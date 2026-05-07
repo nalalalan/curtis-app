@@ -19,6 +19,22 @@ from .settings import (
 
 YOUTUBE_VIDEO_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
 YOUTUBE_CHANNEL_ID_RE = re.compile(r"^UC[A-Za-z0-9_-]{20,}$")
+YOUTUBE_DATE_TITLE_RE = re.compile(r"^\d{1,2}-\d{1,2}-\d{2,4}$")
+ISO_DURATION_RE = re.compile(
+    r"^P(?:(?P<days>\d+)D)?(?:T(?:(?P<hours>\d+)H)?(?:(?P<minutes>\d+)M)?(?:(?P<seconds>\d+)S)?)?$"
+)
+PRACTICE_TITLE_TERMS = {
+    "practice",
+    "rehearsal",
+    "performance",
+    "concertino",
+    "violin",
+    "string",
+    "strings",
+    "quadfest",
+    "vgo",
+    "yuri",
+}
 
 
 @dataclass(frozen=True)
@@ -45,6 +61,58 @@ def credential_state() -> dict[str, bool]:
 
 def youtube_api_key() -> str:
     return os.getenv("YOUTUBE_API_KEY") or os.getenv("GOOGLE_API_KEY") or ""
+
+
+def parse_iso_duration_seconds(value: str | None) -> int | None:
+    if not value:
+        return None
+    match = ISO_DURATION_RE.match(value)
+    if not match:
+        return None
+    parts = {key: int(item or 0) for key, item in match.groupdict().items()}
+    return (
+        parts["days"] * 86400
+        + parts["hours"] * 3600
+        + parts["minutes"] * 60
+        + parts["seconds"]
+    )
+
+
+def classify_youtube_item(item: dict[str, Any]) -> dict[str, Any]:
+    title = str(item.get("title") or "").strip()
+    lowered = title.lower()
+    duration_seconds = parse_iso_duration_seconds(item.get("duration"))
+    reasons: list[str] = []
+    if YOUTUBE_DATE_TITLE_RE.match(title):
+        reasons.append("dated_practice_log")
+    if any(term in lowered for term in PRACTICE_TITLE_TERMS):
+        reasons.append("music_title_signal")
+    if duration_seconds and duration_seconds >= 20 * 60:
+        reasons.append("long_form_video")
+
+    if "wings" in lowered or "eats" in lowered:
+        kind = "other_public_video"
+        candidate = False
+        reasons = [reason for reason in reasons if reason != "long_form_video"]
+    elif "performance" in lowered or "rehearsal" in lowered:
+        kind = "performance_or_rehearsal"
+        candidate = True
+    elif "dated_practice_log" in reasons:
+        kind = "practice_log"
+        candidate = True
+    elif reasons:
+        kind = "music_candidate"
+        candidate = True
+    else:
+        kind = "unclassified_public_video"
+        candidate = False
+
+    return {
+        "mediaKind": kind,
+        "practiceCandidate": candidate,
+        "candidateReasons": reasons,
+        "durationSeconds": duration_seconds,
+    }
 
 
 def parse_youtube_source(source: str) -> dict[str, str]:
@@ -149,7 +217,7 @@ def youtube_item_from_video(item: dict[str, Any]) -> dict[str, Any]:
     content = item.get("contentDetails") or {}
     stats = item.get("statistics") or {}
     video_id = item.get("id")
-    return {
+    mapped = {
         "platform": "youtube",
         "id": video_id,
         "url": f"https://www.youtube.com/watch?v={video_id}",
@@ -162,6 +230,40 @@ def youtube_item_from_video(item: dict[str, Any]) -> dict[str, Any]:
         "analysisState": "metadata_ready_media_blocked",
         "blockers": ["youtube_data_api_returns_metadata_not_video_media"],
     }
+    mapped.update(classify_youtube_item(mapped))
+    return mapped
+
+
+async def hydrate_youtube_video_details(
+    client: httpx.AsyncClient,
+    items: list[dict[str, Any]],
+    access_token: str | None,
+) -> list[dict[str, Any]]:
+    by_id = {item["id"]: item for item in items if item.get("id")}
+    ids = list(by_id)
+    for index in range(0, len(ids), 50):
+        payload = await youtube_get(
+            client,
+            "videos",
+            {
+                "part": "contentDetails,statistics",
+                "id": ",".join(ids[index : index + 50]),
+                "maxResults": 50,
+            },
+            access_token,
+        )
+        for detail in payload.get("items", []):
+            item = by_id.get(detail.get("id"))
+            if not item:
+                continue
+            content = detail.get("contentDetails") or {}
+            stats = detail.get("statistics") or {}
+            if content.get("duration"):
+                item["duration"] = content["duration"]
+            if stats.get("viewCount"):
+                item["viewCount"] = stats["viewCount"]
+            item.update(classify_youtube_item(item))
+    return items
 
 
 async def fetch_youtube_inventory(source: str, limit: int = YOUTUBE_MAX_RESULTS) -> InventoryResult:
@@ -245,8 +347,13 @@ async def fetch_youtube_inventory(source: str, limit: int = YOUTUBE_MAX_RESULTS)
             page_token = payload.get("nextPageToken")
             if not page_token:
                 break
+        try:
+            hydrated = await hydrate_youtube_video_details(client, items, access_token)
+        except httpx.HTTPStatusError:
+            hydrated = items
+            blockers.append("youtube_video_details_unavailable")
         blockers.append("youtube_data_api_returns_metadata_not_video_media")
-        return InventoryResult(items, blockers, parsed["type"])
+        return InventoryResult(hydrated, blockers, parsed["type"])
 
 
 async def fetch_instagram_inventory(source: str, limit: int = INSTAGRAM_MAX_RESULTS) -> InventoryResult:

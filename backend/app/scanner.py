@@ -41,18 +41,38 @@ def effective_sources(state: dict[str, Any]) -> dict[str, Any]:
 def derive_review(inventory: dict[str, list[dict[str, Any]]], existing: dict[str, Any] | None = None) -> dict[str, Any]:
     existing = existing or {}
     sections = existing.get("notableSections") if isinstance(existing.get("notableSections"), list) else []
+    youtube_items = inventory.get("youtube", [])
+    practice_candidates = [
+        item
+        for item in youtube_items
+        if isinstance(item, dict) and item.get("practiceCandidate")
+    ]
+    long_form_candidates = [
+        item
+        for item in practice_candidates
+        if isinstance(item.get("durationSeconds"), int) and item["durationSeconds"] >= 20 * 60
+    ]
     reviewed_urls = {
         section.get("url")
         for section in sections
         if isinstance(section, dict) and section.get("url")
     }
+    current_work = "No processed video sections."
+    if practice_candidates and not sections:
+        current_work = "Practice corpus indexed. Section listening pending."
+    elif sections:
+        current_work = existing.get("currentWork") or "Section evidence recorded."
     return {
         "reviewedVideoCount": len(reviewed_urls),
         "notableSections": sections,
-        "currentWork": "No processed video sections.",
+        "currentWork": current_work,
         "strongestSignal": "Unjudged",
         "weakestRecurringSignal": "Unjudged",
         "inventoryCount": sum(len(items) for items in inventory.values()),
+        "practiceCandidateCount": len(practice_candidates),
+        "longFormCandidateCount": len(long_form_candidates),
+        "latestPracticeCandidate": practice_candidates[0] if practice_candidates else None,
+        "mediaAccess": "metadata_only",
     }
 
 

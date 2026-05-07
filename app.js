@@ -21,6 +21,7 @@ let backend = {
 const elements = {
   youtubeState: document.querySelector("#youtubeState"),
   inventoryCount: document.querySelector("#inventoryCount"),
+  practiceState: document.querySelector("#practiceState"),
   reviewState: document.querySelector("#reviewState"),
   modelState: document.querySelector("#modelState"),
   sourceLink: document.querySelector("#sourceLink"),
@@ -173,7 +174,9 @@ function automationLabel(ops) {
 function currentStateText(ops) {
   if (!backend.online) return `Backend offline: ${backend.lastError}`;
   const inventoryTotal = inventoryItems(ops).length;
-  if (inventoryTotal) return `${inventoryTotal} public YouTube videos indexed. Section judgment pending.`;
+  const practiceCount = Number(ops?.review?.practiceCandidateCount) || 0;
+  if (practiceCount) return `${practiceCount} likely practice/music videos indexed. Section listening pending.`;
+  if (inventoryTotal) return `${inventoryTotal} public YouTube videos indexed. Practice filter pending.`;
   const blockers = [...new Set([...(ops?.lastScan?.blockers || []), ...(ops?.blockers || [])])];
   if (blockers.includes("youtube_channel_not_found")) return "Public channel not found.";
   if (blockers.includes("missing_youtube_api_key_or_oauth")) return "YouTube API key missing.";
@@ -196,15 +199,27 @@ function mediaStateLabel(value) {
   return value || "queued";
 }
 
+function videoBadge(item) {
+  if (item.mediaKind === "practice_log") return "practice log";
+  if (item.mediaKind === "performance_or_rehearsal") return "rehearsal";
+  if (item.mediaKind === "music_candidate") return "music";
+  return mediaStateLabel(item.analysisState);
+}
+
 function renderStatus() {
   const ops = backend.ops || {};
   const inventory = inventoryItems(ops);
   const sections = reviewSections(ops);
   const reviewedVideos = Number(ops?.review?.reviewedVideoCount) || 0;
+  const practiceCount = Number(ops?.review?.practiceCandidateCount) || 0;
+  const longFormCount = Number(ops?.review?.longFormCandidateCount) || 0;
   const model = ops?.model ? `${ops.model.id} / ${ops.model.reasoningEffort}` : "Not reported";
 
   elements.youtubeState.textContent = backend.online ? youtubeLabel(ops) : "Offline";
   elements.inventoryCount.textContent = `${inventory.length} videos`;
+  elements.practiceState.textContent = longFormCount
+    ? `${practiceCount} candidates / ${longFormCount} long`
+    : `${practiceCount} candidates`;
   elements.reviewState.textContent = sections.length ? `${sections.length} sections` : "Unjudged";
   elements.modelState.textContent = model;
   const source = youtubeSource(ops);
@@ -222,6 +237,7 @@ function renderStatus() {
 
 function renderInventory() {
   const inventory = inventoryItems(backend.ops);
+  const candidates = inventory.filter((item) => item.practiceCandidate);
   if (!backend.online) {
     elements.inventoryList.innerHTML = `<p class="empty">Backend offline.</p>`;
     return;
@@ -230,7 +246,8 @@ function renderInventory() {
     elements.inventoryList.innerHTML = `<p class="empty">No public videos indexed.</p>`;
     return;
   }
-  elements.inventoryList.innerHTML = inventory.slice(0, 8).map((item) => {
+  const displayItems = (candidates.length ? candidates : inventory).slice(0, 8);
+  elements.inventoryList.innerHTML = displayItems.map((item) => {
     const meta = [formatDate(item.publishedAt), item.duration, item.viewCount ? `${item.viewCount} views` : ""]
       .filter(Boolean)
       .join(" / ");
@@ -240,7 +257,7 @@ function renderInventory() {
           <span>${escapeHtml(meta || item.channelTitle || "YouTube")}</span>
           <a href="${escapeHtml(item.url)}">${escapeHtml(item.title || item.url || "YouTube video")}</a>
         </div>
-        <em>${escapeHtml(mediaStateLabel(item.analysisState))}</em>
+        <em>${escapeHtml(videoBadge(item))}</em>
       </article>
     `;
   }).join("");
@@ -267,12 +284,15 @@ function dimensionStatus(counts) {
 function renderSkillMap() {
   const inventoryTotal = inventoryItems(backend.ops).length;
   const sections = reviewSections(backend.ops);
+  const practiceCount = Number(backend.ops?.review?.practiceCandidateCount) || 0;
   const needs = skillDimensions
     .map((dimension) => ({ ...dimension, counts: clipCountsForDimension(dimension.id) }))
     .filter((dimension) => ["Needs work", "Regression"].includes(dimensionStatus(dimension.counts)));
 
-  if (!sections.length && inventoryTotal) {
-    elements.skillSummary.textContent = "Inventory ready. Section judgment pending.";
+  if (!sections.length && practiceCount) {
+    elements.skillSummary.textContent = "Practice corpus ready. Section listening pending.";
+  } else if (!sections.length && inventoryTotal) {
+    elements.skillSummary.textContent = "Inventory ready. Practice filter pending.";
   } else if (!sections.length) {
     elements.skillSummary.textContent = "No video sections processed.";
   } else if (needs.length) {
