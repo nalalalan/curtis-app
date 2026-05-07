@@ -390,10 +390,22 @@ function renderSources() {
     blockers,
     "instagram"
   );
-  elements.backendState.textContent = backend.online ? ops.status || "online" : "Backend offline";
-  elements.automationState.textContent = backend.online ? ops.status || "Ready" : "Backend offline";
+  elements.backendState.textContent = backend.online ? automationLabel(ops) : "Offline";
+  elements.automationState.textContent = backend.online ? automationLabel(ops) : "Offline";
   elements.storageState.textContent = backend.online ? "Backend state active" : "Browser state only";
   elements.scanSummary.textContent = scanSummaryText(ops, totalInventory);
+}
+
+function automationLabel(ops) {
+  const blockers = ops.blockers || [];
+  if (blockers.includes("missing_youtube_source") && blockers.includes("missing_instagram_source")) {
+    return "Source needed";
+  }
+  if (blockers.includes("missing_instagram_access_token_or_user_id")) return "Instagram token needed";
+  if (blockers.includes("missing_youtube_api_key_or_oauth")) return "YouTube key needed";
+  if (ops.status === "inventory_ready") return "Inventory ready";
+  if (ops.status === "blocked") return "Blocked";
+  return ops.status || "Ready";
 }
 
 function sourceStateLabel(source, credentialReady, blockers, platform) {
