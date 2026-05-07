@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from datetime import datetime, timezone
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -66,6 +67,17 @@ def sanitized_findings(findings: list[Any]) -> list[dict[str, Any]]:
     return clean
 
 
+def major_piece_tip(piece: dict[str, Any], tip: str) -> str:
+    clean_tip = str(tip or "Capture one clearer excerpt.").strip()
+    signal = f"{piece.get('title') or ''} {piece.get('evidence') or ''} {piece.get('candidateEvidence') or ''}".lower()
+    if re.match(r"^capture one clear(er)? excerpt\.?$", clean_tip, flags=re.IGNORECASE):
+        if any(term in signal for term in ("ricochet", "arpeggio", "paganini")):
+            return "Slow the left-hand arpeggio targets first, then add one short controlled ricochet burst."
+        if "etude" in signal or "caprice" in signal:
+            return "Isolate one small technical cell and record a slower clean take."
+    return clean_tip
+
+
 def enriched_pieces(pieces: list[Any], today: str) -> list[dict[str, Any]]:
     enriched: list[dict[str, Any]] = []
     for item in pieces:
@@ -89,7 +101,7 @@ def enriched_pieces(pieces: list[Any], today: str) -> list[dict[str, Any]]:
             today_latest = ""
         piece["today"] = today
         piece["todayCompletionPercent"] = max(0, min(100, today_percent))
-        piece["todayTip"] = today_tip[:180]
+        piece["todayTip"] = major_piece_tip(piece, today_tip)[:180]
         piece["todayLatestAt"] = today_latest
         piece["isActiveToday"] = bool(today_entry or latest_day == today)
         enriched.append(piece)
