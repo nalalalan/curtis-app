@@ -26,6 +26,8 @@ def allowed_origins() -> list[str]:
     configured = [item.strip() for item in raw.split(",") if item.strip()]
     defaults = [
         "https://curtis.aolabs.io",
+        "https://nalalalan.github.io",
+        "https://curtis-app-production.up.railway.app",
         "http://127.0.0.1:4177",
         "http://127.0.0.1:8000",
         "http://localhost:4177",

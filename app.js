@@ -1,5 +1,6 @@
 const STORAGE_KEY = "curtis-admission-record-v1";
 const API_BASE_KEY = "curtis-api-base";
+const DEFAULT_API_BASE = "https://curtis-app-production.up.railway.app";
 
 const tasks = [
   { id: "profile", label: "Instrument and program", meta: "Required before department repertoire can be locked." },
@@ -163,7 +164,12 @@ function saveState() {
 function apiBase() {
   const params = new URLSearchParams(window.location.search);
   const configured = params.get("api") || localStorage.getItem(API_BASE_KEY) || "";
-  return configured.replace(/\/$/, "");
+  if (configured) return configured.replace(/\/$/, "");
+  if (window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost") {
+    return window.location.port === "8000" ? "" : "http://127.0.0.1:8000";
+  }
+  if (window.location.hostname.endsWith("up.railway.app")) return "";
+  return DEFAULT_API_BASE;
 }
 
 async function apiFetch(path, options = {}) {
