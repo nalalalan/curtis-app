@@ -57,6 +57,13 @@ REPERTOIRE_NAME_TERMS = (
     "ysaye",
     "ysaÿe",
 )
+REJECTED_REPERTOIRE_TITLES = (
+    "paganini caprice no 5",
+    "niccolo paganini caprice no 5",
+    "pablo de sarasate zigeunerweisen op 20",
+    "sarasate zigeunerweisen",
+    "zigeunerweisen",
+)
 
 
 def local_timezone() -> ZoneInfo | timezone:
@@ -120,13 +127,18 @@ def unclear_piece_evidence(value: Any) -> str:
     return evidence[:220]
 
 
+def rejected_repertoire_title(value: Any) -> bool:
+    compact = re.sub(r"[^a-z0-9]+", " ", str(value or "").lower()).strip()
+    return any(rejected in compact or compact in rejected for rejected in REJECTED_REPERTOIRE_TITLES)
+
+
 def enriched_pieces(pieces: list[Any], today: str) -> list[dict[str, Any]]:
     enriched: list[dict[str, Any]] = []
     for item in pieces:
         if not isinstance(item, dict):
             continue
         piece = dict(item)
-        if str(piece.get("confidence") or "unknown").lower() != "clear":
+        if str(piece.get("confidence") or "unknown").lower() != "clear" or rejected_repertoire_title(piece.get("title")):
             piece["title"] = "Piece being identified"
             piece["confidence"] = "unknown"
             piece["confidenceScore"] = 1

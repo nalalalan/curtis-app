@@ -65,6 +65,13 @@ GENERIC_PIECE_TERMS = {
     "section",
     "excerpt",
 }
+REJECTED_PIECE_TITLES = {
+    "paganini caprice no 5",
+    "niccolo paganini caprice no 5",
+    "pablo de sarasate zigeunerweisen op 20",
+    "sarasate zigeunerweisen",
+    "zigeunerweisen",
+}
 COMPOSER_MARKERS = {
     "bach",
     "beethoven",
@@ -258,6 +265,9 @@ def decode_json(text: str) -> dict[str, Any]:
 
 def piece_title_is_identified(title: str) -> bool:
     normalized = re.sub(r"\s+", " ", str(title or "").strip()).lower()
+    compact = re.sub(r"[^a-z0-9]+", " ", normalized).strip()
+    if any(rejected in compact or compact in rejected for rejected in REJECTED_PIECE_TITLES):
+        return False
     if normalized in UNKNOWN_PIECE_TITLES:
         return False
     if normalized.startswith(("possible ", "likely ", "unknown ")):

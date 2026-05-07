@@ -265,7 +265,7 @@ def configured_rejected_pieces() -> list[str]:
 
 
 def rejections_apply_to_sample(sample: dict[str, Any]) -> bool:
-    if os.getenv("CURTIS_GLOBAL_REJECTED_PIECES", "").strip().lower() in {"1", "true", "yes"}:
+    if os.getenv("CURTIS_GLOBAL_REJECTED_PIECES", "1").strip().lower() not in {"0", "false", "no"}:
         return True
     title = compact_title(str(sample.get("title") or ""))
     window = str(sample.get("window") or "")
