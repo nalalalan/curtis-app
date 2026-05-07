@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx
 
+from .analyzer import parse_window_start
 from .auth import youtube_auth_status
 from .platforms import credential_state, fetch_instagram_inventory, fetch_youtube_inventory
 from .settings import (
@@ -64,6 +65,9 @@ REJECTED_REPERTOIRE_TITLES = (
     "sarasate zigeunerweisen",
     "zigeunerweisen",
 )
+LONG_SESSION_PRACTICE_FLOOR_SECONDS = int(os.getenv("CURTIS_LONG_SESSION_PRACTICE_FLOOR_SECONDS", str(2 * 60 * 60)))
+LONG_SESSION_LATE_SAMPLE_COUNT = int(os.getenv("CURTIS_LONG_SESSION_LATE_SAMPLE_COUNT", "3"))
+LONG_SESSION_SPAN_SECONDS = int(os.getenv("CURTIS_LONG_SESSION_SPAN_SECONDS", str(90 * 60)))
 
 
 def local_timezone() -> ZoneInfo | timezone:
@@ -91,6 +95,34 @@ def today_local_day() -> str:
 
 def stable_unique(values: list[str]) -> list[str]:
     return list(dict.fromkeys(value for value in values if value))
+
+
+def sample_window_start(sample: dict[str, Any]) -> int:
+    return parse_window_start(str(sample.get("window") or sample.get("id") or ""))
+
+
+def prefer_late_practice_windows(samples: list[dict[str, Any]]) -> bool:
+    starts = [sample_window_start(sample) for sample in samples]
+    starts = [start for start in starts if start >= 0]
+    if len(starts) < LONG_SESSION_LATE_SAMPLE_COUNT + 1:
+        return False
+    late = [start for start in starts if start >= LONG_SESSION_PRACTICE_FLOOR_SECONDS]
+    return (
+        len(late) >= LONG_SESSION_LATE_SAMPLE_COUNT
+        and max(starts) - min(starts) >= LONG_SESSION_SPAN_SECONDS
+    )
+
+
+def untrusted_long_session_source(piece: dict[str, Any], media_samples: list[dict[str, Any]] | None) -> bool:
+    if not media_samples:
+        return False
+    url = str(piece.get("sourceUrl") or "")
+    if not url:
+        return False
+    group = [sample for sample in media_samples if str(sample.get("url") or "") == url]
+    if not group or not prefer_late_practice_windows(group):
+        return False
+    return int(piece.get("sourceStartSeconds") or 0) < LONG_SESSION_PRACTICE_FLOOR_SECONDS
 
 
 def sanitized_findings(findings: list[Any]) -> list[dict[str, Any]]:
@@ -210,7 +242,7 @@ def merge_enriched_pieces(pieces: list[dict[str, Any]]) -> list[dict[str, Any]]:
     )[:12]
 
 
-def enriched_pieces(pieces: list[Any], today: str) -> list[dict[str, Any]]:
+def enriched_pieces(pieces: list[Any], today: str, media_samples: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
     enriched: list[dict[str, Any]] = []
     for item in pieces:
         if not isinstance(item, dict):
@@ -227,11 +259,13 @@ def enriched_pieces(pieces: list[Any], today: str) -> list[dict[str, Any]]:
             or rejected_repertoire_title(piece.get("title"))
             or not has_source_window
             or not verified_piece_id
+            or untrusted_long_session_source(piece, media_samples)
         ):
             piece["title"] = "Piece being identified"
             piece["confidence"] = "unknown"
             piece["confidenceScore"] = 1
             piece["completionPercent"] = 0
+            piece["evidenceQuality"] = "weak"
             piece["candidateTitle"] = ""
             piece["evidence"] = unclear_piece_evidence(piece.get("evidence"))
             piece["candidateEvidence"] = unclear_piece_evidence(piece.get("candidateEvidence") or piece.get("evidence"))
@@ -294,12 +328,20 @@ def effective_sources(state: dict[str, Any]) -> dict[str, Any]:
     return sources
 
 
-def derive_review(inventory: dict[str, list[dict[str, Any]]], existing: dict[str, Any] | None = None) -> dict[str, Any]:
+def derive_review(
+    inventory: dict[str, list[dict[str, Any]]],
+    existing: dict[str, Any] | None = None,
+    media_samples: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     existing = existing or {}
     today = today_local_day()
     sections = existing.get("notableSections") if isinstance(existing.get("notableSections"), list) else []
     findings = sanitized_findings(existing.get("skillFindings") if isinstance(existing.get("skillFindings"), list) else [])
-    pieces = enriched_pieces(existing.get("pieces") if isinstance(existing.get("pieces"), list) else [], today)
+    pieces = enriched_pieces(
+        existing.get("pieces") if isinstance(existing.get("pieces"), list) else [],
+        today,
+        media_samples,
+    )
     today_pieces = [piece for piece in pieces if piece.get("isActiveToday")]
     progress_plan = existing.get("progressPlan") if isinstance(existing.get("progressPlan"), dict) else None
     youtube_items = inventory.get("youtube", [])
@@ -359,13 +401,13 @@ def base_ops(state: dict[str, Any], extra_blockers: list[str] | None = None) -> 
         blockers.append("missing_instagram_source")
 
     inventory = state.get("inventory", {"youtube": [], "instagram": []})
-    review = derive_review(inventory, state.get("review"))
+    media_samples = [sample for sample in state.get("mediaSamples", []) if isinstance(sample, dict)]
+    review = derive_review(inventory, state.get("review"), media_samples)
     hard_blockers = inventory_blockers(blockers)
     status = "blocked" if hard_blockers else "ready"
     if not hard_blockers and review.get("inventoryCount"):
         status = "inventory_ready"
 
-    media_samples = [sample for sample in state.get("mediaSamples", []) if isinstance(sample, dict)]
     sample_index = [
         {
             "id": sample.get("id"),
@@ -454,7 +496,8 @@ async def run_scan(incoming_sources: dict[str, Any] | None = None) -> dict[str, 
         blockers.extend(["missing_youtube_source", "missing_instagram_source"])
 
     state["inventory"] = inventory
-    state["review"] = derive_review(inventory, state.get("review"))
+    media_samples = [sample for sample in state.get("mediaSamples", []) if isinstance(sample, dict)]
+    state["review"] = derive_review(inventory, state.get("review"), media_samples)
 
     run = {
         "startedAt": utc_now(),

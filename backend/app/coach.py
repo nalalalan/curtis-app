@@ -652,6 +652,7 @@ def aggregate_piece_reviews(existing: list[Any], incoming: list[dict[str, Any]])
                 "sourceStartSeconds": item.get("sourceStartSeconds"),
                 "sourceEndSeconds": item.get("sourceEndSeconds"),
                 "evidenceQuality": evidence_quality,
+                "reviewVersion": item.get("reviewVersion"),
                 "sectionCount": 1,
                 "latestAt": item.get("createdAt") or utc_now(),
             }
@@ -678,6 +679,7 @@ def aggregate_piece_reviews(existing: list[Any], incoming: list[dict[str, Any]])
                 "sourceStartSeconds",
                 "sourceEndSeconds",
                 "evidenceQuality",
+                "reviewVersion",
             ):
                 if item.get(source_key) not in {None, ""}:
                     current[source_key] = item.get(source_key)

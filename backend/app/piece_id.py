@@ -17,10 +17,13 @@ from .settings import OPENAI_AUDIO_MODEL, OPENAI_PIECE_VERIFY_MODEL
 from .state import load_state, save_state, utc_now
 
 
-PIECE_ID_VERSION = "audio_piece_id_v2"
+PIECE_ID_VERSION = "audio_piece_id_v3"
 PIECE_ID_SECONDS = int(os.getenv("CURTIS_PIECE_ID_SECONDS", "45"))
 PIECE_ID_SEGMENTS = int(os.getenv("CURTIS_PIECE_ID_SEGMENTS", "3"))
 CLEAR_SCORE = float(os.getenv("CURTIS_PIECE_ID_CLEAR_SCORE", "0.85"))
+LONG_SESSION_PRACTICE_FLOOR_SECONDS = int(os.getenv("CURTIS_LONG_SESSION_PRACTICE_FLOOR_SECONDS", str(2 * 60 * 60)))
+LONG_SESSION_LATE_SAMPLE_COUNT = int(os.getenv("CURTIS_LONG_SESSION_LATE_SAMPLE_COUNT", "3"))
+LONG_SESSION_SPAN_SECONDS = int(os.getenv("CURTIS_LONG_SESSION_SPAN_SECONDS", str(90 * 60)))
 PIECE_VERIFY_MODEL = OPENAI_PIECE_VERIFY_MODEL
 DEFAULT_REJECTED_PIECES = [
     "Paganini Caprice No. 5",
@@ -240,6 +243,45 @@ def number(value: Any, default: float = 0.0) -> float:
         return float(value)
     except (TypeError, ValueError):
         return default
+
+
+def sample_window_start(sample: dict[str, Any]) -> int:
+    return parse_window_start(str(sample.get("window") or sample.get("id") or ""))
+
+
+def prefer_late_practice_windows(samples: list[dict[str, Any]]) -> bool:
+    starts = [sample_window_start(sample) for sample in samples]
+    starts = [start for start in starts if start >= 0]
+    if len(starts) < LONG_SESSION_LATE_SAMPLE_COUNT + 1:
+        return False
+    late = [start for start in starts if start >= LONG_SESSION_PRACTICE_FLOOR_SECONDS]
+    return (
+        len(late) >= LONG_SESSION_LATE_SAMPLE_COUNT
+        and max(starts) - min(starts) >= LONG_SESSION_SPAN_SECONDS
+    )
+
+
+def practice_window_samples(samples: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    ordered = sorted(samples, key=lambda sample: sample_window_start(sample))
+    if prefer_late_practice_windows(ordered):
+        late = [
+            sample
+            for sample in ordered
+            if sample_window_start(sample) >= LONG_SESSION_PRACTICE_FLOOR_SECONDS
+        ]
+        if late:
+            return late
+    return ordered
+
+
+def source_window_allowed(result: dict[str, Any], samples_by_url: dict[str, list[dict[str, Any]]]) -> bool:
+    url = str(result.get("sourceUrl") or result.get("url") or "")
+    if not url:
+        return True
+    group = samples_by_url.get(url, [])
+    if not group or not prefer_late_practice_windows(group):
+        return True
+    return int(number(result.get("sourceStartSeconds"), 0)) >= LONG_SESSION_PRACTICE_FLOOR_SECONDS
 
 
 def boolish(value: Any) -> bool:
@@ -657,7 +699,7 @@ def consensus_matches(primary: dict[str, Any], verifier: dict[str, Any], sample:
 
 
 def identify_video_consensus(samples: list[dict[str, Any]], results: list[dict[str, Any]]) -> dict[str, Any] | None:
-    usable_samples = [sample for sample in samples if Path(str(sample.get("path") or "")).exists()]
+    usable_samples = practice_window_samples([sample for sample in samples if Path(str(sample.get("path") or "")).exists()])
     if len(usable_samples) < 2:
         return None
     first = usable_samples[0]
@@ -796,6 +838,7 @@ def piece_review_from_identification(result: dict[str, Any]) -> dict[str, Any]:
         "sourceStartSeconds": result.get("sourceStartSeconds"),
         "sourceEndSeconds": result.get("sourceEndSeconds"),
         "createdAt": result.get("createdAt") or utc_now(),
+        "reviewVersion": PIECE_ID_VERSION,
         "evidenceQuality": "verified_piece_id" if result.get("status") == "piece_identified" else "weak",
     }
 
@@ -804,6 +847,18 @@ def identify_pieces_from_samples(limit: int = 4) -> dict[str, Any]:
     state = load_state()
     review = state.setdefault("review", {})
     samples = [sample for sample in state.get("mediaSamples", []) if isinstance(sample, dict)]
+    samples_by_url: dict[str, list[dict[str, Any]]] = {}
+    for sample in samples:
+        url = str(sample.get("url") or "")
+        if url:
+            samples_by_url.setdefault(url, []).append(sample)
+    prioritized_samples = [
+        sample
+        for group in samples_by_url.values()
+        for sample in practice_window_samples(group)
+    ]
+    if not prioritized_samples:
+        prioritized_samples = sorted(samples, key=lambda sample: sample_window_start(sample))
     previous = [
         item
         for item in review.get("pieceIdentifications", [])
@@ -814,7 +869,7 @@ def identify_pieces_from_samples(limit: int = 4) -> dict[str, Any]:
         for item in previous
         if item.get("sampleId") and item.get("reviewVersion") == PIECE_ID_VERSION
     }
-    selected = [sample for sample in samples if sample.get("id") not in processed_ids][:limit]
+    selected = [sample for sample in prioritized_samples if sample.get("id") not in processed_ids][:limit]
     results = [identify_sample(sample) for sample in selected]
     all_results = [*results, *previous]
     consensus_processed_urls = {
@@ -822,15 +877,15 @@ def identify_pieces_from_samples(limit: int = 4) -> dict[str, Any]:
         for item in previous
         if str(item.get("sampleId") or "").endswith("-consensus") and item.get("reviewVersion") == PIECE_ID_VERSION
     }
-    samples_by_url: dict[str, list[dict[str, Any]]] = {}
-    for sample in samples:
-        url = str(sample.get("url") or "")
+    consensus_samples_by_url: dict[str, list[dict[str, Any]]] = {}
+    for url, items in samples_by_url.items():
         if not url or url in consensus_processed_urls:
             continue
-        samples_by_url.setdefault(url, []).append(sample)
+        usable_items = practice_window_samples(items)
+        consensus_samples_by_url[url] = usable_items
     consensus_limit = max(0, int(os.getenv("CURTIS_PIECE_CONSENSUS_LIMIT", "1")))
     consensus_candidates = sorted(
-        (items for items in samples_by_url.values() if len(items) >= 2),
+        (items for items in consensus_samples_by_url.values() if len(items) >= 2),
         key=lambda items: (len(items), str(items[0].get("title") or "")),
         reverse=True,
     )[:consensus_limit]
@@ -845,9 +900,18 @@ def identify_pieces_from_samples(limit: int = 4) -> dict[str, Any]:
     usable_piece_reviews = [
         piece_review_from_identification(result)
         for result in results
-        if result.get("status") == "piece_identified"
+        if result.get("status") == "piece_identified" and source_window_allowed(result, samples_by_url)
     ]
     review["pieceIdentifications"] = [*results, *previous][:80]
+    review["pieces"] = [
+        piece
+        for piece in review.get("pieces", [])
+        if not (
+            isinstance(piece, dict)
+            and str(piece.get("evidenceQuality") or "") == "verified_piece_id"
+            and not source_window_allowed(piece, samples_by_url)
+        )
+    ]
     if usable_piece_reviews:
         review["pieces"] = aggregate_piece_reviews(review.get("pieces", []), usable_piece_reviews)
         review["currentWork"] = f"Piece identified: {usable_piece_reviews[0]['title']}"
