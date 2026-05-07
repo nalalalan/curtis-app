@@ -68,6 +68,7 @@ REJECTED_REPERTOIRE_TITLES = (
 LONG_SESSION_PRACTICE_FLOOR_SECONDS = int(os.getenv("CURTIS_LONG_SESSION_PRACTICE_FLOOR_SECONDS", str(2 * 60 * 60)))
 LONG_SESSION_LATE_SAMPLE_COUNT = int(os.getenv("CURTIS_LONG_SESSION_LATE_SAMPLE_COUNT", "3"))
 LONG_SESSION_SPAN_SECONDS = int(os.getenv("CURTIS_LONG_SESSION_SPAN_SECONDS", str(90 * 60)))
+CONFIRMED_PIECE_ID_VERSION = os.getenv("CURTIS_CONFIRMED_PIECE_ID_VERSION", "audio_piece_id_v4")
 
 
 def local_timezone() -> ZoneInfo | timezone:
@@ -254,11 +255,13 @@ def enriched_pieces(pieces: list[Any], today: str, media_samples: list[dict[str,
             and piece.get("sourceStartSeconds") is not None
         )
         verified_piece_id = str(piece.get("evidenceQuality") or "") == "verified_piece_id"
+        current_piece_id_version = str(piece.get("reviewVersion") or "") == CONFIRMED_PIECE_ID_VERSION
         if (
             str(piece.get("confidence") or "unknown").lower() != "clear"
             or rejected_repertoire_title(piece.get("title"))
             or not has_source_window
             or not verified_piece_id
+            or not current_piece_id_version
             or untrusted_long_session_source(piece, media_samples)
         ):
             piece["title"] = "Piece being identified"

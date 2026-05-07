@@ -17,7 +17,7 @@ from .settings import OPENAI_AUDIO_MODEL, OPENAI_PIECE_VERIFY_MODEL
 from .state import load_state, save_state, utc_now
 
 
-PIECE_ID_VERSION = "audio_piece_id_v3"
+PIECE_ID_VERSION = "audio_piece_id_v4"
 PIECE_ID_SECONDS = int(os.getenv("CURTIS_PIECE_ID_SECONDS", "45"))
 PIECE_ID_SEGMENTS = int(os.getenv("CURTIS_PIECE_ID_SEGMENTS", "3"))
 CLEAR_SCORE = float(os.getenv("CURTIS_PIECE_ID_CLEAR_SCORE", "0.85"))
@@ -31,6 +31,11 @@ DEFAULT_REJECTED_PIECES = [
     "Pablo de Sarasate Zigeunerweisen, Op. 20",
     "Sarasate Zigeunerweisen",
     "Zigeunerweisen",
+]
+FIVE_ONE_REJECTED_PIECES = [
+    "Pablo de Sarasate Carmen Fantasy, Op. 25",
+    "Sarasate Carmen Fantasy",
+    "Carmen Fantasy",
 ]
 WEAK_TITLE_WORDS = {
     "a",
@@ -317,7 +322,12 @@ def rejections_apply_to_sample(sample: dict[str, Any]) -> bool:
 def rejected_pieces_for_sample(sample: dict[str, Any]) -> list[str]:
     if not rejections_apply_to_sample(sample):
         return []
-    return configured_rejected_pieces()
+    rejected = configured_rejected_pieces()
+    title = compact_title(str(sample.get("title") or ""))
+    window = str(sample.get("window") or "")
+    if "5 1 26" in title or "5-1" in title or "5/1" in title or "wDfVpTU4I_I" in window:
+        rejected = [*rejected, *FIVE_ONE_REJECTED_PIECES]
+    return list(dict.fromkeys(rejected))
 
 
 def rejected_piece_text(sample: dict[str, Any]) -> str:
@@ -883,7 +893,7 @@ def identify_pieces_from_samples(limit: int = 4) -> dict[str, Any]:
             continue
         usable_items = practice_window_samples(items)
         consensus_samples_by_url[url] = usable_items
-    consensus_limit = max(0, int(os.getenv("CURTIS_PIECE_CONSENSUS_LIMIT", "1")))
+    consensus_limit = max(0, int(os.getenv("CURTIS_PIECE_CONSENSUS_LIMIT", "5")))
     consensus_candidates = sorted(
         (items for items in consensus_samples_by_url.values() if len(items) >= 2),
         key=lambda items: (len(items), str(items[0].get("title") or "")),
@@ -909,7 +919,10 @@ def identify_pieces_from_samples(limit: int = 4) -> dict[str, Any]:
         if not (
             isinstance(piece, dict)
             and str(piece.get("evidenceQuality") or "") == "verified_piece_id"
-            and not source_window_allowed(piece, samples_by_url)
+            and (
+                str(piece.get("reviewVersion") or "") != PIECE_ID_VERSION
+                or not source_window_allowed(piece, samples_by_url)
+            )
         )
     ]
     if usable_piece_reviews:
