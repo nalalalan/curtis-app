@@ -1,32 +1,43 @@
 # Curtis Admission Record
 
-Static AO Labs app for `curtis.aolabs.io`.
+Static AO Labs app and Railway-ready backend for `curtis.aolabs.io`.
 
 ## Source State
 
 - Curtis Institute of Music official admissions pages reviewed on 2026-05-07.
 - Requirements vary by department; instrument and program remain explicit user inputs.
-- Stored working state is browser-local in v1.
+- Stored working state is browser-local when the backend is offline; backend state is persisted in `CURTIS_STATE_PATH` when the service is running.
 - DNS required for public custom-domain access: `curtis CNAME nalalalan.github.io`.
 
 ## Media Review Direction
 
-- v1 records YouTube and Instagram sources, notable video sections, and skill-map judgments locally.
-- Autonomous scanning requires a Railway-style backend worker, YouTube Data API/OAuth, Instagram Graph API permissions, media extraction, and model-based analysis.
-- Skill claims stay `Unjudged` until a video section is actually processed or entered.
+- Backend records YouTube and Instagram sources, inventories platform posts, and exposes scan state through `/api/curtis/ops-check`.
+- YouTube inventory uses the YouTube Data API or OAuth. The Data API returns metadata, not video media, so performance judgment remains blocked until a permitted media path exists.
+- Instagram inventory uses the Instagram Graph API for authorized account media. Media URLs are queued for section processing when available.
+- Skill claims stay `Unjudged` until a video section is processed against the rubric.
 
 ## Integration Sources
 
-- YouTube Data API: https://developers.google.com/youtube/v3/docs/videos
-- YouTube playlist items: https://developers.google.com/youtube/v3/docs/playlistItems
+- YouTube channels: https://developers.google.com/youtube/v3/docs/channels/list
+- YouTube videos: https://developers.google.com/youtube/v3/docs/videos/list
+- YouTube playlist items: https://developers.google.com/youtube/v3/docs/playlistItems/list
 - Instagram APIs: https://developers.facebook.com/products/instagram/apis/
-- OpenAI vision input: https://platform.openai.com/docs/guides/vision
-- OpenAI speech-to-text: https://platform.openai.com/docs/guides/speech-to-text
+- OpenAI models: https://developers.openai.com/api/docs/models
+- Railway config: https://docs.railway.com/config-as-code/reference
 
-## Local Preview
+## Local Static Preview
 
 ```powershell
 python -m http.server 4177
 ```
 
 Open `http://127.0.0.1:4177/`.
+
+## Local Backend
+
+```powershell
+python -m pip install -r requirements.txt
+python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
+```
+
+Open `http://127.0.0.1:8000/`. The backend serves the same app and API.

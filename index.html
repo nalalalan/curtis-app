@@ -14,12 +14,19 @@
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="Curtis Admission Record">
   <meta name="twitter:description" content="Source-backed Curtis admission dashboard for repertoire, practice media, skill evidence, and audition work.">
-  <link rel="icon" href="/favicon.svg?v=20260507-source" type="image/svg+xml">
-  <link rel="stylesheet" href="/styles.css?v=20260507-media-review2">
+  <link rel="icon" href="/favicon.svg?v=20260507-logo1" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css?v=20260507-automation1">
 </head>
 <body>
   <header class="topbar" aria-label="Curtis navigation">
-    <a class="brand" href="/">Curtis</a>
+    <a class="brand" href="/" aria-label="Curtis home">
+      <svg class="brand-mark" viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+        <rect class="mark-field" x="2" y="2" width="44" height="44" rx="9"></rect>
+        <path class="mark-c" d="M31.6 16.2c-2.1-2-4.7-3-7.8-3-6.4 0-10.9 4.5-10.9 10.9 0 6.5 4.5 11 10.9 11 3.2 0 5.9-1.1 8-3.2"></path>
+        <path class="mark-line" d="M17 24h19"></path>
+      </svg>
+      <span>curtis</span>
+    </a>
     <nav>
       <a href="#record">Record</a>
       <a href="#repertoire">Repertoire</a>
@@ -51,7 +58,7 @@
         </article>
         <article>
           <span>Storage</span>
-          <strong>Local browser record</strong>
+          <strong id="storageState">Browser + backend state</strong>
         </article>
         <article>
           <span>Media Review</span>
@@ -59,7 +66,7 @@
         </article>
         <article>
           <span>Automation</span>
-          <strong>Railway worker pending</strong>
+          <strong id="automationState">Backend check pending</strong>
         </article>
       </div>
     </section>
@@ -265,9 +272,12 @@
         <div class="panel-head">
           <div>
             <p class="section-label">Media</p>
-            <h2>Source Feeds</h2>
+            <h2>Autonomous Sources</h2>
           </div>
-          <button type="submit">Save</button>
+          <div class="action-row">
+            <button type="submit">Save</button>
+            <button type="button" id="runScanButton">Run Scan</button>
+          </div>
         </div>
         <div class="field-grid">
           <label>
@@ -281,15 +291,15 @@
           <label>
             Scan Scope
             <select id="scanScope" name="scanScope">
-              <option>Manual URLs</option>
               <option>Latest public posts</option>
               <option>Authenticated full archive</option>
+              <option>Recent authorized media</option>
             </select>
           </label>
           <label>
             Cadence
             <select id="scanCadence" name="scanCadence">
-              <option>Manual</option>
+              <option>Run now</option>
               <option>Daily</option>
               <option>Weekly</option>
             </select>
@@ -306,9 +316,10 @@
           </article>
           <article>
             <span>Backend</span>
-            <strong>OAuth + media worker required</strong>
+            <strong id="backendState">Checking</strong>
           </article>
         </div>
+        <div id="scanSummary" class="scan-summary">No backend scan recorded.</div>
       </form>
 
       <section class="panel skill-panel" aria-label="Skill map">
@@ -322,43 +333,15 @@
         <div id="skillMap" class="skill-map"></div>
       </section>
 
-      <form class="panel notable-panel" id="clipForm">
+      <section class="panel notable-panel" aria-label="Automated section record">
         <div class="panel-head">
           <div>
             <p class="section-label">Sections</p>
-            <h2>Notable Video Evidence</h2>
+            <h2>Automated Section Record</h2>
           </div>
-          <button type="submit">Add</button>
-        </div>
-        <div class="field-grid clip-fields">
-          <label>
-            Video URL
-            <input id="clipUrl" name="clipUrl" type="url" autocomplete="off" placeholder="YouTube or Instagram URL">
-          </label>
-          <label>
-            Timecode
-            <input id="clipTimecode" name="clipTimecode" autocomplete="off" placeholder="00:00-00:20">
-          </label>
-          <label>
-            Dimension
-            <select id="clipDimension" name="clipDimension"></select>
-          </label>
-          <label>
-            Judgment
-            <select id="clipJudgment" name="clipJudgment">
-              <option>Unjudged</option>
-              <option>Strong signal</option>
-              <option>Needs work</option>
-              <option>Regression</option>
-            </select>
-          </label>
-          <label class="wide-field">
-            Record
-            <input id="clipNote" name="clipNote" autocomplete="off" placeholder="Factual observation">
-          </label>
         </div>
         <div id="clipList" class="entry-list"></div>
-      </form>
+      </section>
 
       <section class="panel backend-panel" aria-label="Backend contract">
         <div class="panel-head">
@@ -402,6 +385,6 @@
     </section>
   </main>
 
-  <script src="/app.js?v=20260507-media-review2"></script>
+  <script src="/app.js?v=20260507-automation1"></script>
 </body>
 </html>

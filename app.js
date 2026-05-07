@@ -1,4 +1,5 @@
 const STORAGE_KEY = "curtis-admission-record-v1";
+const API_BASE_KEY = "curtis-api-base";
 
 const tasks = [
   { id: "profile", label: "Instrument and program", meta: "Required before department repertoire can be locked." },
@@ -74,13 +75,18 @@ const defaultState = {
   sources: {
     youtube: "",
     instagram: "",
-    scanScope: "Manual URLs",
-    scanCadence: "Manual"
+    scanScope: "Latest public posts",
+    scanCadence: "Run now"
   },
   clips: []
 };
 
 let state = loadState();
+let backend = {
+  online: false,
+  ops: null,
+  lastError: ""
+};
 
 const elements = {
   profileForm: document.querySelector("#profileForm"),
@@ -116,15 +122,14 @@ const elements = {
   scanCadence: document.querySelector("#scanCadence"),
   youtubeState: document.querySelector("#youtubeState"),
   instagramState: document.querySelector("#instagramState"),
+  backendState: document.querySelector("#backendState"),
+  automationState: document.querySelector("#automationState"),
+  storageState: document.querySelector("#storageState"),
+  runScanButton: document.querySelector("#runScanButton"),
+  scanSummary: document.querySelector("#scanSummary"),
   mediaReviewState: document.querySelector("#mediaReviewState"),
   skillSummary: document.querySelector("#skillSummary"),
   skillMap: document.querySelector("#skillMap"),
-  clipForm: document.querySelector("#clipForm"),
-  clipUrl: document.querySelector("#clipUrl"),
-  clipTimecode: document.querySelector("#clipTimecode"),
-  clipDimension: document.querySelector("#clipDimension"),
-  clipJudgment: document.querySelector("#clipJudgment"),
-  clipNote: document.querySelector("#clipNote"),
   clipList: document.querySelector("#clipList"),
   reviewedCount: document.querySelector("#reviewedCount"),
   sectionCount: document.querySelector("#sectionCount")
@@ -135,12 +140,15 @@ function loadState() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return structuredClone(defaultState);
     const parsed = JSON.parse(raw);
+    const sources = { ...defaultState.sources, ...parsed.sources };
+    if (sources.scanScope === "Manual URLs") sources.scanScope = "Latest public posts";
+    if (sources.scanCadence === "Manual") sources.scanCadence = "Run now";
     return {
       profile: { ...defaultState.profile, ...parsed.profile },
       taskState: { ...defaultState.taskState, ...parsed.taskState },
       repertoire: Array.isArray(parsed.repertoire) ? parsed.repertoire : [],
       logs: Array.isArray(parsed.logs) ? parsed.logs : [],
-      sources: { ...defaultState.sources, ...parsed.sources },
+      sources,
       clips: Array.isArray(parsed.clips) ? parsed.clips : []
     };
   } catch {
@@ -150,6 +158,96 @@ function loadState() {
 
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+function apiBase() {
+  const params = new URLSearchParams(window.location.search);
+  const configured = params.get("api") || localStorage.getItem(API_BASE_KEY) || "";
+  return configured.replace(/\/$/, "");
+}
+
+async function apiFetch(path, options = {}) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 12000);
+  try {
+    const response = await fetch(`${apiBase()}${path}`, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...(options.headers || {})
+      },
+      signal: controller.signal
+    });
+    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+    return await response.json();
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
+function sourcePayload() {
+  return {
+    youtube: elements.youtubeInput.value.trim(),
+    instagram: elements.instagramInput.value.trim(),
+    scanScope: elements.scanScope.value,
+    scanCadence: elements.scanCadence.value
+  };
+}
+
+function setBackendOps(ops) {
+  backend = {
+    online: true,
+    ops,
+    lastError: ""
+  };
+}
+
+function setBackendOffline(error) {
+  backend = {
+    online: false,
+    ops: null,
+    lastError: error ? String(error.message || error) : "offline"
+  };
+}
+
+async function loadBackendState() {
+  try {
+    setBackendOps(await apiFetch("/api/curtis/ops-check"));
+  } catch (error) {
+    setBackendOffline(error);
+  }
+  render();
+}
+
+async function saveSourcesToBackend() {
+  try {
+    setBackendOps(await apiFetch("/api/curtis/sources", {
+      method: "POST",
+      body: JSON.stringify(state.sources)
+    }));
+  } catch (error) {
+    setBackendOffline(error);
+  }
+}
+
+async function runBackendScan() {
+  elements.runScanButton.disabled = true;
+  elements.runScanButton.textContent = "Scanning";
+  state.sources = sourcePayload();
+  saveState();
+  render();
+  try {
+    setBackendOps(await apiFetch("/api/curtis/scan/run", {
+      method: "POST",
+      body: JSON.stringify(state.sources)
+    }));
+  } catch (error) {
+    setBackendOffline(error);
+  } finally {
+    elements.runScanButton.disabled = false;
+    elements.runScanButton.textContent = "Run Scan";
+    render();
+  }
 }
 
 function escapeHtml(value) {
@@ -264,37 +362,94 @@ function renderLogs() {
 }
 
 function renderSources() {
+  const ops = backend.ops || {};
+  const credentials = ops.credentials || {};
+  const blockers = ops.blockers || [];
+  const inventory = ops.inventory || { youtube: [], instagram: [] };
+  const totalInventory = (inventory.youtube || []).length + (inventory.instagram || []).length;
+
   elements.youtubeInput.value = state.sources.youtube;
   elements.instagramInput.value = state.sources.instagram;
   elements.scanScope.value = state.sources.scanScope;
   elements.scanCadence.value = state.sources.scanCadence;
-  elements.youtubeState.textContent = state.sources.youtube ? "Source set / auth pending" : "Unset";
-  elements.instagramState.textContent = state.sources.instagram ? "Source set / auth pending" : "Unset";
+  elements.youtubeState.textContent = sourceStateLabel(
+    state.sources.youtube,
+    credentials.youtubeApiKey || credentials.youtubeOAuth,
+    blockers,
+    "youtube"
+  );
+  elements.instagramState.textContent = sourceStateLabel(
+    state.sources.instagram,
+    credentials.instagramGraph,
+    blockers,
+    "instagram"
+  );
+  elements.backendState.textContent = backend.online ? ops.status || "online" : "Backend offline";
+  elements.automationState.textContent = backend.online ? ops.status || "Ready" : "Backend offline";
+  elements.storageState.textContent = backend.online ? "Backend state active" : "Browser state only";
+  elements.scanSummary.textContent = scanSummaryText(ops, totalInventory);
 }
 
-function renderClipDimensionOptions() {
-  elements.clipDimension.innerHTML = skillDimensions.map((dimension) => (
-    `<option value="${dimension.id}">${escapeHtml(dimension.label)}</option>`
-  )).join("");
+function sourceStateLabel(source, credentialReady, blockers, platform) {
+  const missingCredential = platform === "youtube"
+    ? blockers.includes("missing_youtube_api_key_or_oauth")
+    : blockers.includes("missing_instagram_access_token_or_user_id");
+  if (!source && credentialReady) return "Credential set / source unset";
+  if (!source) return "Unset";
+  if (credentialReady && !missingCredential) return "Ready";
+  return "Source set / credential blocked";
+}
+
+function scanSummaryText(ops, totalInventory) {
+  if (!backend.online) return `Backend offline: ${backend.lastError || "not reachable"}`;
+  const model = ops.model ? `${ops.model.id} / ${ops.model.reasoningEffort}` : "model unset";
+  const lastScan = ops.lastScan;
+  if (!lastScan) {
+    const blockers = (ops.blockers || []).join(", ") || "none";
+    return `Model ${model}. Inventory ${totalInventory}. Blockers: ${blockers}.`;
+  }
+  const blockers = (lastScan.blockers || []).join(", ") || "none";
+  return `Last scan ${lastScan.status}. Inventory ${lastScan.inventoryCount || 0}. Model ${model}. Blockers: ${blockers}.`;
 }
 
 function renderClips() {
-  if (!state.clips.length) {
-    elements.clipList.innerHTML = '<p class="empty">No reviewed sections.</p>';
+  const backendSections = backend.ops?.review?.notableSections || [];
+  const sections = [...backendSections, ...state.clips];
+  const inventory = backend.ops?.inventory || { youtube: [], instagram: [] };
+  const queued = [...(inventory.youtube || []), ...(inventory.instagram || [])];
+
+  if (!sections.length && queued.length) {
+    elements.clipList.innerHTML = queued.map((entry) => `
+      <article class="entry-row">
+        <div>
+          <span class="entry-meta">${escapeHtml(entry.platform || "media")} / ${escapeHtml(entry.analysisState || "queued")}</span>
+          <p class="entry-title">${escapeHtml(entry.title || entry.url || entry.id || "Queued media")}</p>
+          ${entry.url ? `<a class="entry-link" href="${escapeHtml(entry.url)}">${escapeHtml(entry.url)}</a>` : ""}
+        </div>
+      </article>
+    `).join("");
     return;
   }
 
-  elements.clipList.innerHTML = state.clips.map((entry) => {
+  if (!sections.length) {
+    elements.clipList.innerHTML = '<p class="empty">No processed sections.</p>';
+    return;
+  }
+
+  elements.clipList.innerHTML = sections.map((entry) => {
     const dimension = skillDimensions.find((item) => item.id === entry.dimension);
-    const label = dimension ? dimension.label : entry.dimension;
+    const label = dimension ? dimension.label : entry.dimension || "Unjudged";
+    const url = entry.url || "";
     return `
       <article class="entry-row">
         <div>
-          <span class="entry-meta">${escapeHtml(label)} / ${escapeHtml(entry.judgment)} / ${escapeHtml(entry.timecode || "no timecode")}</span>
-          <p class="entry-title">${escapeHtml(entry.note || entry.url)}</p>
-          <a class="entry-link" href="${escapeHtml(entry.url)}">${escapeHtml(entry.url)}</a>
+          <span class="entry-meta">${escapeHtml(label)} / ${escapeHtml(entry.judgment || "Unjudged")} / ${escapeHtml(entry.timecode || "no timecode")}</span>
+          <p class="entry-title">${escapeHtml(entry.note || url || "Processed section")}</p>
+          ${url ? `<a class="entry-link" href="${escapeHtml(url)}">${escapeHtml(url)}</a>` : ""}
         </div>
-        <button type="button" class="entry-delete" data-delete-clip="${entry.id}" aria-label="Remove reviewed section">X</button>
+        ${entry.id && state.clips.some((clip) => clip.id === entry.id)
+          ? `<button type="button" class="entry-delete" data-delete-clip="${entry.id}" aria-label="Remove reviewed section">X</button>`
+          : ""}
       </article>
     `;
   }).join("");
@@ -309,7 +464,8 @@ function renderClips() {
 }
 
 function clipCountsForDimension(id) {
-  const entries = state.clips.filter((entry) => entry.dimension === id);
+  const backendSections = backend.ops?.review?.notableSections || [];
+  const entries = [...backendSections, ...state.clips].filter((entry) => entry.dimension === id);
   return {
     total: entries.length,
     strong: entries.filter((entry) => entry.judgment === "Strong signal").length,
@@ -327,7 +483,12 @@ function dimensionStatus(counts) {
 }
 
 function renderSkillMap() {
-  const reviewedVideos = new Set(state.clips.map((entry) => entry.url)).size;
+  const review = backend.ops?.review || {};
+  const backendSections = review.notableSections || [];
+  const localReviewedVideos = new Set(state.clips.map((entry) => entry.url)).size;
+  const reviewedVideos = Math.max(Number(review.reviewedVideoCount) || 0, localReviewedVideos);
+  const inventoryCount = Number(review.inventoryCount) || 0;
+  const sectionCount = backendSections.length + state.clips.length;
   elements.mediaReviewState.textContent = `${reviewedVideos} videos reviewed`;
 
   const needs = skillDimensions
@@ -337,7 +498,9 @@ function renderSkillMap() {
       return status === "Needs work" || status === "Regression";
     });
 
-  if (!state.clips.length) {
+  if (!sectionCount && inventoryCount) {
+    elements.skillSummary.textContent = "Inventory ready. Video-section judgment blocked.";
+  } else if (!sectionCount) {
     elements.skillSummary.textContent = "No video reviewed.";
   } else if (needs.length) {
     elements.skillSummary.textContent = `Current work: ${needs.map((dimension) => dimension.label).join(", ")}.`;
@@ -368,6 +531,13 @@ function computeNextOperation() {
   if (!state.sources.youtube.trim() && !state.sources.instagram.trim() && !state.clips.length) {
     return "Set practice video source.";
   }
+  const blockers = backend.ops?.blockers || [];
+  if (blockers.includes("missing_youtube_api_key_or_oauth") || blockers.includes("missing_instagram_access_token_or_user_id")) {
+    return "Connect platform credentials.";
+  }
+  if (backend.ops?.status === "inventory_ready" && !(backend.ops?.review?.reviewedVideoCount)) {
+    return "Enable media section processing.";
+  }
   if (!state.repertoire.length) {
     return "Enter official department repertoire.";
   }
@@ -386,7 +556,9 @@ function renderStats() {
   const complete = values.filter((value) => value === "complete").length;
   const active = values.filter((value) => value === "active").length;
   const minutes = state.logs.reduce((sum, entry) => sum + (Number(entry.minutes) || 0), 0);
-  const reviewedVideos = new Set(state.clips.map((entry) => entry.url)).size;
+  const review = backend.ops?.review || {};
+  const reviewedVideos = Math.max(Number(review.reviewedVideoCount) || 0, new Set(state.clips.map((entry) => entry.url)).size);
+  const sectionTotal = (review.notableSections || []).length + state.clips.length;
   const percent = Math.round((complete / tasks.length) * 100);
 
   elements.completeCount.textContent = complete;
@@ -394,7 +566,7 @@ function renderStats() {
   elements.pieceCount.textContent = state.repertoire.length;
   elements.minuteCount.textContent = minutes;
   elements.reviewedCount.textContent = reviewedVideos;
-  elements.sectionCount.textContent = state.clips.length;
+  elements.sectionCount.textContent = sectionTotal;
   elements.progressText.textContent = `${complete} / ${tasks.length} complete`;
   elements.progressFill.style.width = `${percent}%`;
   elements.nextOperation.textContent = computeNextOperation();
@@ -457,37 +629,15 @@ elements.logForm.addEventListener("submit", (event) => {
   render();
 });
 
-elements.sourceForm.addEventListener("submit", (event) => {
+elements.sourceForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  state.sources = {
-    youtube: elements.youtubeInput.value.trim(),
-    instagram: elements.instagramInput.value.trim(),
-    scanScope: elements.scanScope.value,
-    scanCadence: elements.scanCadence.value
-  };
+  state.sources = sourcePayload();
   saveState();
+  await saveSourcesToBackend();
   render();
 });
 
-elements.clipForm.addEventListener("submit", (event) => {
-  event.preventDefault();
-  const url = elements.clipUrl.value.trim();
-  if (!url) return;
-  state.clips.unshift({
-    id: crypto.randomUUID(),
-    url,
-    timecode: elements.clipTimecode.value.trim(),
-    dimension: elements.clipDimension.value,
-    judgment: elements.clipJudgment.value,
-    note: elements.clipNote.value.trim()
-  });
-  elements.clipUrl.value = "";
-  elements.clipTimecode.value = "";
-  elements.clipJudgment.value = "Unjudged";
-  elements.clipNote.value = "";
-  saveState();
-  render();
-});
+elements.runScanButton.addEventListener("click", runBackendScan);
 
 elements.exportButton.addEventListener("click", async () => {
   const payload = JSON.stringify({ exportedAt: new Date().toISOString(), ...state }, null, 2);
@@ -509,5 +659,5 @@ elements.exportButton.addEventListener("click", async () => {
   }, 1200);
 });
 
-renderClipDimensionOptions();
 render();
+loadBackendState();
