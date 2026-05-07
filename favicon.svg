@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Curtis icon">
+  <defs>
+    <linearGradient id="paper" x1="20" y1="12" x2="108" y2="116">
+      <stop stop-color="#fffaf0"/>
+      <stop offset="1" stop-color="#e4d9ca"/>
+    </linearGradient>
+    <linearGradient id="seal" x1="36" y1="28" x2="94" y2="96">
+      <stop stop-color="#a85d4f"/>
+      <stop offset=".55" stop-color="#355f7c"/>
+      <stop offset="1" stop-color="#223846"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="26" fill="#f4f1ea"/>
+  <path d="M32 23h64a8 8 0 0 1 8 8v66a8 8 0 0 1-8 8H32a8 8 0 0 1-8-8V31a8 8 0 0 1 8-8z" fill="url(#paper)" stroke="#cfc5b7" stroke-width="4"/>
+  <path d="M42 45h44M42 59h44M42 73h28" stroke="#355f7c" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="82" cy="80" r="17" fill="url(#seal)"/>
+  <path d="M74 81h16M82 73v16" stroke="#fff8ee" stroke-width="5" stroke-linecap="round"/>
+</svg>
