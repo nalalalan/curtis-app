@@ -1,15 +1,35 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Curtis icon">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="6 6 116 116" role="img" aria-label="Curtis icon">
   <defs>
-    <filter id="shadow" x="-30%" y="-30%" width="160%" height="170%" color-interpolation-filters="sRGB">
-      <feDropShadow dx="0" dy="5" stdDeviation="4" flood-color="#2b241d" flood-opacity="0.20"/>
+    <filter id="d" x="-35%" y="-35%" width="170%" height="170%">
+      <feDropShadow dx="0" dy="9" stdDeviation="5" flood-color="#2b211d" flood-opacity=".14"/>
+      <feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="#fffaf4" flood-opacity=".42"/>
     </filter>
+    <g id="key">
+      <path d="M64 14v42" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+      <rect x="60.2" y="24" width="7.6" height="23" rx="1.2" fill="currentColor"/>
+    </g>
   </defs>
-  <g filter="url(#shadow)">
-    <path d="M16 17c7-6 25-6 32 0" fill="none" stroke="#181716" stroke-width="5" stroke-linecap="round"/>
-    <path d="M20 22h24v21c0 7-5 12-12 12s-12-5-12-12z" fill="#fffaf2"/>
-    <path d="M24 29h16M24 36h16M28 43h8" stroke="#181716" stroke-width="3.6" stroke-linecap="round"/>
-    <path d="M17 19c8 4 22 4 30 0" fill="none" stroke="#c49a45" stroke-width="4" stroke-linecap="round"/>
-    <circle cx="25" cy="50" r="3" fill="#6f9890"/>
-    <circle cx="39" cy="50" r="3" fill="#bd775f"/>
+  <g filter="url(#d)" opacity=".9">
+    <use href="#key" transform="rotate(138 64 64)" color="#a77d54"/>
+    <use href="#key" transform="rotate(153 64 64)" color="#181716"/>
+    <use href="#key" transform="rotate(168 64 64)" color="#8e746b"/>
+    <use href="#key" transform="rotate(183 64 64)" color="#7b8583"/>
+    <use href="#key" transform="rotate(198 64 64)" color="#181716"/>
+    <use href="#key" transform="rotate(213 64 64)" color="#9b746d"/>
+    <use href="#key" transform="rotate(228 64 64)" color="#71645d"/>
+    <use href="#key" transform="rotate(243 64 64)" color="#6e7f85"/>
+    <use href="#key" transform="rotate(258 64 64)" color="#a77d54"/>
+    <use href="#key" transform="rotate(273 64 64)" color="#181716"/>
+    <use href="#key" transform="rotate(288 64 64)" color="#81746a"/>
+    <use href="#key" transform="rotate(303 64 64)" color="#6e7f85"/>
+    <use href="#key" transform="rotate(318 64 64)" color="#9b746d"/>
+    <use href="#key" transform="rotate(333 64 64)" color="#71645d"/>
+    <use href="#key" transform="rotate(348 64 64)" color="#7b8583"/>
+    <use href="#key" transform="rotate(363 64 64)" color="#181716"/>
+    <use href="#key" transform="rotate(378 64 64)" color="#9b746d"/>
+    <use href="#key" transform="rotate(393 64 64)" color="#6e7f85"/>
+    <use href="#key" transform="rotate(408 64 64)" color="#a77d54"/>
+    <circle cx="64" cy="64" r="10" fill="#fff8ef" opacity=".88"/>
+    <circle cx="64" cy="64" r="4.5" fill="#181716"/>
   </g>
 </svg>
