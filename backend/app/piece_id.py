@@ -17,7 +17,7 @@ from .settings import OPENAI_AUDIO_MODEL, OPENAI_PIECE_VERIFY_MODEL
 from .state import load_state, save_state, utc_now
 
 
-PIECE_ID_VERSION = "audio_piece_id_v5"
+PIECE_ID_VERSION = "audio_piece_id_v6"
 PIECE_ID_SECONDS = int(os.getenv("CURTIS_PIECE_ID_SECONDS", "45"))
 PIECE_ID_SEGMENTS = int(os.getenv("CURTIS_PIECE_ID_SEGMENTS", "3"))
 CLEAR_SCORE = float(os.getenv("CURTIS_PIECE_ID_CLEAR_SCORE", "0.85"))
@@ -913,10 +913,14 @@ def identify_pieces_from_samples(limit: int = 4) -> dict[str, Any]:
             continue
         usable_items = practice_window_samples(items)
         consensus_samples_by_url[url] = usable_items
-    consensus_limit = max(0, int(os.getenv("CURTIS_PIECE_CONSENSUS_LIMIT", "5")))
+    consensus_limit = max(0, int(os.getenv("CURTIS_PIECE_CONSENSUS_LIMIT", "2")))
     consensus_candidates = sorted(
         (items for items in consensus_samples_by_url.values() if len(items) >= 2),
-        key=lambda items: (len(items), str(items[0].get("title") or "")),
+        key=lambda items: (
+            1 if any(sample_matches_five_one(sample) for sample in items) else 0,
+            len(items),
+            str(items[0].get("title") or ""),
+        ),
         reverse=True,
     )[:consensus_limit]
     consensus_results = []
