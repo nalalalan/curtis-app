@@ -9,14 +9,36 @@ Autonomous practice-video review for Curtis preparation.
 - `OPENAI_API_KEY`
 - `OPENAI_MODEL=gpt-5.5`
 - `OPENAI_REASONING_EFFORT=xhigh`
-- `YOUTUBE_API_KEY` or all of:
+- `YOUTUBE_API_KEY` for public YouTube channel inventory.
+- `YOUTUBE_CLIENT_ID` and `YOUTUBE_CLIENT_SECRET` from a Google OAuth web client for persistent authenticated channel access.
+- `YOUTUBE_REFRESH_TOKEN` only when importing an existing token manually; the app stores it after `/api/auth/youtube/callback` when OAuth is connected.
+- Google OAuth authorized redirect URI:
+  - `https://curtis.aolabs.io/api/auth/youtube/callback`
+- Google OAuth scope:
+  - `https://www.googleapis.com/auth/youtube.readonly`
+- `PUBLIC_BASE_URL=https://curtis.aolabs.io`
+- `CURTIS_STATE_PATH=/data/curtis_state.json` with the Railway volume mounted at `/data`.
+- `CURTIS_ALLOWED_ORIGINS=https://curtis.aolabs.io,https://curtis-app-production.up.railway.app`
+- For Instagram Graph automation:
+  - `INSTAGRAM_USER_ID`
+  - `INSTAGRAM_ACCESS_TOKEN`
+
+## YouTube Persistent Login
+
+1. Create a Google OAuth client with application type `Web application`.
+2. Add `https://curtis.aolabs.io/api/auth/youtube/callback` as an authorized redirect URI.
+3. Set `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, `PUBLIC_BASE_URL`, and `CURTIS_STATE_PATH` in Railway.
+4. Open `https://curtis.aolabs.io`, use `Connect YouTube`, and approve the `youtube.readonly` scope once.
+5. The backend stores the refresh token in Railway volume state and scans `mine`, which resolves the authenticated channel uploads playlist.
+
+The YouTube Data API and OAuth provide channel and upload inventory. They do not provide raw video media files, so performance-level scoring still needs a permitted media extraction path.
+
+## Legacy Manual Token Inputs
+
+If OAuth callback storage is not used, set all of:
   - `YOUTUBE_CLIENT_ID`
   - `YOUTUBE_CLIENT_SECRET`
   - `YOUTUBE_REFRESH_TOKEN`
-- `INSTAGRAM_USER_ID`
-- `INSTAGRAM_ACCESS_TOKEN`
-- `CURTIS_STATE_PATH=/data/curtis_state.json` when Railway volume storage is attached.
-- `CURTIS_ALLOWED_ORIGINS=https://curtis.aolabs.io`
 
 ## Optional Inputs
 
@@ -24,7 +46,7 @@ Autonomous practice-video review for Curtis preparation.
 - `CURTIS_SCAN_INTERVAL_SECONDS=86400`
 - `CURTIS_YOUTUBE_SOURCE`
 - `CURTIS_INSTAGRAM_SOURCE`
-- `YOUTUBE_MAX_RESULTS=12`
+- `YOUTUBE_MAX_RESULTS=200`
 - `INSTAGRAM_MAX_RESULTS=12`
 - `INSTAGRAM_GRAPH_VERSION=v20.0`
 
@@ -35,10 +57,14 @@ Autonomous practice-video review for Curtis preparation.
 - `GET /api/curtis/media-status`
 - `POST /api/curtis/sources`
 - `POST /api/curtis/scan/run`
+- `GET /api/auth/youtube/status`
+- `GET /api/auth/youtube/start`
+- `GET /api/auth/youtube/callback`
 
 ## Current Implementation
 
 - YouTube automation inventories channel, playlist, or video metadata through the official Data API.
+- Authenticated YouTube mode uses OAuth `mine=true` channel access and the uploads playlist for the connected account.
 - YouTube media judgment is blocked until a permitted video media path exists; the Data API does not provide raw video content.
 - Instagram automation inventories authorized account media through Graph API and marks media URLs for section processing when present.
 - OpenAI defaults to `gpt-5.5` with `xhigh` reasoning for future media-section scoring.

@@ -31,6 +31,14 @@ DEFAULT_STATE: dict[str, Any] = {
         "strongestSignal": "Unjudged",
         "weakestRecurringSignal": "Unjudged",
     },
+    "auth": {
+        "youtube": {
+            "connected": False,
+            "channelTitle": "",
+            "connectedAt": "",
+            "scope": "",
+        },
+    },
     "runs": [],
     "lastScan": None,
 }

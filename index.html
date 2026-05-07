@@ -14,16 +14,18 @@
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="Curtis Admission Record">
   <meta name="twitter:description" content="Source-backed Curtis admission dashboard for repertoire, practice media, skill evidence, and audition work.">
-  <link rel="icon" href="/favicon.svg?v=20260507-logo1" type="image/svg+xml">
-  <link rel="stylesheet" href="/styles.css?v=20260507-automation1">
+  <link rel="icon" href="/favicon.svg?v=20260507-curtis2" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css?v=20260507-oauth1">
 </head>
 <body>
   <header class="topbar" aria-label="Curtis navigation">
     <a class="brand" href="/" aria-label="Curtis home">
       <svg class="brand-mark" viewBox="0 0 48 48" aria-hidden="true" focusable="false">
         <rect class="mark-field" x="2" y="2" width="44" height="44" rx="9"></rect>
-        <path class="mark-c" d="M31.6 16.2c-2.1-2-4.7-3-7.8-3-6.4 0-10.9 4.5-10.9 10.9 0 6.5 4.5 11 10.9 11 3.2 0 5.9-1.1 8-3.2"></path>
-        <path class="mark-line" d="M17 24h19"></path>
+        <path class="mark-staff" d="M15 18h19M13 23h22M13 28h22M15 33h17"></path>
+        <path class="mark-c" d="M31.8 15.8c-2.2-2-4.8-3-8-3-6.5 0-11 4.6-11 11.2s4.5 11.2 11 11.2c3.4 0 6.1-1.1 8.3-3.3"></path>
+        <path class="mark-bow" d="M30.8 13.8 26 36"></path>
+        <circle class="mark-pin" cx="27.2" cy="36" r="2.2"></circle>
       </svg>
       <span>curtis</span>
     </a>
@@ -267,6 +269,7 @@
             <h2>Autonomous Sources</h2>
           </div>
           <div class="action-row">
+            <button type="button" id="connectYoutubeButton">Connect YouTube</button>
             <button type="submit">Save</button>
             <button type="button" id="runScanButton">Run Scan</button>
           </div>
@@ -274,7 +277,7 @@
         <div class="field-grid">
           <label>
             YouTube
-            <input id="youtubeInput" name="youtube" autocomplete="off" placeholder="Channel, playlist, or practice video URL">
+            <input id="youtubeInput" name="youtube" autocomplete="off" placeholder="Connect account or paste channel/playlist">
           </label>
           <label>
             Instagram
@@ -345,7 +348,7 @@
         <dl class="fact-list system-facts">
           <div>
             <dt>YouTube</dt>
-            <dd>Data API or OAuth for channel inventory; media access required for performance review.</dd>
+            <dd>OAuth reads authenticated channel inventory; media access still required for performance review.</dd>
           </div>
           <div>
             <dt>Instagram</dt>
@@ -377,6 +380,6 @@
     </section>
   </main>
 
-  <script src="/app.js?v=20260507-automation1"></script>
+  <script src="/app.js?v=20260507-oauth1"></script>
 </body>
 </html>

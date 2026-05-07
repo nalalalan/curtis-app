@@ -8,6 +8,7 @@ from urllib.parse import parse_qs, urlparse
 
 import httpx
 
+from .auth import youtube_oauth_config
 from .settings import (
     INSTAGRAM_GRAPH_VERSION,
     INSTAGRAM_MAX_RESULTS,
@@ -28,13 +29,16 @@ class InventoryResult:
 
 
 def credential_state() -> dict[str, bool]:
+    youtube_oauth = youtube_oauth_config()
     return {
         "openai": env_present("OPENAI_API_KEY"),
         "youtubeApiKey": env_present("YOUTUBE_API_KEY") or env_present("GOOGLE_API_KEY"),
-        "youtubeOAuth": all(
-            env_present(name)
-            for name in ("YOUTUBE_CLIENT_ID", "YOUTUBE_CLIENT_SECRET", "YOUTUBE_REFRESH_TOKEN")
+        "youtubeOAuth": bool(
+            youtube_oauth["client_id"]
+            and youtube_oauth["client_secret"]
+            and youtube_oauth["refresh_token"]
         ),
+        "youtubeOAuthConfigured": bool(youtube_oauth["client_id"] and youtube_oauth["client_secret"]),
         "instagramGraph": env_present("INSTAGRAM_ACCESS_TOKEN") and env_present("INSTAGRAM_USER_ID"),
     }
 
@@ -56,6 +60,8 @@ def parse_youtube_source(source: str) -> dict[str, str]:
         return {"type": "handle", "value": value}
     if value.startswith(("PL", "UU", "OLAK5uy_")):
         return {"type": "playlist", "value": value}
+    if value.lower() in {"mine", "my channel", "authenticated"}:
+        return {"type": "mine", "value": "mine"}
 
     parsed = urlparse(value if "://" in value else f"https://{value}")
     host = parsed.netloc.lower().removeprefix("www.")
@@ -80,15 +86,16 @@ def parse_youtube_source(source: str) -> dict[str, str]:
 
 
 async def google_oauth_token() -> str | None:
-    if not credential_state()["youtubeOAuth"]:
+    config = youtube_oauth_config()
+    if not (config["client_id"] and config["client_secret"] and config["refresh_token"]):
         return None
     async with httpx.AsyncClient(timeout=20) as client:
         response = await client.post(
             "https://oauth2.googleapis.com/token",
             data={
-                "client_id": os.getenv("YOUTUBE_CLIENT_ID", ""),
-                "client_secret": os.getenv("YOUTUBE_CLIENT_SECRET", ""),
-                "refresh_token": os.getenv("YOUTUBE_REFRESH_TOKEN", ""),
+                "client_id": config["client_id"],
+                "client_secret": config["client_secret"],
+                "refresh_token": config["refresh_token"],
                 "grant_type": "refresh_token",
             },
         )
@@ -163,11 +170,13 @@ async def fetch_youtube_inventory(source: str, limit: int = YOUTUBE_MAX_RESULTS)
         return InventoryResult([], ["missing_youtube_source"], "unset")
 
     credentials = credential_state()
+    if parsed["type"] == "mine" and not credentials["youtubeOAuth"]:
+        return InventoryResult([], ["missing_youtube_oauth_connection"], "mine")
     if not credentials["youtubeApiKey"] and not credentials["youtubeOAuth"]:
         return InventoryResult([], ["missing_youtube_api_key_or_oauth"], parsed["type"])
 
     access_token = None
-    if not credentials["youtubeApiKey"] and credentials["youtubeOAuth"]:
+    if parsed["type"] == "mine" or (not credentials["youtubeApiKey"] and credentials["youtubeOAuth"]):
         access_token = await google_oauth_token()
         if not access_token:
             return InventoryResult([], ["youtube_oauth_token_refresh_failed"], parsed["type"])
@@ -192,10 +201,12 @@ async def fetch_youtube_inventory(source: str, limit: int = YOUTUBE_MAX_RESULTS)
             )
 
         playlist_id = parsed["value"] if parsed["type"] == "playlist" else None
-        if parsed["type"] in {"channel", "handle"}:
+        if parsed["type"] in {"channel", "handle", "mine"}:
             params: dict[str, Any] = {"part": "contentDetails,snippet", "maxResults": 1}
             if parsed["type"] == "channel":
                 params["id"] = parsed["value"]
+            elif parsed["type"] == "mine":
+                params["mine"] = "true"
             else:
                 params["forHandle"] = parsed["value"]
             channel_payload = await youtube_get(client, "channels", params, access_token)
@@ -214,21 +225,26 @@ async def fetch_youtube_inventory(source: str, limit: int = YOUTUBE_MAX_RESULTS)
         if not playlist_id:
             return InventoryResult([], ["unresolved_youtube_source"], parsed["type"])
 
-        payload = await youtube_get(
-            client,
-            "playlistItems",
-            {
+        items = []
+        page_token = None
+        target_count = max(limit, 1)
+        while len(items) < target_count:
+            params = {
                 "part": "snippet,contentDetails",
                 "playlistId": playlist_id,
-                "maxResults": min(max(limit, 1), 50),
-            },
-            access_token,
-        )
-        items = [
-            mapped
-            for item in payload.get("items", [])
-            if (mapped := youtube_item_from_playlist(item)) is not None
-        ]
+                "maxResults": min(target_count - len(items), 50),
+            }
+            if page_token:
+                params["pageToken"] = page_token
+            payload = await youtube_get(client, "playlistItems", params, access_token)
+            items.extend(
+                mapped
+                for item in payload.get("items", [])
+                if (mapped := youtube_item_from_playlist(item)) is not None
+            )
+            page_token = payload.get("nextPageToken")
+            if not page_token:
+                break
         blockers.append("youtube_data_api_returns_metadata_not_video_media")
         return InventoryResult(items, blockers, parsed["type"])
 

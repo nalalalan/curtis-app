@@ -5,6 +5,7 @@ from typing import Any
 
 import httpx
 
+from .auth import youtube_auth_status
 from .platforms import credential_state, fetch_instagram_inventory, fetch_youtube_inventory
 from .settings import OPENAI_MODEL, OPENAI_REASONING_EFFORT, SERVICE_NAME
 from .state import append_run, load_state, save_state, utc_now
@@ -66,6 +67,9 @@ def base_ops(state: dict[str, Any], extra_blockers: list[str] | None = None) -> 
             "reasoningEffort": OPENAI_REASONING_EFFORT,
         },
         "credentials": credentials,
+        "auth": {
+            "youtube": youtube_auth_status(),
+        },
         "sources": sources,
         "inventory": inventory,
         "review": review,

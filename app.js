@@ -126,6 +126,7 @@ const elements = {
   backendState: document.querySelector("#backendState"),
   automationState: document.querySelector("#automationState"),
   storageState: document.querySelector("#storageState"),
+  connectYoutubeButton: document.querySelector("#connectYoutubeButton"),
   runScanButton: document.querySelector("#runScanButton"),
   scanSummary: document.querySelector("#scanSummary"),
   mediaReviewState: document.querySelector("#mediaReviewState"),
@@ -163,7 +164,10 @@ function saveState() {
 
 function apiBase() {
   const params = new URLSearchParams(window.location.search);
-  const configured = params.get("api") || localStorage.getItem(API_BASE_KEY) || "";
+  const explicit = params.get("api") || "";
+  if (explicit) return explicit.replace(/\/$/, "");
+  if (window.location.hostname === "curtis.aolabs.io") return "";
+  const configured = localStorage.getItem(API_BASE_KEY) || "";
   if (configured) return configured.replace(/\/$/, "");
   if (window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost") {
     return window.location.port === "8000" ? "" : "http://127.0.0.1:8000";
@@ -201,11 +205,32 @@ function sourcePayload() {
 }
 
 function setBackendOps(ops) {
+  syncSourcesFromBackend(ops);
   backend = {
     online: true,
     ops,
     lastError: ""
   };
+}
+
+function syncSourcesFromBackend(ops) {
+  const sources = ops?.sources || {};
+  let changed = false;
+  ["youtube", "instagram", "scanScope", "scanCadence"].forEach((key) => {
+    const value = sources[key];
+    if (typeof value !== "string" || !value.trim()) return;
+    if (state.sources[key] === value) return;
+    if (key === "youtube" || key === "instagram") {
+      state.sources[key] = value;
+      changed = true;
+      return;
+    }
+    if (!state.sources[key] || state.sources[key] === defaultState.sources[key]) {
+      state.sources[key] = value;
+      changed = true;
+    }
+  });
+  if (changed) saveState();
 }
 
 function setBackendOffline(error) {
@@ -370,6 +395,7 @@ function renderLogs() {
 function renderSources() {
   const ops = backend.ops || {};
   const credentials = ops.credentials || {};
+  const youtubeAuth = ops.auth?.youtube || {};
   const blockers = ops.blockers || [];
   const inventory = ops.inventory || { youtube: [], instagram: [] };
   const totalInventory = (inventory.youtube || []).length + (inventory.instagram || []).length;
@@ -378,12 +404,16 @@ function renderSources() {
   elements.instagramInput.value = state.sources.instagram;
   elements.scanScope.value = state.sources.scanScope;
   elements.scanCadence.value = state.sources.scanCadence;
-  elements.youtubeState.textContent = sourceStateLabel(
-    state.sources.youtube,
-    credentials.youtubeApiKey || credentials.youtubeOAuth,
-    blockers,
-    "youtube"
-  );
+  elements.youtubeState.textContent = youtubeAuth.connected
+    ? youtubeConnectedLabel(youtubeAuth)
+    : credentials.youtubeOAuthConfigured
+      ? sourceStateLabel(
+      state.sources.youtube,
+      credentials.youtubeApiKey || credentials.youtubeOAuthConfigured,
+      blockers,
+      "youtube"
+      )
+      : "OAuth setup needed";
   elements.instagramState.textContent = sourceStateLabel(
     state.sources.instagram,
     credentials.instagramGraph,
@@ -394,13 +424,25 @@ function renderSources() {
   elements.automationState.textContent = backend.online ? automationLabel(ops) : "Offline";
   elements.storageState.textContent = backend.online ? "Backend state active" : "Browser state only";
   elements.scanSummary.textContent = scanSummaryText(ops, totalInventory);
+  elements.connectYoutubeButton.disabled = Boolean(youtubeAuth.connected || !backend.online || !credentials.youtubeOAuthConfigured);
+  elements.connectYoutubeButton.textContent = youtubeAuth.connected
+    ? "YouTube Connected"
+    : credentials.youtubeOAuthConfigured
+      ? "Connect YouTube"
+      : "OAuth Setup Needed";
 }
 
 function automationLabel(ops) {
   const blockers = ops.blockers || [];
+  const youtubeAuth = ops.auth?.youtube || {};
+  if (youtubeAuth.connected && blockers.length === 1 && blockers.includes("youtube_data_api_returns_metadata_not_video_media")) {
+    return "Channel inventory ready";
+  }
   if (blockers.includes("missing_youtube_source") && blockers.includes("missing_instagram_source")) {
     return "Source needed";
   }
+  if (blockers.includes("missing_youtube_oauth_connection")) return "Connect YouTube";
+  if (blockers.includes("youtube_oauth_token_refresh_failed")) return "Reconnect YouTube";
   if (blockers.includes("missing_instagram_access_token_or_user_id")) return "Instagram token needed";
   if (blockers.includes("missing_youtube_api_key_or_oauth")) return "YouTube key needed";
   if (ops.status === "inventory_ready") return "Inventory ready";
@@ -418,10 +460,18 @@ function sourceStateLabel(source, credentialReady, blockers, platform) {
   return "Source set / credential blocked";
 }
 
+function youtubeConnectedLabel(auth) {
+  return auth.channelTitle ? `Connected / ${auth.channelTitle}` : "Connected";
+}
+
 function scanSummaryText(ops, totalInventory) {
   if (!backend.online) return `Backend offline: ${backend.lastError || "not reachable"}`;
   const model = ops.model ? `${ops.model.id} / ${ops.model.reasoningEffort}` : "model unset";
+  const youtubeAuth = ops.auth?.youtube || {};
   const lastScan = ops.lastScan;
+  if (youtubeAuth.connected && totalInventory) {
+    return `YouTube connected. Inventory ${totalInventory}. Model ${model}.`;
+  }
   if (!lastScan) {
     const blockers = (ops.blockers || []).join(", ") || "none";
     return `Model ${model}. Inventory ${totalInventory}. Blockers: ${blockers}.`;
@@ -656,6 +706,10 @@ elements.sourceForm.addEventListener("submit", async (event) => {
 });
 
 elements.runScanButton.addEventListener("click", runBackendScan);
+
+elements.connectYoutubeButton.addEventListener("click", () => {
+  window.location.href = `${apiBase()}/api/auth/youtube/start`;
+});
 
 elements.exportButton.addEventListener("click", async () => {
   const payload = JSON.stringify({ exportedAt: new Date().toISOString(), ...state }, null, 2);

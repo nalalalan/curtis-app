@@ -80,17 +80,30 @@ select {
 }
 
 .mark-c,
-.mark-line {
+.mark-staff,
+.mark-bow {
   fill: none;
-  stroke: var(--surface);
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+
+.mark-c {
+  stroke: var(--surface);
   stroke-width: 5.6;
 }
 
-.mark-line {
+.mark-staff {
+  stroke: var(--blue);
+  stroke-width: 1.9;
+}
+
+.mark-bow {
   stroke: var(--red);
-  stroke-width: 2.4;
+  stroke-width: 2.8;
+}
+
+.mark-pin {
+  fill: var(--gold);
 }
 
 .topbar nav {

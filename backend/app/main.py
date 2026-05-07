@@ -4,11 +4,19 @@ import asyncio
 import os
 from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+from .auth import (
+    build_youtube_authorization_url,
+    exchange_youtube_code,
+    fetch_youtube_channel_title,
+    save_youtube_tokens,
+    validate_youtube_oauth_state,
+    youtube_auth_status,
+)
 from .scanner import base_ops, run_scan
 from .settings import ROOT_DIR, SCAN_INTERVAL_SECONDS, SERVICE_NAME, allowed_origins
 from .state import load_state, save_state
@@ -61,6 +69,11 @@ async def health() -> dict[str, str]:
     return {"status": "ok", "service": SERVICE_NAME}
 
 
+def youtube_redirect_uri() -> str:
+    public_base = os.getenv("PUBLIC_BASE_URL", "https://curtis.aolabs.io").rstrip("/")
+    return f"{public_base}/api/auth/youtube/callback"
+
+
 @app.get("/api/curtis/ops-check")
 async def ops_check() -> dict[str, Any]:
     return base_ops(load_state())
@@ -91,6 +104,44 @@ async def update_sources(config: SourceConfig) -> dict[str, Any]:
 async def scan_run(config: SourceConfig | None = None) -> dict[str, Any]:
     incoming = config.to_state() if config else None
     return await run_scan(incoming)
+
+
+@app.get("/api/auth/youtube/status")
+async def youtube_status() -> dict[str, Any]:
+    return youtube_auth_status()
+
+
+@app.get("/api/auth/youtube/start")
+async def youtube_oauth_start() -> RedirectResponse:
+    status = youtube_auth_status()
+    if not status["configured"]:
+        raise HTTPException(
+            status_code=503,
+            detail="Set YOUTUBE_CLIENT_ID and YOUTUBE_CLIENT_SECRET for a Google OAuth web client.",
+        )
+    return RedirectResponse(build_youtube_authorization_url(youtube_redirect_uri()))
+
+
+@app.get("/api/auth/youtube/callback")
+async def youtube_oauth_callback(request: Request) -> RedirectResponse:
+    error = request.query_params.get("error")
+    if error:
+        return RedirectResponse("/?youtube=error#media")
+    code = request.query_params.get("code", "")
+    returned_state = request.query_params.get("state", "")
+    if not code or not validate_youtube_oauth_state(returned_state):
+        return RedirectResponse("/?youtube=invalid#media")
+    try:
+        token_payload = await exchange_youtube_code(code, youtube_redirect_uri())
+        channel_title = ""
+        access_token = token_payload.get("access_token")
+        if isinstance(access_token, str) and access_token:
+            channel_title = await fetch_youtube_channel_title(access_token)
+        save_youtube_tokens(token_payload, channel_title)
+        await run_scan({"youtube": "mine", "scanScope": "Authenticated full archive", "scanCadence": "Daily"})
+    except Exception:
+        return RedirectResponse("/?youtube=failed#media")
+    return RedirectResponse("/?youtube=connected#media")
 
 
 @app.get("/{path:path}")
