@@ -202,6 +202,8 @@ function currentStateText(ops) {
   if (!backend.online) return `Backend offline: ${backend.lastError}`;
   const inventoryTotal = inventoryItems(ops).length;
   const practiceCount = Number(ops?.review?.practiceCandidateCount) || 0;
+  const sectionCount = reviewSections(ops).length;
+  if (sectionCount) return `${sectionCount} audio/video sections scanned. Musicianship judgment pending.`;
   if (practiceCount) return `${practiceCount} likely practice/music videos indexed. Section listening pending.`;
   if (inventoryTotal) return `${inventoryTotal} public YouTube videos indexed. Practice filter pending.`;
   const blockers = [...new Set([...(ops?.lastScan?.blockers || []), ...(ops?.blockers || [])])];
@@ -336,6 +338,8 @@ function renderSkillMap() {
     elements.skillSummary.textContent = "No video sections processed.";
   } else if (needs.length) {
     elements.skillSummary.textContent = `Current work: ${needs.map((dimension) => dimension.label).join(", ")}.`;
+  } else if (sections.every((section) => section.judgment === "Unjudged")) {
+    elements.skillSummary.textContent = "Candidate sections scanned. Musicianship judgment pending.";
   } else {
     elements.skillSummary.textContent = "No weakness claim from current evidence.";
   }

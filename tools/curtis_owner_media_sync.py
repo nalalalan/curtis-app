@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -18,6 +19,25 @@ MEDIA_DIR = RUNTIME / "owner-media"
 API_BASE = os.getenv("CURTIS_API_BASE", "https://curtis.aolabs.io").rstrip("/")
 SAMPLE_SECONDS = int(os.getenv("CURTIS_OWNER_SAMPLE_SECONDS", "90"))
 SAMPLE_START_SECONDS = int(os.getenv("CURTIS_OWNER_SAMPLE_START_SECONDS", str(10 * 60)))
+BUNDLED_NODE = (
+    Path.home()
+    / ".cache"
+    / "codex-runtimes"
+    / "codex-primary-runtime"
+    / "dependencies"
+    / "node"
+    / "bin"
+    / "node.exe"
+)
+BUNDLED_NODE_MODULES = (
+    Path.home()
+    / ".cache"
+    / "codex-runtimes"
+    / "codex-primary-runtime"
+    / "dependencies"
+    / "node"
+    / "node_modules"
+)
 
 
 def load_token() -> str:
@@ -30,13 +50,18 @@ def load_token() -> str:
 
 
 def sample_window(item: dict[str, Any]) -> str:
+    start = sample_start_seconds(item)
+    return f"*{start}-{start + SAMPLE_SECONDS}"
+
+
+def sample_start_seconds(item: dict[str, Any]) -> int:
     duration = item.get("durationSeconds")
     start = SAMPLE_START_SECONDS
     if isinstance(duration, int) and duration > SAMPLE_SECONDS + 60:
         start = min(start, max(0, duration - SAMPLE_SECONDS - 30))
     else:
         start = 0
-    return f"*{start}-{start + SAMPLE_SECONDS}"
+    return start
 
 
 def media_candidates(ops: dict[str, Any]) -> list[dict[str, Any]]:
@@ -70,6 +95,47 @@ def run_download(args: list[str]) -> tuple[int, str]:
     return completed.returncode, completed.stdout
 
 
+def node_executable() -> str:
+    configured = os.getenv("CURTIS_NODE_EXE", "").strip()
+    if configured:
+        return configured
+    if BUNDLED_NODE.exists():
+        return str(BUNDLED_NODE)
+    return shutil.which("node") or "node"
+
+
+def browser_capture_sample(item: dict[str, Any]) -> Path:
+    MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+    video_id = str(item["id"])
+    output_path = MEDIA_DIR / f"{video_id}-browser.webm"
+    env = os.environ.copy()
+    if "NODE_PATH" not in env and BUNDLED_NODE_MODULES.exists():
+        env["NODE_PATH"] = str(BUNDLED_NODE_MODULES)
+    completed = subprocess.run(
+        [
+            node_executable(),
+            str(ROOT / "tools" / "capture_youtube_sample.js"),
+            "--url",
+            str(item["url"]),
+            "--start",
+            str(sample_start_seconds(item)),
+            "--duration",
+            str(SAMPLE_SECONDS),
+            "--output",
+            str(output_path),
+        ],
+        cwd=ROOT,
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=max(180, SAMPLE_SECONDS + 90),
+    )
+    if completed.returncode == 0 and output_path.exists() and output_path.stat().st_size:
+        return output_path
+    raise RuntimeError(completed.stdout[-1200:])
+
+
 def download_sample(item: dict[str, Any]) -> Path:
     MEDIA_DIR.mkdir(parents=True, exist_ok=True)
     video_id = str(item["id"])
@@ -94,6 +160,11 @@ def download_sample(item: dict[str, Any]) -> Path:
         [*base_args[:3], "--cookies-from-browser", "edge:Default", *base_args[3:]],
     ]
     output = ""
+    try:
+        return browser_capture_sample(item)
+    except Exception as exc:
+        output = f"browser_capture_failed: {exc}"
+
     for args in attempts:
         code, output = run_download(args)
         files = sorted(MEDIA_DIR.glob(f"{video_id}.*"), key=lambda path: path.stat().st_mtime, reverse=True)

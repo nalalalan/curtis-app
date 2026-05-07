@@ -117,6 +117,7 @@ def base_ops(state: dict[str, Any], extra_blockers: list[str] | None = None) -> 
             "lastMediaRun": state.get("lastMediaRun"),
             "samples": state.get("mediaSamples", [])[:5],
         },
+        "analysis": state.get("lastAnalysisRun"),
         "lastScan": state.get("lastScan"),
         "blockers": stable_unique(blockers),
     }

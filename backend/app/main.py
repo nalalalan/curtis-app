@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+from .analyzer import analyze_media_samples
 from .auth import (
     build_youtube_authorization_url,
     exchange_youtube_code,
@@ -66,6 +67,7 @@ async def worker_loop() -> None:
         await run_scan()
         if os.getenv("CURTIS_MEDIA_AUTORUN", "1").strip().lower() not in {"0", "false", "no"}:
             await probe_youtube_media()
+            analyze_media_samples()
         await asyncio.sleep(max(SCAN_INTERVAL_SECONDS, 300))
 
 
@@ -114,6 +116,13 @@ async def scan_run(config: SourceConfig | None = None) -> dict[str, Any]:
 @app.post("/api/curtis/media/probe")
 async def media_probe() -> dict[str, Any]:
     await probe_youtube_media()
+    analyze_media_samples()
+    return base_ops(load_state())
+
+
+@app.post("/api/curtis/analyze/run")
+async def analyze_run() -> dict[str, Any]:
+    analyze_media_samples()
     return base_ops(load_state())
 
 
@@ -136,6 +145,7 @@ async def media_upload(
             temp_file.write(chunk)
         temp_path = Path(temp_file.name)
     record_uploaded_sample(temp_path, video_id=video_id, title=title, url=url, window=window)
+    analyze_media_samples()
     return base_ops(load_state())
 
 
