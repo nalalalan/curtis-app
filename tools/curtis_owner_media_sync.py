@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -19,6 +20,8 @@ MEDIA_DIR = RUNTIME / "owner-media"
 API_BASE = os.getenv("CURTIS_API_BASE", "https://curtis.aolabs.io").rstrip("/")
 SAMPLE_SECONDS = int(os.getenv("CURTIS_OWNER_SAMPLE_SECONDS", "90"))
 SAMPLE_START_SECONDS = int(os.getenv("CURTIS_OWNER_SAMPLE_START_SECONDS", str(10 * 60)))
+WINDOWS_PER_VIDEO = int(os.getenv("CURTIS_OWNER_WINDOWS_PER_VIDEO", "4"))
+WINDOW_RE = re.compile(r"\*(\d+)-(\d+)")
 BUNDLED_NODE = (
     Path.home()
     / ".cache"
@@ -49,6 +52,13 @@ def load_token() -> str:
     return ""
 
 
+def parse_window_start(value: str) -> int | None:
+    match = WINDOW_RE.search(value or "")
+    if not match:
+        return None
+    return int(match.group(1))
+
+
 def sample_window(item: dict[str, Any]) -> str:
     start = sample_start_seconds(item)
     return f"*{start}-{start + SAMPLE_SECONDS}"
@@ -64,6 +74,35 @@ def sample_start_seconds(item: dict[str, Any]) -> int:
     return start
 
 
+def sample_starts(item: dict[str, Any]) -> list[int]:
+    duration = item.get("durationSeconds")
+    if not isinstance(duration, int) or duration <= SAMPLE_SECONDS + 60:
+        return [0]
+    latest = max(0, duration - SAMPLE_SECONDS - 30)
+    anchors = [
+        SAMPLE_START_SECONDS,
+        int(duration * 0.25),
+        int(duration * 0.5),
+        int(duration * 0.75),
+        latest,
+    ]
+    starts = [min(max(0, anchor), latest) for anchor in anchors]
+    return list(dict.fromkeys(starts))[: max(1, WINDOWS_PER_VIDEO)]
+
+
+def sample_id(item: dict[str, Any], start: int) -> str:
+    return f"{item['id']}-{start}"
+
+
+def with_sample_window(item: dict[str, Any], start: int) -> dict[str, Any]:
+    return {
+        **item,
+        "sampleStartSeconds": start,
+        "sampleId": sample_id(item, start),
+        "sampleWindow": f"*{start}-{start + SAMPLE_SECONDS}",
+    }
+
+
 def media_candidates(ops: dict[str, Any]) -> list[dict[str, Any]]:
     inventory = ops.get("inventory", {}).get("youtube", [])
     samples = ops.get("media", {}).get("samples", [])
@@ -72,15 +111,26 @@ def media_candidates(ops: dict[str, Any]) -> list[dict[str, Any]]:
         for sample in samples
         if isinstance(sample, dict) and sample.get("id")
     }
-    return [
-        item
-        for item in inventory
-        if isinstance(item, dict)
-        and item.get("practiceCandidate")
-        and item.get("id")
-        and item.get("url")
-        and str(item["id"]) not in sampled_ids
-    ]
+    for sample in samples:
+        if not isinstance(sample, dict) or not sample.get("id"):
+            continue
+        start = parse_window_start(str(sample.get("window") or ""))
+        if start is not None:
+            sampled_ids.add(f"{sample.get('id')}-{start}")
+    candidates: list[dict[str, Any]] = []
+    for item in inventory:
+        if not (
+            isinstance(item, dict)
+            and item.get("practiceCandidate")
+            and item.get("id")
+            and item.get("url")
+        ):
+            continue
+        for start in sample_starts(item):
+            candidate = with_sample_window(item, start)
+            if str(candidate["sampleId"]) not in sampled_ids:
+                candidates.append(candidate)
+    return candidates
 
 
 def run_download(args: list[str]) -> tuple[int, str]:
@@ -106,7 +156,7 @@ def node_executable() -> str:
 
 def browser_capture_sample(item: dict[str, Any]) -> Path:
     MEDIA_DIR.mkdir(parents=True, exist_ok=True)
-    video_id = str(item["id"])
+    video_id = str(item.get("sampleId") or item["id"])
     output_path = MEDIA_DIR / f"{video_id}-browser.webm"
     env = os.environ.copy()
     if "NODE_PATH" not in env and BUNDLED_NODE_MODULES.exists():
@@ -118,7 +168,7 @@ def browser_capture_sample(item: dict[str, Any]) -> Path:
             "--url",
             str(item["url"]),
             "--start",
-            str(sample_start_seconds(item)),
+            str(item.get("sampleStartSeconds", sample_start_seconds(item))),
             "--duration",
             str(SAMPLE_SECONDS),
             "--output",
@@ -138,7 +188,7 @@ def browser_capture_sample(item: dict[str, Any]) -> Path:
 
 def download_sample(item: dict[str, Any]) -> Path:
     MEDIA_DIR.mkdir(parents=True, exist_ok=True)
-    video_id = str(item["id"])
+    video_id = str(item.get("sampleId") or item["id"])
     output_template = str(MEDIA_DIR / f"{video_id}.%(ext)s")
     base_args = [
         sys.executable,
@@ -179,10 +229,10 @@ def upload_sample(client: httpx.Client, token: str, item: dict[str, Any], path: 
             f"{API_BASE}/api/curtis/media/upload",
             headers={"Authorization": f"Bearer {token}"},
             data={
-                "video_id": str(item["id"]),
+                "video_id": str(item.get("sampleId") or item["id"]),
                 "title": str(item.get("title") or ""),
                 "url": str(item.get("url") or ""),
-                "window": sample_window(item),
+                "window": str(item.get("sampleWindow") or sample_window(item)),
             },
             files={"file": (path.name, handle, "application/octet-stream")},
             timeout=180,

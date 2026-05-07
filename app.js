@@ -28,6 +28,10 @@ const elements = {
   runScanButton: document.querySelector("#runScanButton"),
   probeMediaButton: document.querySelector("#probeMediaButton"),
   currentState: document.querySelector("#currentState"),
+  evidenceState: document.querySelector("#evidenceState"),
+  focusState: document.querySelector("#focusState"),
+  constraintState: document.querySelector("#constraintState"),
+  boundaryState: document.querySelector("#boundaryState"),
   inventoryList: document.querySelector("#inventoryList"),
   reviewedCount: document.querySelector("#reviewedCount"),
   sectionCount: document.querySelector("#sectionCount"),
@@ -202,6 +206,8 @@ function currentStateText(ops) {
   if (!backend.online) return `Backend offline: ${backend.lastError}`;
   const inventoryTotal = inventoryItems(ops).length;
   const practiceCount = Number(ops?.review?.practiceCandidateCount) || 0;
+  const findingCount = skillFindings(ops).length;
+  if (findingCount) return `${findingCount} Curtis-focused findings. ${progressPlan(ops)?.oneFocus || "Review active."}`;
   const sectionCount = reviewSections(ops).length;
   if (sectionCount) return `${sectionCount} audio/video sections scanned. Musicianship judgment pending.`;
   if (practiceCount) return `${practiceCount} likely practice/music videos indexed. Section listening pending.`;
@@ -220,6 +226,16 @@ function inventoryItems(ops) {
 
 function reviewSections(ops) {
   return Array.isArray(ops?.review?.notableSections) ? ops.review.notableSections : [];
+}
+
+function skillFindings(ops) {
+  return Array.isArray(ops?.review?.skillFindings) ? ops.review.skillFindings : [];
+}
+
+function progressPlan(ops) {
+  return ops?.review?.progressPlan && typeof ops.review.progressPlan === "object"
+    ? ops.review.progressPlan
+    : null;
 }
 
 function mediaStateLabel(value) {
@@ -250,6 +266,8 @@ function renderStatus() {
   const ops = backend.ops || {};
   const inventory = inventoryItems(ops);
   const sections = reviewSections(ops);
+  const findings = skillFindings(ops);
+  const plan = progressPlan(ops);
   const reviewedVideos = Number(ops?.review?.reviewedVideoCount) || 0;
   const practiceCount = Number(ops?.review?.practiceCandidateCount) || 0;
   const longFormCount = Number(ops?.review?.longFormCandidateCount) || 0;
@@ -262,6 +280,10 @@ function renderStatus() {
     : `${practiceCount} candidates`;
   elements.reviewState.textContent = sections.length ? `${sections.length} sections` : "Unjudged";
   elements.modelState.textContent = model;
+  elements.evidenceState.textContent = findings.length ? `${findings.length} findings` : sections.length ? "Sections ready" : "Unjudged";
+  elements.focusState.textContent = plan?.oneFocus || (sections.length ? "Model review pending." : "Capture playable sections.");
+  elements.constraintState.textContent = plan?.practiceConstraint || "One focus per session.";
+  elements.boundaryState.textContent = plan?.boundary || "No admission prediction from current samples.";
   const source = youtubeSource(ops);
   elements.sourceLink.href = youtubeSourceHref(source);
   elements.sourceLink.textContent = source.replace("https://www.", "").replace("https://", "");
@@ -305,13 +327,21 @@ function renderInventory() {
 }
 
 function clipCountsForDimension(id) {
-  const entries = reviewSections(backend.ops).filter((entry) => entry.dimension === id);
+  const entries = [
+    ...reviewSections(backend.ops).filter((entry) => entry.dimension === id),
+    ...skillFindings(backend.ops).filter((entry) => entry.dimension === id)
+  ];
   return {
     total: entries.length,
     strong: entries.filter((entry) => entry.judgment === "Strong signal").length,
     needs: entries.filter((entry) => entry.judgment === "Needs work").length,
     regression: entries.filter((entry) => entry.judgment === "Regression").length
   };
+}
+
+function evidenceForDimension(id, fallback) {
+  const entry = skillFindings(backend.ops).find((finding) => finding.dimension === id && finding.evidence);
+  return entry ? entry.evidence : fallback;
 }
 
 function dimensionStatus(counts) {
@@ -357,7 +387,7 @@ function renderSkillMap() {
         <div>
           <span>${escapeHtml(status)}</span>
           <strong>${escapeHtml(dimension.label)}</strong>
-          <p>${escapeHtml(dimension.focus)}</p>
+          <p>${escapeHtml(evidenceForDimension(dimension.id, dimension.focus))}</p>
         </div>
         <em>${counts.total}</em>
       </article>
