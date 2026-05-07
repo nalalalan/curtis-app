@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import re
 import subprocess
 import tempfile
 from pathlib import Path
@@ -35,7 +36,76 @@ WEAK_EVIDENCE_TERMS = {
     "masked",
     "dominates",
 }
-REVIEW_VERSION = "audio_video_piece_v1"
+UNKNOWN_PIECE_TITLES = {
+    "",
+    "unknown",
+    "unknown piece",
+    "n/a",
+    "none",
+    "piece being identified",
+}
+GENERIC_PIECE_TERMS = {
+    "possible",
+    "likely",
+    "virtuosic",
+    "solo work",
+    "solo piece",
+    "etude or caprice",
+    "practice passage",
+    "technical passage",
+    "spiccato section",
+    "fast passage",
+    "scale",
+    "exercise",
+    "warmup",
+    "warm-up",
+    "piece",
+    "section",
+    "excerpt",
+}
+COMPOSER_MARKERS = {
+    "bach",
+    "beethoven",
+    "brahms",
+    "bruch",
+    "dont",
+    "fiorillo",
+    "kreisler",
+    "kreutzer",
+    "lalo",
+    "mendelssohn",
+    "mozart",
+    "paganini",
+    "prokofiev",
+    "rode",
+    "saint-saens",
+    "sarasate",
+    "sibelius",
+    "tchaikovsky",
+    "vieuxtemps",
+    "vitali",
+    "vivaldi",
+    "wieniawski",
+    "ysaye",
+}
+WORK_MARKERS = {
+    "bwv",
+    "caprice",
+    "chaconne",
+    "concerto",
+    "czardas",
+    "etude",
+    "major",
+    "minor",
+    "movement",
+    "no.",
+    "no ",
+    "op.",
+    "opus",
+    "partita",
+    "sonata",
+}
+REVIEW_VERSION = "audio_video_piece_v2"
 
 
 def run_process(args: list[str], timeout: int = 120) -> tuple[int, str]:
@@ -150,7 +220,27 @@ def decode_json(text: str) -> dict[str, Any]:
         raise
 
 
-def clamp_percent(value: Any, *, evidence_quality: str, piece_confidence: str) -> int:
+def piece_title_is_identified(title: str) -> bool:
+    normalized = re.sub(r"\s+", " ", str(title or "").strip()).lower()
+    if normalized in UNKNOWN_PIECE_TITLES:
+        return False
+    if normalized.startswith(("possible ", "likely ", "unknown ")):
+        return False
+    has_catalog_or_composer = (
+        any(marker in normalized for marker in COMPOSER_MARKERS)
+        or any(marker in normalized for marker in {"bwv", "k.", "kv", "no.", "no ", "op.", "opus"})
+        or any(char.isdigit() for char in normalized)
+    )
+    has_work_form = any(marker in normalized for marker in WORK_MARKERS)
+    generic_hit = any(term in normalized for term in GENERIC_PIECE_TERMS)
+    if " or " in normalized and not has_catalog_or_composer:
+        return False
+    if generic_hit and not has_catalog_or_composer:
+        return False
+    return has_catalog_or_composer or (has_work_form and len(normalized.split()) >= 2)
+
+
+def clamp_percent(value: Any, *, evidence_quality: str, piece_confidence: str, piece_identified: bool) -> int:
     try:
         percent = int(round(float(value)))
     except (TypeError, ValueError):
@@ -158,25 +248,42 @@ def clamp_percent(value: Any, *, evidence_quality: str, piece_confidence: str) -
     percent = max(0, min(100, percent))
     if evidence_quality == "weak":
         percent = min(percent, 20)
+    if not piece_identified:
+        percent = min(percent, 25)
     if piece_confidence == "unknown":
         percent = min(percent, 45)
+    if piece_confidence == "possible":
+        percent = min(percent, 70)
     return percent
 
 
 def normalize_piece(raw: dict[str, Any], *, evidence_quality: str, section: dict[str, Any]) -> dict[str, Any]:
     piece = raw.get("piece") if isinstance(raw.get("piece"), dict) else {}
-    title = str(piece.get("title") or raw.get("pieceTitle") or "").strip()
+    raw_title = str(piece.get("title") or raw.get("pieceTitle") or "").strip()
     confidence = str(piece.get("confidence") or raw.get("pieceConfidence") or "unknown").strip().lower()
     if confidence not in {"clear", "possible", "unknown"}:
         confidence = "unknown"
-    if not title or title.lower() in {"unknown", "unknown piece", "n/a", "none"}:
+    piece_identified = piece_title_is_identified(raw_title)
+    candidate_title = ""
+    if not piece_identified:
+        candidate_title = "" if raw_title.lower() in UNKNOWN_PIECE_TITLES else raw_title[:120]
         title = "Piece being identified"
         confidence = "unknown"
-    completion = clamp_percent(raw.get("completionPercent"), evidence_quality=evidence_quality, piece_confidence=confidence)
+    else:
+        title = raw_title
+    completion = clamp_percent(
+        raw.get("completionPercent"),
+        evidence_quality=evidence_quality,
+        piece_confidence=confidence,
+        piece_identified=piece_identified,
+    )
+    evidence = str(piece.get("evidence") or raw.get("pieceEvidence") or "Evidence accumulating.").strip()[:220]
     return {
         "title": title[:120],
         "confidence": confidence,
-        "evidence": str(piece.get("evidence") or raw.get("pieceEvidence") or "Evidence accumulating.").strip()[:220],
+        "evidence": evidence,
+        "candidateTitle": candidate_title,
+        "candidateEvidence": evidence if candidate_title else "",
         "completionPercent": completion,
         "immediateTip": str(raw.get("immediateTip") or raw.get("oneFocus") or "Capture one clearer excerpt.").strip()[:180],
         "sectionId": section.get("id"),
@@ -274,6 +381,9 @@ Required JSON:
 
 Rules:
 - If there is no clear violin playing, set evidenceQuality to "weak" and findings to Unjudged.
+- Piece title must be an actual repertoire identifier: composer, work title, movement, etude/caprice number, opus, key, or catalog number.
+- Do not use category labels as piece titles: virtuosic solo work, etude or caprice, spiccato passage, technical exercise, fast section, or similar.
+- If the exact piece is not identifiable, set piece.title exactly to "Piece being identified", confidence to "unknown", and put the candidate category only in piece.evidence.
 - No admission prediction, no odds, no reassurance, no motivation, no diagnosis language.
 - Do not name repertoire unless it is clearly audible.
 - Completion percent means Curtis-level readiness for this piece from current evidence. Use 100 only for clearly Curtis-level evidence.
@@ -313,6 +423,9 @@ Rules:
 - Use visual evidence when audio is weak: posture, bow path, contact-point setup, left-hand frame, tension, setup consistency, and audition-room presentation.
 - Mark audio-only dimensions Unjudged when frames do not show enough.
 - If no violin/person/instrument is visible, evidenceQuality is "weak" and findings are Unjudged.
+- Piece title must be an actual repertoire identifier visible in context: score title, overlay title, composer/work clue, movement, etude/caprice number, opus, key, or catalog number.
+- Do not use category labels as piece titles: virtuosic solo work, etude or caprice, spiccato passage, technical exercise, fast section, or similar.
+- If the exact piece is not identifiable, set piece.title exactly to "Piece being identified", confidence to "unknown", and put the candidate category only in piece.evidence.
 - Completion percent means Curtis-level readiness for this piece from current visual evidence. Use 100 only for clearly Curtis-level evidence.
 - No admission prediction, no odds, no reassurance, no motivation, no diagnosis language.
 - Use at most three findings.
@@ -427,12 +540,26 @@ def aggregate_piece_reviews(existing: list[Any], incoming: list[dict[str, Any]])
     for item in [*existing, *incoming]:
         if not isinstance(item, dict):
             continue
-        title = str(item.get("title") or "Piece being identified").strip()[:120] or "Piece being identified"
+        raw_title = str(item.get("title") or "Piece being identified").strip()[:120] or "Piece being identified"
+        piece_identified = piece_title_is_identified(raw_title)
+        title = raw_title if piece_identified else "Piece being identified"
+        candidate_title = str(item.get("candidateTitle") or "").strip()[:120]
+        if not piece_identified and not candidate_title and raw_title.lower() not in UNKNOWN_PIECE_TITLES:
+            candidate_title = raw_title
         key = title.lower()
         current = pieces.get(key)
-        confidence = str(item.get("confidence") or "unknown")
+        confidence = str(item.get("confidence") or "unknown").strip().lower()
+        if confidence not in {"clear", "possible", "unknown"}:
+            confidence = "unknown"
+        if not piece_identified:
+            confidence = "unknown"
         confidence_score = {"clear": 3, "possible": 2, "unknown": 1}.get(confidence, 1)
-        completion = max(0, min(100, int(item.get("completionPercent") or 0)))
+        completion = clamp_percent(
+            item.get("completionPercent"),
+            evidence_quality=str(item.get("evidenceQuality") or "usable"),
+            piece_confidence=confidence,
+            piece_identified=piece_identified,
+        )
         if current is None:
             pieces[key] = {
                 "title": title,
@@ -441,6 +568,8 @@ def aggregate_piece_reviews(existing: list[Any], incoming: list[dict[str, Any]])
                 "completionPercent": completion,
                 "tip": str(item.get("immediateTip") or "Capture one clearer excerpt.").strip()[:180],
                 "evidence": str(item.get("evidence") or "Evidence accumulating.").strip()[:220],
+                "candidateTitle": candidate_title,
+                "candidateEvidence": str(item.get("candidateEvidence") or item.get("evidence") or "").strip()[:220],
                 "sectionCount": 1,
                 "latestAt": item.get("createdAt") or utc_now(),
             }
@@ -452,6 +581,10 @@ def aggregate_piece_reviews(existing: list[Any], incoming: list[dict[str, Any]])
             current["confidenceScore"] = confidence_score
             current["tip"] = str(item.get("immediateTip") or current.get("tip") or "").strip()[:180]
             current["evidence"] = str(item.get("evidence") or current.get("evidence") or "").strip()[:220]
+            current["candidateTitle"] = candidate_title or current.get("candidateTitle") or ""
+            current["candidateEvidence"] = str(
+                item.get("candidateEvidence") or item.get("evidence") or current.get("candidateEvidence") or ""
+            ).strip()[:220]
             current["latestAt"] = item.get("createdAt") or current.get("latestAt")
     return sorted(
         pieces.values(),

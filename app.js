@@ -255,6 +255,25 @@ function primaryPiece(ops) {
   return list.length ? list[0] : null;
 }
 
+function isIdentifiedPiece(piece) {
+  return Boolean(piece?.title && piece.title !== "Piece being identified");
+}
+
+function pieceLabel(piece) {
+  if (!piece) return "Identifying from practice sessions.";
+  if (isIdentifiedPiece(piece)) return piece.title;
+  const candidate = String(piece.candidateTitle || "").trim();
+  return candidate ? `Identifying / ${candidate}` : "Piece being identified";
+}
+
+function pieceTip(piece) {
+  if (!piece) return "Capture one clear excerpt.";
+  const tip = String(piece.tip || "Capture one clearer excerpt.").trim();
+  if (isIdentifiedPiece(piece)) return tip;
+  const evidence = String(piece.candidateEvidence || piece.evidence || "").trim();
+  return evidence ? `${tip} Evidence: ${evidence}` : tip;
+}
+
 function workingText(ops) {
   const samples = Number(ops?.media?.sampleCount) || (Array.isArray(ops?.media?.samples) ? ops.media.samples.length : 0);
   const sections = reviewSections(ops).length;
@@ -319,9 +338,9 @@ function renderStatus() {
     ? plan.sessionPlan.slice(0, 3)
     : ["Capture clear violin audio."];
   elements.sessionPlan.innerHTML = session.map((item) => `<li>${escapeHtml(item)}</li>`).join("");
-  elements.pieceState.textContent = piece?.title || "Identifying from practice sessions.";
+  elements.pieceState.textContent = pieceLabel(piece);
   elements.pieceProgress.textContent = piece ? `${Number(piece.completionPercent) || 0}%` : "0%";
-  elements.pieceTip.textContent = piece?.tip || "Capture one clear excerpt.";
+  elements.pieceTip.textContent = pieceTip(piece);
   elements.pieceCount.textContent = `${pieceList.length} ${pieceList.length === 1 ? "piece" : "pieces"}`;
   const source = youtubeSource(ops);
   elements.sourceLink.href = youtubeSourceHref(source);
@@ -352,8 +371,8 @@ function renderPieces() {
     <article class="piece-row">
       <div>
         <span>${escapeHtml(piece.confidence || "unknown")}</span>
-        <strong>${escapeHtml(piece.title || "Piece being identified")}</strong>
-        <p>${escapeHtml(piece.tip || piece.evidence || "Capture one clearer excerpt.")}</p>
+        <strong>${escapeHtml(pieceLabel(piece))}</strong>
+        <p>${escapeHtml(pieceTip(piece))}</p>
       </div>
       <em>${Number(piece.completionPercent) || 0}%</em>
     </article>
