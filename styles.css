@@ -113,6 +113,7 @@ button:hover,
 
 .identity,
 .operation-band,
+.timeline-band,
 .panel,
 .source-band {
   border: 1px solid var(--line);
@@ -235,6 +236,81 @@ h1 {
   height: 100%;
   background: linear-gradient(90deg, var(--blue), var(--green), var(--gold));
   transition: width .18s ease;
+}
+
+.timeline-band {
+  display: grid;
+  grid-template-columns: minmax(190px, .32fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
+  margin-bottom: 14px;
+  padding: 16px 18px;
+}
+
+.timeline {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.timeline::before {
+  content: "";
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  top: 17px;
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--blue), var(--green), var(--gold), var(--red));
+}
+
+.timeline article {
+  position: relative;
+  display: grid;
+  gap: 7px;
+  min-height: 72px;
+  padding-top: 34px;
+}
+
+.timeline article::before {
+  content: "";
+  position: absolute;
+  top: 9px;
+  left: 0;
+  width: 18px;
+  height: 18px;
+  border: 3px solid var(--surface);
+  border-radius: 50%;
+  background: var(--blue);
+  box-shadow: 0 0 0 1px rgba(31, 35, 38, .18);
+}
+
+.timeline article:nth-child(2)::before {
+  background: var(--green);
+}
+
+.timeline article:nth-child(3)::before {
+  background: var(--gold);
+}
+
+.timeline article:nth-child(4)::before {
+  background: var(--red);
+}
+
+.timeline span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1.15;
+  text-transform: uppercase;
+}
+
+.timeline strong {
+  display: block;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.2;
 }
 
 .record-grid {
@@ -487,6 +563,7 @@ select:focus {
 
 @media (max-width: 900px) {
   .status-band,
+  .timeline-band,
   .record-grid,
   .work-grid {
     grid-template-columns: 1fr;
@@ -537,6 +614,7 @@ select:focus {
   }
 
   .operation-band,
+  .timeline-band,
   .source-band {
     display: grid;
     align-items: start;
@@ -566,5 +644,30 @@ select:focus {
   .source-links a {
     flex: 1 1 46%;
     justify-content: center;
+  }
+
+  .timeline {
+    grid-template-columns: 1fr;
+  }
+
+  .timeline::before {
+    left: 9px;
+    right: auto;
+    top: 12px;
+    bottom: 12px;
+    width: 4px;
+    height: auto;
+    background: linear-gradient(180deg, var(--blue), var(--green), var(--gold), var(--red));
+  }
+
+  .timeline article {
+    min-height: 54px;
+    padding-top: 0;
+    padding-left: 34px;
+  }
+
+  .timeline article::before {
+    left: 0;
+    top: 3px;
   }
 }
