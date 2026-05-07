@@ -186,6 +186,18 @@ def merge_enriched_pieces(pieces: list[dict[str, Any]]) -> list[dict[str, Any]]:
             ):
                 if piece.get(source_key) not in {None, ""}:
                     current[source_key] = piece.get(source_key)
+        else:
+            for source_key in (
+                "sampleId",
+                "sectionId",
+                "sourceTitle",
+                "sourceUrl",
+                "sourceWindow",
+                "sourceStartSeconds",
+                "sourceEndSeconds",
+            ):
+                if current.get(source_key) in {None, ""} and piece.get(source_key) not in {None, ""}:
+                    current[source_key] = piece.get(source_key)
     return sorted(
         merged.values(),
         key=lambda piece: (
@@ -204,7 +216,18 @@ def enriched_pieces(pieces: list[Any], today: str) -> list[dict[str, Any]]:
         if not isinstance(item, dict):
             continue
         piece = dict(item)
-        if str(piece.get("confidence") or "unknown").lower() != "clear" or rejected_repertoire_title(piece.get("title")):
+        has_source_window = bool(
+            piece.get("sampleId")
+            and piece.get("sourceUrl")
+            and piece.get("sourceStartSeconds") is not None
+        )
+        verified_piece_id = str(piece.get("evidenceQuality") or "") == "verified_piece_id"
+        if (
+            str(piece.get("confidence") or "unknown").lower() != "clear"
+            or rejected_repertoire_title(piece.get("title"))
+            or not has_source_window
+            or not verified_piece_id
+        ):
             piece["title"] = "Piece being identified"
             piece["confidence"] = "unknown"
             piece["confidenceScore"] = 1
@@ -212,6 +235,16 @@ def enriched_pieces(pieces: list[Any], today: str) -> list[dict[str, Any]]:
             piece["candidateTitle"] = ""
             piece["evidence"] = unclear_piece_evidence(piece.get("evidence"))
             piece["candidateEvidence"] = unclear_piece_evidence(piece.get("candidateEvidence") or piece.get("evidence"))
+            daily = piece.get("daily") if isinstance(piece.get("daily"), dict) else {}
+            piece["daily"] = {
+                str(day): {
+                    **entry,
+                    "completionPercent": 0,
+                    "tip": "Piece identification pending verified source evidence.",
+                }
+                for day, entry in daily.items()
+                if isinstance(entry, dict)
+            }
         else:
             piece["title"] = canonical_piece_title(piece.get("title"))
         daily = piece.get("daily") if isinstance(piece.get("daily"), dict) else {}

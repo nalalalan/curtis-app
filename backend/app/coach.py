@@ -329,18 +329,15 @@ def normalize_piece(raw: dict[str, Any], *, evidence_quality: str, section: dict
     confidence = str(piece.get("confidence") or raw.get("pieceConfidence") or "unknown").strip().lower()
     if confidence not in {"clear", "possible", "unknown"}:
         confidence = "unknown"
-    piece_identified = confidence == "clear" and piece_title_is_identified(raw_title)
-    candidate_title = ""
-    if not piece_identified:
-        title = "Piece being identified"
-        confidence = "unknown"
-    else:
-        title = canonical_piece_title(raw_title)
+    model_candidate_identified = confidence == "clear" and piece_title_is_identified(raw_title)
+    candidate_title = canonical_piece_title(raw_title) if model_candidate_identified else ""
+    title = "Piece being identified"
+    confidence = "unknown"
     completion = clamp_percent(
-        raw.get("completionPercent"),
+        0,
         evidence_quality=evidence_quality,
         piece_confidence=confidence,
-        piece_identified=piece_identified,
+        piece_identified=False,
     )
     evidence = str(piece.get("evidence") or raw.get("pieceEvidence") or "Evidence accumulating.").strip()[:220]
     return {
@@ -358,6 +355,7 @@ def normalize_piece(raw: dict[str, Any], *, evidence_quality: str, section: dict
         "sourceStartSeconds": section.get("startSeconds"),
         "sourceEndSeconds": section.get("endSeconds"),
         "createdAt": utc_now(),
+        "evidenceQuality": "coach_candidate",
     }
 
 
@@ -615,9 +613,16 @@ def aggregate_piece_reviews(existing: list[Any], incoming: list[dict[str, Any]])
         confidence = str(item.get("confidence") or "unknown").strip().lower()
         if confidence not in {"clear", "possible", "unknown"}:
             confidence = "unknown"
-        piece_identified = confidence == "clear" and piece_title_is_identified(raw_title)
+        evidence_quality = str(item.get("evidenceQuality") or "usable")
+        has_source_window = bool(item.get("sampleId") and item.get("sourceUrl") and item.get("sourceStartSeconds") is not None)
+        piece_identified = (
+            confidence == "clear"
+            and evidence_quality == "verified_piece_id"
+            and has_source_window
+            and piece_title_is_identified(raw_title)
+        )
         title = canonical_piece_title(raw_title) if piece_identified else "Piece being identified"
-        candidate_title = str(item.get("candidateTitle") or "").strip()[:120] if piece_identified else ""
+        candidate_title = str(item.get("candidateTitle") or "").strip()[:120]
         key = title.lower()
         current = pieces.get(key)
         if not piece_identified:
@@ -625,7 +630,7 @@ def aggregate_piece_reviews(existing: list[Any], incoming: list[dict[str, Any]])
         confidence_score = {"clear": 3, "possible": 2, "unknown": 1}.get(confidence, 1)
         completion = clamp_percent(
             item.get("completionPercent"),
-            evidence_quality=str(item.get("evidenceQuality") or "usable"),
+            evidence_quality=evidence_quality,
             piece_confidence=confidence,
             piece_identified=piece_identified,
         )
@@ -646,6 +651,7 @@ def aggregate_piece_reviews(existing: list[Any], incoming: list[dict[str, Any]])
                 "sourceWindow": item.get("sourceWindow"),
                 "sourceStartSeconds": item.get("sourceStartSeconds"),
                 "sourceEndSeconds": item.get("sourceEndSeconds"),
+                "evidenceQuality": evidence_quality,
                 "sectionCount": 1,
                 "latestAt": item.get("createdAt") or utc_now(),
             }
@@ -671,6 +677,7 @@ def aggregate_piece_reviews(existing: list[Any], incoming: list[dict[str, Any]])
                 "sourceWindow",
                 "sourceStartSeconds",
                 "sourceEndSeconds",
+                "evidenceQuality",
             ):
                 if item.get(source_key) not in {None, ""}:
                     current[source_key] = item.get(source_key)

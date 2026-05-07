@@ -423,7 +423,8 @@ def corroborated_result(primary: dict[str, Any], verification: dict[str, Any], s
         "title": title,
         "confidence": "clear",
         "confidenceScore": max(0.0, min(1.0, score)),
-        "completionPercent": int(primary.get("completionPercent") or 0),
+        "completionPercent": 0,
+        "readinessStatus": "not_scored_from_piece_id",
         "evidence": "; ".join(part for part in evidence_parts if part)[:220],
         "verificationTitle": verification.get("title") or "",
         "verification": verification,
@@ -493,6 +494,255 @@ def best_non_identifying_result(results: list[dict[str, Any]]) -> dict[str, Any]
     return {**result, "segmentsTried": len(results)}
 
 
+def candidate_title_from_result(result: dict[str, Any]) -> list[str]:
+    titles = [str(result.get("title") or ""), str(result.get("proposedTitle") or "")]
+    for candidate in result.get("topCandidates", []):
+        if isinstance(candidate, dict):
+            titles.append(str(candidate.get("title") or ""))
+    return [
+        title.strip()
+        for title in titles
+        if piece_title_is_identified(title) and not title_is_rejected(title, result)
+    ]
+
+
+def ranked_candidate_titles(results: list[dict[str, Any]], *, limit: int = 8) -> list[str]:
+    counts: dict[str, tuple[str, int]] = {}
+    for result in results:
+        for title in candidate_title_from_result(result):
+            key = compact_title(title)
+            if not key:
+                continue
+            display, count = counts.get(key, (title, 0))
+            counts[key] = (display, count + 1)
+    ranked = sorted(counts.values(), key=lambda item: (item[1], len(item[0])), reverse=True)
+    return [title for title, _count in ranked[:limit]]
+
+
+def consensus_prompt(sample: dict[str, Any], candidates: list[str]) -> str:
+    rejected = rejected_piece_text(sample)
+    candidate_text = "\n".join(f"- {title}" for title in candidates) if candidates else "- none"
+    return f"""
+Return JSON only. Identify the common/main classical violin repertoire across this montage of multiple windows from the same long practice video.
+
+Context:
+- Public YouTube practice capture: {sample.get("title") or "untitled"}
+- Source windows: {sample.get("window") or "multiple"}
+- Rejected false labels for this video: {rejected}
+- Candidate titles already proposed by window-level passes:
+{candidate_text}
+
+Rules:
+- This is a same-video consensus task. Prefer the title that explains repeated material across windows, not a one-off stylistic guess.
+- Compare the candidate titles against the audio and choose unknown if none are exact enough.
+- Do not infer a piece from generic technique: fast notes, arpeggios, ricochet, spiccato, scales, caprice-like writing, or virtuoso style.
+- Do not return a rejected false label.
+- If the work is clearer than the movement, put the broader work in workLevelTitle and set exactMovementConfidence below 0.75.
+- No readiness or completion percent.
+
+JSON schema:
+{{
+  "mainPiece": "exact piece title or null",
+  "workLevelTitle": "broader work title or null",
+  "confidence": "clear|possible|unknown",
+  "confidenceScore": 0.0,
+  "exactMovementConfidence": 0.0,
+  "audibleClues": ["clue"],
+  "candidateScores": [
+    {{"title": "candidate", "score": 0.0, "reason": "short reason"}}
+  ],
+  "notes": "short factual note"
+}}
+""".strip()
+
+
+def consensus_title(raw: dict[str, Any]) -> str:
+    exact = str(raw.get("mainPiece") or raw.get("piece") or raw.get("displayTitle") or "").strip()
+    work_level = str(raw.get("workLevelTitle") or "").strip()
+    exact_movement = number(raw.get("exactMovementConfidence"), 0.0)
+    title = exact if exact_movement >= 0.75 else work_level or exact
+    return title.strip()
+
+
+def build_consensus_montage(samples: list[dict[str, Any]], target: Path) -> tuple[list[dict[str, Any]], str]:
+    excerpts: list[dict[str, Any]] = []
+    with tempfile.TemporaryDirectory(prefix="curtis-consensus-") as temp_dir_name:
+        temp_dir = Path(temp_dir_name)
+        concat_lines: list[str] = []
+        for index, sample in enumerate(samples[:8]):
+            source = Path(str(sample.get("path") or ""))
+            if not source.exists():
+                continue
+            starts = candidate_segment_starts(source)
+            segment_start = starts[0] if starts else 0
+            segment_path = temp_dir / f"segment-{index:02d}.wav"
+            code, output = run_process(
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-ss",
+                    str(max(0, segment_start)),
+                    "-i",
+                    str(source),
+                    "-t",
+                    "12",
+                    "-vn",
+                    "-ac",
+                    "1",
+                    "-ar",
+                    "16000",
+                    "-f",
+                    "wav",
+                    str(segment_path),
+                ],
+                timeout=120,
+            )
+            if code != 0 or not segment_path.exists() or segment_path.stat().st_size <= 44:
+                continue
+            base_start = parse_window_start(str(sample.get("window") or ""))
+            excerpts.append(
+                {
+                    "sampleId": sample.get("id"),
+                    "title": sample.get("title"),
+                    "url": sample.get("url"),
+                    "window": sample.get("window"),
+                    "startSeconds": base_start + segment_start,
+                    "endSeconds": base_start + segment_start + 12,
+                }
+            )
+            concat_lines.append(f"file '{segment_path.resolve().as_posix()}'")
+        if len(concat_lines) < 2:
+            return excerpts, "not_enough_consensus_segments"
+        concat_path = temp_dir / "concat.txt"
+        concat_path.write_text("\n".join(concat_lines), encoding="ascii")
+        code, output = run_process(
+            [
+                "ffmpeg",
+                "-y",
+                "-f",
+                "concat",
+                "-safe",
+                "0",
+                "-i",
+                str(concat_path),
+                "-ac",
+                "1",
+                "-ar",
+                "16000",
+                str(target),
+            ],
+            timeout=180,
+        )
+        if code != 0 or not target.exists() or target.stat().st_size <= 44:
+            return excerpts, output[-500:]
+    return excerpts, ""
+
+
+def consensus_matches(primary: dict[str, Any], verifier: dict[str, Any], sample: dict[str, Any]) -> bool:
+    primary_title = consensus_title(primary)
+    verifier_title = consensus_title(verifier)
+    if title_is_rejected(primary_title, sample) or title_is_rejected(verifier_title, sample):
+        return False
+    primary_score = number(primary.get("confidenceScore"), 0.0)
+    verifier_score = number(verifier.get("confidenceScore"), 0.0)
+    primary_confidence = str(primary.get("confidence") or "unknown").lower()
+    verifier_confidence = str(verifier.get("confidence") or "unknown").lower()
+    return (
+        primary_confidence in {"clear", "possible"}
+        and verifier_confidence in {"clear", "possible"}
+        and min(primary_score, verifier_score) >= 0.7
+        and piece_title_is_identified(primary_title)
+        and same_piece_title(primary_title, verifier_title)
+    )
+
+
+def identify_video_consensus(samples: list[dict[str, Any]], results: list[dict[str, Any]]) -> dict[str, Any] | None:
+    usable_samples = [sample for sample in samples if Path(str(sample.get("path") or "")).exists()]
+    if len(usable_samples) < 2:
+        return None
+    first = usable_samples[0]
+    candidates = ranked_candidate_titles(results)
+    fake_sample = {
+        "id": f"{first.get('id')}-consensus",
+        "title": first.get("title"),
+        "url": first.get("url"),
+        "window": ", ".join(str(sample.get("window") or "") for sample in usable_samples[:8] if sample.get("window")),
+    }
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp:
+        montage_path = Path(temp.name)
+    try:
+        if not candidates:
+            probe_limit = max(0, int(os.getenv("CURTIS_PIECE_CONSENSUS_PROBE_LIMIT", "2")))
+            probe_results = [identify_sample(sample) for sample in usable_samples[:probe_limit]]
+            candidates = ranked_candidate_titles(probe_results)
+        excerpts, error = build_consensus_montage(usable_samples, montage_path)
+        if error:
+            return {
+                "status": "blocked",
+                "blocker": "piece_consensus_audio_extract_failed",
+                "sampleId": fake_sample["id"],
+                "detail": error,
+            }
+        primary_raw = call_audio_json_model(
+            montage_path,
+            fake_sample,
+            prompt=consensus_prompt(fake_sample, candidates),
+            model=OPENAI_AUDIO_MODEL,
+            blocker="openai_piece_consensus_failed",
+        )
+        if primary_raw.get("status") == "blocked":
+            return primary_raw
+        verifier_raw = call_audio_json_model(
+            montage_path,
+            fake_sample,
+            prompt=consensus_prompt(fake_sample, candidates),
+            model=PIECE_VERIFY_MODEL,
+            blocker="openai_piece_consensus_verify_failed",
+        )
+        if verifier_raw.get("status") == "blocked":
+            return verifier_raw
+    finally:
+        montage_path.unlink(missing_ok=True)
+
+    verified = consensus_matches(primary_raw, verifier_raw, fake_sample)
+    title = consensus_title(primary_raw)
+    source = excerpts[0] if excerpts else {}
+    confidence_score = min(number(primary_raw.get("confidenceScore")), number(verifier_raw.get("confidenceScore")))
+    return {
+        "status": "piece_identified" if verified else "piece_candidate_unverified",
+        "sampleId": fake_sample["id"],
+        "url": first.get("url"),
+        "sampleTitle": first.get("title"),
+        "sampleWindow": fake_sample.get("window"),
+        "title": title if verified else "Piece being identified",
+        "proposedTitle": title,
+        "confidence": "clear" if verified else "unknown",
+        "confidenceScore": max(0.0, min(1.0, confidence_score)),
+        "completionPercent": 0,
+        "readinessStatus": "not_scored_from_piece_id",
+        "immediateTip": "Use one short repeated cell, then record one clean source take for verification.",
+        "evidence": "; ".join(str(item).strip() for item in primary_raw.get("audibleClues", []) if str(item).strip())[:220]
+        or str(primary_raw.get("notes") or "Same-video consensus completed.").strip()[:220],
+        "musicalClues": [str(item).strip()[:180] for item in primary_raw.get("audibleClues", []) if str(item).strip()][:5],
+        "topCandidates": sanitized_candidates({"topCandidates": primary_raw.get("candidateScores", [])}),
+        "notes": str(primary_raw.get("notes") or "").strip()[:300],
+        "reviewVersion": PIECE_ID_VERSION,
+        "createdAt": utc_now(),
+        "sourceTitle": source.get("title") or first.get("title"),
+        "sourceUrl": source.get("url") or first.get("url"),
+        "sourceWindow": source.get("window") or first.get("window"),
+        "sourceStartSeconds": source.get("startSeconds"),
+        "sourceEndSeconds": source.get("endSeconds"),
+        "consensus": {
+            "sampleCount": len(usable_samples),
+            "excerpts": excerpts[:8],
+            "candidates": candidates,
+            "primary": primary_raw,
+            "verifier": verifier_raw,
+        },
+    }
+
+
 def identify_sample(sample: dict[str, Any]) -> dict[str, Any]:
     path = Path(str(sample.get("path") or ""))
     if not path.exists():
@@ -535,7 +785,7 @@ def piece_review_from_identification(result: dict[str, Any]) -> dict[str, Any]:
     return {
         "title": result.get("title"),
         "confidence": result.get("confidence"),
-        "completionPercent": result.get("completionPercent"),
+        "completionPercent": 0,
         "immediateTip": result.get("immediateTip"),
         "evidence": result.get("evidence"),
         "sectionId": result.get("sampleId"),
@@ -546,7 +796,7 @@ def piece_review_from_identification(result: dict[str, Any]) -> dict[str, Any]:
         "sourceStartSeconds": result.get("sourceStartSeconds"),
         "sourceEndSeconds": result.get("sourceEndSeconds"),
         "createdAt": result.get("createdAt") or utc_now(),
-        "evidenceQuality": "usable" if result.get("status") == "piece_identified" else "weak",
+        "evidenceQuality": "verified_piece_id" if result.get("status") == "piece_identified" else "weak",
     }
 
 
@@ -566,6 +816,32 @@ def identify_pieces_from_samples(limit: int = 4) -> dict[str, Any]:
     }
     selected = [sample for sample in samples if sample.get("id") not in processed_ids][:limit]
     results = [identify_sample(sample) for sample in selected]
+    all_results = [*results, *previous]
+    consensus_processed_urls = {
+        item.get("url")
+        for item in previous
+        if str(item.get("sampleId") or "").endswith("-consensus") and item.get("reviewVersion") == PIECE_ID_VERSION
+    }
+    samples_by_url: dict[str, list[dict[str, Any]]] = {}
+    for sample in samples:
+        url = str(sample.get("url") or "")
+        if not url or url in consensus_processed_urls:
+            continue
+        samples_by_url.setdefault(url, []).append(sample)
+    consensus_limit = max(0, int(os.getenv("CURTIS_PIECE_CONSENSUS_LIMIT", "1")))
+    consensus_candidates = sorted(
+        (items for items in samples_by_url.values() if len(items) >= 2),
+        key=lambda items: (len(items), str(items[0].get("title") or "")),
+        reverse=True,
+    )[:consensus_limit]
+    consensus_results = []
+    for items in consensus_candidates:
+        url = str(items[0].get("url") or "")
+        video_results = [result for result in all_results if result.get("url") == url or result.get("sourceUrl") == url]
+        result = identify_video_consensus(items, video_results)
+        if result is not None:
+            consensus_results.append(result)
+    results = [*consensus_results, *results]
     usable_piece_reviews = [
         piece_review_from_identification(result)
         for result in results

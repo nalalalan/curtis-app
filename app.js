@@ -454,6 +454,7 @@ function todayCompletion(piece) {
 function progressText(piece) {
   if (!piece) return "0%";
   if (!isIdentifiedPiece(piece) || piece.confidence !== "clear") return "Identifying";
+  if (todayCompletion(piece) <= 0) return "Not scored";
   return `${todayCompletion(piece)}%`;
 }
 
@@ -461,6 +462,7 @@ function completionLabel(piece) {
   if (!isIdentifiedPiece(piece) || piece.confidence !== "clear") return "Identifying";
   const today = todayCompletion(piece);
   const overall = Number(piece?.completionPercent) || 0;
+  if (today <= 0 && overall <= 0) return "identified";
   return piece?.isActiveToday ? `${today}% today` : `${overall}% overall`;
 }
 
@@ -522,6 +524,7 @@ function primaryHighlight(ops) {
   const results = pieceIdResults(ops);
   const matchingResult = results.find((result) => {
     if (!result?.url) return false;
+    if (!isIdentifiedPiece(piece) || !resultIsIdentified(result)) return false;
     return sameLooseTitle(result.title, piece?.title) || sameLooseTitle(result.proposedTitle, piece?.title);
   });
   if (matchingResult) return sourceFromResult(matchingResult, ops);
@@ -611,7 +614,7 @@ function practiceDays(ops) {
       samples: daySamples.length,
       sections: daySections.length,
       detected: [...new Set(detected)].slice(0, 3),
-      status: identified.length ? "clear" : unverified.length ? "unverified" : daySamples.length ? "identifying" : "indexed",
+      status: identified.length ? "identified" : unverified.length ? "unverified" : daySamples.length ? "identifying" : "indexed",
       completionPercent: Math.max(0, ...identified.map((item) => Number(item.completionPercent) || 0)),
       tip: (identified[0] || unverified[0])?.immediateTip || "",
       highlight
