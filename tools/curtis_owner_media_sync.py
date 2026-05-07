@@ -22,7 +22,7 @@ PUBLIC_YOUTUBE_SOURCE = os.getenv("CURTIS_YOUTUBE_SOURCE", "https://www.youtube.
 SAMPLE_SECONDS = int(os.getenv("CURTIS_OWNER_SAMPLE_SECONDS", "90"))
 SAMPLE_START_SECONDS = int(os.getenv("CURTIS_OWNER_SAMPLE_START_SECONDS", str(10 * 60)))
 WINDOWS_PER_VIDEO = int(os.getenv("CURTIS_OWNER_WINDOWS_PER_VIDEO", "4"))
-BATCH_SIZE = int(os.getenv("CURTIS_OWNER_BATCH_SIZE", "3"))
+BATCH_SIZE = int(os.getenv("CURTIS_OWNER_BATCH_SIZE", "4"))
 WINDOW_RE = re.compile(r"\*(\d+)-(\d+)")
 BUNDLED_NODE = (
     Path.home()
@@ -96,6 +96,14 @@ def sample_id(item: dict[str, Any], start: int) -> str:
     return f"{item['id']}-{start}"
 
 
+def sample_video_id(sample: dict[str, Any]) -> str:
+    raw_id = str(sample.get("id") or "")
+    start = parse_window_start(str(sample.get("window") or ""))
+    if start is not None and raw_id.endswith(f"-{start}"):
+        return raw_id[: -(len(str(start)) + 1)]
+    return raw_id
+
+
 def with_sample_window(item: dict[str, Any], start: int) -> dict[str, Any]:
     return {
         **item,
@@ -107,20 +115,25 @@ def with_sample_window(item: dict[str, Any], start: int) -> dict[str, Any]:
 
 def media_candidates(ops: dict[str, Any]) -> list[dict[str, Any]]:
     inventory = ops.get("inventory", {}).get("youtube", [])
-    samples = ops.get("media", {}).get("samples", [])
+    media = ops.get("media", {}) if isinstance(ops.get("media"), dict) else {}
+    samples = media.get("sampleIndex") or media.get("samples") or []
     sampled_ids = {
         str(sample.get("id"))
         for sample in samples
         if isinstance(sample, dict) and sample.get("id")
     }
+    sampled_windows = set()
     for sample in samples:
         if not isinstance(sample, dict) or not sample.get("id"):
             continue
         start = parse_window_start(str(sample.get("window") or ""))
         if start is not None:
-            sampled_ids.add(f"{sample.get('id')}-{start}")
-    candidates: list[dict[str, Any]] = []
-    for item in inventory:
+            video_id = sample_video_id(sample)
+            sampled_ids.add(f"{video_id}-{start}")
+            sampled_windows.add((str(sample.get("url") or ""), start))
+
+    by_video: list[list[dict[str, Any]]] = []
+    for item in sorted(inventory, key=inventory_sort_key, reverse=True):
         if not (
             isinstance(item, dict)
             and item.get("practiceCandidate")
@@ -128,11 +141,30 @@ def media_candidates(ops: dict[str, Any]) -> list[dict[str, Any]]:
             and item.get("url")
         ):
             continue
+        windows = []
         for start in sample_starts(item):
             candidate = with_sample_window(item, start)
-            if str(candidate["sampleId"]) not in sampled_ids:
-                candidates.append(candidate)
+            key = (str(item.get("url") or ""), start)
+            if str(candidate["sampleId"]) not in sampled_ids and key not in sampled_windows:
+                windows.append(candidate)
+        if windows:
+            by_video.append(windows)
+
+    candidates: list[dict[str, Any]] = []
+    max_windows = max((len(windows) for windows in by_video), default=0)
+    for index in range(max_windows):
+        for windows in by_video:
+            if index < len(windows):
+                candidates.append(windows[index])
     return candidates
+
+
+def inventory_sort_key(item: dict[str, Any]) -> tuple[int, str, int]:
+    duration = item.get("durationSeconds")
+    duration_value = duration if isinstance(duration, int) else 0
+    title = str(item.get("title") or "").lower()
+    dated = 1 if re.search(r"\b\d{1,2}-\d{1,2}-\d{2,4}\b", title) else 0
+    return (dated, str(item.get("publishedAt") or ""), duration_value)
 
 
 def run_download(args: list[str]) -> tuple[int, str]:

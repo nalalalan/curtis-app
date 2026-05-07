@@ -183,7 +183,7 @@ The broader experiment is whether a practice system can make musical development
 
 \subsection*{Backend}
 
-The backend is a FastAPI service deployed on Railway. It exposes \url{https://curtis.aolabs.io/api/curtis/media-status} for compact state, \url{https://curtis.aolabs.io/api/curtis/ops-check} for fuller operational state, and run endpoints for scans, media probing, analysis, and coaching. Persistent runtime state stores sources, inventory, review findings, media samples, analysis runs, and scan history.
+The backend is a FastAPI service deployed on Railway. It exposes \url{https://curtis.aolabs.io/api/curtis/media-status} for compact state, \url{https://curtis.aolabs.io/api/curtis/ops-check} for fuller operational state, sample indexes for duplicate-window avoidance, and run endpoints for scans, media probing, analysis, and coaching. Persistent runtime state stores sources, inventory, review findings, media samples, analysis runs, and scan history.
 
 \subsection*{Source scan}
 
@@ -191,7 +191,7 @@ The default public source is \url{https://www.youtube.com/@nalalan}. The scanner
 
 \subsection*{Model review}
 
-The model layer reviews sampled media sections where usable excerpts exist. GPT-5.5 is used for text and visual review, and a separate audio model is configured for audio review. Findings are sanitized so weak evidence terms such as obscured, not audible, or no clear evidence produce an unjudged state rather than an unsupported critique. Piece labels are also sanitized: only composer, work, movement, etude/caprice number, opus, key, or catalog evidence can become a piece title.
+The model layer reviews sampled media sections where usable excerpts exist. GPT-5.5 is used for text and visual review, and a separate audio model is configured for audio review. Findings are sanitized so weak evidence terms such as obscured, not audible, or no clear evidence produce an unjudged state rather than an unsupported critique. Piece labels are also sanitized: only composer, work, movement, etude/caprice number, opus, key, or catalog evidence can become a piece title. The owner-browser sync uses the sample index to prioritize uncaptured public YouTube windows rather than re-uploading already reviewed excerpts.
 
 \subsection*{Progress ledger}
 

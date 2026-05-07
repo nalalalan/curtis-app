@@ -127,6 +127,21 @@ def base_ops(state: dict[str, Any], extra_blockers: list[str] | None = None) -> 
     if not hard_blockers and review.get("inventoryCount"):
         status = "inventory_ready"
 
+    media_samples = [sample for sample in state.get("mediaSamples", []) if isinstance(sample, dict)]
+    sample_index = [
+        {
+            "id": sample.get("id"),
+            "url": sample.get("url"),
+            "title": sample.get("title"),
+            "window": sample.get("window"),
+            "createdAt": sample.get("createdAt"),
+            "source": sample.get("source"),
+            "sizeBytes": sample.get("sizeBytes"),
+        }
+        for sample in media_samples
+        if sample.get("id")
+    ]
+
     return {
         "service": SERVICE_NAME,
         "status": status,
@@ -146,8 +161,9 @@ def base_ops(state: dict[str, Any], extra_blockers: list[str] | None = None) -> 
         "review": review,
         "media": {
             "lastMediaRun": state.get("lastMediaRun"),
-            "sampleCount": len(state.get("mediaSamples", [])),
-            "samples": state.get("mediaSamples", [])[:5],
+            "sampleCount": len(media_samples),
+            "sampleIndex": sample_index,
+            "samples": media_samples[:5],
         },
         "analysis": state.get("lastAnalysisRun"),
         "coach": state.get("lastCoachRun"),
