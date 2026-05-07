@@ -2,42 +2,46 @@
   <defs>
     <filter id="d" x="-35%" y="-35%" width="170%" height="170%" color-interpolation-filters="sRGB">
       <feDropShadow dx="0" dy="9" stdDeviation="5" flood-color="#2b211d" flood-opacity=".15"/>
-      <feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="#fffaf4" flood-opacity=".46"/>
+      <feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="#fffaf4" flood-opacity=".42"/>
     </filter>
-    <g id="creamKey">
-      <path d="M64 15v40" fill="none" stroke="#181716" stroke-width="2.2" stroke-linecap="round"/>
-      <rect x="60" y="25" width="8" height="23" rx="1.4" fill="#fffaf2" stroke="#181716" stroke-width="1.4"/>
+    <g id="warmKey">
+      <path d="M64 15v40" fill="none" stroke="#74685d" stroke-width="2.25" stroke-linecap="round"/>
+      <rect x="60" y="25" width="8" height="23" rx="1.5" fill="#d8c8b5" stroke="#74685d" stroke-width="1.25"/>
     </g>
-    <g id="inkKey">
-      <path d="M64 14v42" fill="none" stroke="#181716" stroke-width="2.8" stroke-linecap="round"/>
-      <rect x="60" y="23" width="8" height="26" rx="1.4" fill="#181716"/>
+    <g id="deepKey">
+      <path d="M64 15v40" fill="none" stroke="#4b453f" stroke-width="2.35" stroke-linecap="round"/>
+      <rect x="60" y="24" width="8" height="24" rx="1.5" fill="#5a524b" stroke="#4b453f" stroke-width="1.1"/>
     </g>
     <g id="goldKey">
-      <path d="M64 15v40" fill="none" stroke="#b98a3d" stroke-width="2.6" stroke-linecap="round"/>
-      <rect x="60" y="24" width="8" height="24" rx="1.4" fill="#c49a45"/>
+      <path d="M64 15v40" fill="none" stroke="#9f7a3f" stroke-width="2.45" stroke-linecap="round"/>
+      <rect x="60" y="24" width="8" height="24" rx="1.5" fill="#b6924e" stroke="#8b6b38" stroke-width="1"/>
+    </g>
+    <g id="sageKey">
+      <path d="M64 15v40" fill="none" stroke="#657f78" stroke-width="2.35" stroke-linecap="round"/>
+      <rect x="60" y="24" width="8" height="24" rx="1.5" fill="#78938b" stroke="#5d746e" stroke-width="1"/>
     </g>
   </defs>
   <g filter="url(#d)">
-    <use href="#creamKey" transform="rotate(140 64 64)"/>
-    <use href="#inkKey" transform="rotate(154 64 64)"/>
-    <use href="#creamKey" transform="rotate(168 64 64)"/>
-    <use href="#inkKey" transform="rotate(182 64 64)"/>
-    <use href="#creamKey" transform="rotate(196 64 64)"/>
-    <use href="#inkKey" transform="rotate(210 64 64)"/>
-    <use href="#creamKey" transform="rotate(224 64 64)"/>
-    <use href="#inkKey" transform="rotate(238 64 64)"/>
-    <use href="#creamKey" transform="rotate(252 64 64)"/>
-    <use href="#goldKey" transform="rotate(266 64 64)"/>
-    <use href="#creamKey" transform="rotate(280 64 64)"/>
-    <use href="#inkKey" transform="rotate(294 64 64)"/>
-    <use href="#creamKey" transform="rotate(308 64 64)"/>
-    <use href="#inkKey" transform="rotate(322 64 64)"/>
-    <use href="#creamKey" transform="rotate(336 64 64)"/>
-    <use href="#inkKey" transform="rotate(350 64 64)"/>
-    <use href="#creamKey" transform="rotate(364 64 64)"/>
-    <use href="#inkKey" transform="rotate(378 64 64)"/>
-    <use href="#creamKey" transform="rotate(392 64 64)"/>
-    <circle cx="64" cy="64" r="11" fill="#fffaf2" stroke="#181716" stroke-width="3"/>
-    <circle cx="64" cy="64" r="4.8" fill="#181716"/>
+    <use href="#warmKey" transform="rotate(140 64 64)"/>
+    <use href="#deepKey" transform="rotate(154 64 64)"/>
+    <use href="#warmKey" transform="rotate(168 64 64)"/>
+    <use href="#warmKey" transform="rotate(182 64 64)"/>
+    <use href="#deepKey" transform="rotate(196 64 64)"/>
+    <use href="#warmKey" transform="rotate(210 64 64)"/>
+    <use href="#goldKey" transform="rotate(224 64 64)"/>
+    <use href="#warmKey" transform="rotate(238 64 64)"/>
+    <use href="#deepKey" transform="rotate(252 64 64)"/>
+    <use href="#warmKey" transform="rotate(266 64 64)"/>
+    <use href="#sageKey" transform="rotate(280 64 64)"/>
+    <use href="#warmKey" transform="rotate(294 64 64)"/>
+    <use href="#deepKey" transform="rotate(308 64 64)"/>
+    <use href="#warmKey" transform="rotate(322 64 64)"/>
+    <use href="#warmKey" transform="rotate(336 64 64)"/>
+    <use href="#deepKey" transform="rotate(350 64 64)"/>
+    <use href="#warmKey" transform="rotate(364 64 64)"/>
+    <use href="#warmKey" transform="rotate(378 64 64)"/>
+    <use href="#goldKey" transform="rotate(392 64 64)"/>
+    <circle cx="64" cy="64" r="11" fill="#efe6d8" stroke="#5a524b" stroke-width="3"/>
+    <circle cx="64" cy="64" r="4.8" fill="#4b453f"/>
   </g>
 </svg>
