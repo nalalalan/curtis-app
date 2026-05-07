@@ -43,11 +43,12 @@ def base_ops(state: dict[str, Any], extra_blockers: list[str] | None = None) -> 
     credentials = credential_state()
     sources = effective_sources(state)
     blockers = list(extra_blockers or [])
+    has_any_source = bool(sources.get("youtube") or sources.get("instagram"))
     if not credentials["openai"]:
         blockers.append("missing_openai_api_key")
-    if not sources.get("youtube"):
+    if not has_any_source and not sources.get("youtube"):
         blockers.append("missing_youtube_source")
-    if not sources.get("instagram"):
+    if not has_any_source and not sources.get("instagram"):
         blockers.append("missing_instagram_source")
 
     inventory = state.get("inventory", {"youtube": [], "instagram": []})
@@ -85,28 +86,34 @@ async def run_scan(incoming_sources: dict[str, Any] | None = None) -> dict[str, 
     blockers: list[str] = []
     errors: list[dict[str, str]] = []
     inventory = {"youtube": [], "instagram": []}
+    has_any_source = bool(sources.get("youtube") or sources.get("instagram"))
 
-    try:
-        youtube_result = await fetch_youtube_inventory(str(sources.get("youtube", "")))
-        inventory["youtube"] = youtube_result.items
-        blockers.extend(youtube_result.blockers)
-    except httpx.HTTPStatusError as exc:
-        blockers.append("youtube_api_error")
-        errors.append({"platform": "youtube", "detail": exc.response.text[:500]})
-    except Exception as exc:  # pragma: no cover - defensive service boundary
-        blockers.append("youtube_scan_failed")
-        errors.append({"platform": "youtube", "detail": str(exc)[:500]})
+    if sources.get("youtube"):
+        try:
+            youtube_result = await fetch_youtube_inventory(str(sources.get("youtube", "")))
+            inventory["youtube"] = youtube_result.items
+            blockers.extend(youtube_result.blockers)
+        except httpx.HTTPStatusError as exc:
+            blockers.append("youtube_api_error")
+            errors.append({"platform": "youtube", "detail": exc.response.text[:500]})
+        except Exception as exc:  # pragma: no cover - defensive service boundary
+            blockers.append("youtube_scan_failed")
+            errors.append({"platform": "youtube", "detail": str(exc)[:500]})
 
-    try:
-        instagram_result = await fetch_instagram_inventory(str(sources.get("instagram", "")))
-        inventory["instagram"] = instagram_result.items
-        blockers.extend(instagram_result.blockers)
-    except httpx.HTTPStatusError as exc:
-        blockers.append("instagram_api_error")
-        errors.append({"platform": "instagram", "detail": exc.response.text[:500]})
-    except Exception as exc:  # pragma: no cover - defensive service boundary
-        blockers.append("instagram_scan_failed")
-        errors.append({"platform": "instagram", "detail": str(exc)[:500]})
+    if sources.get("instagram"):
+        try:
+            instagram_result = await fetch_instagram_inventory(str(sources.get("instagram", "")))
+            inventory["instagram"] = instagram_result.items
+            blockers.extend(instagram_result.blockers)
+        except httpx.HTTPStatusError as exc:
+            blockers.append("instagram_api_error")
+            errors.append({"platform": "instagram", "detail": exc.response.text[:500]})
+        except Exception as exc:  # pragma: no cover - defensive service boundary
+            blockers.append("instagram_scan_failed")
+            errors.append({"platform": "instagram", "detail": str(exc)[:500]})
+
+    if not has_any_source:
+        blockers.extend(["missing_youtube_source", "missing_instagram_source"])
 
     state["inventory"] = inventory
     state["review"] = derive_review(inventory, state.get("review"))
