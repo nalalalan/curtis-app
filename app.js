@@ -32,6 +32,7 @@ const elements = {
   focusState: document.querySelector("#focusState"),
   constraintState: document.querySelector("#constraintState"),
   boundaryState: document.querySelector("#boundaryState"),
+  sessionPlan: document.querySelector("#sessionPlan"),
   inventoryList: document.querySelector("#inventoryList"),
   reviewedCount: document.querySelector("#reviewedCount"),
   sectionCount: document.querySelector("#sectionCount"),
@@ -284,6 +285,10 @@ function renderStatus() {
   elements.focusState.textContent = plan?.oneFocus || (sections.length ? "Model review pending." : "Capture playable sections.");
   elements.constraintState.textContent = plan?.practiceConstraint || "One focus per session.";
   elements.boundaryState.textContent = plan?.boundary || "No admission prediction from current samples.";
+  const session = Array.isArray(plan?.sessionPlan) && plan.sessionPlan.length
+    ? plan.sessionPlan.slice(0, 3)
+    : ["Capture clear violin audio."];
+  elements.sessionPlan.innerHTML = session.map((item) => `<li>${escapeHtml(item)}</li>`).join("");
   const source = youtubeSource(ops);
   elements.sourceLink.href = youtubeSourceHref(source);
   elements.sourceLink.textContent = source.replace("https://www.", "").replace("https://", "");
