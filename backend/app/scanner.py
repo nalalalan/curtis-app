@@ -10,6 +10,8 @@ from .platforms import credential_state, fetch_instagram_inventory, fetch_youtub
 from .settings import OPENAI_MODEL, OPENAI_REASONING_EFFORT, SERVICE_NAME
 from .state import append_run, load_state, save_state, utc_now
 
+DEFAULT_YOUTUBE_SOURCE = "https://www.youtube.com/@nalalan"
+
 
 def stable_unique(values: list[str]) -> list[str]:
     return list(dict.fromkeys(value for value in values if value))
@@ -17,7 +19,16 @@ def stable_unique(values: list[str]) -> list[str]:
 
 def effective_sources(state: dict[str, Any]) -> dict[str, Any]:
     sources = dict(state.get("sources", {}))
-    sources["youtube"] = sources.get("youtube") or os.getenv("CURTIS_YOUTUBE_SOURCE", "")
+    stored_youtube = str(sources.get("youtube") or "").strip()
+    env_youtube = os.getenv("CURTIS_YOUTUBE_SOURCE", "").strip()
+    if stored_youtube:
+        sources["youtube"] = stored_youtube
+    elif env_youtube:
+        sources["youtube"] = env_youtube
+    elif youtube_auth_status().get("connected"):
+        sources["youtube"] = "mine"
+    else:
+        sources["youtube"] = DEFAULT_YOUTUBE_SOURCE
     sources["instagram"] = sources.get("instagram") or os.getenv("CURTIS_INSTAGRAM_SOURCE", "")
     return sources
 

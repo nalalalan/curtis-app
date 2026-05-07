@@ -1,18 +1,18 @@
-# Curtis Admission Record
+# Curtis Media Review
 
 Static AO Labs app and Railway-ready backend for `curtis.aolabs.io`.
 
 ## Source State
 
 - Curtis Institute of Music official admissions pages reviewed on 2026-05-07.
-- Requirements vary by department; instrument and program remain explicit user inputs.
+- Default public YouTube source: `https://www.youtube.com/@nalalan`.
 - Stored working state is browser-local when the backend is offline; backend state is persisted in `CURTIS_STATE_PATH` when the service is running.
 - Public custom-domain access is served by Railway at `https://curtis.aolabs.io`.
 
 ## Media Review Direction
 
-- Backend records YouTube and Instagram sources, inventories platform posts, and exposes scan state through `/api/curtis/ops-check`.
-- YouTube can connect once through Google OAuth and persist authenticated channel inventory in backend state. The Data API returns metadata, not video media, so performance judgment remains blocked until a permitted media path exists.
+- Backend inventories the public YouTube channel by default and exposes scan state through `/api/curtis/ops-check`.
+- YouTube OAuth remains available for authenticated inventory later. The Data API returns metadata, not video media, so performance judgment remains blocked until a permitted media path exists.
 - Instagram inventory uses the Instagram Graph API for authorized account media. Media URLs are queued for section processing when available.
 - Skill claims stay `Unjudged` until a video section is processed against the rubric.
 

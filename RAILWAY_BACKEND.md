@@ -10,6 +10,7 @@ Autonomous practice-video review for Curtis preparation.
 - `OPENAI_MODEL=gpt-5.5`
 - `OPENAI_REASONING_EFFORT=xhigh`
 - `YOUTUBE_API_KEY` for public YouTube channel inventory.
+- Default public source is `https://www.youtube.com/@nalalan`; override with `CURTIS_YOUTUBE_SOURCE` only if the channel changes.
 - `YOUTUBE_CLIENT_ID` and `YOUTUBE_CLIENT_SECRET` from a Google OAuth web client for persistent authenticated channel access.
 - `YOUTUBE_REFRESH_TOKEN` only when importing an existing token manually; the app stores it after `/api/auth/youtube/callback` when OAuth is connected.
 - Google OAuth authorized redirect URI:
@@ -28,7 +29,7 @@ Autonomous practice-video review for Curtis preparation.
 1. Create a Google OAuth client with application type `Web application`.
 2. Add `https://curtis.aolabs.io/api/auth/youtube/callback` as an authorized redirect URI.
 3. Set `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, `PUBLIC_BASE_URL`, and `CURTIS_STATE_PATH` in Railway.
-4. Open `https://curtis.aolabs.io`, use `Connect YouTube`, and approve the `youtube.readonly` scope once.
+4. Open `https://curtis.aolabs.io/api/auth/youtube/start` and approve the `youtube.readonly` scope once.
 5. The backend stores the refresh token in Railway volume state and scans `mine`, which resolves the authenticated channel uploads playlist.
 
 The YouTube Data API and OAuth provide channel and upload inventory. They do not provide raw video media files, so performance-level scoring still needs a permitted media extraction path.
@@ -44,7 +45,7 @@ If OAuth callback storage is not used, set all of:
 
 - `CURTIS_AUTORUN=1`
 - `CURTIS_SCAN_INTERVAL_SECONDS=86400`
-- `CURTIS_YOUTUBE_SOURCE`
+- `CURTIS_YOUTUBE_SOURCE=https://www.youtube.com/@nalalan`
 - `CURTIS_INSTAGRAM_SOURCE`
 - `YOUTUBE_MAX_RESULTS=200`
 - `INSTAGRAM_MAX_RESULTS=12`

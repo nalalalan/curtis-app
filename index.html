@@ -3,19 +3,19 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Curtis Admission Record</title>
-  <meta name="description" content="Curtis admission operating record for Alan Pham: source requirements, repertoire, practice media, skill evidence, and audition logs.">
+  <title>Curtis Media Review</title>
+  <meta name="description" content="YouTube-first Curtis practice media inventory and skill review for Alan Pham.">
   <link rel="canonical" href="https://curtis.aolabs.io/" />
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="AO Labs">
-  <meta property="og:title" content="Curtis Admission Record">
-  <meta property="og:description" content="Source-backed Curtis admission dashboard for repertoire, practice media, skill evidence, and audition work.">
+  <meta property="og:title" content="Curtis Media Review">
+  <meta property="og:description" content="YouTube-first Curtis practice media inventory and skill review.">
   <meta property="og:url" content="https://curtis.aolabs.io/">
   <meta name="twitter:card" content="summary">
-  <meta name="twitter:title" content="Curtis Admission Record">
-  <meta name="twitter:description" content="Source-backed Curtis admission dashboard for repertoire, practice media, skill evidence, and audition work.">
-  <link rel="icon" href="/favicon.svg?v=20260507-curtis6" type="image/svg+xml">
-  <link rel="stylesheet" href="/styles.css?v=20260507-oauth1">
+  <meta name="twitter:title" content="Curtis Media Review">
+  <meta name="twitter:description" content="YouTube-first Curtis practice media inventory and skill review.">
+  <link rel="icon" href="/favicon.svg?v=20260507-curtis7" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css?v=20260507-calm1">
 </head>
 <body>
   <header class="topbar" aria-label="Curtis navigation">
@@ -27,376 +27,131 @@
             <rect x="22.2" y="9" width="3.6" height="9.5" rx=".55" fill="currentColor"></rect>
           </g>
         </defs>
-        <g class="mark-keys" opacity=".88">
+        <g opacity=".82">
           <use href="#brand-key" transform="rotate(138 24 24)" color="#a77d54"></use>
-          <use href="#brand-key" transform="rotate(158 24 24)" color="#8e746b"></use>
-          <use href="#brand-key" transform="rotate(178 24 24)" color="#7b8583"></use>
-          <use href="#brand-key" transform="rotate(198 24 24)" color="#6a5d56"></use>
-          <use href="#brand-key" transform="rotate(218 24 24)" color="#9b746d"></use>
-          <use href="#brand-key" transform="rotate(238 24 24)" color="#71645d"></use>
-          <use href="#brand-key" transform="rotate(258 24 24)" color="#a77d54"></use>
-          <use href="#brand-key" transform="rotate(278 24 24)" color="#6f6259"></use>
-          <use href="#brand-key" transform="rotate(298 24 24)" color="#6e7f85"></use>
-          <use href="#brand-key" transform="rotate(318 24 24)" color="#9b746d"></use>
-          <use href="#brand-key" transform="rotate(338 24 24)" color="#71645d"></use>
-          <use href="#brand-key" transform="rotate(358 24 24)" color="#7b8583"></use>
+          <use href="#brand-key" transform="rotate(162 24 24)" color="#8e746b"></use>
+          <use href="#brand-key" transform="rotate(186 24 24)" color="#7b8583"></use>
+          <use href="#brand-key" transform="rotate(210 24 24)" color="#6a5d56"></use>
+          <use href="#brand-key" transform="rotate(234 24 24)" color="#9b746d"></use>
+          <use href="#brand-key" transform="rotate(258 24 24)" color="#71645d"></use>
+          <use href="#brand-key" transform="rotate(282 24 24)" color="#a77d54"></use>
+          <use href="#brand-key" transform="rotate(306 24 24)" color="#6e7f85"></use>
+          <use href="#brand-key" transform="rotate(330 24 24)" color="#9b746d"></use>
+          <use href="#brand-key" transform="rotate(354 24 24)" color="#7b8583"></use>
           <use href="#brand-key" transform="rotate(378 24 24)" color="#9b746d"></use>
-          <use href="#brand-key" transform="rotate(398 24 24)" color="#6e7f85"></use>
+          <use href="#brand-key" transform="rotate(402 24 24)" color="#6e7f85"></use>
         </g>
       </svg>
       <span>curtis</span>
     </a>
     <nav>
-      <a href="#record">Record</a>
-      <a href="#repertoire">Repertoire</a>
       <a href="#media">Media</a>
-      <a href="#sources">Sources</a>
+      <a href="#system">System</a>
       <a href="https://aolabs.io/" aria-label="AO Labs">AO</a>
     </nav>
   </header>
 
   <main class="shell">
-    <section class="status-band" aria-label="Current state">
+    <section class="current-band" aria-label="Current state">
       <div class="identity">
-        <p class="kicker">curtis.aolabs.io</p>
+        <p class="label">curtis.aolabs.io</p>
         <h1>Curtis</h1>
-        <p class="subtitle">Admission operating record</p>
+        <p class="subtitle">YouTube practice review</p>
       </div>
-      <div class="state-grid">
+
+      <div class="status-grid" aria-label="System status">
         <article>
-          <span>Target</span>
-          <strong>Curtis Institute of Music</strong>
+          <span>YouTube</span>
+          <strong id="youtubeState">Checking</strong>
+        </article>
+        <article>
+          <span>Inventory</span>
+          <strong id="inventoryCount">0 videos</strong>
+        </article>
+        <article>
+          <span>Review</span>
+          <strong id="reviewState">Unjudged</strong>
+        </article>
+        <article>
+          <span>Model</span>
+          <strong id="modelState">Checking</strong>
+        </article>
+      </div>
+    </section>
+
+    <section id="media" class="panel source-panel" aria-label="YouTube source">
+      <div class="panel-head">
+        <div>
+          <p class="label">Media</p>
+          <h2>YouTube Inventory</h2>
+        </div>
+        <div class="action-row">
+          <button type="button" id="runScanButton">Run scan</button>
+        </div>
+      </div>
+
+      <div class="source-line">
+        <span>Source</span>
+        <a id="sourceLink" href="https://www.youtube.com/@nalalan">youtube.com/@nalalan</a>
+      </div>
+
+      <div class="current-state" aria-live="polite">
+        <span>Current</span>
+        <strong id="currentState">Checking backend.</strong>
+      </div>
+    </section>
+
+    <section class="work-grid" aria-label="Practice media record">
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <p class="label">Videos</p>
+            <h2>Indexed</h2>
+          </div>
+          <span class="count-pill" id="reviewedCount">0 reviewed</span>
+        </div>
+        <div id="inventoryList" class="video-list"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <p class="label">Skill</p>
+            <h2>State</h2>
+          </div>
+          <span class="count-pill" id="sectionCount">0 sections</span>
+        </div>
+        <div id="skillSummary" class="skill-summary">No video sections processed.</div>
+        <div id="skillMap" class="skill-map"></div>
+      </section>
+    </section>
+
+    <section id="system" class="system-band" aria-label="System state">
+      <div>
+        <p class="label">System</p>
+        <h2>Automation</h2>
+      </div>
+      <div class="system-grid">
+        <article>
+          <span>Backend</span>
+          <strong id="backendState">Checking</strong>
         </article>
         <article>
           <span>Storage</span>
-          <strong id="storageState">Browser + backend state</strong>
+          <strong id="storageState">Checking</strong>
         </article>
         <article>
-          <span>Media Review</span>
-          <strong id="mediaReviewState">0 videos reviewed</strong>
+          <span>Scanner</span>
+          <strong id="automationState">Checking</strong>
         </article>
         <article>
-          <span>Automation</span>
-          <strong id="automationState">Backend check pending</strong>
+          <span>Instagram</span>
+          <strong id="instagramState">Not configured</strong>
         </article>
-      </div>
-    </section>
-
-    <section class="operation-band" aria-label="Next operation">
-      <div>
-        <p class="section-label">Next Operation</p>
-        <h2 id="nextOperation">Set instrument and program.</h2>
-      </div>
-      <div class="meter" aria-label="Readiness progress">
-        <span id="progressText">0 / 10 complete</span>
-        <div class="meter-track"><div id="progressFill"></div></div>
-      </div>
-    </section>
-
-    <section class="timeline-band" aria-label="Official timing">
-      <div>
-        <p class="section-label">Timing</p>
-        <h2>Official General Cycle</h2>
-      </div>
-      <div class="timeline" aria-label="Curtis admissions timeline">
-        <article>
-          <span>September</span>
-          <strong>Applications open</strong>
-        </article>
-        <article>
-          <span>Early December</span>
-          <strong>Application deadline</strong>
-        </article>
-        <article>
-          <span>January-February</span>
-          <strong>Audition invitations</strong>
-        </article>
-        <article>
-          <span>February-March</span>
-          <strong>Live auditions</strong>
-        </article>
-      </div>
-    </section>
-
-    <section id="record" class="record-grid" aria-label="Admission record">
-      <form class="panel profile-panel" id="profileForm">
-        <div class="panel-head">
-          <div>
-            <p class="section-label">Current</p>
-            <h2>Applicant Record</h2>
-          </div>
-          <button type="submit">Save</button>
-        </div>
-        <div class="field-grid">
-          <label>
-            Instrument
-            <input id="instrumentInput" name="instrument" autocomplete="off" placeholder="Unset">
-          </label>
-          <label>
-            Program
-            <input id="programInput" name="program" autocomplete="off" placeholder="Unset">
-          </label>
-          <label>
-            Cycle
-            <input id="cycleInput" name="cycle" autocomplete="off" placeholder="Next open cycle">
-          </label>
-          <label>
-            Teacher
-            <input id="teacherInput" name="teacher" autocomplete="off" placeholder="Unset">
-          </label>
-        </div>
-      </form>
-
-      <section class="panel task-panel" aria-label="Task matrix">
-        <div class="panel-head">
-          <div>
-            <p class="section-label">Status</p>
-            <h2>Readiness Matrix</h2>
-          </div>
-          <button type="button" id="exportButton">Export</button>
-        </div>
-        <div id="taskList" class="task-list"></div>
-      </section>
-
-      <section class="panel facts-panel" aria-label="Official source facts">
-        <div class="panel-head">
-          <div>
-            <p class="section-label">Sources</p>
-            <h2>Official Facts</h2>
-          </div>
-          <a class="text-link" href="https://www.curtis.edu/apply/applying/">Apply</a>
-        </div>
-        <dl id="factList" class="fact-list"></dl>
-      </section>
-
-      <section class="panel stats-panel" aria-label="Signals">
-        <div class="panel-head">
-          <div>
-            <p class="section-label">Signals</p>
-            <h2>Record Totals</h2>
-          </div>
-        </div>
-        <div class="stat-grid">
-          <div>
-            <span id="completeCount">0</span>
-            <p>Complete items</p>
-          </div>
-          <div>
-            <span id="activeCount">0</span>
-            <p>Active items</p>
-          </div>
-          <div>
-            <span id="pieceCount">0</span>
-            <p>Repertoire entries</p>
-          </div>
-          <div>
-            <span id="minuteCount">0</span>
-            <p>Logged minutes</p>
-          </div>
-          <div>
-            <span id="reviewedCount">0</span>
-            <p>Reviewed videos</p>
-          </div>
-          <div>
-            <span id="sectionCount">0</span>
-            <p>Notable sections</p>
-          </div>
-        </div>
-      </section>
-    </section>
-
-    <section id="repertoire" class="work-grid" aria-label="Repertoire and work log">
-      <form class="panel" id="repertoireForm">
-        <div class="panel-head">
-          <div>
-            <p class="section-label">Repertoire</p>
-            <h2>Audition Stack</h2>
-          </div>
-          <button type="submit">Add</button>
-        </div>
-        <div class="field-grid compact">
-          <label>
-            Piece
-            <input id="pieceInput" name="piece" autocomplete="off" placeholder="Composer, work, movement">
-          </label>
-          <label>
-            Role
-            <select id="pieceRole" name="role">
-              <option>Prescreening</option>
-              <option>Live audition</option>
-              <option>Scale / arpeggio</option>
-              <option>Excerpt</option>
-              <option>Essay reference</option>
-            </select>
-          </label>
-          <label>
-            State
-            <select id="pieceState" name="state">
-              <option>Unset</option>
-              <option>Learning</option>
-              <option>Recording</option>
-              <option>Audition-ready</option>
-            </select>
-          </label>
-        </div>
-        <div id="repertoireList" class="entry-list"></div>
-      </form>
-
-      <form class="panel" id="logForm">
-        <div class="panel-head">
-          <div>
-            <p class="section-label">Record</p>
-            <h2>Work Log</h2>
-          </div>
-          <button type="submit">Log</button>
-        </div>
-        <div class="field-grid compact">
-          <label>
-            Date
-            <input id="logDate" name="date" type="date">
-          </label>
-          <label>
-            Type
-            <select id="logType" name="type">
-              <option>Practice</option>
-              <option>Recording</option>
-              <option>Lesson</option>
-              <option>Source review</option>
-              <option>Application</option>
-            </select>
-          </label>
-          <label>
-            Minutes
-            <input id="logMinutes" name="minutes" type="number" min="0" step="5" placeholder="0">
-          </label>
-          <label>
-            Note
-            <input id="logNote" name="note" autocomplete="off" placeholder="Terse record">
-          </label>
-        </div>
-        <div id="logList" class="entry-list"></div>
-      </form>
-    </section>
-
-    <section id="media" class="media-grid" aria-label="Media review system">
-      <form class="panel media-source-panel" id="sourceForm">
-        <div class="panel-head">
-          <div>
-            <p class="section-label">Media</p>
-            <h2>Autonomous Sources</h2>
-          </div>
-          <div class="action-row">
-            <button type="button" id="connectYoutubeButton">Connect YouTube</button>
-            <button type="submit">Save</button>
-            <button type="button" id="runScanButton">Run Scan</button>
-          </div>
-        </div>
-        <div class="field-grid">
-          <label>
-            YouTube
-            <input id="youtubeInput" name="youtube" autocomplete="off" placeholder="Connect account or paste channel/playlist">
-          </label>
-          <label>
-            Instagram
-            <input id="instagramInput" name="instagram" autocomplete="off" placeholder="Profile, Reel, or post URL">
-          </label>
-          <label>
-            Scan Scope
-            <select id="scanScope" name="scanScope">
-              <option>Latest public posts</option>
-              <option>Authenticated full archive</option>
-              <option>Recent authorized media</option>
-            </select>
-          </label>
-          <label>
-            Cadence
-            <select id="scanCadence" name="scanCadence">
-              <option>Run now</option>
-              <option>Daily</option>
-              <option>Weekly</option>
-            </select>
-          </label>
-        </div>
-        <div class="connector-list" aria-label="Connector status">
-          <article>
-            <span>YouTube</span>
-            <strong id="youtubeState">Unset</strong>
-          </article>
-          <article>
-            <span>Instagram</span>
-            <strong id="instagramState">Unset</strong>
-          </article>
-          <article>
-            <span>Backend</span>
-            <strong id="backendState">Checking</strong>
-          </article>
-        </div>
-        <div id="scanSummary" class="scan-summary">No backend scan recorded.</div>
-      </form>
-
-      <section class="panel skill-panel" aria-label="Skill map">
-        <div class="panel-head">
-          <div>
-            <p class="section-label">Skill</p>
-            <h2>Current Judgment</h2>
-          </div>
-        </div>
-        <div id="skillSummary" class="judgment-callout">No video reviewed.</div>
-        <div id="skillMap" class="skill-map"></div>
-      </section>
-
-      <section class="panel notable-panel" aria-label="Automated section record">
-        <div class="panel-head">
-          <div>
-            <p class="section-label">Sections</p>
-            <h2>Automated Section Record</h2>
-          </div>
-        </div>
-        <div id="clipList" class="entry-list"></div>
-      </section>
-
-      <section class="panel backend-panel" aria-label="Backend contract">
-        <div class="panel-head">
-          <div>
-            <p class="section-label">System</p>
-            <h2>Autonomous Review Contract</h2>
-          </div>
-        </div>
-        <dl class="fact-list system-facts">
-          <div>
-            <dt>YouTube</dt>
-            <dd>OAuth reads authenticated channel inventory; media access still required for performance review.</dd>
-          </div>
-          <div>
-            <dt>Instagram</dt>
-            <dd>Graph API permissions required; public scraping is not the operating plan.</dd>
-          </div>
-          <div>
-            <dt>Analysis</dt>
-            <dd>Audio extraction, frame sampling, section detection, rubric scoring, human-readable record.</dd>
-          </div>
-          <div>
-            <dt>Boundary</dt>
-            <dd>No Curtis-level claim until video evidence is processed against a stable rubric.</dd>
-          </div>
-        </dl>
-      </section>
-    </section>
-
-    <section id="sources" class="source-band" aria-label="Source links">
-      <div>
-        <p class="section-label">Source State</p>
-        <h2>Requirement Source Links</h2>
-      </div>
-      <div class="source-links">
-        <a href="https://www.curtis.edu/apply/applying/">How to Apply</a>
-        <a href="https://www.curtis.edu/apply/audition/">Audition</a>
-        <a href="https://www.curtis.edu/apply/faq/">FAQ</a>
-        <a href="https://www.curtis.edu/learn/">Learn</a>
       </div>
     </section>
   </main>
 
-  <script src="/app.js?v=20260507-oauth1"></script>
+  <script src="/app.js?v=20260507-calm1"></script>
 </body>
 </html>
