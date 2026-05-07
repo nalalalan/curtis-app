@@ -134,8 +134,20 @@ def local_day(value: Any) -> str:
     return parsed.astimezone(local_timezone()).date().isoformat()
 
 
+def practice_day_from_title(value: Any) -> str:
+    match = re.search(r"\b(\d{1,2})[-_/](\d{1,2})[-_/](\d{2,4})\b", str(value or ""))
+    if not match:
+        return ""
+    month, day, year = (int(part) for part in match.groups())
+    if year < 100:
+        year += 2000
+    if not (1 <= month <= 12 and 1 <= day <= 31):
+        return ""
+    return f"{year:04d}-{month:02d}-{day:02d}"
+
+
 def merge_daily_piece_state(piece: dict[str, Any], item: dict[str, Any], completion: int) -> None:
-    day = local_day(item.get("createdAt"))
+    day = practice_day_from_title(item.get("sourceTitle") or item.get("title")) or local_day(item.get("createdAt"))
     existing = piece.get("daily") if isinstance(piece.get("daily"), dict) else {}
     daily = {str(key): value for key, value in existing.items() if isinstance(value, dict)}
     current = dict(daily.get(day, {}))

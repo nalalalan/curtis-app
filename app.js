@@ -582,6 +582,7 @@ function practiceDays(ops) {
   const samples = sampleIndex(ops);
   const results = pieceIdResults(ops);
   const sections = reviewSections(ops);
+  const repertoire = pieces(ops);
   return inventory.slice(0, 12).map((video) => {
     const videoId = video.id || parseVideoId(video.url);
     const daySamples = samples.filter((sample) => sample.url === video.url || String(sample.id || "").startsWith(`${videoId}-`) || sample.id === videoId);
@@ -590,21 +591,33 @@ function practiceDays(ops) {
       const sample = sourceForSampleId(ops, result.sampleId);
       return result.url === video.url || sample?.url === video.url || sampleIds.has(result.sampleId);
     });
+    const dayPieces = repertoire.filter((piece) => {
+      const source = sourceForSampleId(ops, piece.sampleId);
+      return piece.sourceUrl === video.url || source?.url === video.url || sampleIds.has(piece.sampleId);
+    });
     const daySections = sections.filter((section) => section.url === video.url || sampleIds.has(section.sampleId));
     const identified = dayResults.filter((result) => result.status === "piece_identified");
+    const identifiedPieces = dayPieces.filter((piece) => isIdentifiedPiece(piece));
     const unverified = dayResults.filter((result) => result.status === "piece_candidate_unverified");
-    const detected = [...identified, ...unverified]
-      .map(resultDetectedLabel)
+    const detected = [...identified.map(resultDetectedLabel), ...identifiedPieces.map(pieceLabel), ...unverified.map(resultDetectedLabel)]
       .filter(Boolean);
     const highlight = identified[0]
       ? sourceFromResult(identified[0], ops)
-      : unverified[0]
-        ? sourceFromResult(unverified[0], ops)
-        : daySections[0]
-          ? sourceFromSection(daySections[0])
-          : daySamples[0]
-            ? sourceFromResult({ sampleId: daySamples[0].id }, ops)
-            : { title: video.title, url: video.url, startSeconds: 0, endSeconds: 0, detectedTitle: "Piece being identified", status: "metadata" };
+      : identifiedPieces[0]
+        ? sourceFromPiece(identifiedPieces[0], ops)
+        : unverified[0]
+          ? sourceFromResult(unverified[0], ops)
+          : daySections[0]
+            ? sourceFromSection(daySections[0])
+            : daySamples[0]
+              ? sourceFromResult({ sampleId: daySamples[0].id }, ops)
+              : { title: video.title, url: video.url, startSeconds: 0, endSeconds: 0, detectedTitle: "Piece being identified", status: "metadata" };
+    const percentCandidates = [
+      ...identified.map((item) => Number(item.completionPercent) || 0),
+      ...identifiedPieces.map((item) => Math.max(Number(item.todayCompletionPercent) || 0, Number(item.completionPercent) || 0))
+    ];
+    const tip = identified[0]?.immediateTip || identifiedPieces[0]?.todayTip || identifiedPieces[0]?.tip || unverified[0]?.immediateTip || "";
+    const identifiedCount = identified.length + identifiedPieces.length;
     return {
       title: video.title || "Practice",
       date: formatDate(video.publishedAt),
@@ -614,9 +627,9 @@ function practiceDays(ops) {
       samples: daySamples.length,
       sections: daySections.length,
       detected: [...new Set(detected)].slice(0, 3),
-      status: identified.length ? "identified" : unverified.length ? "unverified" : daySamples.length ? "identifying" : "indexed",
-      completionPercent: Math.max(0, ...identified.map((item) => Number(item.completionPercent) || 0)),
-      tip: (identified[0] || unverified[0])?.immediateTip || "",
+      status: identifiedCount ? "identified" : unverified.length ? "unverified" : daySamples.length ? "identifying" : "indexed",
+      completionPercent: Math.max(0, ...percentCandidates),
+      tip,
       highlight
     };
   });

@@ -94,6 +94,18 @@ def today_local_day() -> str:
     return datetime.now(timezone.utc).astimezone(local_timezone()).date().isoformat()
 
 
+def practice_day_from_title(value: Any) -> str:
+    match = re.search(r"\b(\d{1,2})[-_/](\d{1,2})[-_/](\d{2,4})\b", str(value or ""))
+    if not match:
+        return ""
+    month, day, year = (int(part) for part in match.groups())
+    if year < 100:
+        year += 2000
+    if not (1 <= month <= 12 and 1 <= day <= 31):
+        return ""
+    return f"{year:04d}-{month:02d}-{day:02d}"
+
+
 def stable_unique(values: list[str]) -> list[str]:
     return list(dict.fromkeys(value for value in values if value))
 
@@ -182,6 +194,59 @@ def better_tip(current: str, incoming: str) -> str:
     return current_clean or incoming_clean
 
 
+def normalize_piece_daily(piece: dict[str, Any], daily: dict[str, Any], practice_day: str) -> dict[str, dict[str, Any]]:
+    normalized: dict[str, dict[str, Any]] = {}
+    for day, entry in daily.items():
+        if not isinstance(entry, dict):
+            continue
+        target_day = practice_day_from_title(entry.get("sourceTitle")) or practice_day or str(day)
+        current = dict(normalized.get(target_day, {}))
+        prior_count = int(current.get("sectionCount") or 0)
+        incoming_count = max(1, int(entry.get("sectionCount") or 1))
+        prior_completion = int(current.get("completionPercent") or 0)
+        incoming_completion = int(entry.get("completionPercent") or 0)
+        total_count = prior_count + incoming_count
+        if total_count:
+            current["completionPercent"] = round(
+                ((prior_completion * prior_count) + (incoming_completion * incoming_count)) / total_count
+            )
+        current["sectionCount"] = total_count
+        current["tip"] = better_tip(str(current.get("tip") or ""), str(entry.get("tip") or piece.get("tip") or ""))
+        current["evidence"] = str(entry.get("evidence") or current.get("evidence") or piece.get("evidence") or "").strip()[:220]
+        if str(entry.get("latestAt") or "") > str(current.get("latestAt") or ""):
+            current["latestAt"] = entry.get("latestAt")
+        for key in (
+            "sampleId",
+            "sectionId",
+            "sourceTitle",
+            "sourceUrl",
+            "sourceWindow",
+            "sourceStartSeconds",
+            "sourceEndSeconds",
+        ):
+            if entry.get(key) not in {None, ""}:
+                current[key] = entry.get(key)
+            elif current.get(key) in {None, ""} and piece.get(key) not in {None, ""}:
+                current[key] = piece.get(key)
+        normalized[target_day] = current
+    if not normalized and practice_day:
+        normalized[practice_day] = {
+            "completionPercent": int(piece.get("completionPercent") or 0),
+            "sectionCount": int(piece.get("sectionCount") or 1),
+            "tip": str(piece.get("tip") or piece.get("immediateTip") or "Evidence recorded.").strip()[:180],
+            "evidence": str(piece.get("evidence") or "Evidence recorded.").strip()[:220],
+            "latestAt": piece.get("latestAt") or piece.get("createdAt"),
+            "sampleId": piece.get("sampleId"),
+            "sectionId": piece.get("sectionId"),
+            "sourceTitle": piece.get("sourceTitle"),
+            "sourceUrl": piece.get("sourceUrl"),
+            "sourceWindow": piece.get("sourceWindow"),
+            "sourceStartSeconds": piece.get("sourceStartSeconds"),
+            "sourceEndSeconds": piece.get("sourceEndSeconds"),
+        }
+    return {key: normalized[key] for key in sorted(normalized)[-21:]}
+
+
 def merge_enriched_pieces(pieces: list[dict[str, Any]]) -> list[dict[str, Any]]:
     merged: dict[str, dict[str, Any]] = {}
     for piece in pieces:
@@ -215,6 +280,7 @@ def merge_enriched_pieces(pieces: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "sourceWindow",
                 "sourceStartSeconds",
                 "sourceEndSeconds",
+                "practiceDay",
             ):
                 if piece.get(source_key) not in {None, ""}:
                     current[source_key] = piece.get(source_key)
@@ -227,12 +293,16 @@ def merge_enriched_pieces(pieces: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "sourceWindow",
                 "sourceStartSeconds",
                 "sourceEndSeconds",
+                "practiceDay",
             ):
                 if current.get(source_key) in {None, ""} and piece.get(source_key) not in {None, ""}:
                     current[source_key] = piece.get(source_key)
+        current["isActiveToday"] = bool(current.get("isActiveToday") or piece.get("isActiveToday"))
     return sorted(
         merged.values(),
         key=lambda piece: (
+            1 if piece.get("isActiveToday") else 0,
+            str(piece.get("practiceDay") or local_day(piece.get("latestAt"))),
             int(piece.get("confidenceScore") or 0),
             int(piece.get("todayCompletionPercent") or 0),
             int(piece.get("completionPercent") or 0),
@@ -283,14 +353,20 @@ def enriched_pieces(pieces: list[Any], today: str, media_samples: list[dict[str,
             }
         else:
             piece["title"] = canonical_piece_title(piece.get("title"))
-        daily = piece.get("daily") if isinstance(piece.get("daily"), dict) else {}
+        practice_day = practice_day_from_title(piece.get("sourceTitle"))
+        daily = normalize_piece_daily(
+            piece,
+            piece.get("daily") if isinstance(piece.get("daily"), dict) else {},
+            practice_day,
+        )
+        piece["daily"] = daily
         today_entry = daily.get(today) if isinstance(daily.get(today), dict) else None
-        latest_day = local_day(piece.get("latestAt"))
+        latest_day = practice_day or (max(daily) if daily else "") or local_day(piece.get("latestAt"))
         if today_entry:
             today_percent = int(today_entry.get("completionPercent") or 0)
             today_tip = str(today_entry.get("tip") or piece.get("tip") or "Capture one clearer excerpt.").strip()
             today_latest = today_entry.get("latestAt") or piece.get("latestAt")
-        elif latest_day == today:
+        elif latest_day == today and not daily:
             today_percent = int(piece.get("completionPercent") or 0)
             today_tip = str(piece.get("tip") or "Capture one clearer excerpt.").strip()
             today_latest = piece.get("latestAt")
@@ -305,7 +381,8 @@ def enriched_pieces(pieces: list[Any], today: str, media_samples: list[dict[str,
         piece["todayCompletionPercent"] = max(0, min(100, today_percent))
         piece["todayTip"] = major_piece_tip(piece, today_tip)[:180]
         piece["todayLatestAt"] = today_latest
-        piece["isActiveToday"] = bool(today_entry or latest_day == today)
+        piece["practiceDay"] = latest_day
+        piece["isActiveToday"] = bool(today_entry or (latest_day == today and not daily))
         enriched.append(piece)
     return merge_enriched_pieces(enriched)
 
@@ -376,7 +453,7 @@ def derive_review(
         "skillFindings": findings,
         "pieces": pieces,
         "today": today,
-        "todayPiece": today_pieces[0] if today_pieces else pieces[0] if pieces else None,
+        "todayPiece": today_pieces[0] if today_pieces else None,
         "todayPieceCount": len(today_pieces),
         "progressPlan": progress_plan,
         "currentWork": current_work,
