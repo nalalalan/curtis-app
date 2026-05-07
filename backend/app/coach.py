@@ -6,8 +6,10 @@ import os
 import re
 import subprocess
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx
 
@@ -106,6 +108,40 @@ WORK_MARKERS = {
     "sonata",
 }
 REVIEW_VERSION = "audio_video_piece_v2"
+
+
+def local_timezone() -> ZoneInfo | timezone:
+    try:
+        return ZoneInfo(os.getenv("CURTIS_LOCAL_TIMEZONE", "America/New_York"))
+    except ZoneInfoNotFoundError:
+        return timezone.utc
+
+
+def local_day(value: Any) -> str:
+    try:
+        parsed = datetime.fromisoformat(str(value or utc_now()).replace("Z", "+00:00"))
+    except ValueError:
+        parsed = datetime.now(timezone.utc)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(local_timezone()).date().isoformat()
+
+
+def merge_daily_piece_state(piece: dict[str, Any], item: dict[str, Any], completion: int) -> None:
+    day = local_day(item.get("createdAt"))
+    existing = piece.get("daily") if isinstance(piece.get("daily"), dict) else {}
+    daily = {str(key): value for key, value in existing.items() if isinstance(value, dict)}
+    current = dict(daily.get(day, {}))
+    prior_count = int(current.get("sectionCount") or 0)
+    prior_completion = int(current.get("completionPercent") or completion)
+    count = prior_count + 1
+    current["completionPercent"] = round(((prior_completion * prior_count) + completion) / count)
+    current["sectionCount"] = count
+    current["tip"] = str(item.get("immediateTip") or piece.get("tip") or "Capture one clearer excerpt.").strip()[:180]
+    current["evidence"] = str(item.get("evidence") or piece.get("evidence") or "Evidence accumulating.").strip()[:220]
+    current["latestAt"] = item.get("createdAt") or utc_now()
+    daily[day] = current
+    piece["daily"] = {key: daily[key] for key in sorted(daily)[-21:]}
 
 
 def run_process(args: list[str], timeout: int = 120) -> tuple[int, str]:
@@ -573,9 +609,11 @@ def aggregate_piece_reviews(existing: list[Any], incoming: list[dict[str, Any]])
                 "sectionCount": 1,
                 "latestAt": item.get("createdAt") or utc_now(),
             }
+            merge_daily_piece_state(pieces[key], item, completion)
             continue
         current["sectionCount"] = int(current.get("sectionCount") or 0) + 1
         current["completionPercent"] = round((int(current["completionPercent"]) + completion) / 2)
+        merge_daily_piece_state(current, item, completion)
         if confidence_score >= int(current.get("confidenceScore") or 0):
             current["confidence"] = confidence
             current["confidenceScore"] = confidence_score

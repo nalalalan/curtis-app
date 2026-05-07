@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import os
+from datetime import datetime, timezone
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx
 
@@ -24,6 +26,29 @@ WEAK_EVIDENCE_TERMS = (
 )
 
 
+def local_timezone() -> ZoneInfo | timezone:
+    try:
+        return ZoneInfo(os.getenv("CURTIS_LOCAL_TIMEZONE", "America/New_York"))
+    except ZoneInfoNotFoundError:
+        return timezone.utc
+
+
+def local_day(value: Any) -> str:
+    if not value:
+        return ""
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return ""
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(local_timezone()).date().isoformat()
+
+
+def today_local_day() -> str:
+    return datetime.now(timezone.utc).astimezone(local_timezone()).date().isoformat()
+
+
 def stable_unique(values: list[str]) -> list[str]:
     return list(dict.fromkeys(value for value in values if value))
 
@@ -39,6 +64,36 @@ def sanitized_findings(findings: list[Any]) -> list[dict[str, Any]]:
             item["judgment"] = "Unjudged"
         clean.append(item)
     return clean
+
+
+def enriched_pieces(pieces: list[Any], today: str) -> list[dict[str, Any]]:
+    enriched: list[dict[str, Any]] = []
+    for item in pieces:
+        if not isinstance(item, dict):
+            continue
+        piece = dict(item)
+        daily = piece.get("daily") if isinstance(piece.get("daily"), dict) else {}
+        today_entry = daily.get(today) if isinstance(daily.get(today), dict) else None
+        latest_day = local_day(piece.get("latestAt"))
+        if today_entry:
+            today_percent = int(today_entry.get("completionPercent") or 0)
+            today_tip = str(today_entry.get("tip") or piece.get("tip") or "Capture one clearer excerpt.").strip()
+            today_latest = today_entry.get("latestAt") or piece.get("latestAt")
+        elif latest_day == today:
+            today_percent = int(piece.get("completionPercent") or 0)
+            today_tip = str(piece.get("tip") or "Capture one clearer excerpt.").strip()
+            today_latest = piece.get("latestAt")
+        else:
+            today_percent = 0
+            today_tip = "Awaiting today's practice sample."
+            today_latest = ""
+        piece["today"] = today
+        piece["todayCompletionPercent"] = max(0, min(100, today_percent))
+        piece["todayTip"] = today_tip[:180]
+        piece["todayLatestAt"] = today_latest
+        piece["isActiveToday"] = bool(today_entry or latest_day == today)
+        enriched.append(piece)
+    return enriched
 
 
 def inventory_blockers(blockers: list[str]) -> list[str]:
@@ -63,9 +118,11 @@ def effective_sources(state: dict[str, Any]) -> dict[str, Any]:
 
 def derive_review(inventory: dict[str, list[dict[str, Any]]], existing: dict[str, Any] | None = None) -> dict[str, Any]:
     existing = existing or {}
+    today = today_local_day()
     sections = existing.get("notableSections") if isinstance(existing.get("notableSections"), list) else []
     findings = sanitized_findings(existing.get("skillFindings") if isinstance(existing.get("skillFindings"), list) else [])
-    pieces = existing.get("pieces") if isinstance(existing.get("pieces"), list) else []
+    pieces = enriched_pieces(existing.get("pieces") if isinstance(existing.get("pieces"), list) else [], today)
+    today_pieces = [piece for piece in pieces if piece.get("isActiveToday")]
     progress_plan = existing.get("progressPlan") if isinstance(existing.get("progressPlan"), dict) else None
     youtube_items = inventory.get("youtube", [])
     practice_candidates = [
@@ -96,6 +153,9 @@ def derive_review(inventory: dict[str, list[dict[str, Any]]], existing: dict[str
         "notableSections": sections,
         "skillFindings": findings,
         "pieces": pieces,
+        "today": today,
+        "todayPiece": today_pieces[0] if today_pieces else pieces[0] if pieces else None,
+        "todayPieceCount": len(today_pieces),
         "progressPlan": progress_plan,
         "currentWork": current_work,
         "strongestSignal": "Unjudged",

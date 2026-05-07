@@ -133,6 +133,10 @@ button:hover,
   border-top: 4px solid var(--clay);
 }
 
+.paper-hero > div {
+  min-width: 0;
+}
+
 .paper-hero h1 {
   max-width: 780px;
   margin-bottom: 10px;
@@ -556,6 +560,7 @@ h2 {
   min-height: 34px;
   align-items: center;
   justify-content: center;
+  padding: 0 10px;
   border: 1px solid rgba(31, 41, 39, .11);
   border-radius: 999px;
   background: #fff;
@@ -563,6 +568,7 @@ h2 {
   font-size: 12px;
   font-style: normal;
   font-weight: 740;
+  white-space: nowrap;
 }
 
 .evidence-details summary {
@@ -798,7 +804,10 @@ h2 {
   }
 
   .paper-hero h1 {
+    width: 100%;
+    max-width: 100%;
     font-size: 30px;
+    word-break: break-word;
   }
 
   .paper-viewer,

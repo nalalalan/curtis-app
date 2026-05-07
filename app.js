@@ -255,6 +255,12 @@ function primaryPiece(ops) {
   return list.length ? list[0] : null;
 }
 
+function currentPiece(ops) {
+  return ops?.review?.todayPiece && typeof ops.review.todayPiece === "object"
+    ? ops.review.todayPiece
+    : primaryPiece(ops);
+}
+
 function isIdentifiedPiece(piece) {
   return Boolean(piece?.title && piece.title !== "Piece being identified");
 }
@@ -267,7 +273,7 @@ function pieceLabel(piece) {
 
 function pieceTip(piece) {
   if (!piece) return "Capture one clear excerpt.";
-  const tip = String(piece.tip || "Capture one clearer excerpt.").trim();
+  const tip = String(piece.todayTip || piece.tip || "Capture one clearer excerpt.").trim();
   const signal = `${piece.title || ""} ${piece.evidence || ""} ${piece.candidateEvidence || ""}`.toLowerCase();
   if (/^capture one clear(er)? excerpt\.?$/i.test(tip)) {
     if (signal.includes("ricochet") || signal.includes("arpeggio") || signal.includes("paganini")) {
@@ -278,6 +284,17 @@ function pieceTip(piece) {
     }
   }
   return tip;
+}
+
+function todayCompletion(piece) {
+  if (!piece) return 0;
+  return Number(piece.todayCompletionPercent ?? piece.completionPercent) || 0;
+}
+
+function completionLabel(piece) {
+  const today = todayCompletion(piece);
+  const overall = Number(piece?.completionPercent) || 0;
+  return piece?.isActiveToday ? `${today}% today` : `${overall}% overall`;
 }
 
 function pieceEvidence(piece) {
@@ -327,7 +344,7 @@ function renderStatus() {
   const inventory = inventoryItems(ops);
   const sections = reviewSections(ops);
   const findings = skillFindings(ops);
-  const piece = primaryPiece(ops);
+  const piece = currentPiece(ops);
   const pieceList = pieces(ops);
   const plan = progressPlan(ops);
   const reviewedVideos = Number(ops?.review?.reviewedVideoCount) || 0;
@@ -352,7 +369,7 @@ function renderStatus() {
     : ["Capture clear violin audio."];
   elements.sessionPlan.innerHTML = session.map((item) => `<li>${escapeHtml(item)}</li>`).join("");
   elements.pieceState.textContent = pieceLabel(piece);
-  elements.pieceProgress.textContent = piece ? `${Number(piece.completionPercent) || 0}%` : "0%";
+  elements.pieceProgress.textContent = piece ? `${todayCompletion(piece)}%` : "0%";
   elements.pieceTip.textContent = pieceTip(piece);
   elements.pieceCount.textContent = `${pieceList.length} ${pieceList.length === 1 ? "piece" : "pieces"}`;
   const source = youtubeSource(ops);
@@ -387,7 +404,7 @@ function renderPieces() {
         <strong>${escapeHtml(pieceLabel(piece))}</strong>
         <p>${escapeHtml(pieceEvidence(piece) || pieceTip(piece))}</p>
       </div>
-      <em>${Number(piece.completionPercent) || 0}%</em>
+      <em>${escapeHtml(completionLabel(piece))}</em>
     </article>
   `).join("");
 }
