@@ -37,8 +37,15 @@ const elements = {
   pieceState: document.querySelector("#pieceState"),
   pieceProgress: document.querySelector("#pieceProgress"),
   pieceTip: document.querySelector("#pieceTip"),
+  detectionState: document.querySelector("#detectionState"),
+  highlightFrame: document.querySelector("#highlightFrame"),
+  highlightMeta: document.querySelector("#highlightMeta"),
+  highlightWindow: document.querySelector("#highlightWindow"),
+  highlightLink: document.querySelector("#highlightLink"),
   pieceCount: document.querySelector("#pieceCount"),
   pieceList: document.querySelector("#pieceList"),
+  dayCount: document.querySelector("#dayCount"),
+  dayList: document.querySelector("#dayList"),
   recordSummary: document.querySelector("#recordSummary"),
   inventoryList: document.querySelector("#inventoryList"),
   reviewedCount: document.querySelector("#reviewedCount"),
@@ -94,11 +101,83 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+function shortText(value, limit = 135) {
+  const clean = String(value || "").replace(/\s+/g, " ").trim();
+  if (clean.length <= limit) return clean;
+  return `${clean.slice(0, limit - 1).trim()}...`;
+}
+
 function formatDate(value) {
   if (!value) return "";
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return "";
   return parsed.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+function compactText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/&amp;/g, "&")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function sameLooseTitle(left, right) {
+  const leftCompact = compactText(left);
+  const rightCompact = compactText(right);
+  if (!leftCompact || !rightCompact) return false;
+  return leftCompact === rightCompact || leftCompact.includes(rightCompact) || rightCompact.includes(leftCompact);
+}
+
+function parseVideoId(value) {
+  const raw = String(value || "").trim();
+  if (/^[A-Za-z0-9_-]{8,}$/.test(raw) && !raw.includes("/")) return raw;
+  try {
+    const url = new URL(raw);
+    if (url.searchParams.get("v")) return url.searchParams.get("v");
+    const parts = url.pathname.split("/").filter(Boolean);
+    if (parts[0] === "embed" && parts[1]) return parts[1];
+    if (url.hostname.includes("youtu.be") && parts[0]) return parts[0];
+  } catch {
+    return "";
+  }
+  return "";
+}
+
+function parseWindow(value) {
+  const match = String(value || "").match(/\*(\d+)-(\d+)/);
+  if (!match) return { start: 0, end: 0 };
+  return { start: Number(match[1]) || 0, end: Number(match[2]) || 0 };
+}
+
+function formatClock(seconds) {
+  const total = Math.max(0, Number(seconds) || 0);
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const secs = Math.floor(total % 60);
+  if (hours) return `${hours}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+  return `${minutes}:${String(secs).padStart(2, "0")}`;
+}
+
+function timedUrl(url, startSeconds = 0) {
+  try {
+    const target = new URL(url);
+    target.searchParams.set("t", `${Math.max(0, Math.floor(startSeconds))}s`);
+    return target.toString();
+  } catch {
+    return url || PUBLIC_YOUTUBE_SOURCE;
+  }
+}
+
+function embedUrl(url, startSeconds = 0, endSeconds = 0) {
+  const videoId = parseVideoId(url);
+  if (!videoId) return "";
+  const params = new URLSearchParams({
+    start: String(Math.max(0, Math.floor(startSeconds))),
+    rel: "0"
+  });
+  if (endSeconds && endSeconds > startSeconds) params.set("end", String(Math.floor(endSeconds)));
+  return `https://www.youtube.com/embed/${videoId}?${params.toString()}`;
 }
 
 function youtubeSource(ops) {
@@ -250,6 +329,81 @@ function pieces(ops) {
   return Array.isArray(ops?.review?.pieces) ? ops.review.pieces : [];
 }
 
+function sampleIndex(ops) {
+  return Array.isArray(ops?.media?.sampleIndex) ? ops.media.sampleIndex : [];
+}
+
+function pieceIdResults(ops) {
+  return Array.isArray(ops?.pieceId?.results) ? ops.pieceId.results : [];
+}
+
+function sourceForSampleId(ops, sampleId) {
+  const id = String(sampleId || "");
+  if (!id) return null;
+  return sampleIndex(ops).find((sample) => sample.id === id) || null;
+}
+
+function sourceFromResult(result, ops) {
+  const sample = sourceForSampleId(ops, result?.sampleId);
+  const window = parseWindow(result?.sourceWindow || sample?.window);
+  const start = Number(result?.sourceStartSeconds ?? window.start) || 0;
+  const end = Number(result?.sourceEndSeconds ?? window.end) || (start ? start + 45 : 0);
+  return {
+    sampleId: result?.sampleId || sample?.id || "",
+    title: result?.sourceTitle || result?.sampleTitle || sample?.title || "",
+    url: result?.sourceUrl || result?.url || sample?.url || "",
+    window: result?.sourceWindow || sample?.window || "",
+    startSeconds: start,
+    endSeconds: end,
+    detectedTitle: result?.title || result?.proposedTitle || "Piece being identified",
+    confidence: result?.confidence || "unknown",
+    confidenceScore: Number(result?.confidenceScore) || 0,
+    status: result?.status || "",
+    tip: result?.immediateTip || "",
+    completionPercent: Number(result?.completionPercent) || 0
+  };
+}
+
+function sourceFromPiece(piece, ops) {
+  const source = sourceForSampleId(ops, piece?.sampleId);
+  const window = parseWindow(piece?.sourceWindow || source?.window);
+  const start = Number(piece?.sourceStartSeconds ?? window.start) || 0;
+  const end = Number(piece?.sourceEndSeconds ?? window.end) || (start ? start + 45 : 0);
+  return {
+    sampleId: piece?.sampleId || source?.id || "",
+    title: piece?.sourceTitle || source?.title || "",
+    url: piece?.sourceUrl || source?.url || "",
+    window: piece?.sourceWindow || source?.window || "",
+    startSeconds: start,
+    endSeconds: end,
+    detectedTitle: pieceLabel(piece),
+    confidence: piece?.confidence || "unknown",
+    confidenceScore: Number(piece?.confidenceScore) || 0,
+    status: isIdentifiedPiece(piece) ? "piece_identified" : "piece_unidentified",
+    tip: pieceTip(piece),
+    completionPercent: todayCompletion(piece)
+  };
+}
+
+function sourceFromSection(section) {
+  const start = Number(section?.startSeconds) || 0;
+  const end = Number(section?.endSeconds) || (start ? start + 30 : 0);
+  return {
+    sampleId: section?.sampleId || "",
+    title: section?.title || "",
+    url: section?.url || "",
+    window: start ? `*${start}-${end}` : "",
+    startSeconds: start,
+    endSeconds: end,
+    detectedTitle: "Piece being identified",
+    confidence: "unknown",
+    confidenceScore: 0,
+    status: section?.status || "candidate_playing_section",
+    tip: section?.note || "",
+    completionPercent: 0
+  };
+}
+
 function primaryPiece(ops) {
   const list = pieces(ops);
   return list.length ? list[0] : null;
@@ -269,6 +423,12 @@ function pieceLabel(piece) {
   if (!piece) return "Identifying from practice sessions.";
   if (isIdentifiedPiece(piece)) return piece.title;
   return "Piece being identified";
+}
+
+function pieceStatusLabel(piece) {
+  if (!piece || !isIdentifiedPiece(piece)) return "identifying";
+  if (piece.confidence === "clear") return "detected";
+  return piece.confidence || "detected";
 }
 
 function pieceTip(piece) {
@@ -346,6 +506,119 @@ function videoBadge(item) {
   return mediaStateLabel(item.analysisState);
 }
 
+function resultIsIdentified(result) {
+  return result?.status === "piece_identified" && isIdentifiedPiece(result);
+}
+
+function resultDetectedLabel(result) {
+  if (!result) return "Piece being identified";
+  if (result.status === "piece_identified" && result.title) return result.title;
+  if (result.proposedTitle) return `${result.proposedTitle} / unverified`;
+  return "Piece being identified";
+}
+
+function primaryHighlight(ops) {
+  const piece = currentPiece(ops);
+  const results = pieceIdResults(ops);
+  const matchingResult = results.find((result) => {
+    if (!result?.url) return false;
+    return sameLooseTitle(result.title, piece?.title) || sameLooseTitle(result.proposedTitle, piece?.title);
+  });
+  if (matchingResult) return sourceFromResult(matchingResult, ops);
+
+  const pieceSource = piece ? sourceFromPiece(piece, ops) : null;
+  if (pieceSource?.url) return pieceSource;
+
+  const latestResult = results.find((result) => result?.url || sourceForSampleId(ops, result?.sampleId)?.url);
+  if (latestResult) return sourceFromResult(latestResult, ops);
+
+  const section = reviewSections(ops).find((item) => item?.url);
+  if (section) return sourceFromSection(section);
+
+  const sample = sampleIndex(ops).find((item) => item?.url);
+  if (sample) {
+    const window = parseWindow(sample.window);
+    return {
+      sampleId: sample.id,
+      title: sample.title,
+      url: sample.url,
+      window: sample.window,
+      startSeconds: window.start,
+      endSeconds: window.end,
+      detectedTitle: "Piece being identified",
+      confidence: "unknown",
+      confidenceScore: 0,
+      status: "sample_ready",
+      tip: "",
+      completionPercent: 0
+    };
+  }
+  return null;
+}
+
+function detectionLabel(source) {
+  if (!source?.url) return "Clip pending.";
+  const title = source.detectedTitle || "Piece being identified";
+  const sourceTitle = source.title || "practice video";
+  if (source.status === "piece_identified" && title !== "Piece being identified") {
+    return `${sourceTitle} / ${title}`;
+  }
+  if (String(title).includes("/ unverified")) return `${sourceTitle} / unverified`;
+  return `${sourceTitle} / identifying`;
+}
+
+function detectionStatus(source) {
+  if (!source?.url) return "No clip";
+  if (source.status === "piece_identified" && source.detectedTitle !== "Piece being identified") return "Check clip";
+  if (String(source.detectedTitle || "").includes("/ unverified")) return "Unverified";
+  return "Identifying";
+}
+
+function practiceDays(ops) {
+  const inventory = inventoryItems(ops).filter((item) => item.practiceCandidate);
+  const samples = sampleIndex(ops);
+  const results = pieceIdResults(ops);
+  const sections = reviewSections(ops);
+  return inventory.slice(0, 12).map((video) => {
+    const videoId = video.id || parseVideoId(video.url);
+    const daySamples = samples.filter((sample) => sample.url === video.url || String(sample.id || "").startsWith(`${videoId}-`) || sample.id === videoId);
+    const sampleIds = new Set(daySamples.map((sample) => sample.id));
+    const dayResults = results.filter((result) => {
+      const sample = sourceForSampleId(ops, result.sampleId);
+      return result.url === video.url || sample?.url === video.url || sampleIds.has(result.sampleId);
+    });
+    const daySections = sections.filter((section) => section.url === video.url || sampleIds.has(section.sampleId));
+    const identified = dayResults.filter((result) => result.status === "piece_identified");
+    const unverified = dayResults.filter((result) => result.status === "piece_candidate_unverified");
+    const detected = [...identified, ...unverified]
+      .map(resultDetectedLabel)
+      .filter(Boolean);
+    const highlight = identified[0]
+      ? sourceFromResult(identified[0], ops)
+      : unverified[0]
+        ? sourceFromResult(unverified[0], ops)
+        : daySections[0]
+          ? sourceFromSection(daySections[0])
+          : daySamples[0]
+            ? sourceFromResult({ sampleId: daySamples[0].id }, ops)
+            : { title: video.title, url: video.url, startSeconds: 0, endSeconds: 0, detectedTitle: "Piece being identified", status: "metadata" };
+    return {
+      title: video.title || "Practice",
+      date: formatDate(video.publishedAt),
+      url: video.url,
+      viewCount: video.viewCount,
+      duration: video.duration,
+      samples: daySamples.length,
+      sections: daySections.length,
+      detected: [...new Set(detected)].slice(0, 3),
+      status: identified.length ? "clear" : unverified.length ? "unverified" : daySamples.length ? "identifying" : "indexed",
+      completionPercent: Math.max(0, ...identified.map((item) => Number(item.completionPercent) || 0)),
+      tip: (identified[0] || unverified[0])?.immediateTip || "",
+      highlight
+    };
+  });
+}
+
 function renderStatus() {
   const ops = backend.ops || {};
   const inventory = inventoryItems(ops);
@@ -358,6 +631,8 @@ function renderStatus() {
   const practiceCount = Number(ops?.review?.practiceCandidateCount) || 0;
   const longFormCount = Number(ops?.review?.longFormCandidateCount) || 0;
   const model = ops?.model ? `${ops.model.id} / ${ops.model.reasoningEffort}` : "Not reported";
+  const highlight = primaryHighlight(ops);
+  const days = practiceDays(ops);
 
   elements.youtubeState.textContent = backend.online ? youtubeLabel(ops) : "Offline";
   elements.inventoryCount.textContent = `${inventory.length} videos`;
@@ -378,7 +653,9 @@ function renderStatus() {
   elements.pieceState.textContent = pieceLabel(piece);
   elements.pieceProgress.textContent = progressText(piece);
   elements.pieceTip.textContent = pieceTip(piece);
+  elements.detectionState.textContent = detectionStatus(highlight);
   elements.pieceCount.textContent = `${pieceList.length} ${pieceList.length === 1 ? "piece" : "pieces"}`;
+  elements.dayCount.textContent = `${days.length} ${days.length === 1 ? "day" : "days"}`;
   const source = youtubeSource(ops);
   elements.sourceLink.href = youtubeSourceHref(source);
   elements.sourceLink.textContent = source.replace("https://www.", "").replace("https://", "");
@@ -407,13 +684,31 @@ function renderPieces() {
   elements.pieceList.innerHTML = list.slice(0, 8).map((piece) => `
     <article class="piece-row">
       <div>
-        <span>${escapeHtml(piece.confidence || "unknown")}</span>
+        <span>${escapeHtml(pieceStatusLabel(piece))}</span>
         <strong>${escapeHtml(pieceLabel(piece))}</strong>
-        <p>${escapeHtml(pieceEvidence(piece) || pieceTip(piece))}</p>
+        <p>${escapeHtml(shortText(pieceEvidence(piece) || pieceTip(piece)))}</p>
+        ${renderPieceDays(piece)}
       </div>
       <em>${escapeHtml(completionLabel(piece))}</em>
     </article>
   `).join("");
+}
+
+function renderPieceDays(piece) {
+  const daily = piece?.daily && typeof piece.daily === "object" ? piece.daily : {};
+  const rows = Object.entries(daily).slice(-4).reverse();
+  if (!rows.length) return "";
+  return `
+    <ol class="mini-days" aria-label="Piece day history">
+      ${rows.map(([day, item]) => `
+        <li>
+          <span>${escapeHtml(day)}</span>
+          <b>${escapeHtml(Number(item?.completionPercent) || 0)}%</b>
+          <small>${escapeHtml(item?.tip || item?.evidence || "Evidence recorded.")}</small>
+        </li>
+      `).join("")}
+    </ol>
+  `;
 }
 
 function renderInventory() {
@@ -516,9 +811,67 @@ function renderSkillMap() {
   }).join("");
 }
 
+function renderHighlight() {
+  const highlight = primaryHighlight(backend.ops);
+  if (!backend.online || !highlight?.url) {
+    elements.highlightFrame.removeAttribute("src");
+    elements.highlightMeta.textContent = backend.online ? "Clip pending." : "Backend offline.";
+    elements.highlightWindow.textContent = "No evidence window.";
+    elements.highlightLink.href = PUBLIC_YOUTUBE_SOURCE;
+    return;
+  }
+  const start = Number(highlight.startSeconds) || 0;
+  const end = Number(highlight.endSeconds) || (start ? start + 45 : 0);
+  const embed = embedUrl(highlight.url, start, end);
+  if (embed && elements.highlightFrame.src !== embed) {
+    elements.highlightFrame.src = embed;
+  }
+  elements.highlightMeta.textContent = detectionLabel(highlight);
+  elements.highlightWindow.textContent = start
+    ? `${formatClock(start)}-${formatClock(end)} / ${highlight.window || "sample"}`
+    : highlight.window || "metadata only";
+  elements.highlightLink.href = timedUrl(highlight.url, start);
+}
+
+function renderDays() {
+  const days = practiceDays(backend.ops);
+  if (!backend.online) {
+    elements.dayList.innerHTML = `<p class="empty">Backend offline.</p>`;
+    return;
+  }
+  if (!days.length) {
+    elements.dayList.innerHTML = `<p class="empty">Practice days pending YouTube inventory.</p>`;
+    return;
+  }
+  elements.dayList.innerHTML = days.map((day) => {
+    const detected = shortText(day.detected.length ? day.detected.join(" / ") : "Piece being identified", 150);
+    const percent = day.completionPercent ? `${day.completionPercent}%` : day.status;
+    const start = Number(day.highlight?.startSeconds) || 0;
+    const end = Number(day.highlight?.endSeconds) || (start ? start + 45 : 0);
+    const clip = timedUrl(day.highlight?.url || day.url, start);
+    const windowText = start ? `${formatClock(start)}-${formatClock(end)}` : "clip pending";
+    return `
+      <article class="day-row" data-status="${escapeHtml(day.status)}">
+        <div>
+          <span>${escapeHtml([day.date, day.samples ? `${day.samples} samples` : "", day.sections ? `${day.sections} sections` : ""].filter(Boolean).join(" / "))}</span>
+          <strong>${escapeHtml(day.title)}</strong>
+          <p>${escapeHtml(detected)}</p>
+          ${day.tip ? `<small>${escapeHtml(day.tip)}</small>` : ""}
+        </div>
+        <div class="day-actions">
+          <em>${escapeHtml(percent)}</em>
+          <a href="${escapeHtml(clip)}">${escapeHtml(windowText)}</a>
+        </div>
+      </article>
+    `;
+  }).join("");
+}
+
 function render() {
   renderStatus();
+  renderHighlight();
   renderPieces();
+  renderDays();
   renderInventory();
   renderSkillMap();
 }

@@ -11,7 +11,7 @@ from typing import Any
 
 import httpx
 
-from .analyzer import active_ranges, extract_wav as extract_full_wav, rms_windows
+from .analyzer import active_ranges, extract_wav as extract_full_wav, parse_window_start, rms_windows
 from .coach import aggregate_piece_reviews, decode_json, piece_title_is_identified
 from .settings import OPENAI_AUDIO_MODEL, OPENAI_PIECE_VERIFY_MODEL
 from .state import load_state, save_state, utc_now
@@ -351,6 +351,8 @@ def normalize_primary_identification(raw: dict[str, Any], sample: dict[str, Any]
         "status": status,
         "sampleId": sample.get("id"),
         "url": sample.get("url"),
+        "sampleTitle": sample.get("title"),
+        "sampleWindow": sample.get("window"),
         "title": raw_title if clear else "Piece being identified",
         "proposedTitle": raw_title,
         "confidence": "clear" if clear else "unknown",
@@ -441,6 +443,12 @@ def identify_wav_segment(wav_path: Path, sample: dict[str, Any], *, segment_star
         return {**raw_primary, "segmentStartSeconds": segment_start}
     primary = normalize_primary_identification(raw_primary, sample)
     primary["segmentStartSeconds"] = segment_start
+    base_start = parse_window_start(str(sample.get("window") or ""))
+    primary["sourceTitle"] = sample.get("title")
+    primary["sourceUrl"] = sample.get("url")
+    primary["sourceWindow"] = sample.get("window")
+    primary["sourceStartSeconds"] = base_start + segment_start
+    primary["sourceEndSeconds"] = base_start + segment_start + PIECE_ID_SECONDS
     if primary.get("status") != "piece_candidate_clear":
         return primary
     proposed_title = str(primary.get("proposedTitle") or "")
@@ -532,6 +540,11 @@ def piece_review_from_identification(result: dict[str, Any]) -> dict[str, Any]:
         "evidence": result.get("evidence"),
         "sectionId": result.get("sampleId"),
         "sampleId": result.get("sampleId"),
+        "sourceTitle": result.get("sourceTitle") or result.get("sampleTitle"),
+        "sourceUrl": result.get("sourceUrl") or result.get("url"),
+        "sourceWindow": result.get("sourceWindow") or result.get("sampleWindow"),
+        "sourceStartSeconds": result.get("sourceStartSeconds"),
+        "sourceEndSeconds": result.get("sourceEndSeconds"),
         "createdAt": result.get("createdAt") or utc_now(),
         "evidenceQuality": "usable" if result.get("status") == "piece_identified" else "weak",
     }

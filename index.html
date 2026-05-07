@@ -15,7 +15,7 @@
   <meta name="twitter:title" content="Curtis Media Review">
   <meta name="twitter:description" content="YouTube-first Curtis practice media inventory and skill review.">
   <link rel="icon" href="/favicon.svg?v=20260507-curtis7" type="image/svg+xml">
-  <link rel="stylesheet" href="/styles.css?v=20260507-design2">
+  <link rel="stylesheet" href="/styles.css?v=20260507-practice-log1">
 </head>
 <body>
   <header class="topbar" aria-label="Curtis navigation">
@@ -45,110 +45,89 @@
       <span>curtis</span>
     </a>
     <nav>
-      <a href="#media">Media</a>
-      <a href="#system">System</a>
-      <a href="/paper">Paper</a>
-      <a href="https://aolabs.io/">AO Labs</a>
+      <a href="#today">Today</a>
+      <a href="#repertoire" aria-label="Repertoire">List</a>
+      <a href="#days">Days</a>
     </nav>
   </header>
 
   <main class="shell">
-    <section class="current-band" aria-label="Current state">
-      <div class="identity">
-        <p class="label">curtis.aolabs.io</p>
-        <h1>Curtis</h1>
-        <p class="subtitle">YouTube practice review</p>
-      </div>
+    <section id="today" class="today-layout" aria-label="Current practice">
+      <section class="panel today-panel">
+        <div class="panel-head">
+          <div>
+            <p class="label">Current</p>
+            <h1>Today</h1>
+          </div>
+          <span class="count-pill" id="evidenceState">Unjudged</span>
+        </div>
 
-      <div class="status-grid" aria-label="System status">
-        <article>
-          <span>YouTube</span>
-          <strong id="youtubeState">Checking</strong>
-        </article>
-        <article>
-          <span>Inventory</span>
-          <strong id="inventoryCount">0 videos</strong>
-        </article>
-        <article>
-          <span>Practice</span>
-          <strong id="practiceState">0 candidates</strong>
-        </article>
-        <article>
-          <span>Review</span>
-          <strong id="reviewState">Unjudged</strong>
-        </article>
-      </div>
+        <div class="today-grid">
+          <article class="detected-card">
+            <span>Detected</span>
+            <strong id="pieceState">Identifying from practice sessions.</strong>
+          </article>
+          <article>
+            <span>Day</span>
+            <strong id="pieceProgress">0%</strong>
+          </article>
+          <article>
+            <span>Check</span>
+            <strong id="detectionState">Clip pending.</strong>
+          </article>
+          <article>
+            <span>Tip</span>
+            <strong id="pieceTip">Capture one clear excerpt.</strong>
+          </article>
+        </div>
+
+      </section>
+
+      <section class="panel highlight-panel" aria-label="Evidence clip">
+        <div class="panel-head">
+          <div>
+            <p class="label">Evidence</p>
+            <h2>Highlight</h2>
+          </div>
+          <a class="clip-link" id="highlightLink" href="https://www.youtube.com/@nalalan">Open</a>
+        </div>
+        <div class="highlight-frame">
+          <iframe id="highlightFrame" title="Current practice highlight" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+        </div>
+        <div class="highlight-meta">
+          <strong id="highlightMeta">Clip pending.</strong>
+          <span id="highlightWindow">No evidence window.</span>
+        </div>
+      </section>
     </section>
 
-    <section class="panel focus-panel" aria-label="Curtis progress state">
-      <div class="panel-head">
-        <div>
-          <p class="label">Focus</p>
-          <h2>Curtis Path</h2>
-        </div>
-        <span class="count-pill" id="evidenceState">Unjudged</span>
-      </div>
-      <div class="focus-grid">
-        <article>
-          <span>Working</span>
-          <strong id="workingState">Checking system.</strong>
-        </article>
-        <article>
-          <span>Now</span>
-          <strong id="focusState">Capture playable sections.</strong>
-        </article>
-        <article>
-          <span>Constraint</span>
-          <strong id="constraintState">One focus per session.</strong>
-        </article>
-        <article>
-          <span>Boundary</span>
-          <strong id="boundaryState">No admission prediction from current samples.</strong>
-        </article>
-      </div>
-      <div class="session-strip" aria-label="Current practice blocks">
-        <span>Session</span>
-        <ol id="sessionPlan">
-          <li>Capture clear violin audio.</li>
-        </ol>
-      </div>
-      <div class="piece-strip" aria-label="Current piece">
-        <article>
-          <span>Piece</span>
-          <strong id="pieceState">Identifying from practice sessions.</strong>
-        </article>
-        <article>
-          <span>Today</span>
-          <strong id="pieceProgress">0%</strong>
-        </article>
-        <article>
-          <span>Major tip</span>
-          <strong id="pieceTip">Capture one clear excerpt.</strong>
-        </article>
-      </div>
+    <section class="status-strip" aria-label="System summary">
+      <article><span>YouTube</span><strong id="youtubeState">Checking</strong></article>
+      <article><span>Inventory</span><strong id="inventoryCount">0 videos</strong></article>
+      <article><span>Practice</span><strong id="practiceState">0 candidates</strong></article>
+      <article><span>Review</span><strong id="reviewState">Unjudged</strong></article>
     </section>
 
-    <section id="media" class="panel source-panel" aria-label="YouTube source">
+    <section id="repertoire" class="panel piece-panel" aria-label="Repertoire">
       <div class="panel-head">
         <div>
-          <p class="label">Media</p>
-          <h2>Automation</h2>
+          <p class="label">Repertoire</p>
+          <h2>Working List</h2>
         </div>
-        <div class="action-row">
-          <button type="button" id="probeMediaButton">Get media</button>
-          <button type="button" id="runScanButton">Run scan</button>
+        <span class="count-pill" id="pieceCount">0 pieces</span>
+      </div>
+      <div id="pieceList" class="piece-list"></div>
+    </section>
+
+    <section id="days" class="panel day-panel" aria-label="Practice days">
+      <div class="panel-head">
+        <div>
+          <p class="label">Days</p>
+          <h2>Practice Log</h2>
         </div>
+        <span class="count-pill" id="dayCount">0 days</span>
       </div>
-
-      <div class="source-line">
-        <span>Source</span>
-        <a id="sourceLink" href="https://www.youtube.com/@nalalan">youtube.com/@nalalan</a>
-      </div>
-
-      <div class="current-state" aria-live="polite">
-        <span>Current</span>
-        <strong id="currentState">Checking backend.</strong>
-      </div>
+      <div id="dayList" class="day-list"></div>
     </section>
 
     <details class="evidence-details">
@@ -156,18 +135,58 @@
         <span>Record</span>
         <strong id="recordSummary">Evidence record</strong>
       </summary>
-      <section class="work-grid" aria-label="Practice media record">
-        <section class="panel piece-panel">
-          <div class="panel-head">
-            <div>
-              <p class="label">Pieces</p>
-              <h2>Working List</h2>
-            </div>
-            <span class="count-pill" id="pieceCount">0 pieces</span>
-          </div>
-          <div id="pieceList" class="piece-list"></div>
-        </section>
 
+      <section id="media" class="panel source-panel" aria-label="YouTube source">
+        <div class="panel-head">
+          <div>
+            <p class="label">Media</p>
+            <h2>Automation</h2>
+          </div>
+          <div class="action-row">
+            <button type="button" id="probeMediaButton">Get media</button>
+            <button type="button" id="runScanButton">Run scan</button>
+          </div>
+        </div>
+
+        <div class="source-line">
+          <span>Source</span>
+          <a id="sourceLink" href="https://www.youtube.com/@nalalan">youtube.com/@nalalan</a>
+        </div>
+
+        <div class="current-state" aria-live="polite">
+          <span>Current</span>
+          <strong id="currentState">Checking backend.</strong>
+        </div>
+      </section>
+
+      <section class="panel hidden-focus" aria-label="Focus record">
+        <div class="focus-grid">
+          <article>
+            <span>Working</span>
+            <strong id="workingState">Checking system.</strong>
+          </article>
+          <article>
+            <span>Now</span>
+            <strong id="focusState">Capture playable sections.</strong>
+          </article>
+          <article>
+            <span>Constraint</span>
+            <strong id="constraintState">One focus per session.</strong>
+          </article>
+          <article>
+            <span>Boundary</span>
+            <strong id="boundaryState">No admission prediction from current samples.</strong>
+          </article>
+        </div>
+        <div class="session-strip compact" aria-label="Current practice blocks">
+          <span>Blocks</span>
+          <ol id="sessionPlan">
+            <li>Capture clear violin audio.</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="work-grid" aria-label="Practice media record">
         <section class="panel">
           <div class="panel-head">
             <div>
@@ -191,42 +210,42 @@
           <div id="skillMap" class="skill-map"></div>
         </section>
       </section>
-    </details>
 
-    <section id="system" class="system-band" aria-label="System state">
-      <div>
-        <p class="label">System</p>
-        <h2>Automation</h2>
-      </div>
-      <div class="system-grid">
-        <article>
-          <span>Backend</span>
-          <strong id="backendState">Checking</strong>
-        </article>
-        <article>
-          <span>Storage</span>
-          <strong id="storageState">Checking</strong>
-        </article>
-        <article>
-          <span>Scanner</span>
-          <strong id="automationState">Checking</strong>
-        </article>
-        <article>
-          <span>Media</span>
-          <strong id="mediaState">Checking</strong>
-        </article>
-        <article>
-          <span>Model</span>
-          <strong id="modelState">Checking</strong>
-        </article>
-        <article>
-          <span>Instagram</span>
-          <strong id="instagramState">Not configured</strong>
-        </article>
-      </div>
-    </section>
+      <section id="system" class="system-band" aria-label="System state">
+        <div>
+          <p class="label">System</p>
+          <h2>Automation</h2>
+        </div>
+        <div class="system-grid">
+          <article>
+            <span>Backend</span>
+            <strong id="backendState">Checking</strong>
+          </article>
+          <article>
+            <span>Storage</span>
+            <strong id="storageState">Checking</strong>
+          </article>
+          <article>
+            <span>Scanner</span>
+            <strong id="automationState">Checking</strong>
+          </article>
+          <article>
+            <span>Media</span>
+            <strong id="mediaState">Checking</strong>
+          </article>
+          <article>
+            <span>Model</span>
+            <strong id="modelState">Checking</strong>
+          </article>
+          <article>
+            <span>Instagram</span>
+            <strong id="instagramState">Not configured</strong>
+          </article>
+        </div>
+      </section>
+    </details>
   </main>
 
-  <script src="/app.js?v=20260507-design3"></script>
+  <script src="/app.js?v=20260507-practice-log1"></script>
 </body>
 </html>

@@ -147,6 +147,17 @@ def merge_daily_piece_state(piece: dict[str, Any], item: dict[str, Any], complet
     current["tip"] = str(item.get("immediateTip") or piece.get("tip") or "Capture one clearer excerpt.").strip()[:180]
     current["evidence"] = str(item.get("evidence") or piece.get("evidence") or "Evidence accumulating.").strip()[:220]
     current["latestAt"] = item.get("createdAt") or utc_now()
+    for key in (
+        "sampleId",
+        "sectionId",
+        "sourceTitle",
+        "sourceUrl",
+        "sourceWindow",
+        "sourceStartSeconds",
+        "sourceEndSeconds",
+    ):
+        if item.get(key) not in {None, ""}:
+            current[key] = item.get(key)
     daily[day] = current
     piece["daily"] = {key: daily[key] for key in sorted(daily)[-21:]}
 
@@ -342,6 +353,10 @@ def normalize_piece(raw: dict[str, Any], *, evidence_quality: str, section: dict
         "immediateTip": str(raw.get("immediateTip") or raw.get("oneFocus") or "Capture one clearer excerpt.").strip()[:180],
         "sectionId": section.get("id"),
         "sampleId": section.get("sampleId"),
+        "sourceTitle": section.get("title"),
+        "sourceUrl": section.get("url"),
+        "sourceStartSeconds": section.get("startSeconds"),
+        "sourceEndSeconds": section.get("endSeconds"),
         "createdAt": utc_now(),
     }
 
@@ -624,6 +639,13 @@ def aggregate_piece_reviews(existing: list[Any], incoming: list[dict[str, Any]])
                 "evidence": str(item.get("evidence") or "Evidence accumulating.").strip()[:220],
                 "candidateTitle": candidate_title,
                 "candidateEvidence": str(item.get("candidateEvidence") or item.get("evidence") or "").strip()[:220],
+                "sampleId": item.get("sampleId"),
+                "sectionId": item.get("sectionId"),
+                "sourceTitle": item.get("sourceTitle"),
+                "sourceUrl": item.get("sourceUrl"),
+                "sourceWindow": item.get("sourceWindow"),
+                "sourceStartSeconds": item.get("sourceStartSeconds"),
+                "sourceEndSeconds": item.get("sourceEndSeconds"),
                 "sectionCount": 1,
                 "latestAt": item.get("createdAt") or utc_now(),
             }
@@ -641,6 +663,17 @@ def aggregate_piece_reviews(existing: list[Any], incoming: list[dict[str, Any]])
             current["candidateEvidence"] = str(
                 item.get("candidateEvidence") or item.get("evidence") or current.get("candidateEvidence") or ""
             ).strip()[:220]
+            for source_key in (
+                "sampleId",
+                "sectionId",
+                "sourceTitle",
+                "sourceUrl",
+                "sourceWindow",
+                "sourceStartSeconds",
+                "sourceEndSeconds",
+            ):
+                if item.get(source_key) not in {None, ""}:
+                    current[source_key] = item.get(source_key)
             current["latestAt"] = item.get("createdAt") or current.get("latestAt")
     return sorted(
         pieces.values(),

@@ -175,6 +175,17 @@ def merge_enriched_pieces(pieces: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if str(piece.get("latestAt") or "") > str(current.get("latestAt") or ""):
             current["latestAt"] = piece.get("latestAt")
             current["todayLatestAt"] = piece.get("todayLatestAt") or current.get("todayLatestAt")
+            for source_key in (
+                "sampleId",
+                "sectionId",
+                "sourceTitle",
+                "sourceUrl",
+                "sourceWindow",
+                "sourceStartSeconds",
+                "sourceEndSeconds",
+            ):
+                if piece.get(source_key) not in {None, ""}:
+                    current[source_key] = piece.get(source_key)
     return sorted(
         merged.values(),
         key=lambda piece: (
