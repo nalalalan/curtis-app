@@ -34,6 +34,11 @@ const elements = {
   constraintState: document.querySelector("#constraintState"),
   boundaryState: document.querySelector("#boundaryState"),
   sessionPlan: document.querySelector("#sessionPlan"),
+  pieceState: document.querySelector("#pieceState"),
+  pieceProgress: document.querySelector("#pieceProgress"),
+  pieceTip: document.querySelector("#pieceTip"),
+  pieceCount: document.querySelector("#pieceCount"),
+  pieceList: document.querySelector("#pieceList"),
   recordSummary: document.querySelector("#recordSummary"),
   inventoryList: document.querySelector("#inventoryList"),
   reviewedCount: document.querySelector("#reviewedCount"),
@@ -241,6 +246,15 @@ function progressPlan(ops) {
     : null;
 }
 
+function pieces(ops) {
+  return Array.isArray(ops?.review?.pieces) ? ops.review.pieces : [];
+}
+
+function primaryPiece(ops) {
+  const list = pieces(ops);
+  return list.length ? list[0] : null;
+}
+
 function workingText(ops) {
   const samples = Number(ops?.media?.sampleCount) || (Array.isArray(ops?.media?.samples) ? ops.media.samples.length : 0);
   const sections = reviewSections(ops).length;
@@ -281,6 +295,8 @@ function renderStatus() {
   const inventory = inventoryItems(ops);
   const sections = reviewSections(ops);
   const findings = skillFindings(ops);
+  const piece = primaryPiece(ops);
+  const pieceList = pieces(ops);
   const plan = progressPlan(ops);
   const reviewedVideos = Number(ops?.review?.reviewedVideoCount) || 0;
   const practiceCount = Number(ops?.review?.practiceCandidateCount) || 0;
@@ -303,6 +319,10 @@ function renderStatus() {
     ? plan.sessionPlan.slice(0, 3)
     : ["Capture clear violin audio."];
   elements.sessionPlan.innerHTML = session.map((item) => `<li>${escapeHtml(item)}</li>`).join("");
+  elements.pieceState.textContent = piece?.title || "Identifying from practice sessions.";
+  elements.pieceProgress.textContent = piece ? `${Number(piece.completionPercent) || 0}%` : "0%";
+  elements.pieceTip.textContent = piece?.tip || "Capture one clear excerpt.";
+  elements.pieceCount.textContent = `${pieceList.length} ${pieceList.length === 1 ? "piece" : "pieces"}`;
   const source = youtubeSource(ops);
   elements.sourceLink.href = youtubeSourceHref(source);
   elements.sourceLink.textContent = source.replace("https://www.", "").replace("https://", "");
@@ -316,6 +336,28 @@ function renderStatus() {
   elements.mediaState.textContent = backend.online ? mediaAccessLabel(ops) : "Offline";
   elements.instagramState.textContent = ops?.credentials?.instagramGraph ? "Configured" : "Not configured";
 
+}
+
+function renderPieces() {
+  const list = pieces(backend.ops);
+  if (!backend.online) {
+    elements.pieceList.innerHTML = `<p class="empty">Backend offline.</p>`;
+    return;
+  }
+  if (!list.length) {
+    elements.pieceList.innerHTML = `<p class="empty">Piece list pending clearer evidence.</p>`;
+    return;
+  }
+  elements.pieceList.innerHTML = list.slice(0, 8).map((piece) => `
+    <article class="piece-row">
+      <div>
+        <span>${escapeHtml(piece.confidence || "unknown")}</span>
+        <strong>${escapeHtml(piece.title || "Piece being identified")}</strong>
+        <p>${escapeHtml(piece.tip || piece.evidence || "Capture one clearer excerpt.")}</p>
+      </div>
+      <em>${Number(piece.completionPercent) || 0}%</em>
+    </article>
+  `).join("");
 }
 
 function renderInventory() {
@@ -420,6 +462,7 @@ function renderSkillMap() {
 
 function render() {
   renderStatus();
+  renderPieces();
   renderInventory();
   renderSkillMap();
 }

@@ -15,7 +15,7 @@
   <meta name="twitter:title" content="Curtis Media Review">
   <meta name="twitter:description" content="YouTube-first Curtis practice media inventory and skill review.">
   <link rel="icon" href="/favicon.svg?v=20260507-curtis7" type="image/svg+xml">
-  <link rel="stylesheet" href="/styles.css?v=20260507-focus2">
+  <link rel="stylesheet" href="/styles.css?v=20260507-pieces1">
 </head>
 <body>
   <header class="topbar" aria-label="Curtis navigation">
@@ -111,6 +111,20 @@
           <li>Capture clear violin audio.</li>
         </ol>
       </div>
+      <div class="piece-strip" aria-label="Current piece">
+        <article>
+          <span>Piece</span>
+          <strong id="pieceState">Identifying from practice sessions.</strong>
+        </article>
+        <article>
+          <span>Curtis level</span>
+          <strong id="pieceProgress">0%</strong>
+        </article>
+        <article>
+          <span>Tip</span>
+          <strong id="pieceTip">Capture one clear excerpt.</strong>
+        </article>
+      </div>
     </section>
 
     <section id="media" class="panel source-panel" aria-label="YouTube source">
@@ -142,6 +156,17 @@
         <strong id="recordSummary">Evidence record</strong>
       </summary>
       <section class="work-grid" aria-label="Practice media record">
+        <section class="panel piece-panel">
+          <div class="panel-head">
+            <div>
+              <p class="label">Pieces</p>
+              <h2>Working List</h2>
+            </div>
+            <span class="count-pill" id="pieceCount">0 pieces</span>
+          </div>
+          <div id="pieceList" class="piece-list"></div>
+        </section>
+
         <section class="panel">
           <div class="panel-head">
             <div>
@@ -201,6 +226,6 @@
     </section>
   </main>
 
-  <script src="/app.js?v=20260507-focus2"></script>
+  <script src="/app.js?v=20260507-pieces1"></script>
 </body>
 </html>

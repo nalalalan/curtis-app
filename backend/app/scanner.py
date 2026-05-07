@@ -65,6 +65,7 @@ def derive_review(inventory: dict[str, list[dict[str, Any]]], existing: dict[str
     existing = existing or {}
     sections = existing.get("notableSections") if isinstance(existing.get("notableSections"), list) else []
     findings = sanitized_findings(existing.get("skillFindings") if isinstance(existing.get("skillFindings"), list) else [])
+    pieces = existing.get("pieces") if isinstance(existing.get("pieces"), list) else []
     progress_plan = existing.get("progressPlan") if isinstance(existing.get("progressPlan"), dict) else None
     youtube_items = inventory.get("youtube", [])
     practice_candidates = [
@@ -94,6 +95,7 @@ def derive_review(inventory: dict[str, list[dict[str, Any]]], existing: dict[str
         "reviewedVideoCount": len(reviewed_urls),
         "notableSections": sections,
         "skillFindings": findings,
+        "pieces": pieces,
         "progressPlan": progress_plan,
         "currentWork": current_work,
         "strongestSignal": "Unjudged",

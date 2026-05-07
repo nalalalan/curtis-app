@@ -35,7 +35,7 @@ WEAK_EVIDENCE_TERMS = {
     "masked",
     "dominates",
 }
-REVIEW_VERSION = "audio_video_v1"
+REVIEW_VERSION = "audio_video_piece_v1"
 
 
 def run_process(args: list[str], timeout: int = 120) -> tuple[int, str]:
@@ -150,6 +150,41 @@ def decode_json(text: str) -> dict[str, Any]:
         raise
 
 
+def clamp_percent(value: Any, *, evidence_quality: str, piece_confidence: str) -> int:
+    try:
+        percent = int(round(float(value)))
+    except (TypeError, ValueError):
+        percent = 0
+    percent = max(0, min(100, percent))
+    if evidence_quality == "weak":
+        percent = min(percent, 20)
+    if piece_confidence == "unknown":
+        percent = min(percent, 45)
+    return percent
+
+
+def normalize_piece(raw: dict[str, Any], *, evidence_quality: str, section: dict[str, Any]) -> dict[str, Any]:
+    piece = raw.get("piece") if isinstance(raw.get("piece"), dict) else {}
+    title = str(piece.get("title") or raw.get("pieceTitle") or "").strip()
+    confidence = str(piece.get("confidence") or raw.get("pieceConfidence") or "unknown").strip().lower()
+    if confidence not in {"clear", "possible", "unknown"}:
+        confidence = "unknown"
+    if not title or title.lower() in {"unknown", "unknown piece", "n/a", "none"}:
+        title = "Piece being identified"
+        confidence = "unknown"
+    completion = clamp_percent(raw.get("completionPercent"), evidence_quality=evidence_quality, piece_confidence=confidence)
+    return {
+        "title": title[:120],
+        "confidence": confidence,
+        "evidence": str(piece.get("evidence") or raw.get("pieceEvidence") or "Evidence accumulating.").strip()[:220],
+        "completionPercent": completion,
+        "immediateTip": str(raw.get("immediateTip") or raw.get("oneFocus") or "Capture one clearer excerpt.").strip()[:180],
+        "sectionId": section.get("id"),
+        "sampleId": section.get("sampleId"),
+        "createdAt": utc_now(),
+    }
+
+
 def normalize_review(raw: dict[str, Any], section: dict[str, Any], *, source: str) -> dict[str, Any]:
     findings = []
     evidence_quality = str(raw.get("evidenceQuality") or "weak").strip()[:40]
@@ -182,6 +217,7 @@ def normalize_review(raw: dict[str, Any], section: dict[str, Any], *, source: st
 
     plan = raw.get("progressPlan") if isinstance(raw.get("progressPlan"), dict) else {}
     session_plan = raw.get("sessionPlan") if isinstance(raw.get("sessionPlan"), list) else []
+    piece_review = normalize_piece(raw, evidence_quality=evidence_quality, section=section)
     one_focus = str(raw.get("oneFocus") or plan.get("oneFocus") or "Capture clearer violin sections.").strip()[:180]
     practice_constraint = ""
     for finding in findings:
@@ -198,6 +234,7 @@ def normalize_review(raw: dict[str, Any], section: dict[str, Any], *, source: st
         "evidenceQuality": evidence_quality,
         "sectionSummary": str(raw.get("sectionSummary") or "Model review completed.").strip()[:260],
         "findings": findings[:5],
+        "pieceReview": piece_review,
         "progressPlan": {
             "status": "Curtis-focused review active.",
             "oneFocus": one_focus,
@@ -220,6 +257,9 @@ Required JSON:
 {{
   "evidenceQuality": "usable|weak|blocked",
   "sectionSummary": "one factual sentence",
+  "piece": {{"title": "piece name or Piece being identified", "confidence": "clear|possible|unknown", "evidence": "short phrase"}},
+  "completionPercent": 0,
+  "immediateTip": "one immediately useful practice tip",
   "findings": [
     {{
       "dimension": "tone|intonation|time|articulation|shifts|musicality|auditionDelivery",
@@ -236,6 +276,7 @@ Rules:
 - If there is no clear violin playing, set evidenceQuality to "weak" and findings to Unjudged.
 - No admission prediction, no odds, no reassurance, no motivation, no diagnosis language.
 - Do not name repertoire unless it is clearly audible.
+- Completion percent means Curtis-level readiness for this piece from current evidence. Use 100 only for clearly Curtis-level evidence.
 - Use at most three findings.
 - Make the plan low-overwhelm: one focus, three short blocks.
 """.strip()
@@ -253,6 +294,9 @@ Required JSON:
 {{
   "evidenceQuality": "usable|weak|blocked",
   "sectionSummary": "one factual sentence",
+  "piece": {{"title": "piece name or Piece being identified", "confidence": "clear|possible|unknown", "evidence": "short visual phrase"}},
+  "completionPercent": 0,
+  "immediateTip": "one immediately useful practice tip",
   "findings": [
     {{
       "dimension": "tone|intonation|time|articulation|shifts|musicality|auditionDelivery",
@@ -269,6 +313,7 @@ Rules:
 - Use visual evidence when audio is weak: posture, bow path, contact-point setup, left-hand frame, tension, setup consistency, and audition-room presentation.
 - Mark audio-only dimensions Unjudged when frames do not show enough.
 - If no violin/person/instrument is visible, evidenceQuality is "weak" and findings are Unjudged.
+- Completion percent means Curtis-level readiness for this piece from current visual evidence. Use 100 only for clearly Curtis-level evidence.
 - No admission prediction, no odds, no reassurance, no motivation, no diagnosis language.
 - Use at most three findings.
 - Make the plan low-overwhelm: one focus, three short blocks.
@@ -356,14 +401,17 @@ def call_vision_model(frame_paths: list[Path], section: dict[str, Any]) -> dict[
         return {"status": "blocked", "blocker": "openai_vision_review_parse_failed", "detail": content[:500]}
 
 
-def merge_review_results(results: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+def merge_review_results(results: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[str, Any] | None, list[dict[str, Any]]]:
     by_dimension: dict[str, dict[str, Any]] = {}
     progress_plan: dict[str, Any] | None = None
+    piece_reviews: list[dict[str, Any]] = []
     priority = {"Needs work": 3, "Strong signal": 2, "Unjudged": 1}
     for result in results:
         if result.get("status") != "model_reviewed":
             continue
         progress_plan = result.get("progressPlan") or progress_plan
+        if isinstance(result.get("pieceReview"), dict):
+            piece_reviews.append(result["pieceReview"])
         for finding in result.get("findings", []):
             if not isinstance(finding, dict) or not finding.get("dimension"):
                 continue
@@ -371,7 +419,45 @@ def merge_review_results(results: list[dict[str, Any]]) -> tuple[list[dict[str, 
             current = by_dimension.get(dimension)
             if current is None or priority.get(str(finding.get("judgment")), 0) > priority.get(str(current.get("judgment")), 0):
                 by_dimension[dimension] = finding
-    return list(by_dimension.values())[:5], progress_plan
+    return list(by_dimension.values())[:5], progress_plan, piece_reviews
+
+
+def aggregate_piece_reviews(existing: list[Any], incoming: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    pieces: dict[str, dict[str, Any]] = {}
+    for item in [*existing, *incoming]:
+        if not isinstance(item, dict):
+            continue
+        title = str(item.get("title") or "Piece being identified").strip()[:120] or "Piece being identified"
+        key = title.lower()
+        current = pieces.get(key)
+        confidence = str(item.get("confidence") or "unknown")
+        confidence_score = {"clear": 3, "possible": 2, "unknown": 1}.get(confidence, 1)
+        completion = max(0, min(100, int(item.get("completionPercent") or 0)))
+        if current is None:
+            pieces[key] = {
+                "title": title,
+                "confidence": confidence,
+                "confidenceScore": confidence_score,
+                "completionPercent": completion,
+                "tip": str(item.get("immediateTip") or "Capture one clearer excerpt.").strip()[:180],
+                "evidence": str(item.get("evidence") or "Evidence accumulating.").strip()[:220],
+                "sectionCount": 1,
+                "latestAt": item.get("createdAt") or utc_now(),
+            }
+            continue
+        current["sectionCount"] = int(current.get("sectionCount") or 0) + 1
+        current["completionPercent"] = round((int(current["completionPercent"]) + completion) / 2)
+        if confidence_score >= int(current.get("confidenceScore") or 0):
+            current["confidence"] = confidence
+            current["confidenceScore"] = confidence_score
+            current["tip"] = str(item.get("immediateTip") or current.get("tip") or "").strip()[:180]
+            current["evidence"] = str(item.get("evidence") or current.get("evidence") or "").strip()[:220]
+            current["latestAt"] = item.get("createdAt") or current.get("latestAt")
+    return sorted(
+        pieces.values(),
+        key=lambda item: (int(item.get("confidenceScore") or 0), int(item.get("completionPercent") or 0), str(item.get("latestAt") or "")),
+        reverse=True,
+    )[:12]
 
 
 def review_media_sections(limit: int = 4) -> dict[str, Any]:
@@ -393,6 +479,7 @@ def review_media_sections(limit: int = 4) -> dict[str, Any]:
 
     results: list[dict[str, Any]] = []
     new_findings: list[dict[str, Any]] = []
+    new_piece_reviews: list[dict[str, Any]] = []
     progress_plan: dict[str, Any] | None = None
 
     for section in selected:
@@ -421,9 +508,10 @@ def review_media_sections(limit: int = 4) -> dict[str, Any]:
                 frame.unlink(missing_ok=True)
             frame_dir.rmdir()
         results.extend(section_results)
-        merged_findings, merged_plan = merge_review_results(section_results)
+        merged_findings, merged_plan, piece_reviews = merge_review_results(section_results)
         if merged_findings:
             new_findings.extend(merged_findings)
+            new_piece_reviews.extend(piece_reviews)
             progress_plan = merged_plan or progress_plan
 
     if new_findings:
@@ -431,6 +519,7 @@ def review_media_sections(limit: int = 4) -> dict[str, Any]:
         for finding in new_findings:
             by_id[finding["id"]] = finding
         review["skillFindings"] = list(by_id.values())[:80]
+        review["pieces"] = aggregate_piece_reviews(review.get("pieces", []), new_piece_reviews)
         review["progressPlan"] = progress_plan
         review["currentWork"] = progress_plan.get("oneFocus") if progress_plan else "Curtis-focused review active."
 
