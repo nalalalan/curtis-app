@@ -20,6 +20,10 @@
   min-width: 0;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 html {
   min-height: 100%;
   background: var(--bg);
@@ -384,6 +388,13 @@ button:disabled {
   grid-template-rows: auto 1fr auto;
 }
 
+.clip-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
 .clip-link {
   display: inline-flex;
   min-height: 30px;
@@ -398,6 +409,12 @@ button:disabled {
   font-weight: 760;
   text-decoration: none;
   white-space: nowrap;
+}
+
+.clip-button {
+  border-color: rgba(142, 79, 72, .26);
+  background: rgba(142, 79, 72, .08);
+  color: var(--red);
 }
 
 .highlight-frame {
@@ -1162,6 +1179,11 @@ h2 {
   .paper-actions {
     display: grid;
     justify-content: stretch;
+  }
+
+  .clip-actions {
+    justify-content: flex-start;
+    width: 100%;
   }
 
   .paper-strip {

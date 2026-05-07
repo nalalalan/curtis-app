@@ -21,6 +21,7 @@ from .auth import (
     youtube_auth_status,
 )
 from .coach import review_media_sections
+from .corrections import learn_rejection, scrub_rejected_source
 from .media import probe_youtube_media, record_uploaded_sample
 from .piece_id import identify_pieces_from_samples
 from .scanner import base_ops, run_scan
@@ -43,6 +44,16 @@ class SourceConfig(BaseModel):
             "scanScope": self.scan_scope,
             "scanCadence": self.scan_cadence,
         }
+
+
+class PieceCorrection(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    source_url: str = Field(default="", alias="sourceUrl")
+    source_title: str = Field(default="", alias="sourceTitle")
+    video_id: str = Field(default="", alias="videoId")
+    rejected_title: str = Field(default="", alias="rejectedTitle")
+    note: str = ""
 
 
 app = FastAPI(title="Curtis Media Review", version="0.2.0")
@@ -153,6 +164,39 @@ async def coach_run() -> dict[str, Any]:
 async def piece_id_run() -> dict[str, Any]:
     identify_pieces_from_samples()
     return base_ops(load_state())
+
+
+@app.post("/api/curtis/piece-corrections")
+async def piece_correction(correction: PieceCorrection) -> dict[str, Any]:
+    rejected_title = correction.rejected_title.strip()
+    if not rejected_title or rejected_title == "Piece being identified":
+        raise HTTPException(status_code=400, detail="Rejected title required.")
+    state = load_state()
+    try:
+        learned = learn_rejection(
+            state,
+            source_url=correction.source_url.strip(),
+            source_title=correction.source_title.strip(),
+            video_id=correction.video_id.strip(),
+            rejected_title=rejected_title,
+            note=correction.note.strip(),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    scrubbed_count = scrub_rejected_source(state, str(learned.get("sourceKey") or ""))
+    state["lastPieceCorrection"] = {
+        "sourceKey": learned.get("sourceKey"),
+        "rejectedTitle": rejected_title,
+        "scrubbedCount": scrubbed_count,
+    }
+    save_state(state)
+    ops = base_ops(state)
+    ops["correction"] = {
+        "sourceKey": learned.get("sourceKey"),
+        "rejectedTitle": rejected_title,
+        "scrubbedCount": scrubbed_count,
+    }
+    return ops
 
 
 @app.post("/api/curtis/media/upload")

@@ -14,13 +14,13 @@
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="Curtis Media Review">
   <meta name="twitter:description" content="YouTube-first Curtis practice media inventory and skill review.">
-  <link rel="icon" href="/favicon.svg?v=20260507-curtis-radial4" type="image/svg+xml">
-  <link rel="stylesheet" href="/styles.css?v=20260507-curtis-refine">
+  <link rel="icon" href="/favicon.svg?v=20260507-curtis-simple" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css?v=20260507-correction1">
 </head>
 <body>
   <header class="topbar" aria-label="Curtis navigation">
     <a class="brand" href="/" aria-label="Curtis home">
-      <img class="brand-mark" src="/favicon.svg?v=20260507-curtis-radial4" alt="">
+      <img class="brand-mark" src="/favicon.svg?v=20260507-curtis-simple" alt="">
       <span>curtis</span>
     </a>
     <nav>
@@ -84,7 +84,10 @@
             <p class="label">Evidence</p>
             <h2>Highlight</h2>
           </div>
-          <a class="clip-link" id="highlightLink" href="https://www.youtube.com/@nalalan">Open</a>
+          <div class="clip-actions">
+            <button class="clip-link clip-button" type="button" id="rejectPieceButton" disabled hidden>Reject title</button>
+            <a class="clip-link" id="highlightLink" href="https://www.youtube.com/@nalalan">Open</a>
+          </div>
         </div>
         <div class="highlight-frame">
           <iframe id="highlightFrame" title="Current practice highlight" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
@@ -241,6 +244,6 @@
     </details>
   </main>
 
-  <script src="/app.js?v=20260507-practice-log1"></script>
+  <script src="/app.js?v=20260507-correction1"></script>
 </body>
 </html>

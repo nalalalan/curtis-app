@@ -13,11 +13,12 @@ import httpx
 
 from .analyzer import active_ranges, extract_wav as extract_full_wav, parse_window_start, rms_windows
 from .coach import aggregate_piece_reviews, decode_json, piece_title_is_identified
+from .corrections import FIVE_ONE_REJECTED_TITLES, correction_for_item
 from .settings import OPENAI_AUDIO_MODEL, OPENAI_PIECE_VERIFY_MODEL
 from .state import load_state, save_state, utc_now
 
 
-PIECE_ID_VERSION = "audio_piece_id_v6"
+PIECE_ID_VERSION = "audio_piece_id_v8"
 PIECE_ID_SECONDS = int(os.getenv("CURTIS_PIECE_ID_SECONDS", "45"))
 PIECE_ID_SEGMENTS = int(os.getenv("CURTIS_PIECE_ID_SEGMENTS", "3"))
 CLEAR_SCORE = float(os.getenv("CURTIS_PIECE_ID_CLEAR_SCORE", "0.85"))
@@ -44,9 +45,56 @@ FIVE_ONE_REJECTED_PIECES = [
     "Paganini Caprice No. 24",
 ]
 FIVE_ONE_SEEDED_CANDIDATES = [
-    "Henryk Wieniawski Violin Concerto No. 2 in D minor, Op. 22, 3rd movement",
-    "Henryk Wieniawski Violin Concerto No. 2 in D minor, Op. 22",
+    "Niccolò Paganini Violin Concerto No. 1 in D major, Op. 6, 1st movement",
+    "Paganini Violin Concerto No. 1 in D major, Op. 6, 1st movement",
+    "Niccolò Paganini Violin Concerto No. 1 in D major, Op. 6",
 ]
+# Alan corrections are source-specific. These do not ban future videos from
+# identifying this repertoire when he actually practices it.
+DEFAULT_REJECTED_PIECES = []
+FIVE_ONE_REJECTED_PIECES = [
+    "Paganini",
+    "Paganini Violin Concerto No. 1",
+    "Paganini Violin Concerto No. 1 in D major, Op. 6",
+    "Paganini Caprice No. 5",
+    "Niccolo Paganini Caprice No. 5",
+    "Niccolo Paganini Caprice No. 24 in A minor, Op. 1",
+    "Paganini Caprice No. 24",
+    "Wieniawski",
+    "Henryk Wieniawski Violin Concerto No. 2 in D minor, Op. 22",
+    "Wieniawski Violin Concerto No. 2",
+    "Wieniawski Polonaise Brillante No. 1 in D major, Op. 4",
+    "Wieniawski Scherzo-Tarantelle, Op. 16",
+    "Saint-Saens",
+    "Saint-Saens Introduction and Rondo Capriccioso, Op. 28",
+    "Saint-Saens - Introduction and Rondo Capriccioso in A minor, Op. 28",
+    "Ravel",
+    "Ravel Tzigane",
+    "Tzigane",
+    "Bazzini",
+    "Antonio Bazzini La Ronde des Lutins, Op. 25",
+    "Bazzini La Ronde des Lutins, Op. 25",
+    "La Ronde des Lutins",
+    "Ernst",
+    "Ernst Last Rose of Summer Variations",
+    "The Last Rose of Summer",
+    "Ernst Grand Caprice on Schubert's Erlkonig",
+    "Ernst - Grand Caprice on Schubert's Erlkonig",
+    "Erlkonig",
+    "Pablo de Sarasate Carmen Fantasy, Op. 25",
+    "Sarasate Carmen Fantasy",
+    "Carmen Fantasy",
+    "Pablo de Sarasate Zigeunerweisen, Op. 20",
+    "Sarasate Zigeunerweisen",
+    "Zigeunerweisen",
+    "J.S. Bach - Partita No. 3 in E Major, BWV 1006",
+    "J.S. Bach Violin Partita No. 3 in E Major, BWV 1006",
+    "J.S. Bach Partita No. 3 in E major, BWV 1006, Preludio",
+    "Bach Partita No. 3 Preludio",
+]
+FIVE_ONE_SEEDED_CANDIDATES = [
+]
+FIVE_ONE_REJECTED_PIECES = FIVE_ONE_REJECTED_TITLES
 WEAK_TITLE_WORDS = {
     "a",
     "an",
@@ -321,7 +369,7 @@ def configured_rejected_pieces() -> list[str]:
 
 
 def rejections_apply_to_sample(sample: dict[str, Any]) -> bool:
-    if os.getenv("CURTIS_GLOBAL_REJECTED_PIECES", "1").strip().lower() not in {"0", "false", "no"}:
+    if os.getenv("CURTIS_GLOBAL_REJECTED_PIECES", "0").strip().lower() not in {"0", "false", "no"}:
         return True
     title = compact_title(str(sample.get("title") or ""))
     window = str(sample.get("window") or "")
@@ -336,8 +384,11 @@ def sample_matches_five_one(sample: dict[str, Any]) -> bool:
 
 def rejected_pieces_for_sample(sample: dict[str, Any]) -> list[str]:
     if not rejections_apply_to_sample(sample):
-        return []
-    rejected = configured_rejected_pieces()
+        rejected = []
+    else:
+        rejected = configured_rejected_pieces()
+    correction = correction_for_item(load_state(), sample)
+    rejected = [*rejected, *[str(item) for item in correction.get("rejectedTitles", []) if str(item).strip()]]
     if sample_matches_five_one(sample):
         rejected = [*rejected, *FIVE_ONE_REJECTED_PIECES]
     return list(dict.fromkeys(rejected))
@@ -641,7 +692,8 @@ def build_consensus_montage(samples: list[dict[str, Any]], target: Path) -> tupl
     with tempfile.TemporaryDirectory(prefix="curtis-consensus-") as temp_dir_name:
         temp_dir = Path(temp_dir_name)
         concat_lines: list[str] = []
-        for index, sample in enumerate(samples[:8]):
+        sample_limit = max(8, int(os.getenv("CURTIS_PIECE_CONSENSUS_SAMPLE_LIMIT", "12")))
+        for index, sample in enumerate(samples[:sample_limit]):
             source = Path(str(sample.get("path") or ""))
             if not source.exists():
                 continue

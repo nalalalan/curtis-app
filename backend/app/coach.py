@@ -65,13 +65,7 @@ GENERIC_PIECE_TERMS = {
     "section",
     "excerpt",
 }
-REJECTED_PIECE_TITLES = {
-    "paganini caprice no 5",
-    "niccolo paganini caprice no 5",
-    "pablo de sarasate zigeunerweisen op 20",
-    "sarasate zigeunerweisen",
-    "zigeunerweisen",
-}
+REJECTED_PIECE_TITLES: set[str] = set()
 COMPOSER_MARKERS = {
     "bach",
     "beethoven",

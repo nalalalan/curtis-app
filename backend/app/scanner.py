@@ -10,6 +10,7 @@ import httpx
 
 from .analyzer import parse_window_start
 from .auth import youtube_auth_status
+from .corrections import title_rejected_for_item
 from .platforms import credential_state, fetch_instagram_inventory, fetch_youtube_inventory
 from .settings import (
     OPENAI_AUDIO_MODEL,
@@ -58,17 +59,27 @@ REPERTOIRE_NAME_TERMS = (
     "ysaye",
     "ysaÿe",
 )
-REJECTED_REPERTOIRE_TITLES = (
-    "paganini caprice no 5",
-    "niccolo paganini caprice no 5",
-    "pablo de sarasate zigeunerweisen op 20",
+REJECTED_REPERTOIRE_TITLES: tuple[str, ...] = ()
+FIVE_ONE_REJECTED_REPERTOIRE_TITLES = (
+    "paganini",
+    "wieniawski",
+    "saint saens",
+    "saint saens introduction and rondo capriccioso",
+    "ravel",
+    "tzigane",
+    "bazzini",
+    "la ronde des lutins",
+    "ernst",
+    "last rose of summer",
+    "erlkonig",
+    "carmen fantasy",
     "sarasate zigeunerweisen",
     "zigeunerweisen",
 )
 LONG_SESSION_PRACTICE_FLOOR_SECONDS = int(os.getenv("CURTIS_LONG_SESSION_PRACTICE_FLOOR_SECONDS", str(2 * 60 * 60)))
 LONG_SESSION_LATE_SAMPLE_COUNT = int(os.getenv("CURTIS_LONG_SESSION_LATE_SAMPLE_COUNT", "3"))
 LONG_SESSION_SPAN_SECONDS = int(os.getenv("CURTIS_LONG_SESSION_SPAN_SECONDS", str(90 * 60)))
-CONFIRMED_PIECE_ID_VERSION = os.getenv("CURTIS_CONFIRMED_PIECE_ID_VERSION", "audio_piece_id_v6")
+CONFIRMED_PIECE_ID_VERSION = os.getenv("CURTIS_CONFIRMED_PIECE_ID_VERSION", "audio_piece_id_v8")
 
 
 def local_timezone() -> ZoneInfo | timezone:
@@ -171,9 +182,23 @@ def unclear_piece_evidence(value: Any) -> str:
     return evidence[:220]
 
 
-def rejected_repertoire_title(value: Any) -> bool:
+def piece_matches_five_one(piece: dict[str, Any] | None) -> bool:
+    piece = piece or {}
+    source = " ".join(
+        str(piece.get(key) or "")
+        for key in ("sourceTitle", "sourceUrl", "sourceWindow", "sampleId", "sectionId")
+    ).lower()
+    return "5-1" in source or "5/1" in source or "5 1 26" in source or "wdfvptu4i_i" in source
+
+
+def rejected_repertoire_title(value: Any, piece: dict[str, Any] | None = None) -> bool:
     compact = re.sub(r"[^a-z0-9]+", " ", str(value or "").lower()).strip()
-    return any(rejected in compact or compact in rejected for rejected in REJECTED_REPERTOIRE_TITLES)
+    if title_rejected_for_item(value, load_state(), piece):
+        return True
+    rejected_titles = list(REJECTED_REPERTOIRE_TITLES)
+    if piece_matches_five_one(piece):
+        rejected_titles.extend(FIVE_ONE_REJECTED_REPERTOIRE_TITLES)
+    return any(rejected in compact or compact in rejected for rejected in rejected_titles)
 
 
 def canonical_piece_title(value: Any) -> str:
@@ -327,7 +352,7 @@ def enriched_pieces(pieces: list[Any], today: str, media_samples: list[dict[str,
         current_piece_id_version = str(piece.get("reviewVersion") or "") == CONFIRMED_PIECE_ID_VERSION
         if (
             str(piece.get("confidence") or "unknown").lower() != "clear"
-            or rejected_repertoire_title(piece.get("title"))
+            or rejected_repertoire_title(piece.get("title"), piece)
             or not has_source_window
             or not verified_piece_id
             or not current_piece_id_version

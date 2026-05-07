@@ -17,6 +17,7 @@ let backend = {
   ops: null,
   lastError: ""
 };
+let activeHighlight = null;
 
 const elements = {
   youtubeState: document.querySelector("#youtubeState"),
@@ -42,6 +43,7 @@ const elements = {
   highlightMeta: document.querySelector("#highlightMeta"),
   highlightWindow: document.querySelector("#highlightWindow"),
   highlightLink: document.querySelector("#highlightLink"),
+  rejectPieceButton: document.querySelector("#rejectPieceButton"),
   pieceCount: document.querySelector("#pieceCount"),
   pieceList: document.querySelector("#pieceList"),
   dayCount: document.querySelector("#dayCount"),
@@ -239,6 +241,36 @@ async function runBackendScan() {
     elements.runScanButton.textContent = "Run scan";
     render();
   }
+}
+
+function rejectableTitle(source) {
+  const title = String(source?.detectedTitle || "").replace(/\s*\/\s*unverified$/i, "").trim();
+  if (!title || title === "Piece being identified") return "";
+  if (source?.status !== "piece_identified" && !String(source?.detectedTitle || "").includes("/ unverified")) return "";
+  return title;
+}
+
+async function rejectActiveTitle() {
+  const rejectedTitle = rejectableTitle(activeHighlight);
+  if (!rejectedTitle || !activeHighlight?.url) return;
+  elements.rejectPieceButton.disabled = true;
+  elements.rejectPieceButton.textContent = "Rejecting";
+  try {
+    const ops = await apiFetch("/api/curtis/piece-corrections", {
+      method: "POST",
+      body: JSON.stringify({
+        sourceUrl: activeHighlight.url,
+        sourceTitle: activeHighlight.title || "",
+        videoId: parseVideoId(activeHighlight.url),
+        rejectedTitle,
+        note: "Rejected from highlight check."
+      })
+    });
+    backend = { online: true, ops, lastError: "" };
+  } catch (error) {
+    backend.lastError = String(error?.message || error || "correction failed");
+  }
+  render();
 }
 
 async function runMediaProbe() {
@@ -838,6 +870,11 @@ function renderSkillMap() {
 
 function renderHighlight() {
   const highlight = primaryHighlight(backend.ops);
+  activeHighlight = highlight || null;
+  const rejectedTitle = rejectableTitle(highlight);
+  elements.rejectPieceButton.hidden = !rejectedTitle;
+  elements.rejectPieceButton.disabled = !backend.online || !rejectedTitle || !highlight?.url;
+  elements.rejectPieceButton.textContent = "Reject title";
   if (!backend.online || !highlight?.url) {
     elements.highlightFrame.removeAttribute("src");
     elements.highlightMeta.textContent = backend.online ? "Clip pending." : "Backend offline.";
@@ -903,6 +940,7 @@ function render() {
 
 elements.runScanButton.addEventListener("click", runBackendScan);
 elements.probeMediaButton.addEventListener("click", runMediaProbe);
+elements.rejectPieceButton.addEventListener("click", rejectActiveTitle);
 
 render();
 loadBackendState();
