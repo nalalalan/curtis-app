@@ -15,7 +15,7 @@
   <meta name="twitter:title" content="Curtis Media Review">
   <meta name="twitter:description" content="YouTube-first Curtis practice media inventory and skill review.">
   <link rel="icon" href="/favicon.svg?v=20260507-curtis7" type="image/svg+xml">
-  <link rel="stylesheet" href="/styles.css?v=20260507-coach2">
+  <link rel="stylesheet" href="/styles.css?v=20260507-focus1">
 </head>
 <body>
   <header class="topbar" aria-label="Curtis navigation">
@@ -79,29 +79,6 @@
       </div>
     </section>
 
-    <section id="media" class="panel source-panel" aria-label="YouTube source">
-      <div class="panel-head">
-        <div>
-          <p class="label">Media</p>
-          <h2>YouTube Inventory</h2>
-        </div>
-        <div class="action-row">
-          <button type="button" id="probeMediaButton">Get media</button>
-          <button type="button" id="runScanButton">Run scan</button>
-        </div>
-      </div>
-
-      <div class="source-line">
-        <span>Source</span>
-        <a id="sourceLink" href="https://www.youtube.com/@nalalan">youtube.com/@nalalan</a>
-      </div>
-
-      <div class="current-state" aria-live="polite">
-        <span>Current</span>
-        <strong id="currentState">Checking backend.</strong>
-      </div>
-    </section>
-
     <section class="panel focus-panel" aria-label="Curtis progress state">
       <div class="panel-head">
         <div>
@@ -132,30 +109,59 @@
       </div>
     </section>
 
-    <section class="work-grid" aria-label="Practice media record">
-      <section class="panel">
-        <div class="panel-head">
-          <div>
-            <p class="label">Videos</p>
-            <h2>Indexed</h2>
-          </div>
-          <span class="count-pill" id="reviewedCount">0 reviewed</span>
+    <section id="media" class="panel source-panel" aria-label="YouTube source">
+      <div class="panel-head">
+        <div>
+          <p class="label">Media</p>
+          <h2>Automation</h2>
         </div>
-        <div id="inventoryList" class="video-list"></div>
-      </section>
+        <div class="action-row">
+          <button type="button" id="probeMediaButton">Get media</button>
+          <button type="button" id="runScanButton">Run scan</button>
+        </div>
+      </div>
 
-      <section class="panel">
-        <div class="panel-head">
-          <div>
-            <p class="label">Skill</p>
-            <h2>State</h2>
-          </div>
-          <span class="count-pill" id="sectionCount">0 sections</span>
-        </div>
-        <div id="skillSummary" class="skill-summary">No video sections processed.</div>
-        <div id="skillMap" class="skill-map"></div>
-      </section>
+      <div class="source-line">
+        <span>Source</span>
+        <a id="sourceLink" href="https://www.youtube.com/@nalalan">youtube.com/@nalalan</a>
+      </div>
+
+      <div class="current-state" aria-live="polite">
+        <span>Current</span>
+        <strong id="currentState">Checking backend.</strong>
+      </div>
     </section>
+
+    <details class="evidence-details">
+      <summary>
+        <span>Record</span>
+        <strong id="recordSummary">Evidence record</strong>
+      </summary>
+      <section class="work-grid" aria-label="Practice media record">
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <p class="label">Videos</p>
+              <h2>Indexed</h2>
+            </div>
+            <span class="count-pill" id="reviewedCount">0 reviewed</span>
+          </div>
+          <div id="inventoryList" class="video-list"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <p class="label">Skill</p>
+              <h2>State</h2>
+            </div>
+            <span class="count-pill" id="sectionCount">0 sections</span>
+          </div>
+          <div id="skillSummary" class="skill-summary">No video sections processed.</div>
+          <div id="skillMap" class="skill-map"></div>
+        </section>
+      </section>
+    </details>
 
     <section id="system" class="system-band" aria-label="System state">
       <div>
@@ -191,6 +197,6 @@
     </section>
   </main>
 
-  <script src="/app.js?v=20260507-coach2"></script>
+  <script src="/app.js?v=20260507-focus1"></script>
 </body>
 </html>

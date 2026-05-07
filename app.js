@@ -33,6 +33,7 @@ const elements = {
   constraintState: document.querySelector("#constraintState"),
   boundaryState: document.querySelector("#boundaryState"),
   sessionPlan: document.querySelector("#sessionPlan"),
+  recordSummary: document.querySelector("#recordSummary"),
   inventoryList: document.querySelector("#inventoryList"),
   reviewedCount: document.querySelector("#reviewedCount"),
   sectionCount: document.querySelector("#sectionCount"),
@@ -293,6 +294,7 @@ function renderStatus() {
   elements.sourceLink.href = youtubeSourceHref(source);
   elements.sourceLink.textContent = source.replace("https://www.", "").replace("https://", "");
   elements.currentState.textContent = currentStateText(ops);
+  elements.recordSummary.textContent = `${inventory.length} videos / ${sections.length} sections / ${findings.length} findings`;
   elements.reviewedCount.textContent = `${reviewedVideos} reviewed`;
   elements.sectionCount.textContent = `${sections.length} sections`;
   elements.backendState.textContent = backend.online ? "Online" : "Offline";

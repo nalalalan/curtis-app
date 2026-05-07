@@ -349,7 +349,45 @@ h2 {
   grid-template-columns: minmax(0, 1.04fr) minmax(320px, .96fr);
   gap: 12px;
   align-items: start;
+  margin: 12px 0;
+}
+
+.evidence-details {
   margin-bottom: 12px;
+}
+
+.evidence-details summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 58px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 252, 246, .96);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  list-style: none;
+}
+
+.evidence-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.evidence-details summary span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.evidence-details summary strong {
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 900;
+  overflow-wrap: anywhere;
+  text-align: right;
 }
 
 .count-pill {
