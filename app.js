@@ -291,7 +291,14 @@ function todayCompletion(piece) {
   return Number(piece.todayCompletionPercent ?? piece.completionPercent) || 0;
 }
 
+function progressText(piece) {
+  if (!piece) return "0%";
+  if (!isIdentifiedPiece(piece) || piece.confidence !== "clear") return "Identifying";
+  return `${todayCompletion(piece)}%`;
+}
+
 function completionLabel(piece) {
+  if (!isIdentifiedPiece(piece) || piece.confidence !== "clear") return "Identifying";
   const today = todayCompletion(piece);
   const overall = Number(piece?.completionPercent) || 0;
   return piece?.isActiveToday ? `${today}% today` : `${overall}% overall`;
@@ -369,7 +376,7 @@ function renderStatus() {
     : ["Capture clear violin audio."];
   elements.sessionPlan.innerHTML = session.map((item) => `<li>${escapeHtml(item)}</li>`).join("");
   elements.pieceState.textContent = pieceLabel(piece);
-  elements.pieceProgress.textContent = piece ? `${todayCompletion(piece)}%` : "0%";
+  elements.pieceProgress.textContent = progressText(piece);
   elements.pieceTip.textContent = pieceTip(piece);
   elements.pieceCount.textContent = `${pieceList.length} ${pieceList.length === 1 ? "piece" : "pieces"}`;
   const source = youtubeSource(ops);

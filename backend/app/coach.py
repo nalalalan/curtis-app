@@ -299,10 +299,9 @@ def normalize_piece(raw: dict[str, Any], *, evidence_quality: str, section: dict
     confidence = str(piece.get("confidence") or raw.get("pieceConfidence") or "unknown").strip().lower()
     if confidence not in {"clear", "possible", "unknown"}:
         confidence = "unknown"
-    piece_identified = piece_title_is_identified(raw_title)
+    piece_identified = confidence == "clear" and piece_title_is_identified(raw_title)
     candidate_title = ""
     if not piece_identified:
-        candidate_title = "" if raw_title.lower() in UNKNOWN_PIECE_TITLES else raw_title[:120]
         title = "Piece being identified"
         confidence = "unknown"
     else:
@@ -419,7 +418,8 @@ Rules:
 - If there is no clear violin playing, set evidenceQuality to "weak" and findings to Unjudged.
 - Piece title must be an actual repertoire identifier: composer, work title, movement, etude/caprice number, opus, key, or catalog number.
 - Do not use category labels as piece titles: virtuosic solo work, etude or caprice, spiccato passage, technical exercise, fast section, or similar.
-- If the exact piece is not identifiable, set piece.title exactly to "Piece being identified", confidence to "unknown", and put the candidate category only in piece.evidence.
+- Only name a repertoire work when the exact piece is clear. If the exact piece is not identifiable, set piece.title exactly to "Piece being identified", confidence to "unknown", and do not mention a composer or work title.
+- Fast arpeggios, ricochet, spiccato, or caprice-like writing alone are not enough to name Paganini or any other work.
 - No admission prediction, no odds, no reassurance, no motivation, no diagnosis language.
 - Do not name repertoire unless it is clearly audible.
 - Completion percent means Curtis-level readiness for this piece from current evidence. Use 100 only for clearly Curtis-level evidence.
@@ -461,7 +461,8 @@ Rules:
 - If no violin/person/instrument is visible, evidenceQuality is "weak" and findings are Unjudged.
 - Piece title must be an actual repertoire identifier visible in context: score title, overlay title, composer/work clue, movement, etude/caprice number, opus, key, or catalog number.
 - Do not use category labels as piece titles: virtuosic solo work, etude or caprice, spiccato passage, technical exercise, fast section, or similar.
-- If the exact piece is not identifiable, set piece.title exactly to "Piece being identified", confidence to "unknown", and put the candidate category only in piece.evidence.
+- Only name a repertoire work when the exact piece is clear. If the exact piece is not identifiable, set piece.title exactly to "Piece being identified", confidence to "unknown", and do not mention a composer or work title.
+- Fast arpeggios, ricochet, spiccato, or caprice-like writing alone are not enough to name Paganini or any other work.
 - Completion percent means Curtis-level readiness for this piece from current visual evidence. Use 100 only for clearly Curtis-level evidence.
 - No admission prediction, no odds, no reassurance, no motivation, no diagnosis language.
 - Use at most three findings.
@@ -577,16 +578,14 @@ def aggregate_piece_reviews(existing: list[Any], incoming: list[dict[str, Any]])
         if not isinstance(item, dict):
             continue
         raw_title = str(item.get("title") or "Piece being identified").strip()[:120] or "Piece being identified"
-        piece_identified = piece_title_is_identified(raw_title)
-        title = raw_title if piece_identified else "Piece being identified"
-        candidate_title = str(item.get("candidateTitle") or "").strip()[:120]
-        if not piece_identified and not candidate_title and raw_title.lower() not in UNKNOWN_PIECE_TITLES:
-            candidate_title = raw_title
-        key = title.lower()
-        current = pieces.get(key)
         confidence = str(item.get("confidence") or "unknown").strip().lower()
         if confidence not in {"clear", "possible", "unknown"}:
             confidence = "unknown"
+        piece_identified = confidence == "clear" and piece_title_is_identified(raw_title)
+        title = raw_title if piece_identified else "Piece being identified"
+        candidate_title = str(item.get("candidateTitle") or "").strip()[:120] if piece_identified else ""
+        key = title.lower()
+        current = pieces.get(key)
         if not piece_identified:
             confidence = "unknown"
         confidence_score = {"clear": 3, "possible": 2, "unknown": 1}.get(confidence, 1)

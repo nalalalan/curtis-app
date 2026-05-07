@@ -25,6 +25,31 @@ WEAK_EVIDENCE_TERMS = (
     "masked",
     "dominates",
 )
+REPERTOIRE_NAME_TERMS = (
+    "bach",
+    "beethoven",
+    "brahms",
+    "bruch",
+    "dont",
+    "fiorillo",
+    "kreisler",
+    "kreutzer",
+    "lalo",
+    "mendelssohn",
+    "mozart",
+    "paganini",
+    "prokofiev",
+    "rode",
+    "saint-saens",
+    "saint-saëns",
+    "sarasate",
+    "sibelius",
+    "tchaikovsky",
+    "vieuxtemps",
+    "wieniawski",
+    "ysaye",
+    "ysaÿe",
+)
 
 
 def local_timezone() -> ZoneInfo | timezone:
@@ -71,11 +96,21 @@ def major_piece_tip(piece: dict[str, Any], tip: str) -> str:
     clean_tip = str(tip or "Capture one clearer excerpt.").strip()
     signal = f"{piece.get('title') or ''} {piece.get('evidence') or ''} {piece.get('candidateEvidence') or ''}".lower()
     if re.match(r"^capture one clear(er)? excerpt\.?$", clean_tip, flags=re.IGNORECASE):
-        if any(term in signal for term in ("ricochet", "arpeggio", "paganini")):
+        if piece.get("confidence") != "clear" or piece.get("title") == "Piece being identified":
+            return "Record one clean 60-second excerpt with the full violin, bow arm, left hand, and music stand visible."
+        if any(term in signal for term in ("ricochet", "arpeggio")):
             return "Slow the left-hand arpeggio targets first, then add one short controlled ricochet burst."
         if "etude" in signal or "caprice" in signal:
             return "Isolate one small technical cell and record a slower clean take."
     return clean_tip
+
+
+def unclear_piece_evidence(value: Any) -> str:
+    evidence = str(value or "Exact piece not identified from current excerpt.").strip()
+    lowered = evidence.lower()
+    if any(term in lowered for term in REPERTOIRE_NAME_TERMS):
+        return "Exact piece not identified from current excerpt."
+    return evidence[:220]
 
 
 def enriched_pieces(pieces: list[Any], today: str) -> list[dict[str, Any]]:
@@ -84,6 +119,14 @@ def enriched_pieces(pieces: list[Any], today: str) -> list[dict[str, Any]]:
         if not isinstance(item, dict):
             continue
         piece = dict(item)
+        if str(piece.get("confidence") or "unknown").lower() != "clear":
+            piece["title"] = "Piece being identified"
+            piece["confidence"] = "unknown"
+            piece["confidenceScore"] = 1
+            piece["completionPercent"] = 0
+            piece["candidateTitle"] = ""
+            piece["evidence"] = unclear_piece_evidence(piece.get("evidence"))
+            piece["candidateEvidence"] = unclear_piece_evidence(piece.get("candidateEvidence") or piece.get("evidence"))
         daily = piece.get("daily") if isinstance(piece.get("daily"), dict) else {}
         today_entry = daily.get(today) if isinstance(daily.get(today), dict) else None
         latest_day = local_day(piece.get("latestAt"))
@@ -99,6 +142,8 @@ def enriched_pieces(pieces: list[Any], today: str) -> list[dict[str, Any]]:
             today_percent = 0
             today_tip = "Awaiting today's practice sample."
             today_latest = ""
+        if piece.get("confidence") != "clear":
+            today_percent = 0
         piece["today"] = today
         piece["todayCompletionPercent"] = max(0, min(100, today_percent))
         piece["todayTip"] = major_piece_tip(piece, today_tip)[:180]
