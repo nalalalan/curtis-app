@@ -314,8 +314,19 @@ elements.logForm.addEventListener("submit", (event) => {
 
 elements.exportButton.addEventListener("click", async () => {
   const payload = JSON.stringify({ exportedAt: new Date().toISOString(), ...state }, null, 2);
-  await navigator.clipboard.writeText(payload);
-  elements.exportButton.textContent = "Copied";
+  try {
+    await navigator.clipboard.writeText(payload);
+    elements.exportButton.textContent = "Copied";
+  } catch {
+    const blob = new Blob([payload], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `curtis-record-${today()}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    elements.exportButton.textContent = "Exported";
+  }
   window.setTimeout(() => {
     elements.exportButton.textContent = "Export";
   }, 1200);
