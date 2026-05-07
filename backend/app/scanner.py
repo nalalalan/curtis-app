@@ -11,10 +11,15 @@ from .settings import OPENAI_MODEL, OPENAI_REASONING_EFFORT, SERVICE_NAME
 from .state import append_run, load_state, save_state, utc_now
 
 DEFAULT_YOUTUBE_SOURCE = "https://www.youtube.com/@nalalan"
+MEDIA_REVIEW_PENDING_BLOCKERS = {"youtube_data_api_returns_metadata_not_video_media"}
 
 
 def stable_unique(values: list[str]) -> list[str]:
     return list(dict.fromkeys(value for value in values if value))
+
+
+def inventory_blockers(blockers: list[str]) -> list[str]:
+    return [blocker for blocker in blockers if blocker not in MEDIA_REVIEW_PENDING_BLOCKERS]
 
 
 def effective_sources(state: dict[str, Any]) -> dict[str, Any]:
@@ -65,8 +70,9 @@ def base_ops(state: dict[str, Any], extra_blockers: list[str] | None = None) -> 
 
     inventory = state.get("inventory", {"youtube": [], "instagram": []})
     review = derive_review(inventory, state.get("review"))
-    status = "blocked" if blockers else "ready"
-    if not blockers and review.get("inventoryCount"):
+    hard_blockers = inventory_blockers(blockers)
+    status = "blocked" if hard_blockers else "ready"
+    if not hard_blockers and review.get("inventoryCount"):
         status = "inventory_ready"
 
     return {
@@ -135,7 +141,7 @@ async def run_scan(incoming_sources: dict[str, Any] | None = None) -> dict[str, 
 
     run = {
         "startedAt": utc_now(),
-        "status": "blocked" if blockers else "inventory_ready",
+        "status": "blocked" if inventory_blockers(blockers) else "inventory_ready",
         "inventoryCount": sum(len(items) for items in inventory.values()),
         "blockers": stable_unique(blockers),
         "errors": errors,
