@@ -29,6 +29,7 @@ const elements = {
   probeMediaButton: document.querySelector("#probeMediaButton"),
   currentState: document.querySelector("#currentState"),
   evidenceState: document.querySelector("#evidenceState"),
+  workingState: document.querySelector("#workingState"),
   focusState: document.querySelector("#focusState"),
   constraintState: document.querySelector("#constraintState"),
   boundaryState: document.querySelector("#boundaryState"),
@@ -240,6 +241,17 @@ function progressPlan(ops) {
     : null;
 }
 
+function workingText(ops) {
+  const samples = Number(ops?.media?.sampleCount) || (Array.isArray(ops?.media?.samples) ? ops.media.samples.length : 0);
+  const sections = reviewSections(ops).length;
+  const findings = skillFindings(ops).length;
+  if (findings) return `${samples} samples / ${sections} sections / ${findings} findings`;
+  if (sections) return `${samples} samples / ${sections} sections`;
+  if (samples) return `${samples} samples captured`;
+  if (inventoryItems(ops).length) return `${inventoryItems(ops).length} videos indexed`;
+  return backend.online ? "Ready" : "Offline";
+}
+
 function mediaStateLabel(value) {
   if (value === "metadata_ready_media_blocked") return "metadata ready";
   if (value === "media_url_ready") return "media ready";
@@ -283,6 +295,7 @@ function renderStatus() {
   elements.reviewState.textContent = sections.length ? `${sections.length} sections` : "Unjudged";
   elements.modelState.textContent = model;
   elements.evidenceState.textContent = findings.length ? `${findings.length} findings` : sections.length ? "Sections ready" : "Unjudged";
+  elements.workingState.textContent = workingText(ops);
   elements.focusState.textContent = plan?.oneFocus || (sections.length ? "Model review pending." : "Capture playable sections.");
   elements.constraintState.textContent = plan?.practiceConstraint || "One focus per session.";
   elements.boundaryState.textContent = plan?.boundary || "No admission prediction from current samples.";
@@ -347,7 +360,10 @@ function clipCountsForDimension(id) {
 }
 
 function evidenceForDimension(id, fallback) {
-  const entry = skillFindings(backend.ops).find((finding) => finding.dimension === id && finding.evidence);
+  const priority = { "Needs work": 3, "Strong signal": 2, "Unjudged": 1 };
+  const entry = skillFindings(backend.ops)
+    .filter((finding) => finding.dimension === id && finding.evidence)
+    .sort((a, b) => (priority[b.judgment] || 0) - (priority[a.judgment] || 0))[0];
   return entry ? entry.evidence : fallback;
 }
 

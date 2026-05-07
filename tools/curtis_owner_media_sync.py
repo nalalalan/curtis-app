@@ -18,6 +18,7 @@ RUNTIME = ROOT / ".runtime"
 TOKEN_PATH = RUNTIME / "curtis-upload-token.txt"
 MEDIA_DIR = RUNTIME / "owner-media"
 API_BASE = os.getenv("CURTIS_API_BASE", "https://curtis.aolabs.io").rstrip("/")
+PUBLIC_YOUTUBE_SOURCE = os.getenv("CURTIS_YOUTUBE_SOURCE", "https://www.youtube.com/@nalalan")
 SAMPLE_SECONDS = int(os.getenv("CURTIS_OWNER_SAMPLE_SECONDS", "90"))
 SAMPLE_START_SECONDS = int(os.getenv("CURTIS_OWNER_SAMPLE_START_SECONDS", str(10 * 60)))
 WINDOWS_PER_VIDEO = int(os.getenv("CURTIS_OWNER_WINDOWS_PER_VIDEO", "4"))
@@ -242,6 +243,21 @@ def upload_sample(client: httpx.Client, token: str, item: dict[str, Any], path: 
     return response.json()
 
 
+def refresh_inventory(client: httpx.Client) -> dict[str, Any]:
+    response = client.post(
+        f"{API_BASE}/api/curtis/scan/run",
+        json={
+            "youtube": PUBLIC_YOUTUBE_SOURCE,
+            "instagram": "",
+            "scanScope": "Autonomous public channel refresh",
+            "scanCadence": "Every owner sync",
+        },
+        timeout=120,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
 def main() -> int:
     token = load_token()
     if not token:
@@ -249,7 +265,10 @@ def main() -> int:
         return 2
 
     with httpx.Client(timeout=60) as client:
-        ops = client.get(f"{API_BASE}/api/curtis/ops-check").json()
+        try:
+            ops = refresh_inventory(client)
+        except Exception:
+            ops = client.get(f"{API_BASE}/api/curtis/ops-check").json()
         candidates = media_candidates(ops)
         if not candidates:
             print(json.dumps({"status": "blocked", "blocker": "no_unsynced_practice_candidates"}))
