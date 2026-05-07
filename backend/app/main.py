@@ -17,6 +17,7 @@ from .auth import (
     validate_youtube_oauth_state,
     youtube_auth_status,
 )
+from .media import probe_youtube_media
 from .scanner import base_ops, run_scan
 from .settings import ROOT_DIR, SCAN_INTERVAL_SECONDS, SERVICE_NAME, allowed_origins
 from .state import load_state, save_state
@@ -104,6 +105,12 @@ async def update_sources(config: SourceConfig) -> dict[str, Any]:
 async def scan_run(config: SourceConfig | None = None) -> dict[str, Any]:
     incoming = config.to_state() if config else None
     return await run_scan(incoming)
+
+
+@app.post("/api/curtis/media/probe")
+async def media_probe() -> dict[str, Any]:
+    await probe_youtube_media()
+    return base_ops(load_state())
 
 
 @app.get("/api/auth/youtube/status")

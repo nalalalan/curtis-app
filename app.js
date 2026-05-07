@@ -26,6 +26,7 @@ const elements = {
   modelState: document.querySelector("#modelState"),
   sourceLink: document.querySelector("#sourceLink"),
   runScanButton: document.querySelector("#runScanButton"),
+  probeMediaButton: document.querySelector("#probeMediaButton"),
   currentState: document.querySelector("#currentState"),
   inventoryList: document.querySelector("#inventoryList"),
   reviewedCount: document.querySelector("#reviewedCount"),
@@ -35,6 +36,7 @@ const elements = {
   backendState: document.querySelector("#backendState"),
   storageState: document.querySelector("#storageState"),
   automationState: document.querySelector("#automationState"),
+  mediaState: document.querySelector("#mediaState"),
   instagramState: document.querySelector("#instagramState")
 };
 
@@ -148,6 +150,31 @@ async function runBackendScan() {
   }
 }
 
+async function runMediaProbe() {
+  elements.probeMediaButton.disabled = true;
+  elements.probeMediaButton.textContent = "Fetching";
+  try {
+    backend = {
+      online: true,
+      ops: await apiFetch("/api/curtis/media/probe", {
+        method: "POST",
+        body: JSON.stringify({})
+      }),
+      lastError: ""
+    };
+  } catch (error) {
+    backend = {
+      online: false,
+      ops: null,
+      lastError: String(error?.message || error || "offline")
+    };
+  } finally {
+    elements.probeMediaButton.disabled = false;
+    elements.probeMediaButton.textContent = "Get media";
+    render();
+  }
+}
+
 function youtubeLabel(ops) {
   const auth = ops?.auth?.youtube || {};
   const credentials = ops?.credentials || {};
@@ -199,6 +226,17 @@ function mediaStateLabel(value) {
   return value || "queued";
 }
 
+function mediaAccessLabel(ops) {
+  const run = ops?.media?.lastMediaRun;
+  const samples = Array.isArray(ops?.media?.samples) ? ops.media.samples : [];
+  if (samples.length) return "Sample ready";
+  if (run?.blockers?.includes("youtube_media_fetch_requires_owner_browser_or_export")) return "Owner export needed";
+  if (run?.blockers?.includes("youtube_media_fetch_needs_cookies")) return "Browser access needed";
+  if (run?.status === "blocked") return "Blocked";
+  if (ops?.review?.mediaAccess === "metadata_only") return "Metadata only";
+  return "Not fetched";
+}
+
 function videoBadge(item) {
   if (item.mediaKind === "practice_log") return "practice log";
   if (item.mediaKind === "performance_or_rehearsal") return "rehearsal";
@@ -231,6 +269,7 @@ function renderStatus() {
   elements.backendState.textContent = backend.online ? "Online" : "Offline";
   elements.storageState.textContent = backend.online ? "Backend state" : "Browser only";
   elements.automationState.textContent = backend.online ? automationLabel(ops) : "Offline";
+  elements.mediaState.textContent = backend.online ? mediaAccessLabel(ops) : "Offline";
   elements.instagramState.textContent = ops?.credentials?.instagramGraph ? "Configured" : "Not configured";
 
 }
@@ -329,6 +368,7 @@ function render() {
 }
 
 elements.runScanButton.addEventListener("click", runBackendScan);
+elements.probeMediaButton.addEventListener("click", runMediaProbe);
 
 render();
 loadBackendState();

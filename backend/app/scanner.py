@@ -110,6 +110,10 @@ def base_ops(state: dict[str, Any], extra_blockers: list[str] | None = None) -> 
         "sources": sources,
         "inventory": inventory,
         "review": review,
+        "media": {
+            "lastMediaRun": state.get("lastMediaRun"),
+            "samples": state.get("mediaSamples", [])[:5],
+        },
         "lastScan": state.get("lastScan"),
         "blockers": stable_unique(blockers),
     }

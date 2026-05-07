@@ -7,6 +7,7 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).resolve().parents[2]
 RUNTIME_DIR = Path(os.getenv("CURTIS_RUNTIME_DIR", ROOT_DIR / ".runtime"))
 STATE_PATH = Path(os.getenv("CURTIS_STATE_PATH", RUNTIME_DIR / "curtis_state.json"))
+MEDIA_DIR = Path(os.getenv("CURTIS_MEDIA_DIR", RUNTIME_DIR / "media"))
 
 SERVICE_NAME = "curtis-media-worker"
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.5")
@@ -15,6 +16,8 @@ YOUTUBE_MAX_RESULTS = int(os.getenv("YOUTUBE_MAX_RESULTS", "1000"))
 INSTAGRAM_MAX_RESULTS = int(os.getenv("INSTAGRAM_MAX_RESULTS", "12"))
 INSTAGRAM_GRAPH_VERSION = os.getenv("INSTAGRAM_GRAPH_VERSION", "v20.0")
 SCAN_INTERVAL_SECONDS = int(os.getenv("CURTIS_SCAN_INTERVAL_SECONDS", str(60 * 60 * 24)))
+MEDIA_SAMPLE_SECONDS = int(os.getenv("CURTIS_MEDIA_SAMPLE_SECONDS", "90"))
+MEDIA_SAMPLE_START_SECONDS = int(os.getenv("CURTIS_MEDIA_SAMPLE_START_SECONDS", str(10 * 60)))
 
 
 def env_present(name: str) -> bool:
