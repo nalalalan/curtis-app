@@ -163,6 +163,7 @@ def enriched_pieces(pieces: list[Any], today: str) -> list[dict[str, Any]]:
             today_latest = ""
         if piece.get("confidence") != "clear":
             today_percent = 0
+            today_tip = "Record one clean 60-second excerpt with the full violin, bow arm, left hand, and music stand visible."
         piece["today"] = today
         piece["todayCompletionPercent"] = max(0, min(100, today_percent))
         piece["todayTip"] = major_piece_tip(piece, today_tip)[:180]
