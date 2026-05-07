@@ -1091,6 +1091,7 @@ h2 {
 
 @media (max-width: 620px) {
   .topbar {
+    flex-wrap: wrap;
     justify-content: flex-start;
     min-height: 58px;
     padding: 10px 12px;
@@ -1108,9 +1109,9 @@ h2 {
   }
 
   .topbar nav {
-    flex: 0 0 auto;
-    width: auto;
-    flex-wrap: nowrap;
+    flex: 1 1 100%;
+    width: 100%;
+    flex-wrap: wrap;
     justify-content: flex-start;
     gap: 6px;
     overflow-x: visible;
@@ -1165,6 +1166,13 @@ h2 {
 
   .paper-strip {
     padding: 16px;
+  }
+
+  .paper-copy strong {
+    max-width: 100%;
+    font-size: 23px;
+    line-height: 1.08;
+    word-break: break-word;
   }
 
   .paper-hero {
