@@ -190,6 +190,12 @@ function reviewSections(ops) {
   return Array.isArray(ops?.review?.notableSections) ? ops.review.notableSections : [];
 }
 
+function mediaStateLabel(value) {
+  if (value === "metadata_ready_media_blocked") return "metadata ready";
+  if (value === "media_url_ready") return "media ready";
+  return value || "queued";
+}
+
 function renderStatus() {
   const ops = backend.ops || {};
   const inventory = inventoryItems(ops);
@@ -224,7 +230,7 @@ function renderInventory() {
     elements.inventoryList.innerHTML = `<p class="empty">No public videos indexed.</p>`;
     return;
   }
-  elements.inventoryList.innerHTML = inventory.slice(0, 12).map((item) => {
+  elements.inventoryList.innerHTML = inventory.slice(0, 8).map((item) => {
     const meta = [formatDate(item.publishedAt), item.duration, item.viewCount ? `${item.viewCount} views` : ""]
       .filter(Boolean)
       .join(" / ");
@@ -234,7 +240,7 @@ function renderInventory() {
           <span>${escapeHtml(meta || item.channelTitle || "YouTube")}</span>
           <a href="${escapeHtml(item.url)}">${escapeHtml(item.title || item.url || "YouTube video")}</a>
         </div>
-        <em>${escapeHtml(item.analysisState || "queued")}</em>
+        <em>${escapeHtml(mediaStateLabel(item.analysisState))}</em>
       </article>
     `;
   }).join("");
@@ -273,6 +279,11 @@ function renderSkillMap() {
     elements.skillSummary.textContent = `Current work: ${needs.map((dimension) => dimension.label).join(", ")}.`;
   } else {
     elements.skillSummary.textContent = "No weakness claim from current evidence.";
+  }
+
+  if (!sections.length) {
+    elements.skillMap.innerHTML = `<p class="empty">Skill map pending section review.</p>`;
+    return;
   }
 
   elements.skillMap.innerHTML = skillDimensions.map((dimension) => {
