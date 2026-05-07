@@ -51,6 +51,16 @@ const facts = [
   }
 ];
 
+const skillDimensions = [
+  { id: "intonation", label: "Intonation", focus: "Pitch center, double-stops, exposed entrances." },
+  { id: "time", label: "Time", focus: "Pulse, subdivision, tempo stability." },
+  { id: "tone", label: "Tone", focus: "Core sound, projection, contact point." },
+  { id: "articulation", label: "Articulation", focus: "Attack, release, bow clarity." },
+  { id: "shifts", label: "Shifts", focus: "Position changes, preparation, arrival quality." },
+  { id: "musicality", label: "Musicality", focus: "Phrase shape, contrast, long line." },
+  { id: "auditionDelivery", label: "Audition delivery", focus: "Start state, recovery, room-ready control." }
+];
+
 const defaultState = {
   profile: {
     instrument: "",
@@ -60,7 +70,14 @@ const defaultState = {
   },
   taskState: Object.fromEntries(tasks.map((task) => [task.id, task.id === "sourceReview" ? "active" : "unset"])),
   repertoire: [],
-  logs: []
+  logs: [],
+  sources: {
+    youtube: "",
+    instagram: "",
+    scanScope: "Manual URLs",
+    scanCadence: "Manual"
+  },
+  clips: []
 };
 
 let state = loadState();
@@ -91,7 +108,26 @@ const elements = {
   logMinutes: document.querySelector("#logMinutes"),
   logNote: document.querySelector("#logNote"),
   logList: document.querySelector("#logList"),
-  exportButton: document.querySelector("#exportButton")
+  exportButton: document.querySelector("#exportButton"),
+  sourceForm: document.querySelector("#sourceForm"),
+  youtubeInput: document.querySelector("#youtubeInput"),
+  instagramInput: document.querySelector("#instagramInput"),
+  scanScope: document.querySelector("#scanScope"),
+  scanCadence: document.querySelector("#scanCadence"),
+  youtubeState: document.querySelector("#youtubeState"),
+  instagramState: document.querySelector("#instagramState"),
+  mediaReviewState: document.querySelector("#mediaReviewState"),
+  skillSummary: document.querySelector("#skillSummary"),
+  skillMap: document.querySelector("#skillMap"),
+  clipForm: document.querySelector("#clipForm"),
+  clipUrl: document.querySelector("#clipUrl"),
+  clipTimecode: document.querySelector("#clipTimecode"),
+  clipDimension: document.querySelector("#clipDimension"),
+  clipJudgment: document.querySelector("#clipJudgment"),
+  clipNote: document.querySelector("#clipNote"),
+  clipList: document.querySelector("#clipList"),
+  reviewedCount: document.querySelector("#reviewedCount"),
+  sectionCount: document.querySelector("#sectionCount")
 };
 
 function loadState() {
@@ -103,7 +139,9 @@ function loadState() {
       profile: { ...defaultState.profile, ...parsed.profile },
       taskState: { ...defaultState.taskState, ...parsed.taskState },
       repertoire: Array.isArray(parsed.repertoire) ? parsed.repertoire : [],
-      logs: Array.isArray(parsed.logs) ? parsed.logs : []
+      logs: Array.isArray(parsed.logs) ? parsed.logs : [],
+      sources: { ...defaultState.sources, ...parsed.sources },
+      clips: Array.isArray(parsed.clips) ? parsed.clips : []
     };
   } catch {
     return structuredClone(defaultState);
@@ -225,9 +263,110 @@ function renderLogs() {
   });
 }
 
+function renderSources() {
+  elements.youtubeInput.value = state.sources.youtube;
+  elements.instagramInput.value = state.sources.instagram;
+  elements.scanScope.value = state.sources.scanScope;
+  elements.scanCadence.value = state.sources.scanCadence;
+  elements.youtubeState.textContent = state.sources.youtube ? "Source set / auth pending" : "Unset";
+  elements.instagramState.textContent = state.sources.instagram ? "Source set / auth pending" : "Unset";
+}
+
+function renderClipDimensionOptions() {
+  elements.clipDimension.innerHTML = skillDimensions.map((dimension) => (
+    `<option value="${dimension.id}">${escapeHtml(dimension.label)}</option>`
+  )).join("");
+}
+
+function renderClips() {
+  if (!state.clips.length) {
+    elements.clipList.innerHTML = '<p class="empty">No reviewed sections.</p>';
+    return;
+  }
+
+  elements.clipList.innerHTML = state.clips.map((entry) => {
+    const dimension = skillDimensions.find((item) => item.id === entry.dimension);
+    const label = dimension ? dimension.label : entry.dimension;
+    return `
+      <article class="entry-row">
+        <div>
+          <span class="entry-meta">${escapeHtml(label)} / ${escapeHtml(entry.judgment)} / ${escapeHtml(entry.timecode || "no timecode")}</span>
+          <p class="entry-title">${escapeHtml(entry.note || entry.url)}</p>
+          <a class="entry-link" href="${escapeHtml(entry.url)}">${escapeHtml(entry.url)}</a>
+        </div>
+        <button type="button" class="entry-delete" data-delete-clip="${entry.id}" aria-label="Remove reviewed section">X</button>
+      </article>
+    `;
+  }).join("");
+
+  elements.clipList.querySelectorAll("[data-delete-clip]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.clips = state.clips.filter((entry) => entry.id !== button.dataset.deleteClip);
+      saveState();
+      render();
+    });
+  });
+}
+
+function clipCountsForDimension(id) {
+  const entries = state.clips.filter((entry) => entry.dimension === id);
+  return {
+    total: entries.length,
+    strong: entries.filter((entry) => entry.judgment === "Strong signal").length,
+    needs: entries.filter((entry) => entry.judgment === "Needs work").length,
+    regression: entries.filter((entry) => entry.judgment === "Regression").length
+  };
+}
+
+function dimensionStatus(counts) {
+  if (!counts.total) return "Unjudged";
+  if (counts.regression) return "Regression";
+  if (counts.needs > counts.strong) return "Needs work";
+  if (counts.strong) return "Strong signal";
+  return "Unjudged";
+}
+
+function renderSkillMap() {
+  const reviewedVideos = new Set(state.clips.map((entry) => entry.url)).size;
+  elements.mediaReviewState.textContent = `${reviewedVideos} videos reviewed`;
+
+  const needs = skillDimensions
+    .map((dimension) => ({ ...dimension, counts: clipCountsForDimension(dimension.id) }))
+    .filter((dimension) => {
+      const status = dimensionStatus(dimension.counts);
+      return status === "Needs work" || status === "Regression";
+    });
+
+  if (!state.clips.length) {
+    elements.skillSummary.textContent = "No video reviewed.";
+  } else if (needs.length) {
+    elements.skillSummary.textContent = `Current work: ${needs.map((dimension) => dimension.label).join(", ")}.`;
+  } else {
+    elements.skillSummary.textContent = "No weakness claim from current evidence.";
+  }
+
+  elements.skillMap.innerHTML = skillDimensions.map((dimension) => {
+    const counts = clipCountsForDimension(dimension.id);
+    const status = dimensionStatus(counts);
+    return `
+      <article class="skill-row" data-status="${escapeHtml(status)}">
+        <div>
+          <span>${escapeHtml(status)}</span>
+          <strong>${escapeHtml(dimension.label)}</strong>
+          <p>${escapeHtml(dimension.focus)}</p>
+        </div>
+        <em>${counts.total}</em>
+      </article>
+    `;
+  }).join("");
+}
+
 function computeNextOperation() {
   if (!state.profile.instrument.trim() || !state.profile.program.trim()) {
     return "Set instrument and program.";
+  }
+  if (!state.sources.youtube.trim() && !state.sources.instagram.trim() && !state.clips.length) {
+    return "Set practice video source.";
   }
   if (!state.repertoire.length) {
     return "Enter official department repertoire.";
@@ -247,12 +386,15 @@ function renderStats() {
   const complete = values.filter((value) => value === "complete").length;
   const active = values.filter((value) => value === "active").length;
   const minutes = state.logs.reduce((sum, entry) => sum + (Number(entry.minutes) || 0), 0);
+  const reviewedVideos = new Set(state.clips.map((entry) => entry.url)).size;
   const percent = Math.round((complete / tasks.length) * 100);
 
   elements.completeCount.textContent = complete;
   elements.activeCount.textContent = active;
   elements.pieceCount.textContent = state.repertoire.length;
   elements.minuteCount.textContent = minutes;
+  elements.reviewedCount.textContent = reviewedVideos;
+  elements.sectionCount.textContent = state.clips.length;
   elements.progressText.textContent = `${complete} / ${tasks.length} complete`;
   elements.progressFill.style.width = `${percent}%`;
   elements.nextOperation.textContent = computeNextOperation();
@@ -264,6 +406,9 @@ function render() {
   renderFacts();
   renderRepertoire();
   renderLogs();
+  renderSources();
+  renderClips();
+  renderSkillMap();
   renderStats();
 }
 
@@ -312,6 +457,38 @@ elements.logForm.addEventListener("submit", (event) => {
   render();
 });
 
+elements.sourceForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  state.sources = {
+    youtube: elements.youtubeInput.value.trim(),
+    instagram: elements.instagramInput.value.trim(),
+    scanScope: elements.scanScope.value,
+    scanCadence: elements.scanCadence.value
+  };
+  saveState();
+  render();
+});
+
+elements.clipForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const url = elements.clipUrl.value.trim();
+  if (!url) return;
+  state.clips.unshift({
+    id: crypto.randomUUID(),
+    url,
+    timecode: elements.clipTimecode.value.trim(),
+    dimension: elements.clipDimension.value,
+    judgment: elements.clipJudgment.value,
+    note: elements.clipNote.value.trim()
+  });
+  elements.clipUrl.value = "";
+  elements.clipTimecode.value = "";
+  elements.clipJudgment.value = "Unjudged";
+  elements.clipNote.value = "";
+  saveState();
+  render();
+});
+
 elements.exportButton.addEventListener("click", async () => {
   const payload = JSON.stringify({ exportedAt: new Date().toISOString(), ...state }, null, 2);
   try {
@@ -332,4 +509,5 @@ elements.exportButton.addEventListener("click", async () => {
   }, 1200);
 });
 
+renderClipDimensionOptions();
 render();

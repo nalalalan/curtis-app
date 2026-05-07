@@ -4,18 +4,18 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Curtis Admission Record</title>
-  <meta name="description" content="Curtis admission operating record for Alan Pham: source requirements, repertoire, prescreening, essays, recommendations, and audition logs.">
+  <meta name="description" content="Curtis admission operating record for Alan Pham: source requirements, repertoire, practice media, skill evidence, and audition logs.">
   <link rel="canonical" href="https://curtis.aolabs.io/" />
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="AO Labs">
   <meta property="og:title" content="Curtis Admission Record">
-  <meta property="og:description" content="Source-backed Curtis admission dashboard for repertoire, prescreening, essays, recommendations, and audition work.">
+  <meta property="og:description" content="Source-backed Curtis admission dashboard for repertoire, practice media, skill evidence, and audition work.">
   <meta property="og:url" content="https://curtis.aolabs.io/">
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="Curtis Admission Record">
-  <meta name="twitter:description" content="Source-backed Curtis admission dashboard for repertoire, prescreening, essays, recommendations, and audition work.">
+  <meta name="twitter:description" content="Source-backed Curtis admission dashboard for repertoire, practice media, skill evidence, and audition work.">
   <link rel="icon" href="/favicon.svg?v=20260507-source" type="image/svg+xml">
-  <link rel="stylesheet" href="/styles.css?v=20260507-source">
+  <link rel="stylesheet" href="/styles.css?v=20260507-media-review2">
 </head>
 <body>
   <header class="topbar" aria-label="Curtis navigation">
@@ -23,8 +23,9 @@
     <nav>
       <a href="#record">Record</a>
       <a href="#repertoire">Repertoire</a>
+      <a href="#media">Media</a>
       <a href="#sources">Sources</a>
-      <a href="https://aolabs.io/">AO Labs</a>
+      <a href="https://aolabs.io/" aria-label="AO Labs">AO</a>
     </nav>
   </header>
 
@@ -51,6 +52,14 @@
         <article>
           <span>Storage</span>
           <strong>Local browser record</strong>
+        </article>
+        <article>
+          <span>Media Review</span>
+          <strong id="mediaReviewState">0 videos reviewed</strong>
+        </article>
+        <article>
+          <span>Automation</span>
+          <strong>Railway worker pending</strong>
         </article>
       </div>
     </section>
@@ -166,6 +175,14 @@
             <span id="minuteCount">0</span>
             <p>Logged minutes</p>
           </div>
+          <div>
+            <span id="reviewedCount">0</span>
+            <p>Reviewed videos</p>
+          </div>
+          <div>
+            <span id="sectionCount">0</span>
+            <p>Notable sections</p>
+          </div>
         </div>
       </section>
     </section>
@@ -243,6 +260,134 @@
       </form>
     </section>
 
+    <section id="media" class="media-grid" aria-label="Media review system">
+      <form class="panel media-source-panel" id="sourceForm">
+        <div class="panel-head">
+          <div>
+            <p class="section-label">Media</p>
+            <h2>Source Feeds</h2>
+          </div>
+          <button type="submit">Save</button>
+        </div>
+        <div class="field-grid">
+          <label>
+            YouTube
+            <input id="youtubeInput" name="youtube" autocomplete="off" placeholder="Channel, playlist, or practice video URL">
+          </label>
+          <label>
+            Instagram
+            <input id="instagramInput" name="instagram" autocomplete="off" placeholder="Profile, Reel, or post URL">
+          </label>
+          <label>
+            Scan Scope
+            <select id="scanScope" name="scanScope">
+              <option>Manual URLs</option>
+              <option>Latest public posts</option>
+              <option>Authenticated full archive</option>
+            </select>
+          </label>
+          <label>
+            Cadence
+            <select id="scanCadence" name="scanCadence">
+              <option>Manual</option>
+              <option>Daily</option>
+              <option>Weekly</option>
+            </select>
+          </label>
+        </div>
+        <div class="connector-list" aria-label="Connector status">
+          <article>
+            <span>YouTube</span>
+            <strong id="youtubeState">Unset</strong>
+          </article>
+          <article>
+            <span>Instagram</span>
+            <strong id="instagramState">Unset</strong>
+          </article>
+          <article>
+            <span>Backend</span>
+            <strong>OAuth + media worker required</strong>
+          </article>
+        </div>
+      </form>
+
+      <section class="panel skill-panel" aria-label="Skill map">
+        <div class="panel-head">
+          <div>
+            <p class="section-label">Skill</p>
+            <h2>Current Judgment</h2>
+          </div>
+        </div>
+        <div id="skillSummary" class="judgment-callout">No video reviewed.</div>
+        <div id="skillMap" class="skill-map"></div>
+      </section>
+
+      <form class="panel notable-panel" id="clipForm">
+        <div class="panel-head">
+          <div>
+            <p class="section-label">Sections</p>
+            <h2>Notable Video Evidence</h2>
+          </div>
+          <button type="submit">Add</button>
+        </div>
+        <div class="field-grid clip-fields">
+          <label>
+            Video URL
+            <input id="clipUrl" name="clipUrl" type="url" autocomplete="off" placeholder="YouTube or Instagram URL">
+          </label>
+          <label>
+            Timecode
+            <input id="clipTimecode" name="clipTimecode" autocomplete="off" placeholder="00:00-00:20">
+          </label>
+          <label>
+            Dimension
+            <select id="clipDimension" name="clipDimension"></select>
+          </label>
+          <label>
+            Judgment
+            <select id="clipJudgment" name="clipJudgment">
+              <option>Unjudged</option>
+              <option>Strong signal</option>
+              <option>Needs work</option>
+              <option>Regression</option>
+            </select>
+          </label>
+          <label class="wide-field">
+            Record
+            <input id="clipNote" name="clipNote" autocomplete="off" placeholder="Factual observation">
+          </label>
+        </div>
+        <div id="clipList" class="entry-list"></div>
+      </form>
+
+      <section class="panel backend-panel" aria-label="Backend contract">
+        <div class="panel-head">
+          <div>
+            <p class="section-label">System</p>
+            <h2>Autonomous Review Contract</h2>
+          </div>
+        </div>
+        <dl class="fact-list system-facts">
+          <div>
+            <dt>YouTube</dt>
+            <dd>Data API or OAuth for channel inventory; media access required for performance review.</dd>
+          </div>
+          <div>
+            <dt>Instagram</dt>
+            <dd>Graph API permissions required; public scraping is not the operating plan.</dd>
+          </div>
+          <div>
+            <dt>Analysis</dt>
+            <dd>Audio extraction, frame sampling, section detection, rubric scoring, human-readable record.</dd>
+          </div>
+          <div>
+            <dt>Boundary</dt>
+            <dd>No Curtis-level claim until video evidence is processed against a stable rubric.</dd>
+          </div>
+        </dl>
+      </section>
+    </section>
+
     <section id="sources" class="source-band" aria-label="Source links">
       <div>
         <p class="section-label">Source State</p>
@@ -257,6 +402,6 @@
     </section>
   </main>
 
-  <script src="/app.js?v=20260507-source"></script>
+  <script src="/app.js?v=20260507-media-review2"></script>
 </body>
 </html>
