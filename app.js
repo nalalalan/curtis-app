@@ -267,7 +267,17 @@ function pieceLabel(piece) {
 
 function pieceTip(piece) {
   if (!piece) return "Capture one clear excerpt.";
-  return String(piece.tip || "Capture one clearer excerpt.").trim();
+  const tip = String(piece.tip || "Capture one clearer excerpt.").trim();
+  const signal = `${piece.title || ""} ${piece.evidence || ""} ${piece.candidateEvidence || ""}`.toLowerCase();
+  if (/^capture one clear(er)? excerpt\.?$/i.test(tip)) {
+    if (signal.includes("ricochet") || signal.includes("arpeggio") || signal.includes("paganini")) {
+      return "Slow the left-hand arpeggio targets first, then add one short controlled ricochet burst.";
+    }
+    if (signal.includes("etude") || signal.includes("caprice")) {
+      return "Isolate one small technical cell and record a slower clean take.";
+    }
+  }
+  return tip;
 }
 
 function pieceEvidence(piece) {

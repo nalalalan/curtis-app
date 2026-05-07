@@ -100,7 +100,7 @@
 \end{center}
 
 \vspace{0.35em}
-\noindent\textbf{High-level music training produces dense evidence: daily practice videos, repeated repertoire, changing technical constraints, and periodic performance goals. Most of that evidence is difficult to use because it is stored as unstructured media rather than as a longitudinal record. We report Curtis Media Review, a live AO Labs system that indexes public practice media, identifies practice candidates, records model-assisted section reviews, and converts the current state into a compact practice record. The checked live state on 7 May 2026 used the YouTube channel \texttt{@nalalan} as the primary source, indexed 207 public videos, marked 102 as practice candidates, marked 82 as long-form candidates, stored 6 media samples, retained 11 reviewed sections, and recorded 48 Curtis-focused findings. The current piece state remains \textit{Piece being identified}; generic categories such as possible etude or caprice are retained only as candidate evidence, not as repertoire titles. The system uses GPT-5.5 for vision and text review and a separate audio model for audio evidence, while preserving explicit limits: Curtis admission cannot be predicted from current samples, weak audio/video evidence is marked unjudged, and the system reports practice signals rather than admissions probability. The contribution is an experimental method for turning accumulated practice media into auditable feedback loops, progress history, and source-bounded coaching suggestions.}
+\noindent\textbf{High-level music training produces dense evidence: daily practice videos, repeated repertoire, changing technical constraints, and periodic performance goals. Most of that evidence is difficult to use because it is stored as unstructured media rather than as a longitudinal record. We report Curtis Media Review, a live AO Labs system that indexes public practice media, identifies practice candidates, records model-assisted section reviews, and converts the current state into a compact practice record. The checked live state on 7 May 2026 used the YouTube channel \texttt{@nalalan} as the primary source, indexed 207 public videos, marked 102 as practice candidates, marked 82 as long-form candidates, stored 6 media samples, retained 11 reviewed sections, and recorded 51 Curtis-focused findings. The current leading piece hypothesis is \textit{Paganini Caprice No. 5} at possible confidence with 70\% Curtis-level completion from current evidence; an additional unidentified piece cluster remains at 12\%. Generic categories such as possible etude or caprice are retained only as candidate evidence, not as repertoire titles. The system uses GPT-5.5 for vision and text review and a separate audio model for audio evidence, while preserving explicit limits: Curtis admission cannot be predicted from current samples, weak audio/video evidence is marked unjudged, and the system reports practice signals rather than admissions probability. The contribution is an experimental method for turning accumulated practice media into auditable feedback loops, progress history, and source-bounded coaching suggestions.}
 
 \newpage
 \pagestyle{fancy}
@@ -131,13 +131,13 @@ Signal & Current value \\
 \metric{Long-form candidates}{82 videos}
 \metric{Media samples}{6 captured samples}
 \metric{Reviewed sections}{11 sections}
-\metric{Curtis-focused findings}{48 findings}
+\metric{Curtis-focused findings}{51 findings}
 \metric{Latest dated practice log}{5-1-26}
 \metric{Review model}{GPT-5.5 for vision/text, separate audio model for audio evidence}
-\metric{Current piece}{Piece being identified; generic category retained only as candidate evidence}
-\metric{Curtis-level completion}{0\% for the current unidentified piece cluster}
-\metric{Current focus}{Visible full-body playing setup}
-\metric{Current constraint}{Capture full playing setup}
+\metric{Current piece}{Paganini Caprice No. 5; possible confidence}
+\metric{Curtis-level completion}{70\% for the leading piece hypothesis; unidentified cluster at 12\%}
+\metric{Current focus}{Audition-style setup consistency}
+\metric{Current constraint}{Open strings only, mirror-check contact point}
 \metric{Boundary}{Curtis admission cannot be predicted from current samples}
 \bottomrule
 \end{tabularx}
@@ -153,7 +153,7 @@ The review layer stores section-level findings with a dimension, evidence source
 
 \section{First readout}
 
-The first live readout is experimental but usable. The strongest immediate value is that the system has already converted a large, timestamped practice archive into a queryable corpus with captured media samples and stored section reviews. The current active focus is visible full-body playing setup, with capture full playing setup as the practice condition. The current piece cluster is not yet identified at repertoire-title level, so the system reports 0\% Curtis-level completion for that unidentified cluster and keeps the possible etude/caprice signal as evidence only. These statements are not generic pedagogy; they are extracted from the stored review findings, piece record, and current progress plan.
+The first live readout is experimental but usable. The strongest immediate value is that the system has already converted a large, timestamped practice archive into a queryable corpus with captured media samples and stored section reviews. The current leading piece hypothesis is Paganini Caprice No. 5 with possible confidence, fast arpeggio and ricochet evidence, and 70\% Curtis-level completion from the current samples. A second unidentified cluster remains at 12\%, with generic etude/caprice evidence retained outside the piece-title field. The current active focus is audition-style setup consistency, with open strings only and mirror-check contact point as the practice condition. These statements are not generic pedagogy; they are extracted from the stored review findings, piece record, and current progress plan.
 
 \begin{table}[htbp]
 \centering
