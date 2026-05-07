@@ -1197,6 +1197,17 @@ h2 {
     word-break: break-word;
   }
 
+  .today-grid article,
+  .highlight-meta,
+  .piece-row,
+  .day-row {
+    max-width: calc(100vw - 58px);
+  }
+
+  .today-grid strong {
+    max-width: 100%;
+  }
+
   .paper-hero {
     width: 100%;
     max-width: 100%;

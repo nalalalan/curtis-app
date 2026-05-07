@@ -5,22 +5,20 @@
       <feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="#fffaf4" flood-opacity=".42"/>
     </filter>
     <g id="blade">
-      <rect x="59" y="20" width="10" height="38" rx="4" fill="currentColor"/>
+      <rect x="58" y="20" width="12" height="43" rx="6" fill="currentColor"/>
     </g>
   </defs>
   <g filter="url(#d)">
-    <use href="#blade" transform="rotate(145 64 64)" color="#b9915a"/>
-    <use href="#blade" transform="rotate(170 64 64)" color="#7f978f"/>
-    <use href="#blade" transform="rotate(195 64 64)" color="#d1bba1"/>
-    <use href="#blade" transform="rotate(220 64 64)" color="#8d7565"/>
-    <use href="#blade" transform="rotate(245 64 64)" color="#c5a76a"/>
-    <use href="#blade" transform="rotate(270 64 64)" color="#6f827d"/>
-    <use href="#blade" transform="rotate(295 64 64)" color="#d8c9b8"/>
-    <use href="#blade" transform="rotate(320 64 64)" color="#9d725f"/>
-    <use href="#blade" transform="rotate(345 64 64)" color="#b89457"/>
-    <path d="M31 85c17 12 48 13 67 0" fill="none" stroke="#3b3834" stroke-width="6" stroke-linecap="round" opacity=".72"/>
-    <circle cx="64" cy="64" r="13" fill="#f1e8dc"/>
-    <circle cx="64" cy="64" r="8" fill="none" stroke="#5a524b" stroke-width="4"/>
-    <circle cx="64" cy="64" r="3.6" fill="#4b453f"/>
+    <use href="#blade" transform="rotate(210 64 64)" color="#c1755f"/>
+    <use href="#blade" transform="rotate(232 64 64)" color="#e6d8c5"/>
+    <use href="#blade" transform="rotate(254 64 64)" color="#6f978c"/>
+    <use href="#blade" transform="rotate(276 64 64)" color="#d0a23f"/>
+    <use href="#blade" transform="rotate(298 64 64)" color="#f3ecdf"/>
+    <use href="#blade" transform="rotate(320 64 64)" color="#7d91ac"/>
+    <use href="#blade" transform="rotate(342 64 64)" color="#b98755"/>
+    <path d="M35 87c16 11 44 12 61 0" fill="none" stroke="#232329" stroke-width="6" stroke-linecap="round" opacity=".7"/>
+    <circle cx="64" cy="64" r="14" fill="#fff7ec"/>
+    <circle cx="64" cy="64" r="8.5" fill="none" stroke="#393a3b" stroke-width="4"/>
+    <circle cx="64" cy="64" r="3.7" fill="#c99739"/>
   </g>
 </svg>
