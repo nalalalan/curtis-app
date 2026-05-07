@@ -112,8 +112,8 @@ def major_piece_tip(piece: dict[str, Any], tip: str) -> str:
     if re.match(r"^capture one clear(er)? excerpt\.?$", clean_tip, flags=re.IGNORECASE):
         if piece.get("confidence") != "clear" or piece.get("title") == "Piece being identified":
             return "Record one clean 60-second excerpt with the full violin, bow arm, left hand, and music stand visible."
-        if any(term in signal for term in ("ricochet", "arpeggio")):
-            return "Slow the left-hand arpeggio targets first, then add one short controlled ricochet burst."
+        if any(term in signal for term in ("bariolage", "string crossing", "arpeggio", "arpeggiated")):
+            return "Keep the E-major pattern even: small string crossings, steady left-hand frame, no rush after shifts."
         if "etude" in signal or "caprice" in signal:
             return "Isolate one small technical cell and record a slower clean take."
     return clean_tip
@@ -132,6 +132,61 @@ def rejected_repertoire_title(value: Any) -> bool:
     return any(rejected in compact or compact in rejected for rejected in REJECTED_REPERTOIRE_TITLES)
 
 
+def canonical_piece_title(value: Any) -> str:
+    title = str(value or "").strip()
+    compact = re.sub(r"[^a-z0-9]+", " ", title.lower()).strip()
+    if "bach" in compact and "partita" in compact and "1006" in compact and (
+        "preludio" in compact or "prelude" in compact
+    ):
+        return "J.S. Bach Partita No. 3 in E major, BWV 1006, Preludio"
+    return title
+
+
+def better_tip(current: str, incoming: str) -> str:
+    current_clean = str(current or "").strip()
+    incoming_clean = str(incoming or "").strip()
+    if re.match(r"^capture one clear(er)? excerpt\.?$", current_clean, flags=re.IGNORECASE) and incoming_clean:
+        return incoming_clean
+    return current_clean or incoming_clean
+
+
+def merge_enriched_pieces(pieces: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    merged: dict[str, dict[str, Any]] = {}
+    for piece in pieces:
+        key = str(piece.get("title") or "Piece being identified").lower()
+        current = merged.get(key)
+        if current is None:
+            merged[key] = piece
+            continue
+        current["sectionCount"] = int(current.get("sectionCount") or 0) + int(piece.get("sectionCount") or 0)
+        current["completionPercent"] = max(int(current.get("completionPercent") or 0), int(piece.get("completionPercent") or 0))
+        current["todayCompletionPercent"] = max(
+            int(current.get("todayCompletionPercent") or 0),
+            int(piece.get("todayCompletionPercent") or 0),
+        )
+        current["tip"] = better_tip(str(current.get("tip") or ""), str(piece.get("tip") or ""))
+        current["todayTip"] = better_tip(str(current.get("todayTip") or ""), str(piece.get("todayTip") or ""))
+        evidence = " ".join(
+            part
+            for part in [str(current.get("evidence") or "").strip(), str(piece.get("evidence") or "").strip()]
+            if part
+        )
+        current["evidence"] = evidence[:220]
+        if str(piece.get("latestAt") or "") > str(current.get("latestAt") or ""):
+            current["latestAt"] = piece.get("latestAt")
+            current["todayLatestAt"] = piece.get("todayLatestAt") or current.get("todayLatestAt")
+    return sorted(
+        merged.values(),
+        key=lambda piece: (
+            int(piece.get("confidenceScore") or 0),
+            int(piece.get("todayCompletionPercent") or 0),
+            int(piece.get("completionPercent") or 0),
+            str(piece.get("latestAt") or ""),
+        ),
+        reverse=True,
+    )[:12]
+
+
 def enriched_pieces(pieces: list[Any], today: str) -> list[dict[str, Any]]:
     enriched: list[dict[str, Any]] = []
     for item in pieces:
@@ -146,6 +201,8 @@ def enriched_pieces(pieces: list[Any], today: str) -> list[dict[str, Any]]:
             piece["candidateTitle"] = ""
             piece["evidence"] = unclear_piece_evidence(piece.get("evidence"))
             piece["candidateEvidence"] = unclear_piece_evidence(piece.get("candidateEvidence") or piece.get("evidence"))
+        else:
+            piece["title"] = canonical_piece_title(piece.get("title"))
         daily = piece.get("daily") if isinstance(piece.get("daily"), dict) else {}
         today_entry = daily.get(today) if isinstance(daily.get(today), dict) else None
         latest_day = local_day(piece.get("latestAt"))
@@ -170,7 +227,7 @@ def enriched_pieces(pieces: list[Any], today: str) -> list[dict[str, Any]]:
         piece["todayLatestAt"] = today_latest
         piece["isActiveToday"] = bool(today_entry or latest_day == today)
         enriched.append(piece)
-    return enriched
+    return merge_enriched_pieces(enriched)
 
 
 def inventory_blockers(blockers: list[str]) -> list[str]:
