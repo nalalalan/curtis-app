@@ -12,10 +12,33 @@ from .state import append_run, load_state, save_state, utc_now
 
 DEFAULT_YOUTUBE_SOURCE = "https://www.youtube.com/@nalalan"
 MEDIA_REVIEW_PENDING_BLOCKERS = {"youtube_data_api_returns_metadata_not_video_media"}
+WEAK_EVIDENCE_TERMS = (
+    "background noise",
+    "no clear",
+    "not audible",
+    "no discernible",
+    "not heard",
+    "obscured",
+    "masked",
+    "dominates",
+)
 
 
 def stable_unique(values: list[str]) -> list[str]:
     return list(dict.fromkeys(value for value in values if value))
+
+
+def sanitized_findings(findings: list[Any]) -> list[dict[str, Any]]:
+    clean: list[dict[str, Any]] = []
+    for finding in findings:
+        if not isinstance(finding, dict):
+            continue
+        item = dict(finding)
+        evidence = str(item.get("evidence") or "").lower()
+        if any(term in evidence for term in WEAK_EVIDENCE_TERMS):
+            item["judgment"] = "Unjudged"
+        clean.append(item)
+    return clean
 
 
 def inventory_blockers(blockers: list[str]) -> list[str]:
@@ -41,7 +64,7 @@ def effective_sources(state: dict[str, Any]) -> dict[str, Any]:
 def derive_review(inventory: dict[str, list[dict[str, Any]]], existing: dict[str, Any] | None = None) -> dict[str, Any]:
     existing = existing or {}
     sections = existing.get("notableSections") if isinstance(existing.get("notableSections"), list) else []
-    findings = existing.get("skillFindings") if isinstance(existing.get("skillFindings"), list) else []
+    findings = sanitized_findings(existing.get("skillFindings") if isinstance(existing.get("skillFindings"), list) else [])
     progress_plan = existing.get("progressPlan") if isinstance(existing.get("progressPlan"), dict) else None
     youtube_items = inventory.get("youtube", [])
     practice_candidates = [

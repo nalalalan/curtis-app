@@ -25,6 +25,16 @@ DIMENSIONS = {
     "auditionDelivery",
 }
 JUDGMENTS = {"Strong signal", "Needs work", "Unjudged"}
+WEAK_EVIDENCE_TERMS = {
+    "background noise",
+    "no clear",
+    "not audible",
+    "no discernible",
+    "not heard",
+    "obscured",
+    "masked",
+    "dominates",
+}
 
 
 def run_process(args: list[str], timeout: int = 120) -> tuple[int, str]:
@@ -94,6 +104,7 @@ def decode_json(text: str) -> dict[str, Any]:
 
 def normalize_review(raw: dict[str, Any], section: dict[str, Any]) -> dict[str, Any]:
     findings = []
+    evidence_quality = str(raw.get("evidenceQuality") or "weak").strip()[:40]
     for item in raw.get("findings", []):
         if not isinstance(item, dict):
             continue
@@ -103,6 +114,9 @@ def normalize_review(raw: dict[str, Any], section: dict[str, Any]) -> dict[str, 
             continue
         if judgment not in JUDGMENTS:
             judgment = "Unjudged"
+        evidence = str(item.get("evidence") or "No stable evidence.").strip()[:220]
+        if evidence_quality == "weak" or any(term in evidence.lower() for term in WEAK_EVIDENCE_TERMS):
+            judgment = "Unjudged"
         findings.append(
             {
                 "id": f"{section.get('id')}-{dimension}",
@@ -110,7 +124,7 @@ def normalize_review(raw: dict[str, Any], section: dict[str, Any]) -> dict[str, 
                 "sampleId": section.get("sampleId"),
                 "dimension": dimension,
                 "judgment": judgment,
-                "evidence": str(item.get("evidence") or "No stable evidence.").strip()[:220],
+                "evidence": evidence,
                 "practiceConstraint": str(item.get("practiceConstraint") or "").strip()[:180],
                 "createdAt": utc_now(),
             }
@@ -129,7 +143,7 @@ def normalize_review(raw: dict[str, Any], section: dict[str, Any]) -> dict[str, 
         "sectionId": section.get("id"),
         "sampleId": section.get("sampleId"),
         "status": "model_reviewed",
-        "evidenceQuality": str(raw.get("evidenceQuality") or "weak").strip()[:40],
+        "evidenceQuality": evidence_quality,
         "sectionSummary": str(raw.get("sectionSummary") or "Model review completed.").strip()[:260],
         "findings": findings[:5],
         "progressPlan": {
