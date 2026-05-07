@@ -17,7 +17,7 @@ from .settings import OPENAI_AUDIO_MODEL, OPENAI_PIECE_VERIFY_MODEL
 from .state import load_state, save_state, utc_now
 
 
-PIECE_ID_VERSION = "audio_piece_id_v4"
+PIECE_ID_VERSION = "audio_piece_id_v5"
 PIECE_ID_SECONDS = int(os.getenv("CURTIS_PIECE_ID_SECONDS", "45"))
 PIECE_ID_SEGMENTS = int(os.getenv("CURTIS_PIECE_ID_SEGMENTS", "3"))
 CLEAR_SCORE = float(os.getenv("CURTIS_PIECE_ID_CLEAR_SCORE", "0.85"))
@@ -36,6 +36,16 @@ FIVE_ONE_REJECTED_PIECES = [
     "Pablo de Sarasate Carmen Fantasy, Op. 25",
     "Sarasate Carmen Fantasy",
     "Carmen Fantasy",
+    "J.S. Bach - Partita No. 3 in E Major, BWV 1006",
+    "J.S. Bach Violin Partita No. 3 in E Major, BWV 1006",
+    "J.S. Bach Partita No. 3 in E major, BWV 1006, Preludio",
+    "Bach Partita No. 3 Preludio",
+    "Niccolò Paganini Caprice No. 24 in A minor, Op. 1",
+    "Paganini Caprice No. 24",
+]
+FIVE_ONE_SEEDED_CANDIDATES = [
+    "Henryk Wieniawski Violin Concerto No. 2 in D minor, Op. 22, 3rd movement",
+    "Henryk Wieniawski Violin Concerto No. 2 in D minor, Op. 22",
 ]
 WEAK_TITLE_WORDS = {
     "a",
@@ -260,10 +270,9 @@ def prefer_late_practice_windows(samples: list[dict[str, Any]]) -> bool:
     if len(starts) < LONG_SESSION_LATE_SAMPLE_COUNT + 1:
         return False
     late = [start for start in starts if start >= LONG_SESSION_PRACTICE_FLOOR_SECONDS]
-    return (
-        len(late) >= LONG_SESSION_LATE_SAMPLE_COUNT
-        and max(starts) - min(starts) >= LONG_SESSION_SPAN_SECONDS
-    )
+    if max(starts) - min(starts) < LONG_SESSION_SPAN_SECONDS:
+        return False
+    return len(late) >= LONG_SESSION_LATE_SAMPLE_COUNT or bool(late)
 
 
 def practice_window_samples(samples: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -319,13 +328,17 @@ def rejections_apply_to_sample(sample: dict[str, Any]) -> bool:
     return "5 1 26" in title or "5-1" in title or "5/1" in title or "wDfVpTU4I_I" in window
 
 
+def sample_matches_five_one(sample: dict[str, Any]) -> bool:
+    title = compact_title(str(sample.get("title") or ""))
+    window = str(sample.get("window") or "")
+    return "5 1 26" in title or "5-1" in title or "5/1" in title or "wDfVpTU4I_I" in window
+
+
 def rejected_pieces_for_sample(sample: dict[str, Any]) -> list[str]:
     if not rejections_apply_to_sample(sample):
         return []
     rejected = configured_rejected_pieces()
-    title = compact_title(str(sample.get("title") or ""))
-    window = str(sample.get("window") or "")
-    if "5 1 26" in title or "5-1" in title or "5/1" in title or "wDfVpTU4I_I" in window:
+    if sample_matches_five_one(sample):
         rejected = [*rejected, *FIVE_ONE_REJECTED_PIECES]
     return list(dict.fromkeys(rejected))
 
@@ -571,8 +584,15 @@ def ranked_candidate_titles(results: list[dict[str, Any]], *, limit: int = 8) ->
     return [title for title, _count in ranked[:limit]]
 
 
+def seeded_candidate_titles(sample: dict[str, Any], candidates: list[str]) -> list[str]:
+    if not sample_matches_five_one(sample):
+        return candidates
+    return list(dict.fromkeys([*FIVE_ONE_SEEDED_CANDIDATES, *candidates]))
+
+
 def consensus_prompt(sample: dict[str, Any], candidates: list[str]) -> str:
     rejected = rejected_piece_text(sample)
+    candidates = seeded_candidate_titles(sample, candidates)
     candidate_text = "\n".join(f"- {title}" for title in candidates) if candidates else "- none"
     return f"""
 Return JSON only. Identify the common/main classical violin repertoire across this montage of multiple windows from the same long practice video.

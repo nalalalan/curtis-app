@@ -68,7 +68,7 @@ REJECTED_REPERTOIRE_TITLES = (
 LONG_SESSION_PRACTICE_FLOOR_SECONDS = int(os.getenv("CURTIS_LONG_SESSION_PRACTICE_FLOOR_SECONDS", str(2 * 60 * 60)))
 LONG_SESSION_LATE_SAMPLE_COUNT = int(os.getenv("CURTIS_LONG_SESSION_LATE_SAMPLE_COUNT", "3"))
 LONG_SESSION_SPAN_SECONDS = int(os.getenv("CURTIS_LONG_SESSION_SPAN_SECONDS", str(90 * 60)))
-CONFIRMED_PIECE_ID_VERSION = os.getenv("CURTIS_CONFIRMED_PIECE_ID_VERSION", "audio_piece_id_v4")
+CONFIRMED_PIECE_ID_VERSION = os.getenv("CURTIS_CONFIRMED_PIECE_ID_VERSION", "audio_piece_id_v5")
 
 
 def local_timezone() -> ZoneInfo | timezone:
@@ -108,10 +108,9 @@ def prefer_late_practice_windows(samples: list[dict[str, Any]]) -> bool:
     if len(starts) < LONG_SESSION_LATE_SAMPLE_COUNT + 1:
         return False
     late = [start for start in starts if start >= LONG_SESSION_PRACTICE_FLOOR_SECONDS]
-    return (
-        len(late) >= LONG_SESSION_LATE_SAMPLE_COUNT
-        and max(starts) - min(starts) >= LONG_SESSION_SPAN_SECONDS
-    )
+    if max(starts) - min(starts) < LONG_SESSION_SPAN_SECONDS:
+        return False
+    return len(late) >= LONG_SESSION_LATE_SAMPLE_COUNT or bool(late)
 
 
 def untrusted_long_session_source(piece: dict[str, Any], media_samples: list[dict[str, Any]] | None) -> bool:
