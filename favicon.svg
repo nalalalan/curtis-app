@@ -1,35 +1,47 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="6 6 116 116" role="img" aria-label="Curtis icon">
   <defs>
-    <filter id="d" x="-35%" y="-35%" width="170%" height="170%">
-      <feDropShadow dx="0" dy="9" stdDeviation="5" flood-color="#2b211d" flood-opacity=".14"/>
-      <feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="#fffaf4" flood-opacity=".42"/>
+    <filter id="d" x="-35%" y="-35%" width="170%" height="170%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="9" stdDeviation="5" flood-color="#2b211d" flood-opacity=".16"/>
+      <feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="#fffaf4" flood-opacity=".46"/>
     </filter>
-    <g id="key">
-      <path d="M64 14v42" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
-      <rect x="60.2" y="24" width="7.6" height="23" rx="1.2" fill="currentColor"/>
+    <g id="whiteKey">
+      <path d="M64 13v42" fill="none" stroke="#181716" stroke-width="2.4" stroke-linecap="round"/>
+      <rect x="59.8" y="24" width="8.4" height="24" rx="1.4" fill="#fffaf2" stroke="#181716" stroke-width="1.6"/>
+    </g>
+    <g id="blackKey">
+      <path d="M64 13v43" fill="none" stroke="#181716" stroke-width="3.1" stroke-linecap="round"/>
+      <rect x="59.5" y="22" width="9" height="27" rx="1.5" fill="#181716"/>
+    </g>
+    <g id="accentKey">
+      <path d="M64 13v42" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+      <rect x="60" y="23" width="8" height="25" rx="1.4" fill="currentColor"/>
     </g>
   </defs>
-  <g filter="url(#d)" opacity=".9">
-    <use href="#key" transform="rotate(138 64 64)" color="#a77d54"/>
-    <use href="#key" transform="rotate(153 64 64)" color="#181716"/>
-    <use href="#key" transform="rotate(168 64 64)" color="#8e746b"/>
-    <use href="#key" transform="rotate(183 64 64)" color="#7b8583"/>
-    <use href="#key" transform="rotate(198 64 64)" color="#181716"/>
-    <use href="#key" transform="rotate(213 64 64)" color="#9b746d"/>
-    <use href="#key" transform="rotate(228 64 64)" color="#71645d"/>
-    <use href="#key" transform="rotate(243 64 64)" color="#6e7f85"/>
-    <use href="#key" transform="rotate(258 64 64)" color="#a77d54"/>
-    <use href="#key" transform="rotate(273 64 64)" color="#181716"/>
-    <use href="#key" transform="rotate(288 64 64)" color="#81746a"/>
-    <use href="#key" transform="rotate(303 64 64)" color="#6e7f85"/>
-    <use href="#key" transform="rotate(318 64 64)" color="#9b746d"/>
-    <use href="#key" transform="rotate(333 64 64)" color="#71645d"/>
-    <use href="#key" transform="rotate(348 64 64)" color="#7b8583"/>
-    <use href="#key" transform="rotate(363 64 64)" color="#181716"/>
-    <use href="#key" transform="rotate(378 64 64)" color="#9b746d"/>
-    <use href="#key" transform="rotate(393 64 64)" color="#6e7f85"/>
-    <use href="#key" transform="rotate(408 64 64)" color="#a77d54"/>
-    <circle cx="64" cy="64" r="10" fill="#fff8ef" opacity=".88"/>
-    <circle cx="64" cy="64" r="4.5" fill="#181716"/>
+  <g filter="url(#d)">
+    <use href="#accentKey" transform="rotate(138 64 64)" color="#c49a45"/>
+    <use href="#blackKey" transform="rotate(150 64 64)"/>
+    <use href="#whiteKey" transform="rotate(162 64 64)"/>
+    <use href="#accentKey" transform="rotate(174 64 64)" color="#6f9890"/>
+    <use href="#blackKey" transform="rotate(186 64 64)"/>
+    <use href="#whiteKey" transform="rotate(198 64 64)"/>
+    <use href="#accentKey" transform="rotate(210 64 64)" color="#bd775f"/>
+    <use href="#blackKey" transform="rotate(222 64 64)"/>
+    <use href="#whiteKey" transform="rotate(234 64 64)"/>
+    <use href="#accentKey" transform="rotate(246 64 64)" color="#c49a45"/>
+    <use href="#blackKey" transform="rotate(258 64 64)"/>
+    <use href="#whiteKey" transform="rotate(270 64 64)"/>
+    <use href="#accentKey" transform="rotate(282 64 64)" color="#6f9890"/>
+    <use href="#blackKey" transform="rotate(294 64 64)"/>
+    <use href="#whiteKey" transform="rotate(306 64 64)"/>
+    <use href="#accentKey" transform="rotate(318 64 64)" color="#bd775f"/>
+    <use href="#blackKey" transform="rotate(330 64 64)"/>
+    <use href="#whiteKey" transform="rotate(342 64 64)"/>
+    <use href="#accentKey" transform="rotate(354 64 64)" color="#c49a45"/>
+    <use href="#blackKey" transform="rotate(366 64 64)"/>
+    <use href="#whiteKey" transform="rotate(378 64 64)"/>
+    <use href="#accentKey" transform="rotate(390 64 64)" color="#6f9890"/>
+    <use href="#blackKey" transform="rotate(402 64 64)"/>
+    <circle cx="64" cy="64" r="11" fill="#fffaf2" stroke="#181716" stroke-width="3"/>
+    <circle cx="64" cy="64" r="4.8" fill="#181716"/>
   </g>
 </svg>
