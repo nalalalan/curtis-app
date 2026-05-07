@@ -262,16 +262,19 @@ function isIdentifiedPiece(piece) {
 function pieceLabel(piece) {
   if (!piece) return "Identifying from practice sessions.";
   if (isIdentifiedPiece(piece)) return piece.title;
-  const candidate = String(piece.candidateTitle || "").trim();
-  return candidate ? `Identifying / ${candidate}` : "Piece being identified";
+  return "Piece being identified";
 }
 
 function pieceTip(piece) {
   if (!piece) return "Capture one clear excerpt.";
-  const tip = String(piece.tip || "Capture one clearer excerpt.").trim();
-  if (isIdentifiedPiece(piece)) return tip;
+  return String(piece.tip || "Capture one clearer excerpt.").trim();
+}
+
+function pieceEvidence(piece) {
+  if (!piece) return "";
   const evidence = String(piece.candidateEvidence || piece.evidence || "").trim();
-  return evidence ? `${tip} Evidence: ${evidence}` : tip;
+  if (!evidence) return "";
+  return isIdentifiedPiece(piece) ? evidence : `Signal: ${evidence}`;
 }
 
 function workingText(ops) {
@@ -372,7 +375,7 @@ function renderPieces() {
       <div>
         <span>${escapeHtml(piece.confidence || "unknown")}</span>
         <strong>${escapeHtml(pieceLabel(piece))}</strong>
-        <p>${escapeHtml(pieceTip(piece))}</p>
+        <p>${escapeHtml(pieceEvidence(piece) || pieceTip(piece))}</p>
       </div>
       <em>${Number(piece.completionPercent) || 0}%</em>
     </article>

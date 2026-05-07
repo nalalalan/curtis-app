@@ -1,4 +1,10 @@
 *.log
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.out
+*.run.xml
 node_modules/
 *.png
 .runtime/

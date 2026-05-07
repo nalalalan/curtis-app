@@ -45,7 +45,11 @@ class SourceConfig(BaseModel):
 
 
 app = FastAPI(title="Curtis Media Review", version="0.2.0")
-STATIC_ALLOWLIST = {"index.html", "app.js", "styles.css", "favicon.svg", "CNAME", ".nojekyll"}
+PAPER_DIR = ROOT_DIR / "paper"
+PAPER_PDF = PAPER_DIR / "curtis-aolabs-paper.pdf"
+PAPER_TEX = PAPER_DIR / "curtis-aolabs-paper.tex"
+PAPER_BIB = PAPER_DIR / "references.bib"
+STATIC_ALLOWLIST = {"index.html", "paper.html", "app.js", "styles.css", "favicon.svg", "CNAME", ".nojekyll"}
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins(),
@@ -82,6 +86,12 @@ async def health() -> dict[str, str]:
 def youtube_redirect_uri() -> str:
     public_base = os.getenv("PUBLIC_BASE_URL", "https://curtis.aolabs.io").rstrip("/")
     return f"{public_base}/api/auth/youtube/callback"
+
+
+def _paper_file_response(path: Path, *, media_type: str, filename: str | None = None) -> FileResponse:
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="paper file not found")
+    return FileResponse(path, media_type=media_type, filename=filename)
 
 
 @app.get("/api/curtis/ops-check")
@@ -196,6 +206,35 @@ async def youtube_oauth_callback(request: Request) -> RedirectResponse:
     except Exception:
         return RedirectResponse("/?youtube=failed#media")
     return RedirectResponse("/?youtube=connected#media")
+
+
+@app.get("/paper")
+async def paper_index() -> FileResponse:
+    return FileResponse(ROOT_DIR / "paper.html")
+
+
+@app.get("/paper/")
+async def paper_index_slash() -> FileResponse:
+    return FileResponse(ROOT_DIR / "paper.html")
+
+
+@app.get("/paper.pdf")
+async def paper_pdf() -> FileResponse:
+    return _paper_file_response(
+        PAPER_PDF,
+        media_type="application/pdf",
+        filename="Longitudinal media review for audition-oriented violin practice.pdf",
+    )
+
+
+@app.get("/paper/source.tex")
+async def paper_tex() -> FileResponse:
+    return _paper_file_response(PAPER_TEX, media_type="text/plain; charset=utf-8")
+
+
+@app.get("/paper/references.bib")
+async def paper_bib() -> FileResponse:
+    return _paper_file_response(PAPER_BIB, media_type="text/plain; charset=utf-8")
 
 
 @app.get("/{path:path}")
