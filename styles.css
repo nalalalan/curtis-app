@@ -70,40 +70,11 @@ select {
 }
 
 .brand-mark {
-  width: 30px;
-  height: 30px;
-  flex: 0 0 30px;
-}
-
-.mark-field {
-  fill: var(--ink);
-}
-
-.mark-c,
-.mark-staff,
-.mark-bow {
-  fill: none;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.mark-c {
-  stroke: var(--surface);
-  stroke-width: 5.6;
-}
-
-.mark-staff {
-  stroke: var(--blue);
-  stroke-width: 1.9;
-}
-
-.mark-bow {
-  stroke: var(--red);
-  stroke-width: 2.8;
-}
-
-.mark-pin {
-  fill: var(--gold);
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  overflow: visible;
+  filter: drop-shadow(0 6px 8px rgba(31, 35, 38, .14));
 }
 
 .topbar nav {
