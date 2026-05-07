@@ -21,6 +21,7 @@ API_BASE = os.getenv("CURTIS_API_BASE", "https://curtis.aolabs.io").rstrip("/")
 SAMPLE_SECONDS = int(os.getenv("CURTIS_OWNER_SAMPLE_SECONDS", "90"))
 SAMPLE_START_SECONDS = int(os.getenv("CURTIS_OWNER_SAMPLE_START_SECONDS", str(10 * 60)))
 WINDOWS_PER_VIDEO = int(os.getenv("CURTIS_OWNER_WINDOWS_PER_VIDEO", "4"))
+BATCH_SIZE = int(os.getenv("CURTIS_OWNER_BATCH_SIZE", "3"))
 WINDOW_RE = re.compile(r"\*(\d+)-(\d+)")
 BUNDLED_NODE = (
     Path.home()
@@ -253,26 +254,37 @@ def main() -> int:
         if not candidates:
             print(json.dumps({"status": "blocked", "blocker": "no_unsynced_practice_candidates"}))
             return 1
-        item = candidates[0]
-        try:
-            sample_path = download_sample(item)
-            updated = upload_sample(client, token, item, sample_path)
-        except Exception as exc:
-            print(json.dumps({
-                "status": "blocked",
-                "blocker": "owner_media_download_or_upload_failed",
-                "video": item.get("title"),
-                "detail": str(exc)[-1000:],
-            }))
-            return 1
+        uploaded: list[dict[str, Any]] = []
+        blockers: list[dict[str, Any]] = []
+        updated: dict[str, Any] = ops
+        for item in candidates[: max(1, BATCH_SIZE)]:
+            try:
+                sample_path = download_sample(item)
+                updated = upload_sample(client, token, item, sample_path)
+                uploaded.append(
+                    {
+                        "id": item.get("sampleId") or item.get("id"),
+                        "video": item.get("title"),
+                        "window": item.get("sampleWindow") or sample_window(item),
+                    }
+                )
+            except Exception as exc:
+                blockers.append(
+                    {
+                        "video": item.get("title"),
+                        "window": item.get("sampleWindow") or sample_window(item),
+                        "detail": str(exc)[-500:],
+                    }
+                )
 
     print(json.dumps({
-        "status": "sample_uploaded",
-        "video": item.get("title"),
+        "status": "sample_uploaded" if uploaded else "blocked",
+        "uploaded": uploaded,
+        "blocked": blockers[:3],
         "mediaAccess": updated.get("review", {}).get("mediaAccess"),
         "samples": len(updated.get("media", {}).get("samples", [])),
     }))
-    return 0
+    return 0 if uploaded else 1
 
 
 if __name__ == "__main__":
