@@ -433,7 +433,11 @@ function pieceStatusLabel(piece) {
 
 function pieceTip(piece) {
   if (!piece) return "Capture one clear excerpt.";
-  const tip = String(piece.todayTip || piece.tip || "Capture one clearer excerpt.").trim();
+  const tip = String(
+    piece.isActiveToday
+      ? piece.todayTip || piece.tip || "Capture one clearer excerpt."
+      : piece.tip || piece.todayTip || "Capture one clearer excerpt."
+  ).trim();
   const signal = `${piece.title || ""} ${piece.evidence || ""} ${piece.candidateEvidence || ""}`.toLowerCase();
   if (/^capture one clear(er)? excerpt\.?$/i.test(tip)) {
     if (signal.includes("ricochet") || signal.includes("arpeggio")) {
@@ -449,6 +453,11 @@ function pieceTip(piece) {
 function todayCompletion(piece) {
   if (!piece) return 0;
   return Number(piece.todayCompletionPercent ?? piece.completionPercent) || 0;
+}
+
+function scoreText(value) {
+  const percent = Number(value) || 0;
+  return percent > 0 ? `${percent}%` : "Not scored";
 }
 
 function progressText(piece) {
@@ -719,7 +728,7 @@ function renderPieceDays(piece) {
       ${rows.map(([day, item]) => `
         <li>
           <span>${escapeHtml(day)}</span>
-          <b>${escapeHtml(Number(item?.completionPercent) || 0)}%</b>
+          <b>${escapeHtml(scoreText(item?.completionPercent))}</b>
           <small>${escapeHtml(item?.tip || item?.evidence || "Evidence recorded.")}</small>
         </li>
       `).join("")}
