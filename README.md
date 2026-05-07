@@ -13,9 +13,9 @@ Static AO Labs app and Railway-ready backend for `curtis.aolabs.io`.
 
 - Backend inventories the public YouTube channel by default and exposes scan state through `/api/curtis/ops-check`.
 - YouTube OAuth remains available for authenticated inventory later. The Data API returns metadata, not video media, so performance judgment remains blocked until a permitted media path exists.
-- Media acquisition attempts short samples automatically after scans. When YouTube blocks server-side public fetching, the owner-media helper uploads samples through the authenticated media endpoint and uses the backend sample index to avoid duplicate windows.
+- Media acquisition attempts short samples automatically after scans. When YouTube blocks server-side public fetching, the owner-media helper uploads multiple distributed windows per long practice video through the authenticated media endpoint and uses the backend sample index to avoid duplicate windows.
 - The first screen reports the active piece, today's Curtis-level completion percent, and one major tip from the latest usable practice evidence.
-- Repertoire names require clear confidence. Possible model guesses stay hidden as `Piece being identified`.
+- Repertoire names require clear confidence plus independent audio verification. Possible or uncorroborated model guesses stay hidden as `Piece being identified`.
 - Instagram inventory uses the Instagram Graph API for authorized account media. Media URLs are queued for section processing when available.
 - Skill claims stay `Unjudged` until a video section is processed against the rubric.
 

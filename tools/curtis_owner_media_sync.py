@@ -21,7 +21,7 @@ API_BASE = os.getenv("CURTIS_API_BASE", "https://curtis.aolabs.io").rstrip("/")
 PUBLIC_YOUTUBE_SOURCE = os.getenv("CURTIS_YOUTUBE_SOURCE", "https://www.youtube.com/@nalalan")
 SAMPLE_SECONDS = int(os.getenv("CURTIS_OWNER_SAMPLE_SECONDS", "90"))
 SAMPLE_START_SECONDS = int(os.getenv("CURTIS_OWNER_SAMPLE_START_SECONDS", str(10 * 60)))
-WINDOWS_PER_VIDEO = int(os.getenv("CURTIS_OWNER_WINDOWS_PER_VIDEO", "4"))
+WINDOWS_PER_VIDEO = int(os.getenv("CURTIS_OWNER_WINDOWS_PER_VIDEO", "8"))
 BATCH_SIZE = int(os.getenv("CURTIS_OWNER_BATCH_SIZE", "4"))
 WINDOW_RE = re.compile(r"\*(\d+)-(\d+)")
 BUNDLED_NODE = (
@@ -81,15 +81,14 @@ def sample_starts(item: dict[str, Any]) -> list[int]:
     if not isinstance(duration, int) or duration <= SAMPLE_SECONDS + 60:
         return [0]
     latest = max(0, duration - SAMPLE_SECONDS - 30)
-    anchors = [
-        SAMPLE_START_SECONDS,
-        int(duration * 0.25),
-        int(duration * 0.5),
-        int(duration * 0.75),
-        latest,
-    ]
+    window_count = max(1, WINDOWS_PER_VIDEO)
+    anchors = [SAMPLE_START_SECONDS]
+    if window_count > 1:
+        step = duration / window_count
+        anchors.extend(int(step * index) for index in range(1, window_count))
+    anchors.append(latest)
     starts = [min(max(0, anchor), latest) for anchor in anchors]
-    return list(dict.fromkeys(starts))[: max(1, WINDOWS_PER_VIDEO)]
+    return list(dict.fromkeys(starts))[:window_count]
 
 
 def sample_id(item: dict[str, Any], start: int) -> str:

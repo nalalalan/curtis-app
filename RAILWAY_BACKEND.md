@@ -71,9 +71,9 @@ If OAuth callback storage is not used, set all of:
 
 - YouTube automation inventories channel, playlist, or video metadata through the official Data API.
 - Media probe attempts a short audio/video sample from the indexed practice corpus and records a blocker when YouTube requires owner browser/export access.
-- Owner-media helper uploads authenticated samples to `/api/curtis/media/upload` when local browser/export access can provide bytes, using `/api/curtis/ops-check` sample indexes to skip already captured windows.
+- Owner-media helper uploads authenticated samples to `/api/curtis/media/upload` when local browser/export access can provide bytes, using `/api/curtis/ops-check` sample indexes to skip already captured windows and distribute capture across long practice logs.
 - `/api/curtis/ops-check` exposes day-specific piece progress fields for the first-screen piece, percent, and major tip.
-- Piece names require clear confidence; possible repertoire guesses are normalized to `Piece being identified`.
+- Piece names require clear confidence and independent audio verification through `/api/curtis/piece-id/run`; possible or uncorroborated repertoire guesses are normalized to `Piece being identified`.
 - Authenticated YouTube mode uses OAuth `mine=true` channel access and the uploads playlist for the connected account.
 - YouTube media judgment is blocked until a permitted video media path exists; the Data API does not provide raw video content.
 - Instagram automation inventories authorized account media through Graph API and marks media URLs for section processing when present.

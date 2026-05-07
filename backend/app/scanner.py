@@ -10,7 +10,14 @@ import httpx
 
 from .auth import youtube_auth_status
 from .platforms import credential_state, fetch_instagram_inventory, fetch_youtube_inventory
-from .settings import OPENAI_AUDIO_MODEL, OPENAI_MODEL, OPENAI_REASONING_EFFORT, OPENAI_VISION_MODEL, SERVICE_NAME
+from .settings import (
+    OPENAI_AUDIO_MODEL,
+    OPENAI_MODEL,
+    OPENAI_PIECE_VERIFY_MODEL,
+    OPENAI_REASONING_EFFORT,
+    OPENAI_VISION_MODEL,
+    SERVICE_NAME,
+)
 from .state import append_run, load_state, save_state, utc_now
 
 DEFAULT_YOUTUBE_SOURCE = "https://www.youtube.com/@nalalan"
@@ -266,6 +273,7 @@ def base_ops(state: dict[str, Any], extra_blockers: list[str] | None = None) -> 
         "model": {
             "id": OPENAI_MODEL,
             "audioId": OPENAI_AUDIO_MODEL,
+            "pieceVerifyId": OPENAI_PIECE_VERIFY_MODEL,
             "visionId": OPENAI_VISION_MODEL,
             "reasoningEffort": OPENAI_REASONING_EFFORT,
         },
@@ -284,6 +292,7 @@ def base_ops(state: dict[str, Any], extra_blockers: list[str] | None = None) -> 
         },
         "analysis": state.get("lastAnalysisRun"),
         "coach": state.get("lastCoachRun"),
+        "pieceId": state.get("lastPieceIdRun"),
         "lastScan": state.get("lastScan"),
         "blockers": stable_unique(blockers),
     }

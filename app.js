@@ -276,7 +276,7 @@ function pieceTip(piece) {
   const tip = String(piece.todayTip || piece.tip || "Capture one clearer excerpt.").trim();
   const signal = `${piece.title || ""} ${piece.evidence || ""} ${piece.candidateEvidence || ""}`.toLowerCase();
   if (/^capture one clear(er)? excerpt\.?$/i.test(tip)) {
-    if (signal.includes("ricochet") || signal.includes("arpeggio") || signal.includes("paganini")) {
+    if (signal.includes("ricochet") || signal.includes("arpeggio")) {
       return "Slow the left-hand arpeggio targets first, then add one short controlled ricochet burst.";
     }
     if (signal.includes("etude") || signal.includes("caprice")) {

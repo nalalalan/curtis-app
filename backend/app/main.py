@@ -22,6 +22,7 @@ from .auth import (
 )
 from .coach import review_media_sections
 from .media import probe_youtube_media, record_uploaded_sample
+from .piece_id import identify_pieces_from_samples
 from .scanner import base_ops, run_scan
 from .settings import ROOT_DIR, SCAN_INTERVAL_SECONDS, SERVICE_NAME, allowed_origins, token_matches
 from .state import load_state, save_state
@@ -73,6 +74,7 @@ async def worker_loop() -> None:
         if os.getenv("CURTIS_MEDIA_AUTORUN", "1").strip().lower() not in {"0", "false", "no"}:
             await probe_youtube_media()
             analyze_media_samples()
+            identify_pieces_from_samples()
             if os.getenv("CURTIS_MODEL_REVIEW_AUTORUN", "1").strip().lower() not in {"0", "false", "no"}:
                 review_media_sections()
         await asyncio.sleep(max(SCAN_INTERVAL_SECONDS, 300))
@@ -136,6 +138,7 @@ async def media_probe() -> dict[str, Any]:
 @app.post("/api/curtis/analyze/run")
 async def analyze_run() -> dict[str, Any]:
     analyze_media_samples()
+    identify_pieces_from_samples()
     review_media_sections()
     return base_ops(load_state())
 
@@ -143,6 +146,12 @@ async def analyze_run() -> dict[str, Any]:
 @app.post("/api/curtis/coach/run")
 async def coach_run() -> dict[str, Any]:
     review_media_sections()
+    return base_ops(load_state())
+
+
+@app.post("/api/curtis/piece-id/run")
+async def piece_id_run() -> dict[str, Any]:
+    identify_pieces_from_samples()
     return base_ops(load_state())
 
 
@@ -166,6 +175,7 @@ async def media_upload(
         temp_path = Path(temp_file.name)
     record_uploaded_sample(temp_path, video_id=video_id, title=title, url=url, window=window)
     analyze_media_samples()
+    identify_pieces_from_samples()
     review_media_sections()
     return base_ops(load_state())
 
