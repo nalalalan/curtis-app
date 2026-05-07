@@ -62,6 +62,9 @@ def derive_review(inventory: dict[str, list[dict[str, Any]]], existing: dict[str
         current_work = "Practice corpus indexed. Section listening pending."
     elif sections:
         current_work = existing.get("currentWork") or "Section evidence recorded."
+    media_access = existing.get("mediaAccess")
+    if media_access not in {"blocked", "sample_ready"}:
+        media_access = "metadata_only"
     return {
         "reviewedVideoCount": len(reviewed_urls),
         "notableSections": sections,
@@ -72,7 +75,7 @@ def derive_review(inventory: dict[str, list[dict[str, Any]]], existing: dict[str
         "practiceCandidateCount": len(practice_candidates),
         "longFormCandidateCount": len(long_form_candidates),
         "latestPracticeCandidate": practice_candidates[0] if practice_candidates else None,
-        "mediaAccess": "metadata_only",
+        "mediaAccess": media_access,
     }
 
 
