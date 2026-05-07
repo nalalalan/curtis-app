@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import shutil
 import sys
 from pathlib import Path
 from typing import Any
@@ -136,3 +137,42 @@ async def probe_youtube_media(limit: int = 1) -> dict[str, Any]:
     state["lastMediaRun"] = run
     save_state(state)
     return run
+
+
+def record_uploaded_sample(
+    source_path: Path,
+    *,
+    video_id: str,
+    title: str = "",
+    url: str = "",
+    window: str = "",
+) -> dict[str, Any]:
+    MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+    safe_id = "".join(char for char in video_id if char.isalnum() or char in {"_", "-"})[:80] or "uploaded"
+    suffix = source_path.suffix if source_path.suffix else ".media"
+    target = MEDIA_DIR / f"{safe_id}-{utc_now().replace(':', '').replace('+', 'Z')}{suffix}"
+    shutil.move(str(source_path), target)
+
+    state = load_state()
+    sample = {
+        "id": safe_id,
+        "url": url,
+        "title": title or safe_id,
+        "createdAt": utc_now(),
+        "status": "media_sample_ready",
+        "path": str(target),
+        "sizeBytes": target.stat().st_size,
+        "window": window,
+        "source": "owner_upload",
+    }
+    state["mediaSamples"] = [sample, *state.get("mediaSamples", [])][:20]
+    state.setdefault("review", {})["mediaAccess"] = "sample_ready"
+    state["lastMediaRun"] = {
+        "startedAt": utc_now(),
+        "status": "media_sample_ready",
+        "blockers": [],
+        "samples": [sample],
+        "attempted": [],
+    }
+    save_state(state)
+    return sample

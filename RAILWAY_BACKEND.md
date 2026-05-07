@@ -20,6 +20,8 @@ Autonomous practice-video review for Curtis preparation.
 - `PUBLIC_BASE_URL=https://curtis.aolabs.io`
 - `CURTIS_STATE_PATH=/data/curtis_state.json` with the Railway volume mounted at `/data`.
 - `CURTIS_MEDIA_DIR=/data/media` for fetched audio/video samples.
+- `CURTIS_MEDIA_AUTORUN=1` to attempt media sampling after each background inventory scan.
+- `CURTIS_UPLOAD_TOKEN` for authenticated owner-media helper uploads.
 - `CURTIS_ALLOWED_ORIGINS=https://curtis.aolabs.io,https://curtis-app-production.up.railway.app`
 - For Instagram Graph automation:
   - `INSTAGRAM_USER_ID`
@@ -60,6 +62,7 @@ If OAuth callback storage is not used, set all of:
 - `POST /api/curtis/sources`
 - `POST /api/curtis/scan/run`
 - `POST /api/curtis/media/probe`
+- `POST /api/curtis/media/upload`
 - `GET /api/auth/youtube/status`
 - `GET /api/auth/youtube/start`
 - `GET /api/auth/youtube/callback`
@@ -68,6 +71,7 @@ If OAuth callback storage is not used, set all of:
 
 - YouTube automation inventories channel, playlist, or video metadata through the official Data API.
 - Media probe attempts a short audio/video sample from the indexed practice corpus and records a blocker when YouTube requires owner browser/export access.
+- Owner-media helper uploads authenticated samples to `/api/curtis/media/upload` when local browser/export access can provide bytes.
 - Authenticated YouTube mode uses OAuth `mine=true` channel access and the uploads playlist for the connected account.
 - YouTube media judgment is blocked until a permitted video media path exists; the Data API does not provide raw video content.
 - Instagram automation inventories authorized account media through Graph API and marks media URLs for section processing when present.

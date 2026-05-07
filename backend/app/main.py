@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import os
+import tempfile
+from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel, ConfigDict, Field
@@ -17,9 +19,9 @@ from .auth import (
     validate_youtube_oauth_state,
     youtube_auth_status,
 )
-from .media import probe_youtube_media
+from .media import probe_youtube_media, record_uploaded_sample
 from .scanner import base_ops, run_scan
-from .settings import ROOT_DIR, SCAN_INTERVAL_SECONDS, SERVICE_NAME, allowed_origins
+from .settings import ROOT_DIR, SCAN_INTERVAL_SECONDS, SERVICE_NAME, allowed_origins, token_matches
 from .state import load_state, save_state
 
 
@@ -62,6 +64,8 @@ async def start_worker() -> None:
 async def worker_loop() -> None:
     while True:
         await run_scan()
+        if os.getenv("CURTIS_MEDIA_AUTORUN", "1").strip().lower() not in {"0", "false", "no"}:
+            await probe_youtube_media()
         await asyncio.sleep(max(SCAN_INTERVAL_SECONDS, 300))
 
 
@@ -110,6 +114,28 @@ async def scan_run(config: SourceConfig | None = None) -> dict[str, Any]:
 @app.post("/api/curtis/media/probe")
 async def media_probe() -> dict[str, Any]:
     await probe_youtube_media()
+    return base_ops(load_state())
+
+
+@app.post("/api/curtis/media/upload")
+async def media_upload(
+    file: UploadFile = File(...),
+    video_id: str = Form("uploaded"),
+    title: str = Form(""),
+    url: str = Form(""),
+    window: str = Form(""),
+    authorization: str = Header(""),
+) -> dict[str, Any]:
+    token = authorization.removeprefix("Bearer").strip()
+    if not token_matches(token):
+        raise HTTPException(status_code=401, detail="Upload token required.")
+
+    suffix = Path(file.filename or "").suffix[:12]
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+        while chunk := await file.read(1024 * 1024):
+            temp_file.write(chunk)
+        temp_path = Path(temp_file.name)
+    record_uploaded_sample(temp_path, video_id=video_id, title=title, url=url, window=window)
     return base_ops(load_state())
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import secrets
 from pathlib import Path
 
 
@@ -18,10 +19,15 @@ INSTAGRAM_GRAPH_VERSION = os.getenv("INSTAGRAM_GRAPH_VERSION", "v20.0")
 SCAN_INTERVAL_SECONDS = int(os.getenv("CURTIS_SCAN_INTERVAL_SECONDS", str(60 * 60 * 24)))
 MEDIA_SAMPLE_SECONDS = int(os.getenv("CURTIS_MEDIA_SAMPLE_SECONDS", "90"))
 MEDIA_SAMPLE_START_SECONDS = int(os.getenv("CURTIS_MEDIA_SAMPLE_START_SECONDS", str(10 * 60)))
+UPLOAD_TOKEN = os.getenv("CURTIS_UPLOAD_TOKEN", "")
 
 
 def env_present(name: str) -> bool:
     return bool(os.getenv(name, "").strip())
+
+
+def token_matches(value: str) -> bool:
+    return bool(UPLOAD_TOKEN) and secrets.compare_digest(value, UPLOAD_TOKEN)
 
 
 def allowed_origins() -> list[str]:
