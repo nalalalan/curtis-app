@@ -11,7 +11,7 @@ from typing import Any
 import httpx
 
 from .analyzer import parse_window_start
-from .settings import MODEL_REVIEW_SAMPLE_SECONDS, OPENAI_AUDIO_MODEL
+from .settings import MODEL_REVIEW_FRAME_COUNT, MODEL_REVIEW_SAMPLE_SECONDS, OPENAI_AUDIO_MODEL, OPENAI_VISION_MODEL
 from .state import load_state, save_state, utc_now
 
 
@@ -35,6 +35,7 @@ WEAK_EVIDENCE_TERMS = {
     "masked",
     "dominates",
 }
+REVIEW_VERSION = "audio_video_v1"
 
 
 def run_process(args: list[str], timeout: int = 120) -> tuple[int, str]:
@@ -88,6 +89,53 @@ def extract_review_wav(sample: dict[str, Any], section: dict[str, Any], target: 
     return code == 0 and target.exists() and target.stat().st_size > 44, output
 
 
+def section_relative_window(sample: dict[str, Any], section: dict[str, Any]) -> tuple[int, int]:
+    base_start = parse_window_start(str(sample.get("window") or ""))
+    section_start = int(section.get("startSeconds") or base_start)
+    section_end = int(section.get("endSeconds") or section_start + MODEL_REVIEW_SAMPLE_SECONDS)
+    relative_start = max(0, section_start - base_start)
+    duration = max(4, min(MODEL_REVIEW_SAMPLE_SECONDS, section_end - section_start))
+    return relative_start, duration
+
+
+def extract_review_frames(sample: dict[str, Any], section: dict[str, Any], target_dir: Path) -> tuple[list[Path], str]:
+    source = Path(str(sample.get("path") or ""))
+    if not source.exists():
+        return [], "media_sample_missing"
+    relative_start, duration = section_relative_window(sample, section)
+    frame_count = max(1, min(6, MODEL_REVIEW_FRAME_COUNT))
+    offsets = [relative_start]
+    if frame_count > 1:
+        step = duration / frame_count
+        offsets = [relative_start + int(step * index) for index in range(frame_count)]
+
+    frames: list[Path] = []
+    output = ""
+    for index, offset in enumerate(offsets, start=1):
+        target = target_dir / f"frame-{index:02d}.jpg"
+        code, output = run_process(
+            [
+                "ffmpeg",
+                "-y",
+                "-ss",
+                str(max(0, offset)),
+                "-i",
+                str(source),
+                "-frames:v",
+                "1",
+                "-vf",
+                "scale=640:-2",
+                "-q:v",
+                "3",
+                str(target),
+            ],
+            timeout=120,
+        )
+        if code == 0 and target.exists() and target.stat().st_size:
+            frames.append(target)
+    return frames, output
+
+
 def decode_json(text: str) -> dict[str, Any]:
     text = text.strip()
     if text.startswith("```"):
@@ -102,7 +150,7 @@ def decode_json(text: str) -> dict[str, Any]:
         raise
 
 
-def normalize_review(raw: dict[str, Any], section: dict[str, Any]) -> dict[str, Any]:
+def normalize_review(raw: dict[str, Any], section: dict[str, Any], *, source: str) -> dict[str, Any]:
     findings = []
     evidence_quality = str(raw.get("evidenceQuality") or "weak").strip()[:40]
     for item in raw.get("findings", []):
@@ -122,6 +170,8 @@ def normalize_review(raw: dict[str, Any], section: dict[str, Any]) -> dict[str, 
                 "id": f"{section.get('id')}-{dimension}",
                 "sectionId": section.get("id"),
                 "sampleId": section.get("sampleId"),
+                "reviewVersion": REVIEW_VERSION,
+                "evidenceSource": source,
                 "dimension": dimension,
                 "judgment": judgment,
                 "evidence": evidence,
@@ -143,6 +193,8 @@ def normalize_review(raw: dict[str, Any], section: dict[str, Any]) -> dict[str, 
         "sectionId": section.get("id"),
         "sampleId": section.get("sampleId"),
         "status": "model_reviewed",
+        "reviewVersion": REVIEW_VERSION,
+        "evidenceSource": source,
         "evidenceQuality": evidence_quality,
         "sectionSummary": str(raw.get("sectionSummary") or "Model review completed.").strip()[:260],
         "findings": findings[:5],
@@ -189,6 +241,40 @@ Rules:
 """.strip()
 
 
+def vision_prompt(section: dict[str, Any]) -> str:
+    return f"""
+Return JSON only. Analyze these sampled video frames as an elite classical violin audition reviewer.
+
+Target: Curtis Institute of Music violin admission standard.
+Evidence: still frames from one captured public YouTube practice-video section.
+Section: {section.get("title") or "untitled"} / {section.get("startSeconds")}s-{section.get("endSeconds")}s.
+
+Required JSON:
+{{
+  "evidenceQuality": "usable|weak|blocked",
+  "sectionSummary": "one factual sentence",
+  "findings": [
+    {{
+      "dimension": "tone|intonation|time|articulation|shifts|musicality|auditionDelivery",
+      "judgment": "Strong signal|Needs work|Unjudged",
+      "evidence": "one short visual evidence phrase",
+      "practiceConstraint": "one short constraint"
+    }}
+  ],
+  "oneFocus": "one short focus",
+  "sessionPlan": ["block 1", "block 2", "block 3"]
+}}
+
+Rules:
+- Use visual evidence when audio is weak: posture, bow path, contact-point setup, left-hand frame, tension, setup consistency, and audition-room presentation.
+- Mark audio-only dimensions Unjudged when frames do not show enough.
+- If no violin/person/instrument is visible, evidenceQuality is "weak" and findings are Unjudged.
+- No admission prediction, no odds, no reassurance, no motivation, no diagnosis language.
+- Use at most three findings.
+- Make the plan low-overwhelm: one focus, three short blocks.
+""".strip()
+
+
 def call_audio_model(wav_path: Path, section: dict[str, Any]) -> dict[str, Any]:
     api_key = os.getenv("OPENAI_API_KEY", "").strip()
     if not api_key:
@@ -218,18 +304,87 @@ def call_audio_model(wav_path: Path, section: dict[str, Any]) -> dict[str, Any]:
         return {"status": "blocked", "blocker": "openai_audio_review_failed", "detail": response.text[:500]}
     content = response.json()["choices"][0]["message"].get("content") or "{}"
     try:
-        return normalize_review(decode_json(content), section)
+        return normalize_review(decode_json(content), section, source="audio")
     except Exception:
         return {"status": "blocked", "blocker": "openai_audio_review_parse_failed", "detail": content[:500]}
 
 
-def review_media_sections(limit: int = 2) -> dict[str, Any]:
+def image_content(frame_paths: list[Path]) -> list[dict[str, Any]]:
+    content: list[dict[str, Any]] = []
+    for frame in frame_paths:
+        encoded = base64.b64encode(frame.read_bytes()).decode("ascii")
+        content.append(
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/jpeg;base64,{encoded}",
+                    "detail": "low",
+                },
+            }
+        )
+    return content
+
+
+def call_vision_model(frame_paths: list[Path], section: dict[str, Any]) -> dict[str, Any]:
+    api_key = os.getenv("OPENAI_API_KEY", "").strip()
+    if not api_key:
+        return {"status": "blocked", "blocker": "missing_openai_api_key"}
+    if not frame_paths:
+        return {"status": "blocked", "blocker": "video_frame_extract_failed"}
+
+    payload = {
+        "model": OPENAI_VISION_MODEL,
+        "messages": [
+            {
+                "role": "user",
+                "content": [{"type": "text", "text": vision_prompt(section)}, *image_content(frame_paths)],
+            }
+        ],
+    }
+    response = httpx.post(
+        "https://api.openai.com/v1/chat/completions",
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        json=payload,
+        timeout=120,
+    )
+    if response.status_code >= 400:
+        return {"status": "blocked", "blocker": "openai_vision_review_failed", "detail": response.text[:500]}
+    content = response.json()["choices"][0]["message"].get("content") or "{}"
+    try:
+        return normalize_review(decode_json(content), section, source="video")
+    except Exception:
+        return {"status": "blocked", "blocker": "openai_vision_review_parse_failed", "detail": content[:500]}
+
+
+def merge_review_results(results: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[str, Any] | None]:
+    by_dimension: dict[str, dict[str, Any]] = {}
+    progress_plan: dict[str, Any] | None = None
+    priority = {"Needs work": 3, "Strong signal": 2, "Unjudged": 1}
+    for result in results:
+        if result.get("status") != "model_reviewed":
+            continue
+        progress_plan = result.get("progressPlan") or progress_plan
+        for finding in result.get("findings", []):
+            if not isinstance(finding, dict) or not finding.get("dimension"):
+                continue
+            dimension = str(finding["dimension"])
+            current = by_dimension.get(dimension)
+            if current is None or priority.get(str(finding.get("judgment")), 0) > priority.get(str(current.get("judgment")), 0):
+                by_dimension[dimension] = finding
+    return list(by_dimension.values())[:5], progress_plan
+
+
+def review_media_sections(limit: int = 4) -> dict[str, Any]:
     state = load_state()
     review = state.setdefault("review", {})
     samples = [sample for sample in state.get("mediaSamples", []) if isinstance(sample, dict)]
     sections = [section for section in review.get("notableSections", []) if isinstance(section, dict)]
     findings = [finding for finding in review.get("skillFindings", []) if isinstance(finding, dict)]
-    reviewed_sections = {finding.get("sectionId") for finding in findings if finding.get("sectionId")}
+    reviewed_sections = {
+        finding.get("sectionId")
+        for finding in findings
+        if finding.get("sectionId") and finding.get("reviewVersion") == REVIEW_VERSION
+    }
     selected = [
         section
         for section in sections
@@ -247,18 +402,29 @@ def review_media_sections(limit: int = 2) -> dict[str, Any]:
             continue
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp:
             wav_path = Path(temp.name)
+        frame_dir = Path(tempfile.mkdtemp(prefix="curtis-frames-"))
+        section_results: list[dict[str, Any]] = []
         try:
             ok, output = extract_review_wav(sample, section, wav_path)
-            if not ok:
-                results.append({"status": "blocked", "blocker": "audio_extract_failed", "sectionId": section.get("id"), "detail": output[-500:]})
-                continue
-            result = call_audio_model(wav_path, section)
+            if ok:
+                section_results.append(call_audio_model(wav_path, section))
+            else:
+                section_results.append({"status": "blocked", "blocker": "audio_extract_failed", "sectionId": section.get("id"), "detail": output[-500:]})
+            frames, frame_output = extract_review_frames(sample, section, frame_dir)
+            if frames:
+                section_results.append(call_vision_model(frames, section))
+            else:
+                section_results.append({"status": "blocked", "blocker": "video_frame_extract_failed", "sectionId": section.get("id"), "detail": frame_output[-500:]})
         finally:
             wav_path.unlink(missing_ok=True)
-        results.append(result)
-        if result.get("status") == "model_reviewed":
-            new_findings.extend(result.get("findings", []))
-            progress_plan = result.get("progressPlan") or progress_plan
+            for frame in frame_dir.glob("*.jpg"):
+                frame.unlink(missing_ok=True)
+            frame_dir.rmdir()
+        results.extend(section_results)
+        merged_findings, merged_plan = merge_review_results(section_results)
+        if merged_findings:
+            new_findings.extend(merged_findings)
+            progress_plan = merged_plan or progress_plan
 
     if new_findings:
         by_id = {finding.get("id"): finding for finding in findings if finding.get("id")}
