@@ -6,12 +6,21 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from .settings import MEDIA_DIR, MEDIA_SAMPLE_SECONDS, MEDIA_SAMPLE_START_SECONDS
+from .settings import MEDIA_DIR, MEDIA_PROBE_LIMIT, MEDIA_SAMPLE_SECONDS, MEDIA_SAMPLE_START_SECONDS
 from .state import load_state, save_state, utc_now
+from .study_packets import practice_ledger_videos
 
 
 def practice_candidates(state: dict[str, Any]) -> list[dict[str, Any]]:
-    youtube = state.get("inventory", {}).get("youtube", [])
+    inventory = state.get("inventory", {})
+    ledger = practice_ledger_videos(inventory if isinstance(inventory, dict) else [])
+    if ledger:
+        return [
+            item
+            for item in ledger
+            if isinstance(item, dict) and item.get("id") and item.get("url")
+        ]
+    youtube = inventory.get("youtube", []) if isinstance(inventory, dict) else []
     if not isinstance(youtube, list):
         return []
     return [
@@ -57,7 +66,7 @@ async def run_command(args: list[str], timeout: int = 240) -> tuple[int, str]:
     return process.returncode or 0, stdout.decode("utf-8", errors="replace")
 
 
-async def probe_youtube_media(limit: int = 1) -> dict[str, Any]:
+async def probe_youtube_media(limit: int = MEDIA_PROBE_LIMIT) -> dict[str, Any]:
     state = load_state()
     candidates = practice_candidates(state)
     if not candidates:

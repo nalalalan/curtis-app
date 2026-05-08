@@ -21,6 +21,7 @@ Autonomous practice-video review for Curtis preparation.
 - `CURTIS_STATE_PATH=/data/curtis_state.json` with the Railway volume mounted at `/data`.
 - `CURTIS_MEDIA_DIR=/data/media` for fetched audio/video samples.
 - `CURTIS_MEDIA_AUTORUN=1` to attempt media sampling after each background inventory scan.
+- `CURTIS_MEDIA_PROBE_LIMIT=4` to fetch several strict-ledger practice samples per background pass.
 - `CURTIS_TRANSCRIPTION_SAMPLE_LIMIT=8` to process several untranscribed sample windows per background pass.
 - `CURTIS_UPLOAD_TOKEN` for authenticated owner-media helper uploads.
 - `CURTIS_ALLOWED_ORIGINS=https://curtis.aolabs.io,https://curtis-app-production.up.railway.app`
@@ -75,10 +76,14 @@ If OAuth callback storage is not used, set all of:
 - Owner-media helper uploads authenticated samples to `/api/curtis/media/upload` when local browser/export access can provide bytes, using `/api/curtis/ops-check` sample indexes to skip already captured windows and distribute capture across long practice logs.
 - `/api/curtis/ops-check` exposes day-specific piece progress fields for the first-screen piece, percent, and major tip.
 - `/api/curtis/ops-check` also exposes `review.practiceTotals`: total title-confirmed practice-video duration from `violin 1` onward, with video title, upload date, duration, URL, and current exact-violin-time limits.
+- `/api/curtis/ops-check` exposes `review.dailyRecords`: analyzed practice-day records grouped from title-confirmed practice videos, with uploaded duration, active-playing status, machine notation events, clips, heat-map layers, confirmed or uncertain pieces, and specific evidence-backed observations.
+- `GET /api/curtis/daily-records` returns the daily-record object directly.
+- `/api/curtis/ops-check` exposes `review.repertoireEvidence`: repertoire entries promoted only from confirmed daily-record evidence, including clips, notation snippets, practice dates, active time when measured, and blocker observations.
 - `/api/curtis/study` exposes confirmed practice-day study packets with transcription state, rendered score-page targets, boxed passages, and clip links.
 - `/api/curtis/score/page/{asset_id}/{page}` renders cached public-domain PDF score pages for the score packet. The Docker image installs `poppler-utils` for this.
 - Piece names require confirmed source evidence before they appear as repertoire. Model-only labels from `/api/curtis/piece-id/run` are withheld as `Piece being identified`, even when the model is confident.
 - Source-confirmed labels currently include 5/1 Haydn Symphony No. 94 IV and 5/2 Wieniawski Scherzo-Tarantelle, Op. 16.
+- Media probing uses the strict title-confirmed ledger from `violin 1` onward instead of broad `practiceCandidate` metadata, so unrelated long public videos are not pulled into the practice media queue.
 - Authenticated YouTube mode uses OAuth `mine=true` channel access and the uploads playlist for the connected account.
 - YouTube media judgment is blocked until a permitted video media path exists; the Data API does not provide raw video content.
 - Instagram automation inventories authorized account media through Graph API and marks media URLs for section processing when present.

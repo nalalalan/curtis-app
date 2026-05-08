@@ -66,6 +66,14 @@ const elements = {
   instagramState: document.querySelector("#instagramState")
 };
 
+function setText(element, value) {
+  if (element) element.textContent = value;
+}
+
+function setHtml(element, value) {
+  if (element) element.innerHTML = value;
+}
+
 function apiBase() {
   const params = new URLSearchParams(window.location.search);
   const explicit = params.get("api") || "";
@@ -353,8 +361,12 @@ function automationLabel(ops) {
 function currentStateText(ops) {
   if (!backend.online) return `Backend offline: ${backend.lastError}`;
   const inventoryTotal = inventoryItems(ops).length;
+  const records = dailyRecords(ops);
+  const recordCount = Number(records.recordCount) || 0;
+  const transcribedCount = Number(records.transcribedRecordCount) || 0;
   const practiceCount = Number(ops?.review?.practiceCandidateCount) || 0;
   const findingCount = skillFindings(ops).length;
+  if (recordCount) return `${transcribedCount} transcribed records / ${recordCount} practice days.`;
   if (findingCount) return `${findingCount} Curtis-focused findings. ${progressPlan(ops)?.oneFocus || "Review active."}`;
   const sectionCount = reviewSections(ops).length;
   if (sectionCount) return `${sectionCount} audio/video sections scanned. Musicianship judgment pending.`;
@@ -388,6 +400,32 @@ function progressPlan(ops) {
 
 function pieces(ops) {
   return Array.isArray(ops?.review?.pieces) ? ops.review.pieces : [];
+}
+
+function dailyRecords(ops) {
+  return ops?.review?.dailyRecords && typeof ops.review.dailyRecords === "object"
+    ? ops.review.dailyRecords
+    : { records: [], recordCount: 0, transcribedRecordCount: 0 };
+}
+
+function dailyRecordList(ops) {
+  const records = dailyRecords(ops).records;
+  return Array.isArray(records) ? records : [];
+}
+
+function latestDailyRecord(ops) {
+  return dailyRecordList(ops)[0] || null;
+}
+
+function repertoireEvidence(ops) {
+  return ops?.review?.repertoireEvidence && typeof ops.review.repertoireEvidence === "object"
+    ? ops.review.repertoireEvidence
+    : { entries: [], entryCount: 0 };
+}
+
+function repertoireEntries(ops) {
+  const entries = repertoireEvidence(ops).entries;
+  return Array.isArray(entries) ? entries : [];
 }
 
 function sampleIndex(ops) {
@@ -669,6 +707,26 @@ function resultDetectedLabel(result) {
 }
 
 function primaryHighlight(ops) {
+  const latestRecord = latestDailyRecord(ops);
+  const dailyClip = Array.isArray(latestRecord?.clips) ? latestRecord.clips.find((clip) => clip?.url) : null;
+  if (dailyClip) {
+    const confirmed = Array.isArray(latestRecord.pieces) && latestRecord.pieces.length ? latestRecord.pieces[0] : null;
+    return {
+      sampleId: "",
+      title: dailyClip.sourceTitle || latestRecord.practiceDay || "Practice record",
+      url: dailyClip.url,
+      window: dailyClip.startSeconds || dailyClip.endSeconds ? `*${dailyClip.startSeconds || 0}-${dailyClip.endSeconds || 0}` : "",
+      startSeconds: Number(dailyClip.startSeconds) || 0,
+      endSeconds: Number(dailyClip.endSeconds) || 0,
+      detectedTitle: confirmed?.title || "Piece being identified",
+      confidence: confirmed?.confidence || "unknown",
+      confidenceScore: 0,
+      status: confirmed ? "piece_identified" : "daily_record",
+      tip: latestRecord.nextStep || "",
+      completionPercent: 0
+    };
+  }
+
   const piece = currentPiece(ops);
   const results = pieceIdResults(ops);
   const matchingResult = results.find((result) => {
@@ -801,7 +859,7 @@ function renderStatus() {
   const sections = reviewSections(ops);
   const findings = skillFindings(ops);
   const piece = currentPiece(ops);
-  const pieceList = pieces(ops);
+  const pieceList = repertoireEntries(ops);
   const plan = progressPlan(ops);
   const reviewedVideos = Number(ops?.review?.reviewedVideoCount) || 0;
   const practiceCount = Number(ops?.review?.practiceCandidateCount) || 0;
@@ -809,32 +867,36 @@ function renderStatus() {
   const model = ops?.model ? `${ops.model.id} / ${ops.model.reasoningEffort}` : "Not reported";
   const highlight = primaryHighlight(ops);
   const days = practiceDays(ops);
-  const study = practiceStudy(ops);
+  const records = dailyRecords(ops);
+  const latestRecord = latestDailyRecord(ops);
+  const latestPiece = Array.isArray(latestRecord?.pieces) && latestRecord.pieces.length ? latestRecord.pieces[0] : null;
   const totals = practiceTotals(ops);
 
-  elements.youtubeState.textContent = backend.online ? youtubeLabel(ops) : "Offline";
-  elements.inventoryCount.textContent = `${inventory.length} videos`;
-  elements.practiceState.textContent = longFormCount
+  setText(elements.youtubeState, backend.online ? youtubeLabel(ops) : "Offline");
+  setText(elements.inventoryCount, `${inventory.length} videos`);
+  setText(elements.practiceState, longFormCount
     ? `${practiceCount} candidates / ${longFormCount} long`
-    : `${practiceCount} candidates`;
-  elements.reviewState.textContent = sections.length ? `${sections.length} sections` : "Unjudged";
-  elements.trainingState.textContent = trainingLabel(ops);
-  elements.modelState.textContent = model;
-  elements.evidenceState.textContent = findings.length ? `${findings.length} findings` : sections.length ? "Sections ready" : "Unjudged";
-  elements.workingState.textContent = workingText(ops);
-  elements.focusState.textContent = plan?.oneFocus || (sections.length ? "Model review pending." : "Capture playable sections.");
-  elements.constraintState.textContent = plan?.practiceConstraint || "One focus per session.";
-  elements.boundaryState.textContent = plan?.boundary || "No admission prediction from current samples.";
+    : `${practiceCount} candidates`);
+  setText(elements.reviewState, sections.length ? `${sections.length} sections` : "Unjudged");
+  setText(elements.trainingState, trainingLabel(ops));
+  setText(elements.modelState, model);
+  setText(elements.evidenceState, findings.length ? `${findings.length} findings` : sections.length ? "Sections ready" : "Unjudged");
+  setText(elements.workingState, workingText(ops));
+  setText(elements.focusState, plan?.oneFocus || (sections.length ? "Model review pending." : "Capture playable sections."));
+  setText(elements.constraintState, plan?.practiceConstraint || "One focus per session.");
+  setText(elements.boundaryState, plan?.boundary || "No admission prediction from current samples.");
   const session = Array.isArray(plan?.sessionPlan) && plan.sessionPlan.length
     ? plan.sessionPlan.slice(0, 3)
     : ["Capture clear violin audio."];
-  elements.sessionPlan.innerHTML = session.map((item) => `<li>${escapeHtml(item)}</li>`).join("");
-  elements.pieceState.textContent = currentPieceLabel(piece);
-  elements.pieceProgress.textContent = progressText(piece);
-  elements.pieceTip.textContent = pieceTip(piece);
-  elements.detectionState.textContent = detectionStatus(highlight);
+  setHtml(elements.sessionPlan, session.map((item) => `<li>${escapeHtml(item)}</li>`).join(""));
+  setText(elements.pieceState, latestPiece?.title || currentPieceLabel(piece));
+  setText(elements.pieceProgress, latestRecord?.activeViolinLabel || progressText(piece));
+  setText(elements.pieceTip, latestRecord?.nextStep || pieceTip(piece));
+  setText(elements.detectionState, detectionStatus(highlight));
   if (elements.studyCount) {
-    elements.studyCount.textContent = `${Number(study.snippetCount) || 0} ${Number(study.snippetCount) === 1 ? "snippet" : "snippets"} / ${Number(study.dayCount) || 0} days`;
+    const recordCount = Number(records.recordCount) || 0;
+    const transcribedCount = Number(records.transcribedRecordCount) || 0;
+    elements.studyCount.textContent = `${transcribedCount} transcribed / ${recordCount} days`;
   }
   if (elements.totalPracticeHours) {
     elements.totalPracticeHours.textContent = practiceHoursText(totals);
@@ -847,21 +909,23 @@ function renderStatus() {
     ].filter(Boolean);
     elements.practiceSince.textContent = sinceParts.join(" / ");
   }
-  elements.pieceCount.textContent = `${pieceList.length} ${pieceList.length === 1 ? "piece" : "pieces"}`;
-  const dayTotal = Number(study.dayCount) || days.length;
-  elements.dayCount.textContent = `${dayTotal} ${dayTotal === 1 ? "day" : "days"}`;
+  setText(elements.pieceCount, `${pieceList.length} ${pieceList.length === 1 ? "piece" : "pieces"}`);
+  const dayTotal = Number(records.recordCount) || days.length;
+  setText(elements.dayCount, `${dayTotal} ${dayTotal === 1 ? "day" : "days"}`);
   const source = youtubeSource(ops);
-  elements.sourceLink.href = youtubeSourceHref(source);
-  elements.sourceLink.textContent = source.replace("https://www.", "").replace("https://", "");
-  elements.currentState.textContent = currentStateText(ops);
-  elements.recordSummary.textContent = `${inventory.length} videos / ${practiceHoursText(totals)} / ${Number(study.snippetCount) || 0} snippets`;
-  elements.reviewedCount.textContent = `${reviewedVideos} reviewed`;
-  elements.sectionCount.textContent = `${sections.length} sections`;
-  elements.backendState.textContent = backend.online ? "Online" : "Offline";
-  elements.storageState.textContent = backend.online ? "Backend state" : "Browser only";
-  elements.automationState.textContent = backend.online ? automationLabel(ops) : "Offline";
-  elements.mediaState.textContent = backend.online ? mediaAccessLabel(ops) : "Offline";
-  elements.instagramState.textContent = ops?.credentials?.instagramGraph ? "Configured" : "Not configured";
+  if (elements.sourceLink) {
+    elements.sourceLink.href = youtubeSourceHref(source);
+    elements.sourceLink.textContent = source.replace("https://www.", "").replace("https://", "");
+  }
+  setText(elements.currentState, currentStateText(ops));
+  setText(elements.recordSummary, `${inventory.length} videos / ${practiceHoursText(totals)} / ${Number(records.recordCount) || 0} records`);
+  setText(elements.reviewedCount, `${reviewedVideos} reviewed`);
+  setText(elements.sectionCount, `${sections.length} sections`);
+  setText(elements.backendState, backend.online ? "Online" : "Offline");
+  setText(elements.storageState, backend.online ? "Backend state" : "Browser only");
+  setText(elements.automationState, backend.online ? automationLabel(ops) : "Offline");
+  setText(elements.mediaState, backend.online ? mediaAccessLabel(ops) : "Offline");
+  setText(elements.instagramState, ops?.credentials?.instagramGraph ? "Configured" : "Not configured");
 
 }
 
@@ -913,82 +977,222 @@ function renderTranscriptionStaff(transcription) {
   `;
 }
 
-function renderStudySnippet(packet, snippet) {
-  const transcription = snippet?.transcription || {};
-  const notes = transcription.cleanText || (Array.isArray(transcription.firstNotes) ? transcription.firstNotes.join(" ") : "");
-  const score = snippet?.score || {};
-  const scoreHref = score.sourceUrl || score.pdfUrl || "";
-  const clipUrl = snippetClipUrl(snippet, packet.sourceUrl);
-  const startSeconds = Number(snippet?.audio?.startSeconds) || 0;
-  const rawEndSeconds = Number(snippet?.audio?.endSeconds) || 0;
-  const hasTimedWindow = rawEndSeconds > startSeconds;
-  const timeLabel = hasTimedWindow
-    ? `${formatClock(startSeconds)}-${formatClock(rawEndSeconds)}`
-    : "open video";
-  const sectionSeconds = hasTimedWindow
-    ? rawEndSeconds - startSeconds
-    : Number(snippet?.practiceSeconds || snippet?.audio?.durationSeconds) || 0;
-  const daySeconds = Number(packet?.totalPracticeSeconds) || 0;
-  return `
-    <article class="study-card">
-      <div class="study-copy">
-        <span>${escapeHtml([packet.practiceDay, daySeconds ? `${formatDurationSeconds(daySeconds)} day` : "", studyStatusLabel(snippet.status), transcription.noteCount ? `${transcription.noteCount} notes` : ""].filter(Boolean).join(" / "))}</span>
-        <strong>${escapeHtml(packet.pieceTitle || snippet.pieceTitle || "Piece being identified")}</strong>
-        <p>${escapeHtml(snippet.feedback || packet.tip || "")}</p>
-        <div class="study-meta">
-          <a href="${escapeHtml(clipUrl)}">${escapeHtml(timeLabel)}</a>
-          ${sectionSeconds ? `<em>${escapeHtml(formatDurationSeconds(sectionSeconds))} section</em>` : ""}
-          ${scoreHref ? `<a href="${escapeHtml(scoreHref)}">score</a>` : ""}
-          <em>${escapeHtml(snippet.readiness || "Score match pending.")}</em>
-        </div>
-        ${renderTranscriptionStaff(transcription)}
-        ${notes ? `<code>${escapeHtml(shortText(notes, 190))}</code>` : `<small>Transcription pending.</small>`}
+function notationDurationClass(kind) {
+  const clean = String(kind || "").toLowerCase();
+  return ["sixteenth", "eighth", "quarter", "half", "whole"].includes(clean) ? clean : "quarter";
+}
+
+function renderNotationSheet(events) {
+  const items = Array.isArray(events) ? events.slice(0, 42) : [];
+  const staffLines = [30, 40, 50, 60, 70].map((y) => `<line x1="22" x2="698" y1="${y}" y2="${y}" />`).join("");
+  if (!items.length) {
+    return `
+      <div class="notation-sheet notation-empty" aria-label="Sheet-music-style transcription pending">
+        <svg viewBox="0 0 720 104" role="img">
+          <g class="staff-lines">${staffLines}</g>
+          <text x="34" y="57">G</text>
+        </svg>
+        <span>Notation pending.</span>
       </div>
-      ${renderScoreImage(snippet)}
+    `;
+  }
+  const step = items.length > 1 ? 630 / (items.length - 1) : 0;
+  const marks = items.map((event, index) => {
+    const x = 48 + (step * index);
+    const durationClass = notationDurationClass(event.durationKind);
+    if (event.kind === "rest") {
+      return `
+        <g class="notation-rest ${durationClass}" transform="translate(${x} 0)">
+          <rect x="-5" y="45" width="10" height="6" rx="1"></rect>
+          <line x1="-7" x2="7" y1="55" y2="55"></line>
+        </g>
+      `;
+    }
+    const y = noteY(event.note) + 3;
+    const uncertain = event.uncertain ? " notation-uncertain" : "";
+    const label = escapeHtml([event.note, event.uncertain ? "uncertain" : ""].filter(Boolean).join(" / "));
+    return `
+      <g class="notation-note ${durationClass}${uncertain}" aria-label="${label}">
+        <ellipse cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" rx="6.6" ry="4.4" transform="rotate(-16 ${x.toFixed(1)} ${y.toFixed(1)})"></ellipse>
+        ${durationClass === "whole" ? "" : `<line x1="${(x + 6).toFixed(1)}" x2="${(x + 6).toFixed(1)}" y1="${y.toFixed(1)}" y2="${Math.max(14, y - 28).toFixed(1)}"></line>`}
+      </g>
+    `;
+  }).join("");
+  return `
+    <div class="notation-sheet" aria-label="Sheet-music-style machine transcription">
+      <svg viewBox="0 0 720 104" role="img">
+        <g class="staff-lines">${staffLines}</g>
+        <text x="34" y="57">G</text>
+        ${marks}
+      </svg>
+    </div>
+  `;
+}
+
+function renderHeatMap(record) {
+  const fragments = Array.isArray(record?.heatMap?.fragments) ? record.heatMap.fragments : [];
+  if (!fragments.length) {
+    return `<div class="heat-map heat-map-empty"><span>Heat map pending transcription.</span></div>`;
+  }
+  return `
+    <div class="heat-map" aria-label="Repeated passage heat map">
+      ${fragments.slice(0, 6).map((fragment) => {
+        const intensity = Math.max(0.08, Math.min(1, Number(fragment.intensity) || 0));
+        return `
+          <div class="heat-row">
+            <span>${escapeHtml(shortText(fragment.label, 34))}</span>
+            <b style="--heat:${intensity};"></b>
+            <em>${escapeHtml(String(fragment.count || 0))}x</em>
+          </div>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+function renderObservations(observations) {
+  const rows = Array.isArray(observations) ? observations.slice(0, 3) : [];
+  if (!rows.length) return `<div class="observation-list"><p>No specific observed blocker extracted yet.</p></div>`;
+  return `
+    <div class="observation-list" aria-label="Specific observed problems">
+      ${rows.map((item) => `
+        <article>
+          <span>${escapeHtml([item.category, item.frequency].filter(Boolean).join(" / "))}</span>
+          <strong>${escapeHtml(item.problem || "Observation pending.")}</strong>
+          <p>${escapeHtml(item.curtisReadinessIssue || "")}</p>
+        </article>
+      `).join("")}
+    </div>
+  `;
+}
+
+function clipWindowLabel(clip) {
+  const start = Number(clip?.startSeconds) || 0;
+  const end = Number(clip?.endSeconds) || 0;
+  return end > start ? `${formatClock(start)}-${formatClock(end)}` : "open video";
+}
+
+function renderRecordClips(record) {
+  const clips = Array.isArray(record?.clips) ? record.clips.slice(0, 3) : [];
+  if (!clips.length) return `<p class="empty">Clip evidence pending.</p>`;
+  return `
+    <div class="clip-list">
+      ${clips.map((clip) => {
+        const start = Number(clip?.startSeconds) || 0;
+        const url = timedUrl(clip?.url || "", start);
+        return `
+          <a href="${escapeHtml(url)}">
+            <span>${escapeHtml(clipWindowLabel(clip))}</span>
+            <strong>${escapeHtml(shortText(clip?.reason || clip?.label || "practice clip", 76))}</strong>
+          </a>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+function scoreSnippetForRecord(record) {
+  const packet = studyDays(backend.ops).find((item) => item.practiceDay === record.practiceDay);
+  if (!packet || !Array.isArray(packet.snippets)) return null;
+  return packet.snippets[0] || null;
+}
+
+function recordPieceText(record) {
+  const confirmed = Array.isArray(record?.pieces) ? record.pieces.map((piece) => piece.title).filter(Boolean) : [];
+  if (confirmed.length) return confirmed.join(" / ");
+  const uncertain = Array.isArray(record?.uncertainPieces) ? record.uncertainPieces.map((piece) => `${piece.title} uncertain`).filter(Boolean) : [];
+  if (uncertain.length) return uncertain.join(" / ");
+  return "Piece evidence pending";
+}
+
+function renderDailyRecord(record) {
+  const events = record?.transcription?.events || [];
+  const scoreSnippet = scoreSnippetForRecord(record);
+  const meta = [
+    record.practiceDay,
+    record.uploadedVideoLabel ? `${record.uploadedVideoLabel} uploaded` : "",
+    record.activeViolinLabel ? `${record.activeViolinLabel} active` : record.activeTimeStatus === "pending_media" ? "active time pending" : "",
+    record.transcription?.noteCount ? `${record.transcription.noteCount} notes` : "notation pending"
+  ].filter(Boolean).join(" / ");
+  return `
+    <article class="record-card" data-status="${escapeHtml(record.status || "pending")}">
+      <div class="record-main">
+        <span>${escapeHtml(meta)}</span>
+        <strong>${escapeHtml(recordPieceText(record))}</strong>
+        <p>${escapeHtml(record.summary || "")}</p>
+        <div class="blocker-line">
+          <span>Main Curtis-level blocker today</span>
+          <strong>${escapeHtml(record.mainCurtisBlocker || "Pending evidence.")}</strong>
+        </div>
+        ${renderNotationSheet(events)}
+        ${renderObservations(record.observations)}
+        <small>${escapeHtml(record.nextStep || "")}</small>
+      </div>
+      <aside class="record-side">
+        ${renderRecordClips(record)}
+        ${renderHeatMap(record)}
+        ${scoreSnippet ? renderScoreImage(scoreSnippet) : `<div class="score-placeholder">Score snippet pending.</div>`}
+      </aside>
     </article>
   `;
 }
 
 function renderStudy() {
   if (!elements.studyList) return;
-  const study = practiceStudy(backend.ops);
-  const days = studyDays(backend.ops);
+  const records = dailyRecordList(backend.ops);
   if (!backend.online) {
     elements.studyList.innerHTML = `<p class="empty">Backend offline.</p>`;
     return;
   }
-  if (!days.length) {
-    elements.studyList.innerHTML = `<p class="empty">Study packet pending practice media.</p>`;
+  if (!records.length) {
+    elements.studyList.innerHTML = `<p class="empty">Daily records pending YouTube inventory.</p>`;
     return;
   }
-  const cards = days.slice(0, 3).map((packet) => {
-    const snippet = Array.isArray(packet.snippets) && packet.snippets.length ? packet.snippets[0] : null;
-    return snippet ? renderStudySnippet(packet, snippet) : "";
-  }).filter(Boolean);
-  elements.studyList.innerHTML = cards.join("") || `<p class="empty">Score snippets pending.</p>`;
+  elements.studyList.innerHTML = records.slice(0, 4).map(renderDailyRecord).join("");
 }
 
 function renderPieces() {
-  const list = pieces(backend.ops);
+  if (!elements.pieceList) return;
+  const list = repertoireEntries(backend.ops);
   if (!backend.online) {
     elements.pieceList.innerHTML = `<p class="empty">Backend offline.</p>`;
     return;
   }
   if (!list.length) {
-    elements.pieceList.innerHTML = `<p class="empty">Piece list pending clearer evidence.</p>`;
+    elements.pieceList.innerHTML = `<p class="empty">Confirmed repertoire evidence pending transcription or source confirmation.</p>`;
     return;
   }
-  elements.pieceList.innerHTML = list.slice(0, 8).map((piece) => `
-    <article class="piece-row">
-      <div>
-        <span>${escapeHtml(pieceStatusLabel(piece))}</span>
-        <strong>${escapeHtml(pieceLabel(piece))}</strong>
-        <p>${escapeHtml(shortText(pieceEvidence(piece) || pieceTip(piece)))}</p>
-        ${renderPieceDays(piece)}
+  elements.pieceList.innerHTML = list.slice(0, 8).map((piece) => {
+    const evidence = Array.isArray(piece.evidence) ? piece.evidence.slice(0, 2) : [];
+    return `
+    <article class="piece-row evidence-piece">
+      <div class="piece-evidence-copy">
+        <span>${escapeHtml(piece.status || "confirmed")}</span>
+        <strong>${escapeHtml(piece.title || "Piece")}</strong>
+        <p>${escapeHtml(shortText(piece.reason || "Confirmed from daily practice evidence.", 150))}</p>
+        <div class="blocker-line repertoire-blocker">
+          <span>Current blocker</span>
+          <strong>${escapeHtml(piece.mainCurtisBlocker || "Specific blocker pending.")}</strong>
+        </div>
+        ${renderObservations(piece.observations)}
+        <div class="evidence-list">
+          ${evidence.map((item) => {
+            const clip = item.clip || {};
+            const clipUrl = timedUrl(clip.url || "", Number(clip.startSeconds) || 0);
+            return `
+              <div class="evidence-row">
+                <a href="${escapeHtml(clipUrl)}">${escapeHtml([item.practiceDay, clipWindowLabel(clip)].filter(Boolean).join(" / "))}</a>
+                <span>${escapeHtml(item.confidence || "confirmed")}</span>
+                ${renderNotationSheet(item.transcriptionSnippet || [])}
+              </div>
+            `;
+          }).join("")}
+        </div>
       </div>
-      <em>${escapeHtml(completionLabel(piece))}</em>
+      <em>${escapeHtml(piece.totalActiveViolinLabel || piece.totalUploadedVideoLabel || "pending")}</em>
     </article>
-  `).join("");
+  `;
+  }).join("");
 }
 
 function renderPieceDays(piece) {
@@ -1191,17 +1395,17 @@ function renderDays() {
 
 function render() {
   renderStatus();
-  renderHighlight();
   renderStudy();
   renderPieces();
-  renderDays();
-  renderInventory();
-  renderSkillMap();
+  if (elements.highlightFrame) renderHighlight();
+  if (elements.dayList) renderDays();
+  if (elements.inventoryList) renderInventory();
+  if (elements.skillMap) renderSkillMap();
 }
 
-elements.runScanButton.addEventListener("click", runBackendScan);
-elements.probeMediaButton.addEventListener("click", runMediaProbe);
-elements.rejectPieceButton.addEventListener("click", rejectActiveTitle);
+if (elements.runScanButton) elements.runScanButton.addEventListener("click", runBackendScan);
+if (elements.probeMediaButton) elements.probeMediaButton.addEventListener("click", runMediaProbe);
+if (elements.rejectPieceButton) elements.rejectPieceButton.addEventListener("click", rejectActiveTitle);
 
 render();
 loadBackendState();

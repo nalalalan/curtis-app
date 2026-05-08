@@ -125,8 +125,10 @@ def practice_ledger_videos(inventory: dict[str, list[dict[str, Any]]] | list[dic
             continue
         title = str(item.get("title") or "Practice video").strip()
         published_value = str(item.get("publishedAt") or "").strip()
+        video_id = youtube_video_id(item.get("url") or item.get("sourceUrl") or item.get("id")) or str(item.get("id") or "").strip()
         ledger.append(
             {
+                "id": video_id,
                 "sourceKey": item.get("sourceKey") or source_key_from_item(item),
                 "title": title,
                 "url": str(item.get("url") or item.get("sourceUrl") or "").strip(),

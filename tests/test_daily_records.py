@@ -1,0 +1,188 @@
+import unittest
+
+from backend.app.daily_records import build_daily_records, build_repertoire_evidence
+from backend.app.media import practice_candidates
+
+
+def note(name, start, end, confidence=0.9):
+    return {
+        "note": name,
+        "midi": 72,
+        "startSeconds": start,
+        "endSeconds": end,
+        "durationSeconds": end - start,
+        "confidence": confidence,
+    }
+
+
+class DailyRecordTests(unittest.TestCase):
+    def test_groups_same_day_videos_and_renders_machine_notation_evidence(self):
+        inventory = {
+            "youtube": [
+                {
+                    "id": "otHfHMgDo2g",
+                    "title": "violin 1",
+                    "url": "https://www.youtube.com/watch?v=otHfHMgDo2g",
+                    "publishedAt": "2025-12-20T19:47:20Z",
+                    "durationSeconds": 3608,
+                    "practiceCandidate": True,
+                },
+                {
+                    "id": "K38CgZhvF3Q",
+                    "title": "5-2-26",
+                    "url": "https://www.youtube.com/watch?v=K38CgZhvF3Q",
+                    "publishedAt": "2026-05-03T09:10:00Z",
+                    "durationSeconds": 600,
+                    "practiceCandidate": True,
+                },
+                {
+                    "id": "second520",
+                    "title": "5-2-26",
+                    "url": "https://www.youtube.com/watch?v=second520",
+                    "publishedAt": "2026-05-03T10:10:00Z",
+                    "durationSeconds": 300,
+                    "practiceCandidate": True,
+                },
+                {
+                    "id": "unrelated",
+                    "title": "alan makes the reading decoration bday present",
+                    "url": "https://www.youtube.com/watch?v=unrelated00",
+                    "publishedAt": "2026-05-03T11:10:00Z",
+                    "durationSeconds": 1000,
+                    "practiceCandidate": True,
+                },
+            ]
+        }
+        transcriptions = [
+            {
+                "transcriptionId": "K38CgZhvF3Q-1",
+                "sampleId": "K38CgZhvF3Q",
+                "sourceUrl": "https://www.youtube.com/watch?v=K38CgZhvF3Q",
+                "sourceTitle": "5-2-26",
+                "sourceWindow": "*10-30",
+                "status": "transcribed",
+                "tempoBpm": 72,
+                "noteCount": 9,
+                "notes": [
+                    note("E5", 0.0, 0.3),
+                    note("F#5", 0.3, 0.6),
+                    note("G5", 1.2, 1.5, 0.4),
+                    note("A5", 1.5, 1.8),
+                    note("E5", 2.0, 2.3),
+                    note("F#5", 2.3, 2.6),
+                    note("G5", 2.6, 2.9, 0.5),
+                    note("A5", 2.9, 3.2),
+                    note("E5", 3.2, 3.5),
+                ],
+            }
+        ]
+
+        daily = build_daily_records(inventory=inventory, state={}, media_samples=[], transcriptions=transcriptions, sections=[])
+        record = next(item for item in daily["records"] if item["practiceDay"] == "2026-05-02")
+
+        self.assertEqual(record["videoCount"], 2)
+        self.assertEqual(record["uploadedVideoSeconds"], 900)
+        self.assertEqual(record["activeTimeStatus"], "measured_from_pitch")
+        self.assertEqual(record["transcription"]["status"], "ready")
+        self.assertTrue(any(event["kind"] == "rest" for event in record["transcription"]["events"]))
+        self.assertTrue(any(event.get("uncertain") for event in record["transcription"]["events"]))
+        self.assertEqual(record["pieces"][0]["title"], "Wieniawski Scherzo-Tarantelle, Op. 16")
+        self.assertIn("uncertain", record["mainCurtisBlocker"])
+        self.assertTrue(record["heatMap"]["layers"])
+        self.assertNotIn("reading decoration", " ".join(video["title"] for video in record["videos"]))
+
+    def test_repertoire_promotes_only_confirmed_daily_evidence(self):
+        inventory = {
+            "youtube": [
+                {
+                    "id": "otHfHMgDo2g",
+                    "title": "violin 1",
+                    "url": "https://www.youtube.com/watch?v=otHfHMgDo2g",
+                    "publishedAt": "2025-12-20T19:47:20Z",
+                    "durationSeconds": 3608,
+                    "practiceCandidate": True,
+                },
+                {
+                    "id": "K38CgZhvF3Q",
+                    "title": "5-2-26",
+                    "url": "https://www.youtube.com/watch?v=K38CgZhvF3Q",
+                    "publishedAt": "2026-05-03T09:10:00Z",
+                    "durationSeconds": 600,
+                    "practiceCandidate": True,
+                },
+                {
+                    "id": "unknown420",
+                    "title": "4-20-26",
+                    "url": "https://www.youtube.com/watch?v=unknown420",
+                    "publishedAt": "2026-04-21T09:10:00Z",
+                    "durationSeconds": 500,
+                    "practiceCandidate": True,
+                },
+            ]
+        }
+        transcriptions = [
+            {
+                "transcriptionId": "confirmed",
+                "sampleId": "K38CgZhvF3Q",
+                "sourceUrl": "https://www.youtube.com/watch?v=K38CgZhvF3Q",
+                "sourceTitle": "5-2-26",
+                "sourceWindow": "*10-30",
+                "status": "transcribed",
+                "tempoBpm": 100,
+                "noteCount": 4,
+                "notes": [note("E5", 0, 0.3), note("F#5", 0.3, 0.6), note("G5", 0.6, 0.9), note("A5", 0.9, 1.2)],
+            },
+            {
+                "transcriptionId": "uncertain",
+                "sampleId": "unknown420",
+                "sourceUrl": "https://www.youtube.com/watch?v=unknown420",
+                "sourceTitle": "4-20-26",
+                "sourceWindow": "*10-30",
+                "status": "transcribed",
+                "tempoBpm": 100,
+                "noteCount": 4,
+                "notes": [note("C5", 0, 0.3), note("D5", 0.3, 0.6), note("E5", 0.6, 0.9), note("F5", 0.9, 1.2)],
+                "referenceMatches": [{"title": "Unconfirmed Candidate Piece", "score": 0.92}],
+            },
+        ]
+
+        daily = build_daily_records(inventory=inventory, state={}, media_samples=[], transcriptions=transcriptions, sections=[])
+        repertoire = build_repertoire_evidence(daily)
+        titles = [entry["title"] for entry in repertoire["entries"]]
+
+        self.assertIn("Wieniawski Scherzo-Tarantelle, Op. 16", titles)
+        self.assertNotIn("Unconfirmed Candidate Piece", titles)
+        self.assertEqual(repertoire["entries"][0]["progressStatus"], "not_scored")
+        self.assertTrue(repertoire["entries"][0]["evidence"])
+
+    def test_media_probe_uses_title_confirmed_ledger_not_broad_candidates(self):
+        state = {
+            "inventory": {
+                "youtube": [
+                    {
+                        "id": "otHfHMgDo2g",
+                        "title": "violin 1",
+                        "url": "https://www.youtube.com/watch?v=otHfHMgDo2g",
+                        "publishedAt": "2025-12-20T19:47:20Z",
+                        "durationSeconds": 3608,
+                        "practiceCandidate": True,
+                    },
+                    {
+                        "id": "unrelated",
+                        "title": "alan makes the reading decoration bday present",
+                        "url": "https://www.youtube.com/watch?v=unrelated00",
+                        "publishedAt": "2025-12-21T21:42:04Z",
+                        "durationSeconds": 24610,
+                        "practiceCandidate": True,
+                    },
+                ]
+            }
+        }
+
+        candidates = practice_candidates(state)
+
+        self.assertEqual([item["title"] for item in candidates], ["violin 1"])
+
+
+if __name__ == "__main__":
+    unittest.main()

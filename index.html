@@ -3,19 +3,19 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Curtis Media Review</title>
-  <meta name="description" content="YouTube-first Curtis practice media inventory and skill review for Alan Pham.">
+  <title>Curtis</title>
+  <meta name="description" content="Evidence-backed violin practice transcription and repertoire tracking for Alan Pham.">
   <link rel="canonical" href="https://curtis.aolabs.io/" />
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="AO Labs">
-  <meta property="og:title" content="Curtis Media Review">
-  <meta property="og:description" content="YouTube-first Curtis practice media inventory and skill review.">
+  <meta property="og:title" content="Curtis">
+  <meta property="og:description" content="Evidence-backed violin practice transcription and repertoire tracking.">
   <meta property="og:url" content="https://curtis.aolabs.io/">
   <meta name="twitter:card" content="summary">
-  <meta name="twitter:title" content="Curtis Media Review">
-  <meta name="twitter:description" content="YouTube-first Curtis practice media inventory and skill review.">
+  <meta name="twitter:title" content="Curtis">
+  <meta name="twitter:description" content="Evidence-backed violin practice transcription and repertoire tracking.">
   <link rel="icon" href="/favicon.svg?v=20260508-curtis-japandi-spokes" type="image/svg+xml">
-  <link rel="stylesheet" href="/styles.css?v=20260508-study-hours">
+  <link rel="stylesheet" href="/styles.css?v=20260508-daily-records">
 </head>
 <body>
   <header class="topbar" aria-label="Curtis navigation">
@@ -24,101 +24,43 @@
       <span>curtis</span>
     </a>
     <nav>
-      <a href="#today">Current</a>
-      <a href="#study">Study</a>
+      <a href="#study">Analyzed Days</a>
+      <a href="#repertoire">Repertoire</a>
       <a href="/paper.html">Paper</a>
-      <a href="#repertoire" aria-label="Repertoire">List</a>
-      <a href="#days">Days</a>
       <a class="ao-home" href="https://aolabs.io/" aria-label="AO Labs">
         <img src="https://aolabs.io/favicon.svg?v=20260507-suite3" alt="">
       </a>
     </nav>
   </header>
 
-  <main class="shell">
-    <section class="paper-strip" aria-label="Curtis paper">
-      <div class="paper-copy">
-        <span>Paper</span>
-        <strong>Longitudinal media review for audition-oriented violin practice</strong>
-        <p>Curtis Media Review, current production record.</p>
+  <main class="shell two-section-shell">
+    <div class="practice-header" aria-label="Curtis practice record">
+      <div>
+        <p class="label">Curtis</p>
+        <h1>Violin practice evidence</h1>
+        <p class="subtitle">Transcription, clips, heat maps, and repertoire evidence from Alan's real practice videos.</p>
       </div>
-      <div class="practice-total" aria-label="Total practice hours">
-        <span>Practice hours</span>
-        <strong id="totalPracticeHours">0h</strong>
-        <em id="practiceSince">Since violin 1</em>
+      <div class="header-metrics">
+        <article>
+          <span>Practice hours</span>
+          <strong id="totalPracticeHours">0h</strong>
+          <em id="practiceSince">Since violin 1</em>
+        </article>
+        <article>
+          <span>Records</span>
+          <strong id="recordSummary">0 records</strong>
+          <em id="currentState">Checking backend.</em>
+        </article>
       </div>
-      <div class="paper-actions">
-        <a class="primary" href="/paper.pdf" download>Open PDF</a>
-      </div>
-    </section>
+    </div>
 
-    <section id="today" class="today-layout" aria-label="Current practice">
-      <section class="panel today-panel">
-        <div class="panel-head">
-          <div>
-            <p class="label">Current</p>
-            <h1>Current</h1>
-          </div>
-          <span class="count-pill" id="evidenceState">Unjudged</span>
-        </div>
-
-        <div class="today-grid">
-          <article class="detected-card">
-            <span>Piece</span>
-            <strong id="pieceState">Identifying from practice sessions.</strong>
-          </article>
-          <article>
-            <span>Score</span>
-            <strong id="pieceProgress">0%</strong>
-          </article>
-          <article>
-            <span>Check</span>
-            <strong id="detectionState">Clip pending.</strong>
-          </article>
-          <article>
-            <span>Tip</span>
-            <strong id="pieceTip">Capture one clear excerpt.</strong>
-          </article>
-        </div>
-
-      </section>
-
-      <section class="panel highlight-panel" aria-label="Evidence clip">
-        <div class="panel-head">
-          <div>
-            <p class="label">Evidence</p>
-            <h2>Highlight</h2>
-          </div>
-          <div class="clip-actions">
-            <button class="clip-link clip-button" type="button" id="rejectPieceButton" disabled hidden>Reject title</button>
-            <a class="clip-link" id="highlightLink" href="https://www.youtube.com/@nalalan">Open</a>
-          </div>
-        </div>
-        <div class="highlight-frame">
-          <iframe id="highlightFrame" title="Current practice highlight" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
-        </div>
-        <div class="highlight-meta">
-          <strong id="highlightMeta">Clip pending.</strong>
-          <span id="highlightWindow">No evidence window.</span>
-        </div>
-      </section>
-    </section>
-
-    <section class="status-strip" aria-label="System summary">
-      <article><span>YouTube</span><strong id="youtubeState">Checking</strong></article>
-      <article><span>Inventory</span><strong id="inventoryCount">0 videos</strong></article>
-      <article><span>Practice</span><strong id="practiceState">0 candidates</strong></article>
-      <article><span>Review</span><strong id="reviewState">Unjudged</strong></article>
-      <article><span>Training</span><strong id="trainingState">0 anchors</strong></article>
-    </section>
-
-    <section id="study" class="panel study-panel" aria-label="Study packet">
+    <section id="study" class="panel study-panel" aria-label="Analyzed practice days">
       <div class="panel-head">
         <div>
-          <p class="label">Study</p>
-          <h2>Score Packet</h2>
+          <p class="label">Analyzed Practice Days</p>
+          <h2>Analyzed Practice Days</h2>
         </div>
-        <span class="count-pill" id="studyCount">0 snippets</span>
+        <span class="count-pill" id="studyCount">0 transcribed / 0 days</span>
       </div>
       <div id="studyList" class="study-list"></div>
     </section>
@@ -127,140 +69,14 @@
       <div class="panel-head">
         <div>
           <p class="label">Repertoire</p>
-          <h2>Working List</h2>
+          <h2>Repertoire</h2>
         </div>
         <span class="count-pill" id="pieceCount">0 pieces</span>
       </div>
       <div id="pieceList" class="piece-list"></div>
     </section>
-
-    <section id="days" class="panel day-panel" aria-label="Practice days">
-      <div class="panel-head">
-        <div>
-          <p class="label">Days</p>
-          <h2>Practice Log</h2>
-        </div>
-        <span class="count-pill" id="dayCount">0 days</span>
-      </div>
-      <div id="dayList" class="day-list"></div>
-    </section>
-
-    <details class="evidence-details">
-      <summary>
-        <span>Record</span>
-        <strong id="recordSummary">Evidence record</strong>
-      </summary>
-
-      <section id="media" class="panel source-panel" aria-label="YouTube source">
-        <div class="panel-head">
-          <div>
-            <p class="label">Media</p>
-            <h2>Automation</h2>
-          </div>
-          <div class="action-row">
-            <button type="button" id="probeMediaButton">Get media</button>
-            <button type="button" id="runScanButton">Run scan</button>
-          </div>
-        </div>
-
-        <div class="source-line">
-          <span>Source</span>
-          <a id="sourceLink" href="https://www.youtube.com/@nalalan">youtube.com/@nalalan</a>
-        </div>
-
-        <div class="current-state" aria-live="polite">
-          <span>Current</span>
-          <strong id="currentState">Checking backend.</strong>
-        </div>
-      </section>
-
-      <section class="panel hidden-focus" aria-label="Focus record">
-        <div class="focus-grid">
-          <article>
-            <span>Working</span>
-            <strong id="workingState">Checking system.</strong>
-          </article>
-          <article>
-            <span>Now</span>
-            <strong id="focusState">Capture playable sections.</strong>
-          </article>
-          <article>
-            <span>Constraint</span>
-            <strong id="constraintState">One focus per session.</strong>
-          </article>
-          <article>
-            <span>Boundary</span>
-            <strong id="boundaryState">No admission prediction from current samples.</strong>
-          </article>
-        </div>
-        <div class="session-strip compact" aria-label="Current practice blocks">
-          <span>Blocks</span>
-          <ol id="sessionPlan">
-            <li>Capture clear violin audio.</li>
-          </ol>
-        </div>
-      </section>
-
-      <section class="work-grid" aria-label="Practice media record">
-        <section class="panel">
-          <div class="panel-head">
-            <div>
-              <p class="label">Videos</p>
-              <h2>Indexed</h2>
-            </div>
-            <span class="count-pill" id="reviewedCount">0 reviewed</span>
-          </div>
-          <div id="inventoryList" class="video-list"></div>
-        </section>
-
-        <section class="panel">
-          <div class="panel-head">
-            <div>
-              <p class="label">Skill</p>
-              <h2>State</h2>
-            </div>
-            <span class="count-pill" id="sectionCount">0 sections</span>
-          </div>
-          <div id="skillSummary" class="skill-summary">No video sections processed.</div>
-          <div id="skillMap" class="skill-map"></div>
-        </section>
-      </section>
-
-      <section id="system" class="system-band" aria-label="System state">
-        <div>
-          <p class="label">System</p>
-          <h2>Automation</h2>
-        </div>
-        <div class="system-grid">
-          <article>
-            <span>Backend</span>
-            <strong id="backendState">Checking</strong>
-          </article>
-          <article>
-            <span>Storage</span>
-            <strong id="storageState">Checking</strong>
-          </article>
-          <article>
-            <span>Scanner</span>
-            <strong id="automationState">Checking</strong>
-          </article>
-          <article>
-            <span>Media</span>
-            <strong id="mediaState">Checking</strong>
-          </article>
-          <article>
-            <span>Model</span>
-            <strong id="modelState">Checking</strong>
-          </article>
-          <article>
-            <span>Instagram</span>
-            <strong id="instagramState">Not configured</strong>
-          </article>
-        </div>
-      </section>
-    </details>
   </main>
 
-  <script src="/app.js?v=20260508-study-hours"></script>
+  <script src="/app.js?v=20260508-daily-records"></script>
 </body>
 </html>

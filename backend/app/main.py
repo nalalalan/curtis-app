@@ -134,6 +134,11 @@ async def study_packet() -> dict[str, Any]:
     return base_ops(load_state())["review"]["practiceStudy"]
 
 
+@app.get("/api/curtis/daily-records")
+async def daily_records() -> dict[str, Any]:
+    return base_ops(load_state())["review"]["dailyRecords"]
+
+
 @app.get("/api/curtis/score/page/{asset_id}/{page}")
 async def score_page(asset_id: str, page: int) -> FileResponse:
     try:
