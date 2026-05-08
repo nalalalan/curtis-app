@@ -16,7 +16,7 @@ def note(name, start, end, confidence=0.9):
 
 
 class DailyRecordTests(unittest.TestCase):
-    def test_groups_same_day_videos_and_hides_unverified_machine_notation(self):
+    def test_groups_same_day_videos_and_fails_unverified_machine_notation(self):
         inventory = {
             "youtube": [
                 {
@@ -106,12 +106,14 @@ class DailyRecordTests(unittest.TestCase):
         self.assertLess(record["activeViolinSeconds"], record["uploadedVideoSeconds"])
         self.assertEqual(record["activeTimeStatus"], "measured_from_pitch")
         self.assertEqual(daily["transcribedRecordCount"], 0)
+        self.assertEqual(daily["failedTranscriptionRecordCount"], 1)
         self.assertEqual(daily["audioEvidenceRecordCount"], 1)
         self.assertEqual(record["status"], "active_time_measured")
-        self.assertEqual(record["transcription"]["status"], "not_ready")
-        self.assertEqual(record["transcription"]["qualityStatus"], "machine_pitch_hidden")
+        self.assertEqual(record["transcription"]["status"], "failed_quality_gate")
+        self.assertEqual(record["transcription"]["qualityStatus"], "transcription_failed")
         self.assertEqual(record["transcription"]["kind"], "audio_evidence_only")
-        self.assertEqual(record["transcription"]["reliability"], "machine_pitch_hidden")
+        self.assertEqual(record["transcription"]["reliability"], "transcription_failed")
+        self.assertEqual(record["transcription"]["failureMode"], "unverified_machine_pitch")
         self.assertFalse(record["transcription"]["displayNotation"])
         self.assertFalse(record["transcription"]["transcriptionReady"])
         self.assertFalse(record["transcription"]["scoreLinked"])
@@ -128,7 +130,7 @@ class DailyRecordTests(unittest.TestCase):
         self.assertTrue(any(event["kind"] == "rest" for event in record["transcription"]["events"]))
         self.assertTrue(any(event.get("uncertain") for event in record["transcription"]["events"]))
         self.assertEqual(record["pieces"][0]["title"], "Wieniawski Scherzo-Tarantelle, Op. 16")
-        self.assertIn("hidden", record["mainCurtisBlocker"])
+        self.assertIn("failed", record["mainCurtisBlocker"])
         self.assertEqual(record["heatMap"]["status"], "pending_score_alignment")
         self.assertEqual(record["heatMap"]["fragments"], [])
         self.assertEqual(record["clips"][0]["type"], "transcribed_window")
@@ -391,7 +393,10 @@ class DailyRecordTests(unittest.TestCase):
         self.assertTrue(all(system["clip"]["mediaUrl"] == "/api/curtis/media/sample/wDfVpTU4I_I" for system in transcription["notationSystems"]))
         self.assertLess(transcription["renderedEventCount"], transcription["eventCount"])
         self.assertFalse(transcription["displayNotation"])
-        self.assertEqual(transcription["status"], "not_ready")
+        self.assertEqual(transcription["status"], "failed_quality_gate")
+        self.assertEqual(transcription["qualityStatus"], "transcription_failed")
+        self.assertEqual(transcription["reliability"], "transcription_failed")
+        self.assertEqual(transcription["failureMode"], "unverified_machine_pitch")
         self.assertIn("hidden", transcription["displayLimit"])
 
 

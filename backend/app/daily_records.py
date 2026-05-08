@@ -1135,12 +1135,15 @@ def build_daily_records(
         elif has_machine_pitch_events:
             quality = {
                 **quality,
-                "qualityStatus": "machine_pitch_hidden",
-                "qualityLabel": "machine notes hidden",
+                "qualityStatus": "transcription_failed",
+                "qualityLabel": "transcription failed",
                 "qualityLimit": (
-                    "Machine pitch events exist for sampled audio, but they are hidden because they are not reliable "
-                    "or professionally formatted transcription of the practice session."
+                    "Machine transcription failed: pitch events exist for sampled audio, but they are rejected because "
+                    "they are not reliable, complete, or professionally formatted enough to match the practice audio."
                 ),
+                "failureMode": "unverified_machine_pitch",
+                "failureWindowCount": len(day_transcriptions),
+                "failurePitchEventCount": note_count,
             }
         uploaded_seconds = sum(int(video.get("durationSeconds") or 0) for video in videos)
         processed_seconds = sum(sample_duration_seconds(sample) for sample in day_samples)
@@ -1179,25 +1182,20 @@ def build_daily_records(
                 "pieces": confirmed,
                 "uncertainPieces": uncertain,
                 "transcription": {
-                    "status": "failed_quality_gate" if failure_summary else "not_ready" if has_machine_pitch_events else "pending",
+                    "status": "failed_quality_gate" if failure_summary or has_machine_pitch_events else "pending",
                     "displayTitle": (
                         "Transcription failed quality gate"
-                        if failure_summary
-                        else "Transcription not ready"
-                        if has_machine_pitch_events
+                        if failure_summary or has_machine_pitch_events
                         else "Transcription pending"
                     ),
                     "kind": "audio_evidence_only" if has_machine_pitch_events else "pending",
                     "scoreLinked": False,
                     "scoreAlignmentStatus": "not_aligned",
                     "fullSessionStatus": "incomplete",
-                    "reliability": "transcription_failed" if failure_summary else "machine_pitch_hidden" if has_machine_pitch_events else "pending",
+                    "reliability": "transcription_failed" if failure_summary or has_machine_pitch_events else "pending",
                     "reliabilityLimit": (
                         quality.get("qualityLimit")
-                        if failure_summary
-                        else
-                        "Machine pitch events are hidden because they do not match the standard for readable, score-linked music transcription. Use the paired audio/video evidence only."
-                        if has_machine_pitch_events
+                        if failure_summary or has_machine_pitch_events
                         else "No full-session score-linked transcription has been generated."
                     ),
                     "noteCount": note_count,
@@ -1256,7 +1254,7 @@ def build_daily_records(
         "failedTranscriptionRecordCount": sum(1 for record in records if record.get("transcription", {}).get("reliability") == "transcription_failed"),
         "records": records[:MAX_RECORDS],
         "method": "Groups title-confirmed practice videos by practice day, then attaches uploaded duration, active-time evidence, playable audio/video windows, score targets, and repertoire evidence.",
-        "limit": "Uploaded archive duration is visible separately. Exact active violin hours require fetched media and are incomplete until each practice video is segmented; machine pitch events are hidden and are not counted as transcription.",
+        "limit": "Uploaded archive duration is visible separately. Exact active violin hours require fetched media and are incomplete until each practice video is segmented; unverified machine pitch events fail the transcription gate and are not counted as transcription.",
     }
 
 
