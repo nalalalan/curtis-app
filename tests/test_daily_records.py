@@ -16,7 +16,7 @@ def note(name, start, end, confidence=0.9):
 
 
 class DailyRecordTests(unittest.TestCase):
-    def test_groups_same_day_videos_and_renders_machine_notation_evidence(self):
+    def test_groups_same_day_videos_and_hides_unverified_machine_notation(self):
         inventory = {
             "youtube": [
                 {
@@ -105,10 +105,15 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(record["uploadedVideoSeconds"], 900)
         self.assertLess(record["activeViolinSeconds"], record["uploadedVideoSeconds"])
         self.assertEqual(record["activeTimeStatus"], "measured_from_pitch")
-        self.assertEqual(record["transcription"]["status"], "ready")
-        self.assertEqual(record["transcription"]["qualityStatus"], "weak_fragment")
-        self.assertEqual(record["transcription"]["kind"], "audio_paired_pitch_trace")
-        self.assertEqual(record["transcription"]["reliability"], "unverified_pitch_trace")
+        self.assertEqual(daily["transcribedRecordCount"], 0)
+        self.assertEqual(daily["audioEvidenceRecordCount"], 1)
+        self.assertEqual(record["status"], "active_time_measured")
+        self.assertEqual(record["transcription"]["status"], "not_ready")
+        self.assertEqual(record["transcription"]["qualityStatus"], "machine_pitch_hidden")
+        self.assertEqual(record["transcription"]["kind"], "audio_evidence_only")
+        self.assertEqual(record["transcription"]["reliability"], "machine_pitch_hidden")
+        self.assertFalse(record["transcription"]["displayNotation"])
+        self.assertFalse(record["transcription"]["transcriptionReady"])
         self.assertFalse(record["transcription"]["scoreLinked"])
         self.assertEqual(record["transcription"]["clef"], "treble")
         self.assertEqual(record["transcription"]["keySignature"]["label"], "G minor / 2 flats")
@@ -116,16 +121,16 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(record["transcription"]["coverageStatus"], "sample_window_only")
         self.assertIn("Not a full-session transcription", record["transcription"]["fullSessionLimit"])
         self.assertTrue(record["transcription"]["notationSystems"])
-        self.assertEqual(record["transcription"]["notationSystems"][0]["clip"]["type"], "pitch_trace_snippet")
+        self.assertEqual(record["transcription"]["notationSystems"][0]["clip"]["type"], "audio_evidence_window")
         self.assertEqual(record["transcription"]["notationSystems"][0]["clip"]["mediaUrl"], "/api/curtis/media/sample/K38CgZhvF3Q")
         self.assertEqual(record["transcription"]["notationSystems"][0]["clip"]["localStartSeconds"], 0)
-        self.assertTrue(record["transcription"]["repeatGroups"])
-        self.assertIn("x2", record["transcription"]["repeatGroups"][0]["notationLabel"])
+        self.assertEqual(record["transcription"]["repeatGroups"], [])
         self.assertTrue(any(event["kind"] == "rest" for event in record["transcription"]["events"]))
         self.assertTrue(any(event.get("uncertain") for event in record["transcription"]["events"]))
         self.assertEqual(record["pieces"][0]["title"], "Wieniawski Scherzo-Tarantelle, Op. 16")
-        self.assertIn("not enough", record["mainCurtisBlocker"])
-        self.assertTrue(record["heatMap"]["layers"])
+        self.assertIn("hidden", record["mainCurtisBlocker"])
+        self.assertEqual(record["heatMap"]["status"], "pending_score_alignment")
+        self.assertEqual(record["heatMap"]["fragments"], [])
         self.assertEqual(record["clips"][0]["type"], "transcribed_window")
         self.assertEqual(record["clips"][0]["mediaUrl"], "/api/curtis/media/sample/K38CgZhvF3Q")
         self.assertEqual(record["clips"][0]["localStartSeconds"], 0)
@@ -195,8 +200,8 @@ class DailyRecordTests(unittest.TestCase):
         self.assertNotIn("Unconfirmed Candidate Piece", titles)
         self.assertEqual(repertoire["entries"][0]["progressStatus"], "not_scored")
         self.assertTrue(repertoire["entries"][0]["evidence"])
-        self.assertEqual(repertoire["entries"][0]["heatMap"]["status"], "ready")
-        self.assertTrue(repertoire["entries"][0]["heatMap"]["fragments"])
+        self.assertEqual(repertoire["entries"][0]["heatMap"]["status"], "pending_transcription")
+        self.assertEqual(repertoire["entries"][0]["heatMap"]["fragments"], [])
         self.assertIn("Practice density", [layer["label"] for layer in repertoire["entries"][0]["heatMap"]["layers"]])
 
     def test_daily_record_coverage_counts_active_transcribed_audio(self):
@@ -253,12 +258,12 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(record["transcription"]["windowSeconds"], 12)
         self.assertEqual(record["transcription"]["segmentCount"], 1)
         self.assertEqual(record["transcription"]["coverageStatus"], "active_sections_only")
-        self.assertIn("active playing", record["transcription"]["coverageLimit"])
+        self.assertIn("active-audio evidence", record["transcription"]["coverageLimit"])
         self.assertEqual(record["activeViolinSeconds"], 57)
         self.assertEqual(record["clips"][0]["activeTranscribedSeconds"], 12.4)
         self.assertIn("active audio", record["clips"][0]["reason"])
         self.assertEqual(record["clips"][1]["activeTranscribedSeconds"], 44.2)
-        self.assertIn("no stable note notation", record["clips"][1]["reason"])
+        self.assertIn("no reliable score-linked transcription", record["clips"][1]["reason"])
 
     def test_media_probe_uses_title_confirmed_ledger_not_broad_candidates(self):
         state = {
@@ -329,7 +334,9 @@ class DailyRecordTests(unittest.TestCase):
         self.assertGreaterEqual(len(transcription["notationSystems"]), 3)
         self.assertTrue(all(system["clip"]["mediaUrl"] == "/api/curtis/media/sample/wDfVpTU4I_I" for system in transcription["notationSystems"]))
         self.assertLess(transcription["renderedEventCount"], transcription["eventCount"])
-        self.assertIn("of", transcription["displayLimit"])
+        self.assertFalse(transcription["displayNotation"])
+        self.assertEqual(transcription["status"], "not_ready")
+        self.assertIn("hidden", transcription["displayLimit"])
 
 
 if __name__ == "__main__":

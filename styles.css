@@ -2016,6 +2016,32 @@ h2 {
   font-weight: 680;
 }
 
+.notation-withheld {
+  display: grid;
+  gap: 4px;
+  padding: 10px 11px;
+  border: 1px solid rgba(31, 41, 39, .12);
+  border-radius: 7px;
+  background: #fffdf8;
+}
+
+.notation-withheld span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 780;
+  letter-spacing: 0;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.notation-withheld strong {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 690;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
 .transcription-stats {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));

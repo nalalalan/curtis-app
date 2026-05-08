@@ -242,7 +242,7 @@ def notation_system_payload(events: list[dict[str, Any]], index: int) -> dict[st
             source_clip_start = min(source_starts) if source_starts else 0.0
             source_clip_end = max(source_ends) if source_ends else 0.0
             clip = {
-                "type": "pitch_trace_snippet",
+                "type": "audio_evidence_window",
                 "sampleId": sample_id,
                 "mediaUrl": media_url,
                 "sourceTitle": source_title,
@@ -266,7 +266,7 @@ def notation_system_payload(events: list[dict[str, Any]], index: int) -> dict[st
         "sourceWindow": source_window_label(int(start), int(end)) if end > start else "",
         "clip": clip,
         "events": events,
-        "limit": "Audio-paired pitch trace from detected pitch/rhythm events; not verified score transcription.",
+        "limit": "Audio evidence from the same sample. Machine pitch events are hidden until score-linked transcription is reliable.",
     }
 
 
@@ -327,12 +327,16 @@ def notation_display_state(
         "notationEventCount": len(notation),
         "renderedEventCount": rendered_events,
         "renderedNoteCount": rendered_notes,
+        "detectedPitchEventCount": note_events,
+        "hiddenPitchEventCount": note_events,
         "remainingEventCount": display_omitted_events,
         "omittedDetectedNoteCount": api_omitted_notes,
         "notationSystems": systems,
+        "displayNotation": False,
+        "transcriptionReady": False,
         "displayLimit": (
-            f"{rendered_events} of {len(notation)} notation events are shown"
-            + (f"; {api_omitted_notes} detected notes are outside the API event slice" if api_omitted_notes else "")
+            f"{rendered_notes} detected pitch events are hidden from the staff view"
+            + (f"; {api_omitted_notes} detected pitch events are outside the API event slice" if api_omitted_notes else "")
             + "."
         ),
     }
@@ -414,8 +418,8 @@ def transcription_coverage(
             "windowSeconds": 0,
             "windowLabel": "",
             "coveragePercent": 0,
-            "coverageLabel": "No notation window yet.",
-            "coverageLimit": "No playable transcription window is available for this day yet.",
+            "coverageLabel": "No verified transcription window yet.",
+            "coverageLimit": "No playable score-linked transcription window is available for this day yet.",
             "coverageStatus": "pending_transcription",
         }
     percent = round((transcribed_seconds / max(1, uploaded_seconds)) * 100, 2) if uploaded_seconds else 0
@@ -424,15 +428,15 @@ def transcription_coverage(
         "windowLabel": duration_seconds_label(transcribed_seconds),
         "coveragePercent": percent,
         "coverageLabel": (
-            f"{duration_seconds_label(transcribed_seconds)} transcribed"
+            f"{duration_seconds_label(transcribed_seconds)} sampled audio evidence"
             + (f" from {duration_seconds_label(uploaded_seconds)} uploaded" if uploaded_seconds else "")
         ),
         "coverageLimit": (
-            "Partial pitch trace only: the notation covers detected active playing inside sampled clips, not the full practice day."
+            "Sampled active-audio evidence only: this does not cover the full practice day as transcription."
             if active_section_mode
-            else "Partial pitch trace only: the notation is for the sampled playable window shown here, not the full practice day."
+            else "Sampled audio evidence only: this is not full-session transcription."
             if segment_count <= 1
-            else "Partial pitch trace only: the notation combines sampled playable windows, not the full practice day."
+            else "Sampled audio evidence only: these windows are not full-session transcription."
         ),
         "coverageStatus": "active_sections_only" if active_section_mode else "sample_window_only",
     }
@@ -493,7 +497,7 @@ def transcription_quality(
             "qualityStatus": "weak_fragment",
             "qualityLabel": "weak fragment",
             "qualityLimit": (
-                f"Only {duration_seconds_label(active_seconds) or '0s'} and {note_count} notes were detected; "
+                f"Only {duration_seconds_label(active_seconds) or '0s'} and {note_count} pitch events were detected; "
                 "this is not enough to call it a daily transcription."
             ),
             "segmentCount": segment_count,
@@ -514,10 +518,10 @@ def transcription_quality(
             parts.append(f"{low_confidence} low-confidence note{'s' if low_confidence != 1 else ''}")
         return {
             "qualityStatus": "sanity_corrected_draft",
-            "qualityLabel": "unverified pitch trace",
+            "qualityLabel": "machine notes hidden",
             "qualityLimit": (
-                f"The displayed notes contain {', '.join(parts)}. Treat them as an audio-paired pitch trace, "
-                f"not a reliable transcription of what was played.{sparse_note}"
+                f"The machine pitch events contain {', '.join(parts)} and are hidden from the music view. "
+                f"They are not reliable transcription of what was played.{sparse_note}"
             ),
             "qualityMetrics": metrics,
             "segmentCount": segment_count,
@@ -525,18 +529,18 @@ def transcription_quality(
     if active_seconds < DRAFT_TRANSCRIPTION_MIN_SECONDS or note_count < DRAFT_TRANSCRIPTION_MIN_NOTES:
         return {
             "qualityStatus": "draft_fragment",
-            "qualityLabel": "unverified pitch trace",
+            "qualityLabel": "machine notes hidden",
             "qualityLimit": (
-                f"{duration_seconds_label(active_seconds)} and {note_count} notes were detected; "
-                f"use this as audio-paired machine evidence, not finished sheet music.{sparse_note}"
+                f"{duration_seconds_label(active_seconds)} and {note_count} pitch events were detected; "
+                f"use the paired audio evidence, not the hidden machine notes.{sparse_note}"
             ),
             "qualityMetrics": metrics,
             "segmentCount": segment_count,
         }
     return {
         "qualityStatus": "usable_fragment",
-        "qualityLabel": "unverified pitch trace",
-        "qualityLimit": f"The pitch trace is long enough to inspect with audio, but it is not score-verified transcription.{sparse_note}",
+        "qualityLabel": "machine notes hidden",
+        "qualityLimit": f"Machine pitch events exist, but they are hidden until score-verified transcription is available.{sparse_note}",
         "qualityMetrics": metrics,
         "segmentCount": segment_count,
     }
@@ -763,7 +767,7 @@ def transcription_quality_observations(
     clips: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     status = str(quality.get("qualityStatus") or "")
-    if status not in {"weak_fragment", "sanity_corrected_draft"}:
+    if status not in {"weak_fragment", "sanity_corrected_draft", "machine_pitch_hidden"}:
         return []
     primary_clip = clips[0] if clips else {}
     return [
@@ -850,20 +854,20 @@ def clips_for_day(
             active_duration = float(transcription.get("durationSeconds") or 0.0)
         except (TypeError, ValueError):
             active_duration = 0.0
-        reason = f"{note_count} detected notes in the displayed notation window."
+        reason = f"{note_count} detected pitch events kept as hidden machine evidence."
         quality = transcription.get("quality") if isinstance(transcription.get("quality"), dict) else {}
         if note_count <= 0:
             reason = (
-                f"{duration_seconds_label(active_duration)} of active audio scanned; no stable note notation extracted."
+                f"{duration_seconds_label(active_duration)} of active audio scanned; no reliable score-linked transcription extracted."
                 if active_duration > 0
-                else "Audio scanned; no stable note notation extracted."
+                else "Audio scanned; no reliable score-linked transcription extracted."
             )
         elif quality.get("windowMode") == "detected_active_sections" and active_duration > 0:
-            reason = f"{note_count} detected notes from {duration_seconds_label(active_duration)} of active audio inside this sample."
+            reason = f"{note_count} detected pitch events from {duration_seconds_label(active_duration)} of active audio; staff output hidden until verified."
         clips.append(
             {
                 "type": "transcribed_window",
-                "label": "transcribed playing window",
+                "label": "audio evidence window",
                 "url": transcription.get("sourceUrl") or "",
                 "sourceTitle": transcription.get("sourceTitle") or "",
                 "startSeconds": start,
@@ -1062,13 +1066,25 @@ def build_daily_records(
         )
         confirmed = confirmed_pieces_for_day(state, videos, day_transcriptions)
         uncertain = uncertain_pieces_for_day(day_transcriptions)
-        heat_fragments = transcription_fragments(day_transcriptions)
-        day_repeat_groups = repeat_groups(heat_fragments, day_transcriptions)
+        heat_fragments: list[dict[str, Any]] = []
+        day_repeat_groups: list[dict[str, Any]] = []
         note_count = transcription_note_count(day_transcriptions)
         notation_segments = [item for item in day_transcriptions if has_stable_notation(item)]
         quality_metrics = transcription_quality_metrics(notation_segments)
         quality = transcription_quality(note_count, active_seconds, len(notation_segments), quality_metrics)
         display_state = notation_display_state(notation, day_notation_systems, note_count)
+        has_machine_pitch_events = bool(notation)
+        has_verified_transcription = False
+        if has_machine_pitch_events:
+            quality = {
+                **quality,
+                "qualityStatus": "machine_pitch_hidden",
+                "qualityLabel": "machine notes hidden",
+                "qualityLimit": (
+                    "Machine pitch events exist for sampled audio, but they are hidden because they are not reliable "
+                    "or professionally formatted transcription of the practice session."
+                ),
+            }
         uploaded_seconds = sum(int(video.get("durationSeconds") or 0) for video in videos)
         processed_seconds = sum(sample_duration_seconds(sample) for sample in day_samples)
         transcribed_seconds = transcription_window_seconds(day_transcriptions)
@@ -1084,15 +1100,16 @@ def build_daily_records(
         )
         key_signature = key_signature_from_pieces(confirmed)
         clips = clips_for_day(videos, day_sections, day_transcriptions, day_samples)
-        observations = [
-            *transcription_quality_observations(quality, notation, clips),
-            *problem_observations(notation, heat_fragments, clips, day_transcriptions, active_status),
-        ][:6]
+        observations = (
+            problem_observations(notation, heat_fragments, clips, day_transcriptions, active_status)[:6]
+            if has_verified_transcription
+            else transcription_quality_observations(quality, [], clips)[:2]
+        )
         blocker = main_curtis_blocker(observations)
         records.append(
             {
                 "practiceDay": day,
-                "status": "transcribed" if notation else "active_time_measured" if active_seconds else "pending_media",
+                "status": "active_time_measured" if active_seconds else "pending_media",
                 "videos": videos,
                 "videoCount": len(videos),
                 "uploadedVideoSeconds": uploaded_seconds,
@@ -1105,16 +1122,16 @@ def build_daily_records(
                 "pieces": confirmed,
                 "uncertainPieces": uncertain,
                 "transcription": {
-                    "status": "ready" if notation else "pending",
-                    "displayTitle": "Audio-paired pitch trace" if notation else "Transcription pending",
-                    "kind": "audio_paired_pitch_trace" if notation else "pending",
+                    "status": "not_ready" if has_machine_pitch_events else "pending",
+                    "displayTitle": "Transcription not ready" if has_machine_pitch_events else "Transcription pending",
+                    "kind": "audio_evidence_only" if has_machine_pitch_events else "pending",
                     "scoreLinked": False,
                     "scoreAlignmentStatus": "not_aligned",
                     "fullSessionStatus": "incomplete",
-                    "reliability": "unverified_pitch_trace" if notation else "pending",
+                    "reliability": "machine_pitch_hidden" if has_machine_pitch_events else "pending",
                     "reliabilityLimit": (
-                        "The visible notes are raw machine pitch events paired with audio. They are not yet a trustworthy full-session transcription."
-                        if notation
+                        "Machine pitch events are hidden because they do not match the standard for readable, score-linked music transcription. Use the paired audio/video evidence only."
+                        if has_machine_pitch_events
                         else "No full-session score-linked transcription has been generated."
                     ),
                     "noteCount": note_count,
@@ -1127,14 +1144,14 @@ def build_daily_records(
                     "fullSessionLimit": transcription_session_limit(transcribed_seconds, uploaded_seconds),
                     "events": notation,
                     "repeatGroups": day_repeat_groups,
-                    "limit": "Audio-paired monophonic pitch trace from detected active sections. Do not treat it as reliable transcription until full-session extraction and score alignment exist.",
+                    "limit": "Audio evidence is available, but machine pitch events are not rendered as music until full-session extraction and score alignment are reliable.",
                 },
                 "clips": clips,
                 "heatMap": {
-                    "status": "ready" if heat_fragments else "pending_transcription",
+                    "status": "pending_score_alignment",
                     "fragments": heat_fragments,
-                    "layers": heat_map_layers(heat_fragments, notation),
-                    "limit": "Heat map currently uses repeated four-note fragments from machine transcription.",
+                    "layers": heat_map_layers(heat_fragments, []),
+                    "limit": "Heat map is withheld until practice locations can be aligned to actual score sections.",
                 },
                 "observations": observations,
                 "mainCurtisBlocker": blocker,
@@ -1149,7 +1166,7 @@ def build_daily_records(
                 ],
                 "evidenceStatus": "confirmed_piece" if confirmed else "uncertain_piece" if uncertain else active_status,
                 "summary": day_summary(active_status, confirmed, uncertain),
-                "nextStep": day_next_step(active_status, confirmed, bool(notation)),
+                "nextStep": day_next_step(active_status, confirmed, has_verified_transcription),
             }
         )
 
@@ -1167,10 +1184,12 @@ def build_daily_records(
         "unmeasuredUploadedVideoSeconds": unmeasured_uploaded,
         "unmeasuredUploadedVideoLabel": duration_seconds_label(unmeasured_uploaded) if unmeasured_uploaded else "",
         "activeMeasurementStatus": "partial" if unmeasured_uploaded else "complete" if total_uploaded else "pending",
-        "transcribedRecordCount": sum(1 for record in records if record.get("transcription", {}).get("status") == "ready"),
+        "transcribedRecordCount": sum(1 for record in records if record.get("transcription", {}).get("transcriptionReady")),
+        "audioEvidenceRecordCount": sum(1 for record in records if record.get("transcription", {}).get("kind") == "audio_evidence_only"),
+        "hiddenPitchTraceRecordCount": sum(1 for record in records if record.get("transcription", {}).get("reliability") == "machine_pitch_hidden"),
         "records": records[:MAX_RECORDS],
-        "method": "Groups title-confirmed practice videos by practice day, then attaches uploaded duration, active-time evidence, machine notation, clips, heat-map fragments, and repertoire evidence.",
-        "limit": "Uploaded archive duration is visible separately. Exact active violin hours require fetched media and are incomplete until each practice video is segmented; the app does not invent active violin time, notation, clips, or repertoire labels.",
+        "method": "Groups title-confirmed practice videos by practice day, then attaches uploaded duration, active-time evidence, playable audio/video windows, score targets, and repertoire evidence.",
+        "limit": "Uploaded archive duration is visible separately. Exact active violin hours require fetched media and are incomplete until each practice video is segmented; machine pitch events are hidden and are not counted as transcription.",
     }
 
 
