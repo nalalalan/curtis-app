@@ -107,7 +107,7 @@
 \end{center}
 
 \vspace{0.35em}
-\noindent\textbf{High-level music training produces dense evidence: daily practice videos, repeated repertoire, changing technical constraints, and periodic performance goals. Most of that evidence is difficult to use because it is stored as unstructured media rather than as a score-linked longitudinal record. We report Curtis, a live AO Labs system that converts messy long-form violin practice videos into structured, evidence-linked practice records using active practice detection, sheet-music-style transcription, score alignment targets, heat maps, repertoire tracking, and passage-level performance observation. The checked live state on 7 May 2026 used the YouTube channel \texttt{@nalalan} as the primary source, indexed 209 public videos, marked 104 as practice candidates, marked 84 as long-form candidates, stored 20 media samples, retained 51 reviewed sections, and recorded 80 Curtis-focused findings. The uploaded-video ledger begins at \texttt{violin 1}, uploaded on 20 December 2025, and currently counts 40 violin-numbered or date-titled practice logs totaling 158 h 2 min of public session duration; this duration is not counted as active practice time. Active violin practice time is counted only from detected playing windows after media processing. The primary interface has three top-level surfaces: a paper card, analyzed practice days, and repertoire. Each daily record now collapses to a minimal evidence view: an embedded local media sample with video and audio controls, machine-generated sheet-music-style notation, a score-image heat-map target when a score packet exists, and a compact limit statement. This keeps the interface from presenting short sampled transcription as whole-session notation. Repertoire entries are promoted only from confirmed daily-record evidence and keep possible labels, user-rejected false labels, weak evidence, and readiness scores inferred only from piece identification separate from confirmed repertoire and judged playing quality. The system uses GPT-5.5 for vision and text review and separate audio models for identification and verification, while preserving explicit limits: Curtis admission cannot be predicted from current samples, weak audio/video evidence is marked unjudged, whole-session transcription is not yet complete, and the system reports practice signals rather than admissions probability. The contribution is an experimental method for making practice visible, searchable, measurable, and tied to actual musical evidence.}
+\noindent\textbf{High-level music training produces dense evidence: daily practice videos, repeated repertoire, changing technical constraints, and periodic performance goals. Most of that evidence is difficult to use because it is stored as unstructured media rather than as a score-linked longitudinal record. We report Curtis, a live AO Labs system that converts messy long-form violin practice videos into structured, evidence-linked practice records using active practice detection, sheet-music-style transcription, score alignment targets, heat maps, repertoire tracking, and passage-level performance observation. The checked live state on 8 May 2026 used the YouTube channel \texttt{@nalalan} as the primary source, indexed 211 public videos, marked 106 as practice candidates, marked 86 as long-form candidates, stored 20 media-sample index entries, exposed 5 local media samples for playback, retained 80 reviewed sections, and recorded 80 Curtis-focused findings. The uploaded-video ledger begins at \texttt{violin 1}, uploaded on 20 December 2025, and currently counts 42 violin-numbered or date-titled practice logs totaling 179 h 48 min of public session duration; this duration is not counted as active practice time. The live daily-record state contains 35 indexed practice days, 7 processed daily records, and 5 transcribed daily records. Active violin practice time is counted only from detected playing windows after media processing; the current measured total is 7 min 54 s. The primary interface has three top-level surfaces: a paper card, analyzed practice days, and repertoire. Each daily record now collapses to a minimal evidence view: an embedded local media sample with video and audio controls, machine-generated sheet-music-style notation, a score-image heat-map target when a score packet exists, and a compact limit statement. This keeps the interface from presenting short sampled transcription as whole-session notation. Repertoire entries are promoted only from confirmed daily-record evidence and keep possible labels, user-rejected false labels, weak evidence, and readiness scores inferred only from piece identification separate from confirmed repertoire and judged playing quality. The system uses GPT-5.5 for vision and text review and separate audio models for identification and verification, while preserving explicit limits: Curtis admission cannot be predicted from current samples, weak audio/video evidence is marked unjudged, whole-session transcription is not yet complete, and the system reports practice signals rather than admissions probability. The contribution is an experimental method for making practice visible, searchable, measurable, and tied to actual musical evidence.}
 
 \newpage
 \pagestyle{fancy}
@@ -124,32 +124,32 @@ The system is also part of AO Labs' broader progress architecture. In May 2026, 
 
 \section{System state}
 
-The first production state used the live backend at \url{https://curtis.aolabs.io/api/curtis/media-status}. The checked state on 7 May 2026 reported the values in Table~\ref{tab:state}. These are operating facts, not outcome claims.
+The production state uses the live backend at \url{https://curtis.aolabs.io/api/curtis/media-status}. The checked state on 8 May 2026 reported the values in Table~\ref{tab:state}. These are operating facts, not outcome claims.
 
 \begin{table}[htbp]
 \centering
-\caption{Curtis production state on 7 May 2026.}
+\caption{Curtis production state on 8 May 2026.}
 \label{tab:state}
 \begin{tabularx}{\textwidth}{>{\bfseries}p{0.31\textwidth}X}
 \toprule
 Signal & Current value \\
 \midrule
 \metric{Primary source}{YouTube channel \texttt{@nalalan}}
-\metric{Inventory}{209 indexed videos}
-\metric{Practice candidates}{104 videos}
-\metric{Long-form candidates}{84 videos}
+\metric{Inventory}{211 indexed videos}
+\metric{Practice candidates}{106 videos}
+\metric{Long-form candidates}{86 videos}
 \metric{Uploaded-video marker}{\texttt{violin 1}, uploaded 20 December 2025}
-\metric{Title-confirmed uploaded-video ledger}{40 videos, 158 h 2 min uploaded session duration}
-\metric{Active practice time}{Counted only from detected violin-playing windows; uploaded duration is reported separately}
-\metric{Media samples}{20 captured samples}
-\metric{Reviewed sections}{51 sections}
+\metric{Title-confirmed uploaded-video ledger}{42 videos, 179 h 48 min uploaded session duration}
+\metric{Active practice time}{7 min 54 s counted only from detected violin-playing windows; uploaded duration is reported separately}
+\metric{Media samples}{20 indexed windows; 5 local samples exposed for playback}
+\metric{Reviewed sections}{80 sections}
 \metric{Curtis-focused findings}{80 findings}
 \metric{Latest dated practice log}{5-3-26}
 \metric{Review model}{GPT-5.5 for vision/text, separate audio models for audio evidence and piece verification}
 \metric{Confirmed labels}{5/1 Haydn Symphony No. 94 IV; 5/2 and 5/3 Wieniawski Scherzo-Tarantelle}
 \metric{Training anchors}{3 source-confirmed practice sources}
 \metric{Score-reference targets}{3 configured}
-\metric{Analyzed practice days}{40 title-confirmed daily records; 3 confirmed source labels with score snippets}
+\metric{Analyzed practice days}{35 indexed days; 7 processed daily records; 5 transcribed daily records; 3 confirmed source labels with score snippets}
 \metric{Pitch/rhythm transcription}{Onset-aware violin-range pYIN configured; per-sample note events, quality gates, and fingerprints stored when media samples exist}
 \metric{Specific observations}{Generated only from extracted uncertainty, pause/restart, tempo, and repetition evidence}
 \metric{Score-aligned windows}{0; pitch/rhythm-to-score matching is not yet configured}
