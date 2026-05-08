@@ -1168,11 +1168,61 @@ function renderClipFrame(clip, label = "Evidence clip") {
   `;
 }
 
+function renderClipEvidencePair({ clip, observation, repeatGroup, notationEvents, pieceTitle }) {
+  if (!clip && !observation && !repeatGroup && !(Array.isArray(notationEvents) && notationEvents.length)) return "";
+  const events = Array.isArray(notationEvents) && notationEvents.length
+    ? notationEvents
+    : Array.isArray(observation?.transcriptionSnippet)
+      ? observation.transcriptionSnippet
+      : [];
+  const passage = observation?.passage || repeatGroup?.label || pieceTitle || "passage pending";
+  const repeatText = repeatGroup?.notationLabel
+    || (repeatGroup?.repeatCount ? `${repeatGroup?.label || "fragment"} x${repeatGroup.repeatCount}` : "");
+  const pattern = repeatGroup?.practicePattern || clip?.reason || observation?.frequency || "pattern pending";
+  const problem = observation?.problem || clip?.reason || "specific observation pending";
+  const confidence = observation?.confidence || repeatGroup?.confidence || clip?.type || "confidence pending";
+  return `
+    <div class="clip-evidence-pair" aria-label="Clip linked to transcription evidence">
+      <div class="clip-evidence-grid">
+        <article>
+          <span>Passage</span>
+          <strong>${escapeHtml(shortText(passage, 58))}</strong>
+        </article>
+        <article>
+          <span>Repeat</span>
+          <strong>${escapeHtml(shortText(repeatText || pattern, 58))}</strong>
+        </article>
+        <article>
+          <span>Observation</span>
+          <strong>${escapeHtml(shortText(problem, 96))}</strong>
+        </article>
+        <article>
+          <span>Confidence</span>
+          <strong>${escapeHtml(shortText(confidence, 58))}</strong>
+        </article>
+      </div>
+      ${events.length ? renderNotationSheet(events.slice(0, 18)) : `<p class="empty">Transcription snippet pending.</p>`}
+    </div>
+  `;
+}
+
 function renderRecordClips(record, includeFrame = false) {
   const clips = Array.isArray(record?.clips) ? record.clips.slice(0, 3) : [];
   if (!clips.length) return `<p class="empty">Clip evidence pending.</p>`;
+  const primaryObservation = Array.isArray(record?.observations) ? record.observations[0] : null;
+  const primaryRepeatGroup = Array.isArray(record?.transcription?.repeatGroups) ? record.transcription.repeatGroups[0] : null;
+  const primaryEvents = Array.isArray(primaryObservation?.transcriptionSnippet) && primaryObservation.transcriptionSnippet.length
+    ? primaryObservation.transcriptionSnippet
+    : record?.transcription?.events;
   return `
     ${includeFrame ? renderClipFrame(clips[0], "Main practice evidence") : ""}
+    ${includeFrame ? renderClipEvidencePair({
+      clip: clips[0],
+      observation: primaryObservation,
+      repeatGroup: primaryRepeatGroup,
+      notationEvents: primaryEvents,
+      pieceTitle: recordPieceText(record)
+    }) : ""}
     <div class="clip-list">
       ${clips.map((clip) => {
         const start = Number(clip?.startSeconds) || 0;
@@ -1278,6 +1328,8 @@ function renderPieces() {
   }
   elements.pieceList.innerHTML = list.slice(0, 8).map((piece, index) => {
     const evidence = Array.isArray(piece.evidence) ? piece.evidence.slice(0, 2) : [];
+    const leadEvidence = evidence[0] || {};
+    const leadObservation = Array.isArray(piece.observations) ? piece.observations[0] : null;
     const open = index === 0 ? " open" : "";
     return `
     <details class="piece-row evidence-piece"${open}>
@@ -1296,7 +1348,14 @@ function renderPieces() {
         <small class="piece-meta-line">Progress: ${escapeHtml(piece.currentProgressLabel || piece.progressStatus || "not scored")}</small>
         ${renderObservations(piece.observations)}
         ${renderHeatMap(piece)}
-        ${index === 0 ? renderClipFrame(evidence[0]?.clip, "Repertoire evidence") : ""}
+        ${index === 0 ? renderClipFrame(leadEvidence?.clip, "Repertoire evidence") : ""}
+        ${index === 0 ? renderClipEvidencePair({
+          clip: leadEvidence?.clip,
+          observation: leadObservation,
+          repeatGroup: null,
+          notationEvents: leadEvidence?.transcriptionSnippet,
+          pieceTitle: piece.title
+        }) : ""}
         <div class="evidence-list">
           ${evidence.map((item) => {
             const clip = item.clip || {};
@@ -1305,6 +1364,7 @@ function renderPieces() {
               <div class="evidence-row">
                 <a href="${escapeHtml(clipUrl)}">${escapeHtml([item.practiceDay, clipWindowLabel(clip)].filter(Boolean).join(" / "))}</a>
                 <span>${escapeHtml(item.confidence || "confirmed")}</span>
+                <small>${escapeHtml(shortText(item.reason || "Confirmed source evidence.", 130))}</small>
                 ${renderNotationSheet(item.transcriptionSnippet || [])}
               </div>
             `;

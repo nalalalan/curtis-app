@@ -1692,6 +1692,56 @@ h2 {
   font-weight: 720;
 }
 
+.clip-evidence-pair {
+  display: grid;
+  gap: 8px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(31, 41, 39, .1);
+}
+
+.clip-evidence-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.clip-evidence-grid article {
+  min-width: 0;
+  padding: 9px;
+  border: 1px solid rgba(31, 41, 39, .1);
+  border-radius: 7px;
+  background: rgba(255, 253, 248, .68);
+}
+
+.clip-evidence-grid span {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 760;
+  letter-spacing: 0;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.clip-evidence-grid strong {
+  display: block;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.clip-evidence-pair .notation-sheet svg {
+  height: 70px;
+}
+
+.clip-evidence-pair .empty {
+  padding: 9px;
+  font-size: 12px;
+}
+
 .clip-list a {
   display: block;
   padding: 8px 0;
@@ -1848,6 +1898,13 @@ h2 {
   margin-top: 10px;
 }
 
+.piece-evidence-copy > .clip-frame,
+.piece-evidence-copy > .clip-evidence-pair {
+  width: 100%;
+  max-width: 520px;
+  margin-top: 10px;
+}
+
 .evidence-list {
   display: grid;
   gap: 9px;
@@ -1867,6 +1924,13 @@ h2 {
   font-weight: 720;
   line-height: 1.2;
   text-decoration: none;
+}
+
+.evidence-row small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 620;
+  line-height: 1.25;
 }
 
 .evidence-row .notation-sheet svg {
@@ -1998,7 +2062,8 @@ h2 {
   .piece-strip,
   .paper-strip,
   .paper-hero,
-  .paper-status {
+  .paper-status,
+  .clip-evidence-grid {
     grid-template-columns: 1fr;
   }
 
