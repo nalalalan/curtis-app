@@ -132,6 +132,9 @@ def notation_events(transcriptions: list[dict[str, Any]]) -> list[dict[str, Any]
         notes = transcription.get("notes") if isinstance(transcription.get("notes"), list) else []
         tempo = float(transcription.get("tempoBpm") or 0.0)
         source_start = parse_window_start(str(transcription.get("sourceWindow") or ""))
+        sample_id = str(transcription.get("sampleId") or "").strip()
+        media_url = f"/api/curtis/media/sample/{sample_id}" if sample_id else ""
+        source_title = str(transcription.get("sourceTitle") or "").strip()
         previous_end = 0.0
         for note in notes:
             if not isinstance(note, dict):
@@ -147,6 +150,13 @@ def notation_events(transcriptions: list[dict[str, Any]]) -> list[dict[str, Any]
                         "durationSeconds": round(rest_seconds, 3),
                         "durationKind": note_duration_kind(rest_seconds, tempo),
                         "uncertain": False,
+                        "sampleId": sample_id,
+                        "mediaUrl": media_url,
+                        "sourceTitle": source_title,
+                        "sourceStartSeconds": round(source_start + previous_end, 3),
+                        "sourceEndSeconds": round(source_start + start, 3),
+                        "localStartSeconds": round(previous_end, 3),
+                        "localEndSeconds": round(start, 3),
                     }
                 )
             note_name = str(note.get("note") or "").strip()
@@ -162,6 +172,11 @@ def notation_events(transcriptions: list[dict[str, Any]]) -> list[dict[str, Any]
                     "rawMidi": note.get("rawMidi") if note.get("rawMidi") else "",
                     "sourceStartSeconds": round(source_start + start, 3),
                     "sourceEndSeconds": round(source_start + end, 3),
+                    "localStartSeconds": round(start, 3),
+                    "localEndSeconds": round(end, 3),
+                    "sampleId": sample_id,
+                    "mediaUrl": media_url,
+                    "sourceTitle": source_title,
                     "durationSeconds": round(duration, 3),
                     "durationKind": note_duration_kind(duration, tempo),
                     "confidence": round(confidence, 3),
@@ -190,6 +205,56 @@ def notation_system_payload(events: list[dict[str, Any]], index: int) -> dict[st
     start = min(starts) if starts else 0.0
     end = max(ends) if ends else 0.0
     uncertain = sum(1 for event in notes if event.get("uncertain"))
+    playable_events = [
+        event
+        for event in events
+        if isinstance(event, dict) and event.get("mediaUrl") and event.get("sampleId")
+    ]
+    clip: dict[str, Any] = {}
+    if playable_events:
+        first = playable_events[0]
+        sample_id = str(first.get("sampleId") or "")
+        media_url = str(first.get("mediaUrl") or "")
+        source_title = str(first.get("sourceTitle") or "")
+        local_starts = [
+            float(event.get("localStartSeconds"))
+            for event in playable_events
+            if event.get("sampleId") == sample_id and event.get("localStartSeconds") is not None
+        ]
+        local_ends = [
+            float(event.get("localEndSeconds"))
+            for event in playable_events
+            if event.get("sampleId") == sample_id and event.get("localEndSeconds") is not None
+        ]
+        source_starts = [
+            float(event.get("sourceStartSeconds"))
+            for event in playable_events
+            if event.get("sampleId") == sample_id and event.get("sourceStartSeconds") is not None
+        ]
+        source_ends = [
+            float(event.get("sourceEndSeconds"))
+            for event in playable_events
+            if event.get("sampleId") == sample_id and event.get("sourceEndSeconds") is not None
+        ]
+        if local_starts and local_ends:
+            local_start = max(0.0, min(local_starts) - 0.35)
+            local_end = max(local_start + 0.75, max(local_ends) + 0.35)
+            source_clip_start = min(source_starts) if source_starts else 0.0
+            source_clip_end = max(source_ends) if source_ends else 0.0
+            clip = {
+                "type": "pitch_trace_snippet",
+                "sampleId": sample_id,
+                "mediaUrl": media_url,
+                "sourceTitle": source_title,
+                "localStartSeconds": round(local_start, 3),
+                "localEndSeconds": round(local_end, 3),
+                "sourceStartSeconds": round(source_clip_start, 3) if source_clip_start else 0,
+                "sourceEndSeconds": round(source_clip_end, 3) if source_clip_end else 0,
+                "startSeconds": round(source_clip_start, 3) if source_clip_start else 0,
+                "endSeconds": round(source_clip_end, 3) if source_clip_end else 0,
+                "durationSeconds": round(max(0.0, local_end - local_start), 3),
+                "label": f"Audio for line {index}",
+            }
     return {
         "id": f"system-{index}",
         "label": f"Line {index}",
@@ -199,8 +264,9 @@ def notation_system_payload(events: list[dict[str, Any]], index: int) -> dict[st
         "startSeconds": round(start, 3) if start else 0,
         "endSeconds": round(end, 3) if end else 0,
         "sourceWindow": source_window_label(int(start), int(end)) if end > start else "",
+        "clip": clip,
         "events": events,
-        "limit": "Machine notation line from detected pitch/rhythm events; uncertain notes stay marked.",
+        "limit": "Audio-paired pitch trace from detected pitch/rhythm events; not verified score transcription.",
     }
 
 
@@ -208,22 +274,30 @@ def notation_systems(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
     systems: list[dict[str, Any]] = []
     current: list[dict[str, Any]] = []
     current_notes = 0
+    current_sample_id = ""
 
     def flush() -> None:
-        nonlocal current, current_notes
+        nonlocal current, current_notes, current_sample_id
         if not current or len(systems) >= MAX_NOTATION_SYSTEMS:
             current = []
             current_notes = 0
+            current_sample_id = ""
             return
         systems.append(notation_system_payload(current, len(systems) + 1))
         current = []
         current_notes = 0
+        current_sample_id = ""
 
     for event in events:
         if len(systems) >= MAX_NOTATION_SYSTEMS:
             break
         if not isinstance(event, dict):
             continue
+        sample_id = str(event.get("sampleId") or "")
+        if current and sample_id and current_sample_id and sample_id != current_sample_id:
+            flush()
+        if not current_sample_id and sample_id:
+            current_sample_id = sample_id
         current.append(event)
         if event.get("kind") == "note":
             current_notes += 1
@@ -354,11 +428,11 @@ def transcription_coverage(
             + (f" from {duration_seconds_label(uploaded_seconds)} uploaded" if uploaded_seconds else "")
         ),
         "coverageLimit": (
-            "Partial transcription only: the notation covers detected active playing inside sampled clips, not the full practice day."
+            "Partial pitch trace only: the notation covers detected active playing inside sampled clips, not the full practice day."
             if active_section_mode
-            else "Partial transcription only: the notation is for the sampled playable window shown here, not the full practice day."
+            else "Partial pitch trace only: the notation is for the sampled playable window shown here, not the full practice day."
             if segment_count <= 1
-            else "Partial transcription only: the notation combines sampled playable windows, not the full practice day."
+            else "Partial pitch trace only: the notation combines sampled playable windows, not the full practice day."
         ),
         "coverageStatus": "active_sections_only" if active_section_mode else "sample_window_only",
     }
@@ -370,8 +444,8 @@ def transcription_session_limit(transcribed_seconds: int, uploaded_seconds: int)
     uploaded = duration_seconds_label(uploaded_seconds) if uploaded_seconds else ""
     transcribed = duration_seconds_label(transcribed_seconds)
     if uploaded:
-        return f"Not a full-session transcription: {transcribed} is transcribed from {uploaded} uploaded."
-    return f"Not a full-session transcription: {transcribed} is transcribed."
+        return f"Not a full-session transcription: {transcribed} has unverified pitch events from {uploaded} uploaded."
+    return f"Not a full-session transcription: {transcribed} has unverified pitch events."
 
 
 def transcription_note_count(transcriptions: list[dict[str, Any]]) -> int:
@@ -412,7 +486,7 @@ def transcription_quality(
         return {
             "qualityStatus": "pending",
             "qualityLabel": "notation pending",
-            "qualityLimit": "No stable violin notes have been extracted yet.",
+            "qualityLimit": "No score-linked transcription has been extracted yet.",
         }
     if active_seconds < WEAK_TRANSCRIPTION_MIN_SECONDS or note_count < WEAK_TRANSCRIPTION_MIN_NOTES:
         return {
@@ -440,10 +514,10 @@ def transcription_quality(
             parts.append(f"{low_confidence} low-confidence note{'s' if low_confidence != 1 else ''}")
         return {
             "qualityStatus": "sanity_corrected_draft",
-            "qualityLabel": "sanity-corrected draft",
+            "qualityLabel": "unverified pitch trace",
             "qualityLimit": (
-                f"The notation still contains {', '.join(parts)}; read it as a corrected pitch trace, "
-                f"not finished sheet music.{sparse_note}"
+                f"The displayed notes contain {', '.join(parts)}. Treat them as an audio-paired pitch trace, "
+                f"not a reliable transcription of what was played.{sparse_note}"
             ),
             "qualityMetrics": metrics,
             "segmentCount": segment_count,
@@ -451,18 +525,18 @@ def transcription_quality(
     if active_seconds < DRAFT_TRANSCRIPTION_MIN_SECONDS or note_count < DRAFT_TRANSCRIPTION_MIN_NOTES:
         return {
             "qualityStatus": "draft_fragment",
-            "qualityLabel": "draft fragment",
+            "qualityLabel": "unverified pitch trace",
             "qualityLimit": (
                 f"{duration_seconds_label(active_seconds)} and {note_count} notes were detected; "
-                f"use this as machine evidence, not finished sheet music.{sparse_note}"
+                f"use this as audio-paired machine evidence, not finished sheet music.{sparse_note}"
             ),
             "qualityMetrics": metrics,
             "segmentCount": segment_count,
         }
     return {
         "qualityStatus": "usable_fragment",
-        "qualityLabel": "usable fragment",
-        "qualityLimit": f"Machine transcription is long enough to inspect, but score alignment is still required.{sparse_note}",
+        "qualityLabel": "unverified pitch trace",
+        "qualityLimit": f"The pitch trace is long enough to inspect with audio, but it is not score-verified transcription.{sparse_note}",
         "qualityMetrics": metrics,
         "segmentCount": segment_count,
     }
@@ -1032,6 +1106,17 @@ def build_daily_records(
                 "uncertainPieces": uncertain,
                 "transcription": {
                     "status": "ready" if notation else "pending",
+                    "displayTitle": "Audio-paired pitch trace" if notation else "Transcription pending",
+                    "kind": "audio_paired_pitch_trace" if notation else "pending",
+                    "scoreLinked": False,
+                    "scoreAlignmentStatus": "not_aligned",
+                    "fullSessionStatus": "incomplete",
+                    "reliability": "unverified_pitch_trace" if notation else "pending",
+                    "reliabilityLimit": (
+                        "The visible notes are raw machine pitch events paired with audio. They are not yet a trustworthy full-session transcription."
+                        if notation
+                        else "No full-session score-linked transcription has been generated."
+                    ),
                     "noteCount": note_count,
                     "segmentCount": len(notation_segments),
                     **coverage,
@@ -1042,7 +1127,7 @@ def build_daily_records(
                     "fullSessionLimit": transcription_session_limit(transcribed_seconds, uploaded_seconds),
                     "events": notation,
                     "repeatGroups": day_repeat_groups,
-                    "limit": "Onset-aware machine notation from detected monophonic violin pitch/rhythm. It is partial machine evidence until every source video is fetched, segmented, and aligned to score.",
+                    "limit": "Audio-paired monophonic pitch trace from detected active sections. Do not treat it as reliable transcription until full-session extraction and score alignment exist.",
                 },
                 "clips": clips,
                 "heatMap": {

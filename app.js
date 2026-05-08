@@ -1222,6 +1222,7 @@ function renderTranscriptionStats(transcription) {
     ["Key", signature.label || "key pending"],
     ["Detected", `${Number(transcription?.noteCount) || 0} notes`],
     ["Shown", `${Number(transcription?.renderedEventCount) || 0}/${Number(transcription?.eventCount) || 0} events`],
+    ["Status", transcription?.reliability === "unverified_pitch_trace" ? "not verified" : transcription?.status || "pending"],
   ];
   return `
     <div class="transcription-stats" aria-label="Transcription state">
@@ -1241,7 +1242,7 @@ function renderNotationSystems(transcription, fallbackEvents = []) {
     : [{ label: "Line 1", events: Array.isArray(fallbackEvents) ? fallbackEvents : [], noteCount: 0, uncertainNoteCount: 0 }];
   const signature = transcription?.keySignature || {};
   return `
-    <div class="notation-systems" aria-label="Partial sheet-music-style machine transcription">
+    <div class="notation-systems" aria-label="Audio-paired pitch trace snippets">
       ${systems.map((system) => {
         const notes = Number(system?.noteCount) || 0;
         const uncertain = Number(system?.uncertainNoteCount) || 0;
@@ -1252,6 +1253,7 @@ function renderNotationSystems(transcription, fallbackEvents = []) {
               <span>${escapeHtml(system?.label || "Line")}${escapeHtml(window)}</span>
               <strong>${escapeHtml(`${notes} notes${uncertain ? ` / ${uncertain} uncertain` : ""}`)}</strong>
             </div>
+            ${renderSnippetAudio(system?.clip || {}, `${system?.label || "Line"} audio`)}
             ${renderNotationSheet(system?.events || [], {
               keySignature: signature,
               systemLabel: system?.label || "",
@@ -1309,17 +1311,18 @@ function renderHeatMap(record) {
 }
 
 function recordStatusLabel(record) {
-  if (record?.transcription?.qualityStatus === "weak_fragment") return "weak notation";
-  if (record?.transcription?.qualityStatus === "sanity_corrected_draft") return "corrected draft";
-  if (record?.transcription?.qualityStatus === "draft_fragment") return "draft notation";
-  if (record?.status === "transcribed") return "transcribed";
+  if (record?.transcription?.reliability === "unverified_pitch_trace") return "pitch trace";
+  if (record?.transcription?.qualityStatus === "weak_fragment") return "weak pitch trace";
+  if (record?.transcription?.qualityStatus === "sanity_corrected_draft") return "pitch trace";
+  if (record?.transcription?.qualityStatus === "draft_fragment") return "pitch trace";
+  if (record?.status === "transcribed") return "pitch trace";
   if (record?.status === "active_time_measured") return "active measured";
   return "pending media";
 }
 
 function transcriptionEvidenceLabel(transcription) {
   const count = Number(transcription?.noteCount) || 0;
-  const label = transcription?.qualityLabel || (transcription?.status === "ready" ? "machine fragment" : "notation pending");
+  const label = transcription?.qualityLabel || (transcription?.status === "ready" ? "pitch trace" : "notation pending");
   if (!count) return label;
   return `${label} / ${count} notes`;
 }
@@ -1446,6 +1449,28 @@ function mediaFragmentUrl(clip) {
   return `${url}#t=${start.toFixed(2)}${end > start ? `,${end.toFixed(2)}` : ""}`;
 }
 
+function renderSnippetAudio(clip, label = "Snippet audio") {
+  const src = mediaFragmentUrl(clip);
+  if (!src) {
+    return `
+      <div class="snippet-audio snippet-audio-pending">
+        <span>${escapeHtml(label)}</span>
+        <strong>audio pending</strong>
+      </div>
+    `;
+  }
+  const window = clipWindowLabel(clip);
+  return `
+    <div class="snippet-audio" aria-label="${escapeHtml([label, window].filter(Boolean).join(" / "))}">
+      <div>
+        <span>${escapeHtml(label)}</span>
+        <strong>${escapeHtml(window)}</strong>
+      </div>
+      <audio controls preload="metadata" src="${escapeHtml(src)}"></audio>
+    </div>
+  `;
+}
+
 function primaryPlayableClip(record) {
   const clips = Array.isArray(record?.clips) ? record.clips : [];
   return clips.find((clip) => clip?.mediaUrl && clip.type === "transcribed_window" && Number(clip.noteCount || record?.transcription?.noteCount || 0) > 0)
@@ -1453,6 +1478,12 @@ function primaryPlayableClip(record) {
     || clips.find((clip) => clip?.mediaUrl)
     || clips[0]
     || null;
+}
+
+function primaryNotationClip(record) {
+  const systems = Array.isArray(record?.transcription?.notationSystems) ? record.transcription.notationSystems : [];
+  const system = systems.find((item) => item?.clip?.mediaUrl);
+  return system?.clip || null;
 }
 
 function eventInsideClip(event, clip) {
@@ -1496,7 +1527,7 @@ function renderEmbeddedMedia(record, preferredClip = null) {
       </div>
     `;
   }
-  const label = clip?.type === "transcribed_window" ? "Transcribed sample" : "Local clip";
+  const label = clip?.type === "pitch_trace_snippet" ? "Pitch trace sample" : clip?.type === "transcribed_window" ? "Transcribed sample" : "Local clip";
   return `
     <div class="embedded-media" aria-label="Playable local practice clip">
       <div class="embedded-media-header">
@@ -1617,7 +1648,7 @@ function recordEvidenceLine(record, scoreSnippet) {
 }
 
 function renderDailyRecord(record, index = 0) {
-  const playableClip = primaryPlayableClip(record);
+  const playableClip = primaryNotationClip(record) || primaryPlayableClip(record);
   const events = transcriptionEventsForClip(record, playableClip);
   const scoreSnippet = scoreSnippetForRecord(record);
   const openTarget = new URLSearchParams(window.location.search).get("open") || "";
@@ -1640,8 +1671,9 @@ function renderDailyRecord(record, index = 0) {
         <div class="practice-essentials">
           ${renderEmbeddedMedia(record, playableClip)}
           <section class="essential-panel">
-            <span>Partial transcription</span>
+            <span>${escapeHtml(record?.transcription?.displayTitle || "Audio-paired pitch trace")}</span>
             ${renderTranscriptionStats(record?.transcription || {})}
+            <small class="transcription-limit">${escapeHtml(record?.transcription?.reliabilityLimit || "Score-linked transcription pending.")}</small>
             ${renderNotationSystems(record?.transcription || {}, events)}
             <small class="transcription-limit">${escapeHtml(record?.transcription?.fullSessionLimit || record?.transcription?.coverageLimit || "Full-session transcription pending.")}</small>
           </section>
