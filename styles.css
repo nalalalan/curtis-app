@@ -1639,6 +1639,59 @@ h2 {
   gap: 7px;
 }
 
+.clip-frame {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  border: 1px solid rgba(31, 41, 39, .12);
+  border-radius: 7px;
+  background: #111715;
+  aspect-ratio: 16 / 9;
+  color: #fffdf8;
+  text-decoration: none;
+}
+
+.clip-frame img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: .82;
+}
+
+.clip-frame span {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  left: 10px;
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 10px;
+  color: #fffdf8;
+  text-transform: none;
+}
+
+.clip-frame b,
+.clip-frame em {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  padding: 7px 9px;
+  border-radius: 999px;
+  background: rgba(17, 23, 21, .9);
+  color: #fffdf8;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 780;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.clip-frame em {
+  font-weight: 720;
+}
+
 .clip-list a {
   display: block;
   padding: 8px 0;

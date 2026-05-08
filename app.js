@@ -1147,10 +1147,32 @@ function clipWindowLabel(clip) {
   return end > start ? `${formatClock(start)}-${formatClock(end)}` : "open video";
 }
 
-function renderRecordClips(record) {
+function clipThumbnailUrl(clip) {
+  const id = parseVideoId(clip?.url || clip?.sourceUrl || "");
+  if (!id) return "";
+  return `https://i.ytimg.com/vi/${encodeURIComponent(id)}/hqdefault.jpg`;
+}
+
+function renderClipFrame(clip, label = "Evidence clip") {
+  const image = clipThumbnailUrl(clip);
+  const href = timedUrl(clip?.url || "", Number(clip?.startSeconds) || 0);
+  if (!image || !href) return "";
+  return `
+    <a class="clip-frame" href="${escapeHtml(href)}" aria-label="${escapeHtml([label, clipWindowLabel(clip)].filter(Boolean).join(" / "))}">
+      <img src="${escapeHtml(image)}" alt="">
+      <span>
+        <b>${escapeHtml(label)}</b>
+        <em>${escapeHtml(clipWindowLabel(clip))}</em>
+      </span>
+    </a>
+  `;
+}
+
+function renderRecordClips(record, includeFrame = false) {
   const clips = Array.isArray(record?.clips) ? record.clips.slice(0, 3) : [];
   if (!clips.length) return `<p class="empty">Clip evidence pending.</p>`;
   return `
+    ${includeFrame ? renderClipFrame(clips[0], "Main practice evidence") : ""}
     <div class="clip-list">
       ${clips.map((clip) => {
         const start = Number(clip?.startSeconds) || 0;
@@ -1211,7 +1233,7 @@ function renderDailyRecord(record, index = 0) {
         <small>${escapeHtml(record.nextStep || "")}</small>
         </div>
         <aside class="record-side">
-          ${renderRecordClips(record)}
+          ${renderRecordClips(record, index === 0)}
           ${renderHeatMap(record)}
           ${scoreSnippet ? renderScoreImage(scoreSnippet) : `<div class="score-placeholder">Score snippet pending.</div>`}
         </aside>
@@ -1274,6 +1296,7 @@ function renderPieces() {
         <small class="piece-meta-line">Progress: ${escapeHtml(piece.currentProgressLabel || piece.progressStatus || "not scored")}</small>
         ${renderObservations(piece.observations)}
         ${renderHeatMap(piece)}
+        ${index === 0 ? renderClipFrame(evidence[0]?.clip, "Repertoire evidence") : ""}
         <div class="evidence-list">
           ${evidence.map((item) => {
             const clip = item.clip || {};
