@@ -1854,14 +1854,25 @@ h2 {
   .paper-hero h1 {
     display: block;
     width: auto;
-    max-width: calc(100vw - 72px);
+    max-width: min(100%, 300px);
     white-space: normal;
-    font-size: 30px;
+    font-size: 27px;
+    line-height: 1.08;
     word-break: break-word;
   }
 
   .paper-hero .subtitle {
-    max-width: calc(100vw - 72px);
+    max-width: min(100%, 300px);
+    overflow-wrap: anywhere;
+  }
+
+  .paper-status article {
+    overflow-x: hidden;
+  }
+
+  .paper-status strong,
+  .paper-status p {
+    max-width: min(100%, 300px);
     overflow-wrap: anywhere;
   }
 
