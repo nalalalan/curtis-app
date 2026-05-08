@@ -1092,16 +1092,51 @@ function notationDurationClass(kind) {
   return ["sixteenth", "eighth", "quarter", "half", "whole"].includes(clean) ? clean : "quarter";
 }
 
+function normalizedKeySignature(signature) {
+  const accidentals = Array.isArray(signature?.accidentals)
+    ? signature.accidentals.map((item) => String(item || "").trim()).filter(Boolean).slice(0, 7)
+    : [];
+  const accidentalType = String(signature?.accidentalType || "").toLowerCase();
+  return {
+    label: signature?.label || (accidentals.length ? accidentals.join(" ") : "key pending"),
+    accidentalType: accidentalType === "flat" || accidentalType === "sharp" ? accidentalType : "none",
+    accidentals,
+  };
+}
+
+function renderKeySignatureMarks(signature) {
+  const key = normalizedKeySignature(signature);
+  if (!key.accidentals.length || key.accidentalType === "none") {
+    return { svg: "", width: 0, label: key.label };
+  }
+  const glyph = key.accidentalType === "flat" ? "&#9837;" : "&#9839;";
+  const sharpY = [30, 45, 24, 40, 55, 70, 63];
+  const flatY = [50, 35, 58, 42, 65, 48, 72];
+  const yPositions = key.accidentalType === "flat" ? flatY : sharpY;
+  const marks = key.accidentals.map((_, index) => {
+    const x = 74 + (index * 12);
+    const y = yPositions[index] || 50;
+    return `<text class="key-signature-mark" x="${x}" y="${y}">${glyph}</text>`;
+  }).join("");
+  return {
+    svg: `<g class="key-signature" aria-label="${escapeHtml(key.label)}">${marks}</g>`,
+    width: key.accidentals.length * 12 + 16,
+    label: key.label,
+  };
+}
+
 function renderNotationSheet(events, options = {}) {
   const items = Array.isArray(events) ? events.slice(0, 42) : [];
   const staffLines = [30, 40, 50, 60, 70].map((y) => `<line x1="22" x2="698" y1="${y}" y2="${y}" />`).join("");
   const repeatGroup = options?.repeatGroup && typeof options.repeatGroup === "object" ? options.repeatGroup : null;
+  const keySignature = renderKeySignatureMarks(options?.keySignature);
   const repeatLabel = repeatGroup?.notationLabel || options?.repeatLabel || "";
   const repeatPattern = repeatGroup?.practicePattern || options?.practicePattern || "";
   const qualityLabel = options?.qualityLabel || "";
   const qualityLimit = options?.qualityLimit || "";
-  const captionTitle = repeatLabel || qualityLabel;
-  const captionDetail = repeatPattern || qualityLimit;
+  const systemLabel = options?.systemLabel || "";
+  const captionTitle = systemLabel || repeatLabel || qualityLabel;
+  const captionDetail = [repeatPattern || qualityLimit, keySignature.label && keySignature.label !== "key pending" ? keySignature.label : ""].filter(Boolean).join(" / ");
   const repeatClass = repeatLabel ? " notation-repeat" : "";
   const repeatMarks = repeatLabel ? `
     <g class="notation-repeat-mark" aria-label="${escapeHtml(shortText(repeatLabel, 72))}">
@@ -1121,8 +1156,9 @@ function renderNotationSheet(events, options = {}) {
     return `
       <div class="notation-sheet notation-empty${repeatClass}" aria-label="Sheet-music-style transcription pending">
         <svg viewBox="0 0 720 104" role="img">
-          <g class="staff-lines">${staffLines}</g>
-          <text x="34" y="57">G</text>
+        <g class="staff-lines">${staffLines}</g>
+          <text class="treble-clef" x="29" y="70">&#119070;</text>
+          ${keySignature.svg}
           ${repeatMarks}
         </svg>
         <span>Notation pending.</span>
@@ -1135,9 +1171,11 @@ function renderNotationSheet(events, options = {}) {
       </div>
     `;
   }
-  const step = items.length > 1 ? 630 / (items.length - 1) : 0;
+  const noteStartX = 78 + keySignature.width;
+  const noteEndX = 682;
+  const step = items.length > 1 ? (noteEndX - noteStartX) / (items.length - 1) : 0;
   const marks = items.map((event, index) => {
-    const x = 48 + (step * index);
+    const x = noteStartX + (step * index);
     const durationClass = notationDurationClass(event.durationKind);
     if (event.kind === "rest") {
       return `
@@ -1162,7 +1200,8 @@ function renderNotationSheet(events, options = {}) {
     <div class="notation-sheet${repeatClass}" aria-label="Sheet-music-style machine transcription">
       <svg viewBox="0 0 720 104" role="img">
         <g class="staff-lines">${staffLines}</g>
-        <text x="34" y="57">G</text>
+        <text class="treble-clef" x="29" y="70">&#119070;</text>
+        ${keySignature.svg}
         ${repeatMarks}
         ${marks}
       </svg>
@@ -1172,6 +1211,55 @@ function renderNotationSheet(events, options = {}) {
           <em>${escapeHtml(shortText(captionDetail || "machine evidence", 92))}</em>
         </div>
       ` : ""}
+    </div>
+  `;
+}
+
+function renderTranscriptionStats(transcription) {
+  const signature = normalizedKeySignature(transcription?.keySignature || {});
+  const rows = [
+    ["Clef", transcription?.clef === "treble" ? "treble" : "pending"],
+    ["Key", signature.label || "key pending"],
+    ["Detected", `${Number(transcription?.noteCount) || 0} notes`],
+    ["Shown", `${Number(transcription?.renderedEventCount) || 0}/${Number(transcription?.eventCount) || 0} events`],
+  ];
+  return `
+    <div class="transcription-stats" aria-label="Transcription state">
+      ${rows.map(([label, value]) => `
+        <article>
+          <span>${escapeHtml(label)}</span>
+          <strong>${escapeHtml(value)}</strong>
+        </article>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderNotationSystems(transcription, fallbackEvents = []) {
+  const systems = Array.isArray(transcription?.notationSystems) && transcription.notationSystems.length
+    ? transcription.notationSystems.slice(0, 4)
+    : [{ label: "Line 1", events: Array.isArray(fallbackEvents) ? fallbackEvents : [], noteCount: 0, uncertainNoteCount: 0 }];
+  const signature = transcription?.keySignature || {};
+  return `
+    <div class="notation-systems" aria-label="Partial sheet-music-style machine transcription">
+      ${systems.map((system) => {
+        const notes = Number(system?.noteCount) || 0;
+        const uncertain = Number(system?.uncertainNoteCount) || 0;
+        const window = system?.sourceWindow ? ` / ${system.sourceWindow}s` : "";
+        return `
+          <div class="notation-system">
+            <div class="notation-system-head">
+              <span>${escapeHtml(system?.label || "Line")}${escapeHtml(window)}</span>
+              <strong>${escapeHtml(`${notes} notes${uncertain ? ` / ${uncertain} uncertain` : ""}`)}</strong>
+            </div>
+            ${renderNotationSheet(system?.events || [], {
+              keySignature: signature,
+              systemLabel: system?.label || "",
+              qualityLimit: system?.limit || transcription?.displayLimit || transcription?.coverageLimit || ""
+            })}
+          </div>
+        `;
+      }).join("")}
     </div>
   `;
 }
@@ -1421,7 +1509,7 @@ function renderEmbeddedMedia(record, preferredClip = null) {
   `;
 }
 
-function renderClipEvidencePair({ clip, observation, repeatGroup, notationEvents, pieceTitle }) {
+function renderClipEvidencePair({ clip, observation, repeatGroup, notationEvents, pieceTitle, keySignature }) {
   if (!clip && !observation && !repeatGroup && !(Array.isArray(notationEvents) && notationEvents.length)) return "";
   const events = Array.isArray(notationEvents) && notationEvents.length
     ? notationEvents
@@ -1454,7 +1542,7 @@ function renderClipEvidencePair({ clip, observation, repeatGroup, notationEvents
           <strong>${escapeHtml(shortText(confidence, 58))}</strong>
         </article>
       </div>
-      ${events.length ? renderNotationSheet(events.slice(0, 18), { repeatGroup }) : `<p class="empty">Transcription snippet pending.</p>`}
+      ${events.length ? renderNotationSheet(events.slice(0, 18), { repeatGroup, keySignature }) : `<p class="empty">Transcription snippet pending.</p>`}
     </div>
   `;
 }
@@ -1474,7 +1562,8 @@ function renderRecordClips(record, includeFrame = false) {
       observation: primaryObservation,
       repeatGroup: primaryRepeatGroup,
       notationEvents: primaryEvents,
-      pieceTitle: recordPieceText(record)
+      pieceTitle: recordPieceText(record),
+      keySignature: record?.transcription?.keySignature
     }) : ""}
     <div class="clip-list">
       ${clips.map((clip) => {
@@ -1531,6 +1620,8 @@ function renderDailyRecord(record, index = 0) {
   const playableClip = primaryPlayableClip(record);
   const events = transcriptionEventsForClip(record, playableClip);
   const scoreSnippet = scoreSnippetForRecord(record);
+  const openTarget = new URLSearchParams(window.location.search).get("open") || "";
+  const openForReview = (openTarget === "first" && index === 0) || openTarget === record.practiceDay;
   const meta = [
     record.practiceDay,
     record.uploadedVideoLabel ? `${record.uploadedVideoLabel} uploaded` : "",
@@ -1538,7 +1629,7 @@ function renderDailyRecord(record, index = 0) {
     record.transcription?.noteCount ? transcriptionEvidenceLabel(record.transcription) : "notation pending"
   ].filter(Boolean).join(" / ");
   return `
-    <details class="record-card" data-status="${escapeHtml(record.status || "pending")}">
+    <details class="record-card" data-status="${escapeHtml(record.status || "pending")}"${openForReview ? " open" : ""}>
       <summary class="record-summary">
         <span>${escapeHtml(meta)}</span>
         <strong>${escapeHtml(recordPieceText(record))}</strong>
@@ -1549,11 +1640,10 @@ function renderDailyRecord(record, index = 0) {
         <div class="practice-essentials">
           ${renderEmbeddedMedia(record, playableClip)}
           <section class="essential-panel">
-            <span>Transcription</span>
-            ${renderNotationSheet(events, {
-              qualityLabel: record?.transcription?.qualityLabel,
-              qualityLimit: record?.transcription?.coverageLabel || record?.transcription?.qualityLimit
-            })}
+            <span>Partial transcription</span>
+            ${renderTranscriptionStats(record?.transcription || {})}
+            ${renderNotationSystems(record?.transcription || {}, events)}
+            <small class="transcription-limit">${escapeHtml(record?.transcription?.fullSessionLimit || record?.transcription?.coverageLimit || "Full-session transcription pending.")}</small>
           </section>
           <section class="essential-panel">
             ${renderScoreHeatMap(record, scoreSnippet)}
@@ -1632,7 +1722,8 @@ function renderPieces() {
           observation: leadObservation,
           repeatGroup: null,
           notationEvents: leadEvidence?.transcriptionSnippet,
-          pieceTitle: piece.title
+          pieceTitle: piece.title,
+          keySignature: leadEvidence?.score?.keySignature
         }) : ""}
         <div class="evidence-list">
           ${evidence.map((item, itemIndex) => {
@@ -1643,7 +1734,7 @@ function renderPieces() {
                 <a href="${escapeHtml(clipUrl)}">${escapeHtml([item.practiceDay, clipWindowLabel(clip)].filter(Boolean).join(" / "))}</a>
                 <span>${escapeHtml(item.confidence || "confirmed")}</span>
                 <small>${escapeHtml(shortText(item.reason || "Confirmed source evidence.", 130))}</small>
-                ${renderNotationSheet(item.transcriptionSnippet || [])}
+                ${renderNotationSheet(item.transcriptionSnippet || [], { keySignature: item?.score?.keySignature })}
                 ${itemIndex === 0 ? renderEvidenceScore(item) : ""}
               </div>
             `;

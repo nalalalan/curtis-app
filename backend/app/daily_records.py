@@ -12,7 +12,9 @@ from .study_packets import (
 )
 
 
-MAX_NOTATION_EVENTS = 96
+MAX_NOTATION_EVENTS = 192
+MAX_NOTATION_SYSTEMS = 4
+MAX_NOTATION_SYSTEM_EVENTS = 36
 MAX_RECORDS = 120
 MAX_CLIPS_PER_DAY = 5
 WEAK_TRANSCRIPTION_MIN_SECONDS = 8
@@ -173,9 +175,117 @@ def notation_events(transcriptions: list[dict[str, Any]]) -> list[dict[str, Any]
     return events
 
 
+def notation_system_payload(events: list[dict[str, Any]], index: int) -> dict[str, Any]:
+    notes = [event for event in events if event.get("kind") == "note"]
+    starts = [
+        float(event.get("sourceStartSeconds"))
+        for event in notes
+        if event.get("sourceStartSeconds") is not None
+    ]
+    ends = [
+        float(event.get("sourceEndSeconds"))
+        for event in notes
+        if event.get("sourceEndSeconds") is not None
+    ]
+    start = min(starts) if starts else 0.0
+    end = max(ends) if ends else 0.0
+    uncertain = sum(1 for event in notes if event.get("uncertain"))
+    return {
+        "id": f"system-{index}",
+        "label": f"Line {index}",
+        "eventCount": len(events),
+        "noteCount": len(notes),
+        "uncertainNoteCount": uncertain,
+        "startSeconds": round(start, 3) if start else 0,
+        "endSeconds": round(end, 3) if end else 0,
+        "sourceWindow": source_window_label(int(start), int(end)) if end > start else "",
+        "events": events,
+        "limit": "Machine notation line from detected pitch/rhythm events; uncertain notes stay marked.",
+    }
+
+
+def notation_systems(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    systems: list[dict[str, Any]] = []
+    current: list[dict[str, Any]] = []
+    current_notes = 0
+
+    def flush() -> None:
+        nonlocal current, current_notes
+        if not current or len(systems) >= MAX_NOTATION_SYSTEMS:
+            current = []
+            current_notes = 0
+            return
+        systems.append(notation_system_payload(current, len(systems) + 1))
+        current = []
+        current_notes = 0
+
+    for event in events:
+        if len(systems) >= MAX_NOTATION_SYSTEMS:
+            break
+        if not isinstance(event, dict):
+            continue
+        current.append(event)
+        if event.get("kind") == "note":
+            current_notes += 1
+        is_restart_rest = (
+            event.get("kind") == "rest"
+            and float(event.get("durationSeconds") or 0.0) >= 0.65
+            and current_notes >= 6
+        )
+        if is_restart_rest or (len(current) >= MAX_NOTATION_SYSTEM_EVENTS and current_notes >= 4):
+            flush()
+    flush()
+    return systems
+
+
+def notation_display_state(
+    notation: list[dict[str, Any]],
+    systems: list[dict[str, Any]],
+    detected_note_count: int,
+) -> dict[str, Any]:
+    note_events = sum(1 for event in notation if event.get("kind") == "note")
+    rendered_events = sum(int(system.get("eventCount") or 0) for system in systems)
+    rendered_notes = sum(int(system.get("noteCount") or 0) for system in systems)
+    api_omitted_notes = max(0, detected_note_count - note_events)
+    display_omitted_events = max(0, len(notation) - rendered_events)
+    return {
+        "eventCount": len(notation),
+        "notationEventCount": len(notation),
+        "renderedEventCount": rendered_events,
+        "renderedNoteCount": rendered_notes,
+        "remainingEventCount": display_omitted_events,
+        "omittedDetectedNoteCount": api_omitted_notes,
+        "notationSystems": systems,
+        "displayLimit": (
+            f"{rendered_events} of {len(notation)} notation events are shown"
+            + (f"; {api_omitted_notes} detected notes are outside the API event slice" if api_omitted_notes else "")
+            + "."
+        ),
+    }
+
+
 def active_seconds_from_transcriptions(transcriptions: list[dict[str, Any]]) -> int:
     total = 0.0
+    seen: set[tuple[str, int, int]] = set()
     for transcription in transcriptions:
+        start, end = window_bounds(transcription)
+        key = (
+            str(transcription.get("sampleId") or transcription.get("id") or transcription.get("sourceUrl") or ""),
+            start,
+            end,
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        quality = transcription.get("quality") if isinstance(transcription.get("quality"), dict) else {}
+        if quality.get("windowMode") == "detected_active_sections":
+            try:
+                active_duration = float(transcription.get("durationSeconds") or 0.0)
+            except (TypeError, ValueError):
+                active_duration = 0.0
+            if active_duration > 0:
+                total += active_duration
+                continue
         notes = transcription.get("notes") if isinstance(transcription.get("notes"), list) else []
         for note in notes:
             if isinstance(note, dict):
@@ -244,14 +354,24 @@ def transcription_coverage(
             + (f" from {duration_seconds_label(uploaded_seconds)} uploaded" if uploaded_seconds else "")
         ),
         "coverageLimit": (
-            "The notation covers detected active playing inside sampled clips, not the full practice day."
+            "Partial transcription only: the notation covers detected active playing inside sampled clips, not the full practice day."
             if active_section_mode
-            else "The notation is only for the sampled playable window shown here, not the full practice day."
+            else "Partial transcription only: the notation is for the sampled playable window shown here, not the full practice day."
             if segment_count <= 1
-            else "The notation combines sampled playable windows, not the full practice day."
+            else "Partial transcription only: the notation combines sampled playable windows, not the full practice day."
         ),
         "coverageStatus": "active_sections_only" if active_section_mode else "sample_window_only",
     }
+
+
+def transcription_session_limit(transcribed_seconds: int, uploaded_seconds: int) -> str:
+    if transcribed_seconds <= 0:
+        return "Full-session transcription has not started for this practice day."
+    uploaded = duration_seconds_label(uploaded_seconds) if uploaded_seconds else ""
+    transcribed = duration_seconds_label(transcribed_seconds)
+    if uploaded:
+        return f"Not a full-session transcription: {transcribed} is transcribed from {uploaded} uploaded."
+    return f"Not a full-session transcription: {transcribed} is transcribed."
 
 
 def transcription_note_count(transcriptions: list[dict[str, Any]]) -> int:
@@ -759,6 +879,21 @@ def confirmed_pieces_for_day(
     return pieces
 
 
+def key_signature_from_pieces(pieces: list[dict[str, Any]]) -> dict[str, Any]:
+    for piece in pieces:
+        score = piece.get("score") if isinstance(piece.get("score"), dict) else {}
+        signature = score.get("keySignature") if isinstance(score.get("keySignature"), dict) else {}
+        if signature:
+            return signature
+    return {
+        "tonic": "",
+        "mode": "",
+        "accidentalType": "none",
+        "accidentals": [],
+        "label": "key pending",
+    }
+
+
 def uncertain_pieces_for_day(transcriptions: list[dict[str, Any]]) -> list[dict[str, Any]]:
     uncertain: list[dict[str, Any]] = []
     for transcription in transcriptions:
@@ -825,7 +960,14 @@ def build_daily_records(
     for day, videos in grouped.items():
         keys = set().union(*(video_match_keys(video) for video in videos))
         day_samples = [sample for sample in media_samples if item_matches_keys(sample, keys)]
-        day_transcriptions = [item for item in transcriptions if item_matches_keys(item, keys)]
+        day_transcriptions = sorted(
+            [item for item in transcriptions if item_matches_keys(item, keys)],
+            key=lambda item: (
+                str(item.get("sourceTitle") or ""),
+                window_bounds(item)[0],
+                str(item.get("transcriptionId") or ""),
+            ),
+        )
         day_sections = [
             section
             for section in sections
@@ -833,6 +975,7 @@ def build_daily_records(
             or any(str(section.get("sampleId") or "") == str(sample.get("id") or "") for sample in day_samples)
         ]
         notation = notation_events(day_transcriptions)
+        day_notation_systems = notation_systems(notation)
         note_active = active_seconds_from_transcriptions(day_transcriptions)
         section_active = active_seconds_from_sections(day_sections)
         active_seconds = note_active or section_active
@@ -851,6 +994,7 @@ def build_daily_records(
         notation_segments = [item for item in day_transcriptions if has_stable_notation(item)]
         quality_metrics = transcription_quality_metrics(notation_segments)
         quality = transcription_quality(note_count, active_seconds, len(notation_segments), quality_metrics)
+        display_state = notation_display_state(notation, day_notation_systems, note_count)
         uploaded_seconds = sum(int(video.get("durationSeconds") or 0) for video in videos)
         processed_seconds = sum(sample_duration_seconds(sample) for sample in day_samples)
         transcribed_seconds = transcription_window_seconds(day_transcriptions)
@@ -864,6 +1008,7 @@ def build_daily_records(
             len(notation_segments),
             active_section_mode=active_section_mode,
         )
+        key_signature = key_signature_from_pieces(confirmed)
         clips = clips_for_day(videos, day_sections, day_transcriptions, day_samples)
         observations = [
             *transcription_quality_observations(quality, notation, clips),
@@ -891,9 +1036,13 @@ def build_daily_records(
                     "segmentCount": len(notation_segments),
                     **coverage,
                     **quality,
+                    **display_state,
+                    "clef": "treble",
+                    "keySignature": key_signature,
+                    "fullSessionLimit": transcription_session_limit(transcribed_seconds, uploaded_seconds),
                     "events": notation,
                     "repeatGroups": day_repeat_groups,
-                    "limit": "Onset-aware machine notation from detected monophonic violin pitch/rhythm; weak fragments are marked instead of treated as finished sheet music.",
+                    "limit": "Onset-aware machine notation from detected monophonic violin pitch/rhythm. It is partial machine evidence until every source video is fetched, segmented, and aligned to score.",
                 },
                 "clips": clips,
                 "heatMap": {

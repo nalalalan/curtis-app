@@ -107,8 +107,12 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(record["activeTimeStatus"], "measured_from_pitch")
         self.assertEqual(record["transcription"]["status"], "ready")
         self.assertEqual(record["transcription"]["qualityStatus"], "weak_fragment")
+        self.assertEqual(record["transcription"]["clef"], "treble")
+        self.assertEqual(record["transcription"]["keySignature"]["label"], "G minor / 2 flats")
         self.assertEqual(record["transcription"]["windowSeconds"], 20)
         self.assertEqual(record["transcription"]["coverageStatus"], "sample_window_only")
+        self.assertIn("Not a full-session transcription", record["transcription"]["fullSessionLimit"])
+        self.assertTrue(record["transcription"]["notationSystems"])
         self.assertTrue(record["transcription"]["repeatGroups"])
         self.assertIn("x2", record["transcription"]["repeatGroups"][0]["notationLabel"])
         self.assertTrue(any(event["kind"] == "rest" for event in record["transcription"]["events"]))
@@ -244,6 +248,7 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(record["transcription"]["segmentCount"], 1)
         self.assertEqual(record["transcription"]["coverageStatus"], "active_sections_only")
         self.assertIn("active playing", record["transcription"]["coverageLimit"])
+        self.assertEqual(record["activeViolinSeconds"], 57)
         self.assertEqual(record["clips"][0]["activeTranscribedSeconds"], 12.4)
         self.assertIn("active audio", record["clips"][0]["reason"])
         self.assertEqual(record["clips"][1]["activeTranscribedSeconds"], 44.2)
@@ -276,6 +281,48 @@ class DailyRecordTests(unittest.TestCase):
         candidates = practice_candidates(state)
 
         self.assertEqual([item["title"] for item in candidates], ["violin 1"])
+
+    def test_long_transcription_is_split_into_partial_notation_systems(self):
+        inventory = {
+            "youtube": [
+                {
+                    "id": "wDfVpTU4I_I",
+                    "title": "5-1-26",
+                    "url": "https://www.youtube.com/watch?v=wDfVpTU4I_I",
+                    "publishedAt": "2026-05-02T08:10:00Z",
+                    "durationSeconds": 3600,
+                    "practiceCandidate": True,
+                }
+            ]
+        }
+        names = ["G4", "A4", "B4", "C5", "D5", "E5", "F#5", "G5"]
+        notes = []
+        for index in range(220):
+            start = index * 0.18
+            notes.append(note(names[index % len(names)], start, start + 0.14, 0.82))
+        transcriptions = [
+            {
+                "transcriptionId": "haydn-long",
+                "sampleId": "wDfVpTU4I_I",
+                "sourceUrl": "https://www.youtube.com/watch?v=wDfVpTU4I_I",
+                "sourceTitle": "5-1-26",
+                "sourceWindow": "*100-180",
+                "status": "transcribed",
+                "tempoBpm": 120,
+                "noteCount": len(notes),
+                "notes": notes,
+            }
+        ]
+
+        daily = build_daily_records(inventory=inventory, state={}, media_samples=[], transcriptions=transcriptions, sections=[])
+        record = next(item for item in daily["records"] if item["practiceDay"] == "2026-05-01")
+        transcription = record["transcription"]
+
+        self.assertEqual(transcription["keySignature"]["label"], "G major / 1 sharp")
+        self.assertEqual(transcription["eventCount"], len(transcription["events"]))
+        self.assertGreaterEqual(len(transcription["notationSystems"]), 3)
+        self.assertLess(transcription["renderedEventCount"], transcription["eventCount"])
+        self.assertIn("of", transcription["displayLimit"])
 
 
 if __name__ == "__main__":
