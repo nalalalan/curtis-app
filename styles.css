@@ -135,12 +135,17 @@ button:hover,
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 18px;
   align-items: center;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 10px;
   background: rgba(255, 253, 248, .92);
-  padding: 18px;
+  padding: 18px 20px;
   box-shadow: var(--soft-shadow);
+}
+
+.paper-card {
+  border-color: rgba(31, 41, 39, .16);
+  background: rgba(255, 253, 248, .96);
 }
 
 .paper-copy {
@@ -160,9 +165,9 @@ button:hover,
 .paper-copy strong {
   display: block;
   max-width: 900px;
-  font-size: clamp(24px, 3vw, 38px);
+  font-size: clamp(22px, 2.4vw, 34px);
   font-weight: 760;
-  line-height: 1.02;
+  line-height: 1.06;
   overflow-wrap: anywhere;
 }
 
@@ -172,6 +177,27 @@ button:hover,
   font-size: 14px;
   font-weight: 620;
   line-height: 1.35;
+}
+
+.paper-button {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 15px;
+  border: 1px solid rgba(31, 41, 39, .88);
+  border-radius: 999px;
+  background: var(--ink);
+  color: #fffdf8;
+  font-size: 13px;
+  font-weight: 780;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.paper-button:hover {
+  background: #111715;
 }
 
 .practice-total {
@@ -279,14 +305,22 @@ button:hover,
   text-decoration: none;
 }
 
+.paper-actions .paper-button,
 .paper-actions a.primary,
 .paper-button.primary {
   border-color: var(--ink);
+  border-radius: 999px;
   background: var(--ink);
   color: #fffdf8;
 }
 
-.paper-actions a:hover {
+.paper-actions .paper-button:hover {
+  border-color: #111715;
+  background: #111715;
+  color: #fffdf8;
+}
+
+.paper-actions a:not(.paper-button):hover {
   border-color: rgba(47, 82, 104, .42);
   background: #fff;
 }
@@ -1243,13 +1277,19 @@ h2 {
   overflow-wrap: anywhere;
 }
 
-.header-metrics {
+.header-metrics,
+.evidence-summary {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 
-.header-metrics article {
+.evidence-summary {
+  margin-bottom: 14px;
+}
+
+.header-metrics article,
+.evidence-summary article {
   min-width: 0;
   padding: 13px;
   border: 1px solid rgba(31, 41, 39, .12);
@@ -1258,6 +1298,7 @@ h2 {
 }
 
 .header-metrics span,
+.evidence-summary span,
 .record-card span,
 .record-card small,
 .clip-list span,
@@ -1272,7 +1313,8 @@ h2 {
   text-transform: uppercase;
 }
 
-.header-metrics strong {
+.header-metrics strong,
+.evidence-summary strong {
   display: block;
   margin: 4px 0;
   color: var(--green);
@@ -1282,7 +1324,8 @@ h2 {
   overflow-wrap: anywhere;
 }
 
-.header-metrics em {
+.header-metrics em,
+.evidence-summary em {
   display: block;
   color: var(--muted);
   font-size: 12px;
@@ -1290,6 +1333,14 @@ h2 {
   font-weight: 640;
   line-height: 1.25;
   overflow-wrap: anywhere;
+}
+
+.evidence-summary article:first-child {
+  background: rgba(95, 118, 104, .08);
+}
+
+.evidence-summary article:nth-child(2) strong {
+  color: var(--gold);
 }
 
 .record-card {
@@ -1369,6 +1420,46 @@ h2 {
   margin-top: 10px;
 }
 
+.repeat-groups {
+  display: grid;
+  gap: 7px;
+  margin-top: 9px;
+}
+
+.repeat-groups article {
+  padding: 8px 9px;
+  border: 1px solid rgba(95, 118, 104, .15);
+  border-radius: 7px;
+  background: rgba(95, 118, 104, .055);
+}
+
+.repeat-groups span {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 760;
+  line-height: 1.15;
+  text-transform: uppercase;
+}
+
+.repeat-groups strong {
+  display: block;
+  margin: 3px 0;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 730;
+  line-height: 1.2;
+}
+
+.repeat-groups em {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 620;
+  line-height: 1.25;
+}
+
 .observation-list article {
   padding: 0 0 8px;
   border-bottom: 1px solid rgba(31, 41, 39, .09);
@@ -1396,6 +1487,16 @@ h2 {
 
 .repertoire-blocker {
   margin-bottom: 8px;
+}
+
+.piece-meta-line {
+  display: block;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 620;
+  line-height: 1.25;
+  text-transform: none;
 }
 
 .record-side {
@@ -1680,6 +1781,7 @@ h2 {
   .current-band,
   .practice-header,
   .header-metrics,
+  .evidence-summary,
   .record-card,
   .today-layout,
   .today-grid,
@@ -1789,6 +1891,10 @@ h2 {
   .paper-actions {
     display: grid;
     justify-content: stretch;
+  }
+
+  .paper-button {
+    width: 100%;
   }
 
   .clip-actions {

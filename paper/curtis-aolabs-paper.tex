@@ -26,13 +26,20 @@
 \usepackage{booktabs}
 \usepackage[margin=0.92in,top=0.82in,bottom=0.95in,headsep=18pt,footskip=24pt]{geometry}
 \usepackage[font=small,labelfont=bf,labelsep=period]{caption}
+\usepackage{subcaption}
+\usepackage{float}
+\usepackage{afterpage}
 \usepackage{array}
 \usepackage{tabularx}
+\usepackage{multirow}
 \usepackage{setspace}
 \usepackage{titlesec}
 \usepackage{enumitem}
 \usepackage{fancyhdr}
 \usepackage{needspace}
+\usepackage{etoolbox}
+\usepackage{placeins}
+\usepackage{flafter}
 \usepackage[table]{xcolor}
 
 \definecolor{ClayLine}{HTML}{EEDBDD}
@@ -71,7 +78,7 @@
 
 \pagestyle{fancy}
 \fancyhf{}
-\lhead{\small\sffamily Curtis Media Review}
+\lhead{\small\sffamily Score-linked practice intelligence}
 \rhead{\small\sffamily \thepage}
 \renewcommand{\headrulewidth}{0.35pt}
 \renewcommand{\headrule}{\hbox to\headwidth{\color{ClayLine}\leaders\hrule height \headrulewidth\hfill}}
@@ -86,7 +93,7 @@
     \vspace*{-0.6em}
 
     {\fontsize{20}{22}\selectfont\bfseries\color{SumiInk}
-    Longitudinal media review for audition-oriented violin practice\par}
+    Score-linked practice intelligence from long-form violin training video\par}
 
     \vspace{0.95em}
 
@@ -100,7 +107,7 @@
 \end{center}
 
 \vspace{0.35em}
-\noindent\textbf{High-level music training produces dense evidence: daily practice videos, repeated repertoire, changing technical constraints, and periodic performance goals. Most of that evidence is difficult to use because it is stored as unstructured media rather than as a longitudinal record. We report Curtis Media Review, a live AO Labs system that indexes public practice media, identifies title-confirmed practice logs, stores machine transcription evidence, and converts same-day videos into compact practice records. The checked live state on 7 May 2026 used the YouTube channel \texttt{@nalalan} as the primary source, indexed 209 public videos, marked 104 as practice candidates, marked 84 as long-form candidates, stored 20 media samples, retained 51 reviewed sections, and recorded 80 Curtis-focused findings. The practice-hours ledger begins at \texttt{violin 1}, uploaded on 20 December 2025, and currently counts 40 violin-numbered or date-titled practice logs totaling 158 h 2 min of public session duration. The primary interface now has only two main sections: analyzed practice days and repertoire. Each daily record can show uploaded duration, measured active violin time when media is available, machine-generated sheet-music-style notation, evidence clips, repeated-fragment heat maps, confirmed or uncertain piece evidence, and specific observed blockers such as uncertain repeated notes, longer pause or restart markers, slow windows, and repeated fragments. Repertoire entries are promoted only from confirmed daily-record evidence and keep possible labels, user-rejected false labels, weak evidence, and readiness scores inferred only from piece identification separate from confirmed repertoire and judged playing quality. The system uses GPT-5.5 for vision and text review and separate audio models for identification and verification, while preserving explicit limits: Curtis admission cannot be predicted from current samples, weak audio/video evidence is marked unjudged, and the system reports practice signals rather than admissions probability. The contribution is an experimental method for turning accumulated practice media into auditable feedback loops, progress history, and source-bounded coaching observations.}
+\noindent\textbf{High-level music training produces dense evidence: daily practice videos, repeated repertoire, changing technical constraints, and periodic performance goals. Most of that evidence is difficult to use because it is stored as unstructured media rather than as a score-linked longitudinal record. We report Curtis, a live AO Labs system that converts messy long-form violin practice videos into structured, evidence-linked practice records using active practice detection, sheet-music-style transcription, score alignment targets, heat maps, repertoire tracking, and passage-level performance observation. The checked live state on 7 May 2026 used the YouTube channel \texttt{@nalalan} as the primary source, indexed 209 public videos, marked 104 as practice candidates, marked 84 as long-form candidates, stored 20 media samples, retained 51 reviewed sections, and recorded 80 Curtis-focused findings. The uploaded-video ledger begins at \texttt{violin 1}, uploaded on 20 December 2025, and currently counts 40 violin-numbered or date-titled practice logs totaling 158 h 2 min of public session duration; this duration is not counted as active practice time. Active violin practice time is counted only from detected playing windows after media processing. The primary interface has three top-level surfaces: a paper card, analyzed practice days, and repertoire. Each daily record can show uploaded duration, measured active violin time, machine-generated sheet-music-style notation, evidence clips, repeated-fragment heat maps, confirmed or uncertain piece evidence, and specific observed blockers such as uncertain repeated notes, longer pause or restart markers, slow windows, and repeated fragments. Repertoire entries are promoted only from confirmed daily-record evidence and keep possible labels, user-rejected false labels, weak evidence, and readiness scores inferred only from piece identification separate from confirmed repertoire and judged playing quality. The system uses GPT-5.5 for vision and text review and separate audio models for identification and verification, while preserving explicit limits: Curtis admission cannot be predicted from current samples, weak audio/video evidence is marked unjudged, and the system reports practice signals rather than admissions probability. The contribution is an experimental method for making practice visible, searchable, measurable, and tied to actual musical evidence.}
 
 \newpage
 \pagestyle{fancy}
@@ -109,7 +116,9 @@
 
 Elite music preparation depends on repeated, deliberate practice and feedback over long time horizons~\cite{ericsson_role_1993,williamon_musical_2004}. The useful data are not only polished performances. They include ordinary practice sessions, failed takes, camera angle limitations, recurring technical problems, and changes in focus across days. A violinist recording daily practice can therefore produce a large longitudinal dataset, but the raw dataset does not automatically become an operating record.
 
-Curtis Media Review addresses this problem as a live software system rather than as a portfolio page~\cite{curtis_app_2026}. The system indexes public practice media, classifies candidate practice logs, records technical observations, and keeps the current practice constraint visible. It is designed for the Curtis Institute goal, but it does not claim to estimate an acceptance probability. The current role of the system is narrower: observe practice evidence, retain history, separate judged from unjudged evidence, and return a small number of practice constraints that can be tested in subsequent recordings.
+Curtis addresses this problem as a live software system rather than as a portfolio page~\cite{curtis_app_2026}. The system indexes public practice media, separates uploaded video duration from detected active violin practice, records technical observations, and keeps evidence tied to clips and generated notation. It is designed for the Curtis Institute goal, but it does not claim to estimate an acceptance probability. The current role of the system is narrower: observe practice evidence, retain history, separate judged from unjudged evidence, and identify the specific passage-level blockers that can be tested in subsequent recordings.
+
+The core pipeline is video \(\rightarrow\) active practice detection \(\rightarrow\) clips \(\rightarrow\) music transcription \(\rightarrow\) repeat grouping \(\rightarrow\) score matching \(\rightarrow\) heat map \(\rightarrow\) repertoire update \(\rightarrow\) passage-level observations. The output is intentionally small: analyzed practice days and an automatically updated repertoire list, both grounded in clips, notation, active playing time, and confidence limits.
 
 The system is also part of AO Labs' broader progress architecture. In May 2026, AO Progress was introduced as a shared ledger for cross-application state and long-term changes across public apps, papers, CV artifacts, Curtis practice state, Imagineer state, and Relay state~\cite{progress_app_2026}. Curtis supplies one stream in that ledger: timestamped media and review evidence for musical development.
 
@@ -129,8 +138,9 @@ Signal & Current value \\
 \metric{Inventory}{209 indexed videos}
 \metric{Practice candidates}{104 videos}
 \metric{Long-form candidates}{84 videos}
-\metric{Practice-hours marker}{\texttt{violin 1}, uploaded 20 December 2025}
-\metric{Title-confirmed practice ledger}{40 videos, 158 h 2 min session duration}
+\metric{Uploaded-video marker}{\texttt{violin 1}, uploaded 20 December 2025}
+\metric{Title-confirmed uploaded-video ledger}{40 videos, 158 h 2 min uploaded session duration}
+\metric{Active practice time}{Counted only from detected violin-playing windows; uploaded duration is reported separately}
 \metric{Media samples}{20 captured samples}
 \metric{Reviewed sections}{51 sections}
 \metric{Curtis-focused findings}{80 findings}
@@ -153,7 +163,7 @@ Signal & Current value \\
 
 \subsection{Media indexing}
 
-The source inventory stores platform, title, publication time, duration, view count, candidate reasons, media kind, and blocker state. Dated long-form practice logs are treated as high-value longitudinal records because the title contains a practice date and the duration preserves session-level evidence. The practice-hours ledger starts at the \texttt{violin 1} marker and counts only violin-numbered or date-titled practice logs, so unrelated long public videos are retained in inventory without being silently counted as violin practice. Other videos are retained but not forced into the practice lane.
+The source inventory stores platform, title, publication time, duration, view count, candidate reasons, media kind, and blocker state. Dated long-form practice logs are treated as high-value longitudinal records because the title contains a practice date and the duration preserves session-level evidence. The uploaded-video ledger starts at the \texttt{violin 1} marker and counts only violin-numbered or date-titled practice logs, so unrelated long public videos are retained in inventory without being silently counted as violin practice. This ledger is not the active-practice total. Active practice is measured only after media processing identifies windows where violin playing is actually occurring.
 
 \subsection{Review evidence}
 
@@ -161,7 +171,7 @@ The review layer stores section-level findings with a dimension, evidence source
 
 \section{First readout}
 
-The first live readout is experimental but usable. The strongest immediate value is that the system has already converted a large, timestamped practice archive into a queryable corpus with captured media samples, stored section reviews, and title-confirmed practice records. The home screen has been reduced to two main surfaces: analyzed practice days and repertoire. Each analyzed day groups same-day videos, preserves uploaded duration, shows active-playing status, renders generated notation when pitch/rhythm extraction exists, links clips, shows repeated-fragment heat maps, and names confirmed or uncertain piece evidence without promoting guesses. The repertoire surface is evidence-backed: an entry appears only when a daily record carries confirmed source evidence, and each entry keeps practice dates, clips, notation snippets, active time when measured, and current blocker observations. Generic etude/caprice evidence remains outside the piece-title field, and possible or uncorroborated repertoire labels remain checkable against the source window. These statements are not generic pedagogy; they are extracted from stored review findings, sample indexes, source corrections, public-domain score targets, machine note/rhythm events, heat-map fragments, and the practice-hours ledger.
+The first live readout is experimental but usable. The strongest immediate value is that the system has already converted a large, timestamped practice archive into a queryable corpus with captured media samples, stored section reviews, and title-confirmed practice records. The home screen has three top-level surfaces: a paper card, analyzed practice days, and repertoire. Each analyzed day groups same-day videos, preserves uploaded duration, shows active-playing status, renders generated notation when pitch/rhythm extraction exists, links clips, shows repeated-fragment heat maps, and names confirmed or uncertain piece evidence without promoting guesses. The repertoire surface is evidence-backed: an entry appears only when a daily record carries confirmed source evidence, and each entry keeps practice dates, clips, notation snippets, active time when measured, and current blocker observations. Generic etude/caprice evidence remains outside the piece-title field, and possible or uncorroborated repertoire labels remain checkable against the source window. These statements are not generic pedagogy; they are extracted from stored review findings, sample indexes, source corrections, public-domain score targets, machine note/rhythm events, heat-map fragments, and the uploaded-video ledger.
 
 \begin{table}[htbp]
 \centering

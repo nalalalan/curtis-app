@@ -29,6 +29,8 @@ const elements = {
   sourceLink: document.querySelector("#sourceLink"),
   totalPracticeHours: document.querySelector("#totalPracticeHours"),
   practiceSince: document.querySelector("#practiceSince"),
+  uploadedVideoTime: document.querySelector("#uploadedVideoTime"),
+  uploadedVideoScope: document.querySelector("#uploadedVideoScope"),
   runScanButton: document.querySelector("#runScanButton"),
   probeMediaButton: document.querySelector("#probeMediaButton"),
   currentState: document.querySelector("#currentState"),
@@ -189,6 +191,16 @@ function practiceHoursText(totals) {
   if (!seconds) return "0h";
   const hours = seconds / 3600;
   return hours >= 100 ? `${Math.round(hours)}h` : `${hours.toFixed(1)}h`;
+}
+
+function activePracticeText(records) {
+  const seconds = Number(records?.totalActiveViolinSeconds) || 0;
+  if (records?.totalActiveViolinLabel) return records.totalActiveViolinLabel;
+  return seconds ? formatDurationSeconds(seconds) : "pending";
+}
+
+function uploadedVideoText(records, totals) {
+  return records?.totalUploadedVideoLabel || totals?.totalPracticeLabel || "0h";
 }
 
 function timedUrl(url, startSeconds = 0) {
@@ -898,17 +910,25 @@ function renderStatus() {
     const transcribedCount = Number(records.transcribedRecordCount) || 0;
     elements.studyCount.textContent = `${transcribedCount} transcribed / ${recordCount} days`;
   }
-  if (elements.totalPracticeHours) {
-    elements.totalPracticeHours.textContent = practiceHoursText(totals);
-  }
-  if (elements.practiceSince) {
-    const sinceParts = [
+  const activeSeconds = Number(records.totalActiveViolinSeconds) || 0;
+  const uploadedLabel = uploadedVideoText(records, totals);
+  setText(elements.totalPracticeHours, activePracticeText(records));
+  setText(
+    elements.practiceSince,
+    activeSeconds
+      ? "Real active violin-playing time only."
+      : "Pending active-playing detection across the full practice archive."
+  );
+  setText(elements.uploadedVideoTime, uploadedLabel);
+  setText(
+    elements.uploadedVideoScope,
+    [
       totals?.sinceTitle ? `Since ${totals.sinceTitle}` : "Ledger pending",
       totals?.sincePublishedAt ? formatDate(totals.sincePublishedAt) : "",
-      totals?.videoCount ? `${totals.videoCount} videos` : ""
-    ].filter(Boolean);
-    elements.practiceSince.textContent = sinceParts.join(" / ");
-  }
+      totals?.videoCount ? `${totals.videoCount} videos` : "",
+      "not counted as active practice"
+    ].filter(Boolean).join(" / ")
+  );
   setText(elements.pieceCount, `${pieceList.length} ${pieceList.length === 1 ? "piece" : "pieces"}`);
   const dayTotal = Number(records.recordCount) || days.length;
   setText(elements.dayCount, `${dayTotal} ${dayTotal === 1 ? "day" : "days"}`);
@@ -918,7 +938,7 @@ function renderStatus() {
     elements.sourceLink.textContent = source.replace("https://www.", "").replace("https://", "");
   }
   setText(elements.currentState, currentStateText(ops));
-  setText(elements.recordSummary, `${inventory.length} videos / ${practiceHoursText(totals)} / ${Number(records.recordCount) || 0} records`);
+  setText(elements.recordSummary, `${Number(records.transcribedRecordCount) || 0} transcribed / ${Number(records.recordCount) || 0} days`);
   setText(elements.reviewedCount, `${reviewedVideos} reviewed`);
   setText(elements.sectionCount, `${sections.length} sections`);
   setText(elements.backendState, backend.online ? "Online" : "Offline");
@@ -1050,6 +1070,22 @@ function renderHeatMap(record) {
   `;
 }
 
+function renderRepeatGroups(groups) {
+  const rows = Array.isArray(groups) ? groups.slice(0, 4) : [];
+  if (!rows.length) return "";
+  return `
+    <div class="repeat-groups" aria-label="Grouped repeated practice material">
+      ${rows.map((group) => `
+        <article>
+          <span>${escapeHtml(group.confidence || "machine grouped")}</span>
+          <strong>${escapeHtml(group.notationLabel || `${group.label || "fragment"} x${group.repeatCount || ""}`)}</strong>
+          <em>${escapeHtml(group.practicePattern || "repeated loop")}</em>
+        </article>
+      `).join("")}
+    </div>
+  `;
+}
+
 function renderObservations(observations) {
   const rows = Array.isArray(observations) ? observations.slice(0, 3) : [];
   if (!rows.length) return `<div class="observation-list"><p>No specific observed blocker extracted yet.</p></div>`;
@@ -1125,6 +1161,7 @@ function renderDailyRecord(record) {
           <strong>${escapeHtml(record.mainCurtisBlocker || "Pending evidence.")}</strong>
         </div>
         ${renderNotationSheet(events)}
+        ${renderRepeatGroups(record?.transcription?.repeatGroups)}
         ${renderObservations(record.observations)}
         <small>${escapeHtml(record.nextStep || "")}</small>
       </div>
@@ -1188,8 +1225,9 @@ function renderPieces() {
             `;
           }).join("")}
         </div>
+        ${piece.totalUploadedVideoLabel ? `<small class="piece-meta-line">Uploaded video evidence: ${escapeHtml(piece.totalUploadedVideoLabel)}</small>` : ""}
       </div>
-      <em>${escapeHtml(piece.totalActiveViolinLabel || piece.totalUploadedVideoLabel || "pending")}</em>
+      <em>${escapeHtml(piece.totalActiveViolinLabel || "active pending")}</em>
     </article>
   `;
   }).join("");

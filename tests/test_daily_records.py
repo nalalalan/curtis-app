@@ -82,8 +82,11 @@ class DailyRecordTests(unittest.TestCase):
 
         self.assertEqual(record["videoCount"], 2)
         self.assertEqual(record["uploadedVideoSeconds"], 900)
+        self.assertLess(record["activeViolinSeconds"], record["uploadedVideoSeconds"])
         self.assertEqual(record["activeTimeStatus"], "measured_from_pitch")
         self.assertEqual(record["transcription"]["status"], "ready")
+        self.assertTrue(record["transcription"]["repeatGroups"])
+        self.assertIn("x2", record["transcription"]["repeatGroups"][0]["notationLabel"])
         self.assertTrue(any(event["kind"] == "rest" for event in record["transcription"]["events"]))
         self.assertTrue(any(event.get("uncertain") for event in record["transcription"]["events"]))
         self.assertEqual(record["pieces"][0]["title"], "Wieniawski Scherzo-Tarantelle, Op. 16")

@@ -202,6 +202,36 @@ def transcription_fragments(transcriptions: list[dict[str, Any]]) -> list[dict[s
     return fragments
 
 
+def repeat_groups(
+    heat_fragments: list[dict[str, Any]],
+    transcriptions: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    slow_window_count = sum(
+        1
+        for transcription in transcriptions
+        if float(transcription.get("tempoBpm") or 0.0) and float(transcription.get("tempoBpm") or 0.0) < 84.0
+    )
+    groups: list[dict[str, Any]] = []
+    for fragment in heat_fragments:
+        count = int(fragment.get("count") or 0)
+        if count < 2:
+            continue
+        pattern = "repeated loop from machine note/rhythm fragments"
+        if slow_window_count:
+            pattern = f"repeated loop; {slow_window_count} slow-practice window{'s' if slow_window_count != 1 else ''} in this day"
+        groups.append(
+            {
+                "label": fragment.get("label") or "repeated fragment",
+                "repeatCount": count,
+                "notationLabel": f"{fragment.get('label') or 'fragment'} x{count}",
+                "practicePattern": pattern,
+                "confidence": "machine_grouped_fragment",
+                "limit": "Repeat count is based on repeated four-note transcription fragments, not full score measures yet.",
+            }
+        )
+    return groups[:6]
+
+
 def problem_observations(
     notation: list[dict[str, Any]],
     heat_fragments: list[dict[str, Any]],
@@ -562,6 +592,7 @@ def build_daily_records(
         confirmed = confirmed_pieces_for_day(state, videos, day_transcriptions)
         uncertain = uncertain_pieces_for_day(day_transcriptions)
         heat_fragments = transcription_fragments(day_transcriptions)
+        day_repeat_groups = repeat_groups(heat_fragments, day_transcriptions)
         uploaded_seconds = sum(int(video.get("durationSeconds") or 0) for video in videos)
         processed_seconds = sum(sample_duration_seconds(sample) for sample in day_samples)
         clips = clips_for_day(videos, day_sections, day_transcriptions)
@@ -587,6 +618,7 @@ def build_daily_records(
                     "noteCount": sum(int(item.get("noteCount") or 0) for item in day_transcriptions),
                     "segmentCount": len(day_transcriptions),
                     "events": notation,
+                    "repeatGroups": day_repeat_groups,
                     "limit": "Machine notation from detected monophonic violin pitch/rhythm; uncertain notes are marked.",
                 },
                 "clips": clips,

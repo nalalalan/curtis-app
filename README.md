@@ -14,12 +14,13 @@ Static AO Labs app and Railway-ready backend for `curtis.aolabs.io`.
 - Backend inventories the public YouTube channel by default and exposes scan state through `/api/curtis/ops-check`.
 - YouTube OAuth remains available for authenticated inventory later. The Data API returns metadata, not video media, so performance judgment remains blocked until a permitted media path exists.
 - Media acquisition attempts short samples automatically after scans. When YouTube blocks server-side public fetching, the owner-media helper uploads multiple distributed windows per long practice video through the authenticated media endpoint and uses the backend sample index to avoid duplicate windows.
-- The first screen has two main sections: analyzed practice days and repertoire.
-- Daily records group same-day practice videos, preserve uploaded duration, attach active-playing evidence when media has been processed, render sheet-music-style notation from pYIN note/rhythm events, show clips, heat-map fragments, and keep uncertain evidence marked uncertain.
+- The first screen has three top-level surfaces: a paper card, analyzed practice days, and repertoire.
+- The top paper card links to `Score-linked practice intelligence from long-form violin training video`.
+- Daily records group same-day practice videos, preserve uploaded duration separately from real active violin-playing time, attach active-playing evidence when media has been processed, render sheet-music-style notation from pYIN note/rhythm events, show clips, repeat groups, heat-map fragments, and keep uncertain evidence marked uncertain.
 - Repertoire names require source-backed evidence before promotion. Possible, uncorroborated, or user-rejected model guesses stay daily uncertain evidence instead of becoming repertoire.
 - Specific Curtis-level observations are generated only from extracted evidence such as uncertain repeated notes, longer pause/restart markers, slow windows, and repeated fragments. Generic advice and fake completion percentages are withheld.
 - Practice-study packets remain as support data for score pages, boxed passage targets, and timed practice links, but the primary page is the daily record plus evidence-backed repertoire.
-- Practice totals start at the public `violin 1` marker and count violin-numbered or date-titled practice logs, preserving video title, upload date, duration, and URL for the growing ledger.
+- Uploaded-video totals start at the public `violin 1` marker and count violin-numbered or date-titled practice logs, preserving video title, upload date, duration, and URL for the growing ledger. These totals are not active practice time; active practice time comes only from detected violin-playing windows.
 - Instagram inventory uses the Instagram Graph API for authorized account media. Media URLs are queued for section processing when available.
 - Skill claims stay `Unjudged` until a video section is processed against the rubric.
 
