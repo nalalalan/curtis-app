@@ -277,10 +277,16 @@ def scrubbed_piece_item(item: dict[str, Any]) -> dict[str, Any]:
     current["todayCompletionPercent"] = 0
     current["readinessStatus"] = "piece_identification_pending"
     current["evidenceQuality"] = "weak"
+    current["proposedTitle"] = ""
     current["candidateTitle"] = ""
+    current["verificationTitle"] = ""
     current["candidateEvidence"] = "Rejected source-specific false label. Exact piece pending."
     current["evidence"] = "Rejected source-specific false label. Exact piece pending."
     current["rejectedByCorrection"] = True
+    current["topCandidates"] = []
+    current["verification"] = {}
+    current["musicalClues"] = []
+    current["notes"] = "Rejected source-specific false label. Exact piece pending."
     daily = current.get("daily")
     if isinstance(daily, dict):
         current["daily"] = {

@@ -19,6 +19,7 @@ from .corrections import (
     item_stale_after_source_correction,
     scrubbed_piece_item,
     source_requires_confirmed_acceptance,
+    title_rejected_for_item,
 )
 from .settings import OPENAI_AUDIO_MODEL, OPENAI_PIECE_VERIFY_MODEL
 from .state import load_state, save_state, utc_now
@@ -932,12 +933,31 @@ def piece_review_from_identification(result: dict[str, Any]) -> dict[str, Any]:
 
 
 def apply_source_correction_gate(state: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
-    if result.get("status") != "piece_identified" or not source_requires_confirmed_acceptance(state, result):
+    if result.get("status") == "blocked":
+        return result
+    titles: list[Any] = [
+        result.get("title"),
+        result.get("proposedTitle"),
+        result.get("candidateTitle"),
+        result.get("verificationTitle"),
+    ]
+    verification = result.get("verification")
+    if isinstance(verification, dict):
+        titles.append(verification.get("title"))
+    for candidate in result.get("topCandidates", []):
+        if isinstance(candidate, dict):
+            titles.append(candidate.get("title"))
+    rejected_candidate = any(
+        title_rejected_for_item(title, state, result) or title_is_rejected(str(title or ""), result)
+        for title in titles
+    )
+    requires_acceptance = source_requires_confirmed_acceptance(state, result)
+    if not rejected_candidate and not (result.get("status") == "piece_identified" and requires_acceptance):
         return result
     candidate_title = str(result.get("title") or result.get("proposedTitle") or "").strip()
     gated = scrubbed_piece_item(result)
-    gated["status"] = "source_correction_unresolved"
-    gated["candidateTitle"] = candidate_title[:140]
+    gated["status"] = "source_correction_unresolved" if requires_acceptance else "piece_rejected_guess"
+    gated["candidateTitle"] = "" if rejected_candidate else candidate_title[:140]
     gated["candidateEvidence"] = "Repeated corrected false labels for this source. Exact piece pending."
     gated["evidence"] = "Repeated corrected false labels for this source. Exact piece pending."
     return gated
