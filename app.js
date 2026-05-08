@@ -1059,6 +1059,15 @@ function renderNotationSheet(events) {
   `;
 }
 
+function heatLayerDetail(layer, items) {
+  if (items) return `${items} signals`;
+  const status = String(layer?.status || "pending");
+  if (status.includes("pending_multiple")) return "pending";
+  if (status.includes("pending_more")) return "pending";
+  if (status.includes("pending")) return "pending";
+  return status.replaceAll("_", " ");
+}
+
 function renderHeatMap(record) {
   const fragments = Array.isArray(record?.heatMap?.fragments) ? record.heatMap.fragments : [];
   const layers = Array.isArray(record?.heatMap?.layers) ? record.heatMap.layers.slice(0, 4) : [];
@@ -1074,7 +1083,7 @@ function renderHeatMap(record) {
             return `
               <span data-status="${escapeHtml(layer.status || "pending")}">
                 <b>${escapeHtml(layer.label || "Layer")}</b>
-                <em>${escapeHtml(items ? `${items} signals` : layer.status || "pending")}</em>
+                <em>${escapeHtml(heatLayerDetail(layer, items))}</em>
               </span>
             `;
           }).join("")}
@@ -1191,7 +1200,6 @@ function renderDailyRecord(record, index = 0) {
       </summary>
       <div class="record-card-body">
         <div class="record-main">
-        <strong>${escapeHtml(recordPieceText(record))}</strong>
         <p>${escapeHtml(record.summary || "")}</p>
         <div class="blocker-line">
           <span>Main Curtis-level blocker today</span>
@@ -1246,13 +1254,18 @@ function renderPieces() {
     elements.pieceList.innerHTML = `<p class="empty">Confirmed repertoire evidence pending transcription or source confirmation.</p>`;
     return;
   }
-  elements.pieceList.innerHTML = list.slice(0, 8).map((piece) => {
+  elements.pieceList.innerHTML = list.slice(0, 8).map((piece, index) => {
     const evidence = Array.isArray(piece.evidence) ? piece.evidence.slice(0, 2) : [];
+    const open = index === 0 ? " open" : "";
     return `
-    <article class="piece-row evidence-piece">
-      <div class="piece-evidence-copy">
+    <details class="piece-row evidence-piece"${open}>
+      <summary class="piece-summary">
         <span>${escapeHtml(piece.status || "confirmed")}</span>
         <strong>${escapeHtml(piece.title || "Piece")}</strong>
+        <em>${escapeHtml(piece.totalActiveViolinLabel || "active pending")}</em>
+      </summary>
+      <div class="piece-card-body">
+        <div class="piece-evidence-copy">
         <p>${escapeHtml(shortText(piece.reason || "Confirmed from daily practice evidence.", 150))}</p>
         <div class="blocker-line repertoire-blocker">
           <span>Current blocker</span>
@@ -1260,6 +1273,7 @@ function renderPieces() {
         </div>
         <small class="piece-meta-line">Progress: ${escapeHtml(piece.currentProgressLabel || piece.progressStatus || "not scored")}</small>
         ${renderObservations(piece.observations)}
+        ${renderHeatMap(piece)}
         <div class="evidence-list">
           ${evidence.map((item) => {
             const clip = item.clip || {};
@@ -1275,8 +1289,8 @@ function renderPieces() {
         </div>
         ${piece.totalUploadedVideoLabel ? `<small class="piece-meta-line">Uploaded video evidence: ${escapeHtml(piece.totalUploadedVideoLabel)}</small>` : ""}
       </div>
-      <em>${escapeHtml(piece.totalActiveViolinLabel || "active pending")}</em>
-    </article>
+      </div>
+    </details>
   `;
   }).join("");
 }

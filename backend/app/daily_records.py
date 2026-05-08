@@ -662,6 +662,83 @@ def build_daily_records(
     }
 
 
+def repertoire_heat_map(fragments: list[dict[str, Any]], observations: list[dict[str, Any]]) -> dict[str, Any]:
+    counter: Counter[str] = Counter()
+    seconds: dict[str, float] = defaultdict(float)
+    examples: dict[str, dict[str, Any]] = {}
+    days: dict[str, set[str]] = defaultdict(set)
+    for fragment in fragments:
+        if not isinstance(fragment, dict):
+            continue
+        label = str(fragment.get("label") or "").strip()
+        if not label:
+            continue
+        count = int(fragment.get("count") or 0)
+        counter[label] += max(1, count)
+        try:
+            seconds[label] += max(0.0, float(fragment.get("seconds") or 0.0))
+        except (TypeError, ValueError):
+            seconds[label] += 0.0
+        examples[label] = fragment
+        day = str(fragment.get("practiceDay") or "").strip()
+        if day:
+            days[label].add(day)
+
+    max_count = max(counter.values()) if counter else 0
+    heat_fragments = []
+    for label, count in counter.most_common(8):
+        base = examples.get(label, {})
+        heat_fragments.append(
+            {
+                "label": label,
+                "count": count,
+                "seconds": round(seconds[label], 1),
+                "intensity": round(count / max(1, max_count), 3),
+                "notes": base.get("notes") or [],
+                "practiceDays": sorted(days[label], reverse=True)[:6],
+            }
+        )
+
+    problem_items = [
+        {
+            "label": str(item.get("passage") or item.get("category") or "observed problem"),
+            "count": 1,
+            "category": item.get("category"),
+            "problem": item.get("problem"),
+            "practiceDay": item.get("practiceDay"),
+        }
+        for item in observations[:8]
+        if isinstance(item, dict)
+    ]
+    return {
+        "status": "ready" if heat_fragments else "pending_transcription",
+        "fragments": heat_fragments,
+        "layers": [
+            {
+                "label": "Practice density",
+                "status": "ready" if heat_fragments else "pending_transcription",
+                "items": heat_fragments,
+            },
+            {
+                "label": "Repetition density",
+                "status": "ready" if heat_fragments else "pending_transcription",
+                "items": heat_fragments,
+            },
+            {
+                "label": "Problem density",
+                "status": "ready" if problem_items else "pending_more_aligned_attempts",
+                "items": problem_items,
+            },
+            {
+                "label": "Improvement",
+                "status": "pending_multiple_aligned_attempts",
+                "items": [],
+            },
+        ],
+        "limit": "Piece heat map is aggregated from confirmed daily-record transcription fragments and observations only.",
+    }
+
+
 def build_repertoire_evidence(daily_records: dict[str, Any]) -> dict[str, Any]:
     entries: dict[str, dict[str, Any]] = {}
     for record in daily_records.get("records", []):
@@ -685,6 +762,7 @@ def build_repertoire_evidence(daily_records: dict[str, Any]) -> dict[str, Any]:
                     "recentPracticeDays": [],
                     "evidence": [],
                     "observations": [],
+                    "heatFragments": [],
                 },
             )
             entry["totalActiveViolinSeconds"] += int(record.get("activeViolinSeconds") or 0)
@@ -702,6 +780,9 @@ def build_repertoire_evidence(daily_records: dict[str, Any]) -> dict[str, Any]:
                     "confidence": piece.get("confidence") or "confirmed",
                 }
             )
+            for fragment in record.get("heatMap", {}).get("fragments", []):
+                if isinstance(fragment, dict):
+                    entry["heatFragments"].append({**fragment, "practiceDay": record.get("practiceDay")})
             for observation in record.get("observations", [])[:2]:
                 if isinstance(observation, dict):
                     entry["observations"].append(
@@ -724,6 +805,7 @@ def build_repertoire_evidence(daily_records: dict[str, Any]) -> dict[str, Any]:
         entry["totalUploadedVideoLabel"] = duration_seconds_label(entry["totalUploadedVideoSeconds"])
         entry["progressStatus"] = "not_scored"
         entry["currentProgressLabel"] = "not scored"
+        entry["heatMap"] = repertoire_heat_map(entry.pop("heatFragments", []), entry["observations"])
         entry["mainCurtisBlocker"] = (
             str(entry["observations"][0].get("curtisReadinessIssue") or entry["observations"][0].get("problem") or "")
             if entry["observations"]

@@ -157,6 +157,9 @@ class DailyRecordTests(unittest.TestCase):
         self.assertNotIn("Unconfirmed Candidate Piece", titles)
         self.assertEqual(repertoire["entries"][0]["progressStatus"], "not_scored")
         self.assertTrue(repertoire["entries"][0]["evidence"])
+        self.assertEqual(repertoire["entries"][0]["heatMap"]["status"], "ready")
+        self.assertTrue(repertoire["entries"][0]["heatMap"]["fragments"])
+        self.assertIn("Practice density", [layer["label"] for layer in repertoire["entries"][0]["heatMap"]["layers"]])
 
     def test_media_probe_uses_title_confirmed_ledger_not_broad_candidates(self):
         state = {

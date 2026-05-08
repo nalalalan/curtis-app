@@ -1086,7 +1086,8 @@ h2 {
   word-break: break-word;
 }
 
-.piece-row em {
+.piece-row > em,
+.piece-summary em {
   display: inline-flex;
   min-width: 52px;
   min-height: 34px;
@@ -1677,6 +1678,8 @@ h2 {
   display: grid;
   gap: 2px;
   min-width: 0;
+  overflow: hidden;
+  margin: 0;
   padding: 7px 8px;
   border: 1px solid rgba(31, 41, 39, .09);
   border-radius: 7px;
@@ -1692,23 +1695,27 @@ h2 {
 }
 
 .heat-layers em {
+  min-width: 0;
   color: var(--muted);
   font-size: 10px;
   font-style: normal;
   font-weight: 660;
   line-height: 1.15;
   overflow-wrap: anywhere;
+  word-break: break-word;
   text-transform: uppercase;
 }
 
 .heat-row {
   display: grid;
-  grid-template-columns: minmax(72px, .8fr) minmax(80px, 1fr) 34px;
+  grid-template-columns: minmax(0, .82fr) minmax(58px, 1fr) 30px;
   gap: 8px;
   align-items: center;
+  min-width: 0;
 }
 
 .heat-row span {
+  min-width: 0;
   color: var(--muted);
   font-size: 12px;
   font-weight: 650;
@@ -1718,6 +1725,7 @@ h2 {
 
 .heat-row b {
   display: block;
+  min-width: 0;
   height: 9px;
   border-radius: 999px;
   background: linear-gradient(90deg, rgba(95, 118, 104, .22), rgba(166, 111, 86, .82));
@@ -1727,8 +1735,15 @@ h2 {
 }
 
 .heat-row em {
+  display: block;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
   font-style: normal;
   text-align: right;
+  white-space: nowrap;
 }
 
 .heat-map-empty {
@@ -1737,7 +1752,47 @@ h2 {
 }
 
 .evidence-piece {
+  display: block;
   align-items: start;
+}
+
+.piece-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  align-items: center;
+  cursor: pointer;
+  list-style: none;
+}
+
+.piece-summary::-webkit-details-marker {
+  display: none;
+}
+
+.piece-summary span {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.piece-summary strong {
+  margin: 0;
+}
+
+.piece-summary em {
+  justify-self: end;
+}
+
+.piece-row[open] .piece-summary {
+  padding-bottom: 11px;
+  border-bottom: 1px solid rgba(31, 41, 39, .1);
+}
+
+.piece-card-body {
+  padding-top: 12px;
+}
+
+.piece-card-body .heat-map {
+  margin-top: 10px;
 }
 
 .evidence-list {
@@ -2115,7 +2170,7 @@ h2 {
 
   .video-row em,
   .skill-row em,
-  .piece-row em,
+  .piece-summary em,
   .day-actions {
     justify-self: start;
   }
