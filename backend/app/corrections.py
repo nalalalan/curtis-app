@@ -11,6 +11,7 @@ FIVE_ONE_KEY = "youtube:wDfVpTU4I_I"
 FIVE_ONE_ACCEPTED_TITLE = "Haydn Symphony No. 94, IV. Finale, Violin I part"
 FIVE_TWO_KEY = "youtube:K38CgZhvF3Q"
 FIVE_TWO_ACCEPTED_TITLE = "Wieniawski Scherzo-Tarantelle, Op. 16"
+FIVE_THREE_KEY = "title:5 3 26"
 FIVE_ONE_REJECTED_TITLES = [
     "Paganini",
     "Paganini Violin Concerto No. 1",
@@ -201,7 +202,7 @@ FIVE_ONE_REJECTED_TITLES = [
     "John Williams Raiders March, Violin I part",
 ]
 SOURCE_ACCEPTANCE_REJECT_COUNT = 3
-BUILTIN_CORRECTION_KEYS = [FIVE_ONE_KEY, FIVE_TWO_KEY]
+BUILTIN_CORRECTION_KEYS = [FIVE_ONE_KEY, FIVE_TWO_KEY, FIVE_THREE_KEY]
 
 
 def compact_text(value: Any) -> str:
@@ -219,15 +220,24 @@ def youtube_video_id(value: Any) -> str:
     return ""
 
 
+def title_has_practice_date(title_key: str, month: int, day: int) -> bool:
+    return bool(re.search(rf"\b0?{month} 0?{day} (?:26|2026)\b", title_key))
+
+
 def source_key(*, url: Any = "", title: Any = "", sample_id: Any = "", video_id: Any = "") -> str:
-    direct_id = youtube_video_id(video_id) or youtube_video_id(url) or youtube_video_id(sample_id)
+    direct_id = youtube_video_id(video_id) or youtube_video_id(url)
     if direct_id:
         return f"youtube:{direct_id}"
     title_key = compact_text(title)
-    if "5 1 26" in title_key:
+    if title_has_practice_date(title_key, 5, 1):
         return FIVE_ONE_KEY
-    if "5 2 26" in title_key:
+    if title_has_practice_date(title_key, 5, 2):
         return FIVE_TWO_KEY
+    if title_has_practice_date(title_key, 5, 3):
+        return FIVE_THREE_KEY
+    direct_id = youtube_video_id(sample_id)
+    if direct_id:
+        return f"youtube:{direct_id}"
     return f"title:{title_key}" if title_key else ""
 
 
@@ -238,6 +248,28 @@ def source_key_from_item(item: dict[str, Any] | None) -> str:
         title=item.get("sourceTitle") or item.get("sampleTitle") or item.get("title"),
         sample_id=item.get("sampleId") or item.get("id") or item.get("sectionId"),
     )
+
+
+def wieniawski_reference_target() -> dict[str, Any]:
+    return {
+        "status": "reference_target_ready",
+        "composer": "Henryk Wieniawski",
+        "work": "Scherzo-Tarantelle, Op. 16",
+        "movement": "",
+        "part": "Solo violin",
+        "scoreSource": "Wieniawski Society source page",
+        "scoreUrl": "https://wieniawski.com/scherzo_tarantella_op_16.html",
+        "referenceAudio": "needed",
+        "alignmentGoal": "Match extracted solo-violin pitch/rhythm to Scherzo-Tarantelle sections, then report phrase, section, or measure range.",
+        "passageVocabulary": [
+            "Presto opening",
+            "introduction bars 1-4",
+            "main theme bars 5-9",
+            "Maggiore / Tranquillo cantilena",
+            "solo cadenza",
+            "returning refrain and coda",
+        ],
+    }
 
 
 def builtin_correction(key: str) -> dict[str, Any] | None:
@@ -251,6 +283,23 @@ def builtin_correction(key: str) -> dict[str, Any] | None:
             "sourceTip": "Haydn finale: light bow, even rhythm.",
             "updatedAt": "2026-05-08T00:00:00+00:00",
             "sourceHint": "Alan-confirmed source label: Haydn Symphony No. 94, last movement, Violin I part.",
+            "referenceTarget": {
+                "status": "reference_target_ready",
+                "composer": "Joseph Haydn",
+                "work": "Symphony No. 94 in G major, Hob.I:94",
+                "movement": "IV. Finale",
+                "part": "Violin I",
+                "scoreSource": "IMSLP",
+                "scoreUrl": "https://imslp.org/wiki/Symphony_No.94_%28Haydn%2C_Joseph%29",
+                "referenceAudio": "needed",
+                "alignmentGoal": "Match extracted violin pitch/rhythm to the Finale violin I part, then report section or measure range.",
+                "passageVocabulary": [
+                    "Finale / Allegro molto",
+                    "orchestral Violin I part",
+                    "light repeated-note and running-note Haydn finale figures",
+                    "not a solo concerto, caprice, sonata, partita, or showpiece",
+                ],
+            },
             "reason": "Alan-corrected false labels and supplied the accepted 5/1 source label.",
         }
     if key == FIVE_TWO_KEY:
@@ -263,7 +312,21 @@ def builtin_correction(key: str) -> dict[str, Any] | None:
             "sourceTip": "Scherzo-Tarantelle: keep the bow stroke small, even, and rhythm-first before tempo.",
             "updatedAt": "2026-05-08T00:00:00+00:00",
             "sourceHint": "Alan-confirmed source label: Wieniawski Scherzo-Tarantelle, Op. 16.",
+            "referenceTarget": wieniawski_reference_target(),
             "reason": "Alan supplied the accepted 5/2 source label.",
+        }
+    if key == FIVE_THREE_KEY:
+        return {
+            "sourceKey": FIVE_THREE_KEY,
+            "sourceTitle": "5-3-26",
+            "sourceUrl": "",
+            "rejectedTitles": [],
+            "acceptedTitle": FIVE_TWO_ACCEPTED_TITLE,
+            "sourceTip": "Scherzo-Tarantelle: preserve the bounce without letting repetitions grow large.",
+            "updatedAt": "2026-05-08T00:00:00+00:00",
+            "sourceHint": "Alan-confirmed source label: 5/3 violin footage is Wieniawski Scherzo-Tarantelle, Op. 16. Treat same-day violin footage as this piece unless score/audio strongly contradicts it.",
+            "referenceTarget": wieniawski_reference_target(),
+            "reason": "Alan supplied the accepted 5/3 source label and confirmed all violin footage that day was Scherzo-Tarantelle.",
         }
     return None
 

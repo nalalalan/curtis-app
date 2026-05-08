@@ -24,6 +24,7 @@ from .corrections import (
 )
 from .settings import OPENAI_AUDIO_MODEL, OPENAI_PIECE_VERIFY_MODEL, REQUIRE_SOURCE_CONFIRMED_PIECE_TITLES
 from .state import load_state, save_state, utc_now
+from .transcription import transcription_prior_hint
 
 
 PIECE_ID_VERSION = "audio_piece_id_v8"
@@ -139,6 +140,7 @@ Context:
 Rules:
 - This is a piece-identification task, not a coaching task.
 - If the source hint says orchestral work, identify the orchestral work and first-violin part, not a solo violin piece.
+- If the source hint says all violin footage for the date is a confirmed piece, use that as a strong source prior and do not restart from broad repertoire guesses.
 - For an orchestral-work source, do not return concerto, caprice, showpiece, sonata, partita, or other solo repertoire unless the audio clearly contradicts the hint.
 - Name a piece only when the melody, harmony, rhythm, or quoted material makes the exact work clear.
 - Do not infer a piece from generic technique: fast notes, arpeggios, ricochet, spiccato, scales, caprice-like writing, or virtuoso style.
@@ -147,6 +149,7 @@ Rules:
 - If the excerpt is speech, noise, tuning, setup, or not enough music, use title null and confidence "unknown".
 - If the piece is clear, return composer, work title, opus/catalog number, and movement/section when known.
 - Include concrete musical clues a violinist can verify by listening.
+- If the source hint includes a score target, attempt passage alignment from audible pitch/rhythm. Use unknown if the exact passage is not audible enough.
 - Include one major immediate tip for this exact piece/excerpt.
 - Completion percent means current-evidence Curtis-level readiness for this named piece. Use 100 only for clearly Curtis-level evidence.
 
@@ -158,6 +161,13 @@ JSON schema:
   "completionPercent": 0,
   "immediateTip": "one major immediately useful tip",
   "musicalClues": ["clue"],
+  "scoreAlignment": {{
+    "possible": false,
+    "matchedSection": "section name or empty",
+    "matchedMeasures": "measure range or empty",
+    "heardPitchRhythm": ["short pitch/rhythm clue"],
+    "reason": "why this passage does or does not align"
+  }},
   "topCandidates": [
     {{"title": "candidate", "score": 0.0, "reason": "short reason"}}
   ],
@@ -182,9 +192,11 @@ Context:
 Rules:
 - This is a verification task. Do not agree with the proposed title unless the audible material clearly supports the exact work.
 - If the source hint says orchestral work, reject solo-repertoire proposals and verify only an orchestral work / violin I part.
+- If the source hint says all violin footage for the date is a confirmed piece, treat unrelated broad repertoire proposals as unsupported unless the audio clearly contradicts the source prior.
 - A similar technique, texture, virtuoso style, fast arpeggios, spiccato, ricochet, or caprice-like writing is not enough.
 - Do not output a rejected false label.
 - If the proposed title is not exact enough, set title null, matchesProposed false, and exactEnough false.
+- If the source hint includes a score target, verify whether the audible pitch/rhythm supports a specific passage or measure range.
 - Include concrete musical clues a violinist can verify by listening.
 
 JSON schema:
@@ -194,6 +206,13 @@ JSON schema:
   "exactEnough": false,
   "confidenceScore": 0.0,
   "musicalClues": ["clue"],
+  "scoreAlignment": {{
+    "possible": false,
+    "matchedSection": "section name or empty",
+    "matchedMeasures": "measure range or empty",
+    "heardPitchRhythm": ["short pitch/rhythm clue"],
+    "reason": "why this passage does or does not align"
+  }},
   "topCandidates": [
     {{"title": "candidate", "score": 0.0, "reason": "short reason"}}
   ],
@@ -350,11 +369,39 @@ def rejected_piece_text(sample: dict[str, Any]) -> str:
     return ", ".join(rejected) if rejected else "none"
 
 
+def reference_target_hint(correction: dict[str, Any]) -> str:
+    target = correction.get("referenceTarget")
+    if not isinstance(target, dict):
+        return ""
+    fields = [
+        f"score target: {target.get('composer')}, {target.get('work')}",
+        f"movement/part: {target.get('movement') or 'single movement'} / {target.get('part')}",
+        f"alignment goal: {target.get('alignmentGoal')}",
+    ]
+    vocabulary = [
+        str(item).strip()
+        for item in target.get("passageVocabulary", [])
+        if str(item).strip()
+    ]
+    if vocabulary:
+        fields.append(f"known sections/clues: {', '.join(vocabulary[:8])}")
+    return "; ".join(str(field).strip() for field in fields if str(field).strip())
+
+
 def source_hint_text(sample: dict[str, Any]) -> str:
-    correction = correction_for_item(load_state(), sample)
+    state = load_state()
+    correction = correction_for_item(state, sample)
     hint = str(correction.get("sourceHint") or "").strip()
+    reference_hint = reference_target_hint(correction)
+    transcription_hint = transcription_prior_hint(state, sample)
+    if transcription_hint:
+        hint = f"{hint} {transcription_hint}".strip()
+    if hint and reference_hint:
+        return f"{hint} {reference_hint}"
     if hint:
         return hint
+    if reference_hint:
+        return reference_hint
     if sample_matches_five_one(sample):
         return "Violin I part of an orchestral work; not solo violin repertoire."
     return "none"
@@ -415,6 +462,29 @@ def musical_clues(raw: dict[str, Any]) -> list[str]:
     return [str(item).strip()[:180] for item in raw.get("musicalClues", []) if str(item).strip()][:5]
 
 
+def sanitized_score_alignment(raw: dict[str, Any]) -> dict[str, Any]:
+    value = raw.get("scoreAlignment")
+    if not isinstance(value, dict):
+        return {
+            "possible": False,
+            "matchedSection": "",
+            "matchedMeasures": "",
+            "heardPitchRhythm": [],
+            "reason": "",
+        }
+    return {
+        "possible": boolish(value.get("possible")),
+        "matchedSection": str(value.get("matchedSection") or "").strip()[:120],
+        "matchedMeasures": str(value.get("matchedMeasures") or "").strip()[:80],
+        "heardPitchRhythm": [
+            str(item).strip()[:100]
+            for item in value.get("heardPitchRhythm", [])
+            if str(item).strip()
+        ][:8],
+        "reason": str(value.get("reason") or "").strip()[:220],
+    }
+
+
 def normalize_primary_identification(raw: dict[str, Any], sample: dict[str, Any]) -> dict[str, Any]:
     raw_title = str(raw.get("title") or "").strip()[:140]
     score = max(0.0, min(1.0, number(raw.get("confidenceScore"))))
@@ -441,6 +511,7 @@ def normalize_primary_identification(raw: dict[str, Any], sample: dict[str, Any]
         ).strip()[:180],
         "evidence": "; ".join(clues)[:220] or str(raw.get("notes") or "Exact piece not identified from current excerpt.").strip()[:220],
         "musicalClues": clues,
+        "scoreAlignment": sanitized_score_alignment(raw),
         "topCandidates": candidates,
         "notes": str(raw.get("notes") or "").strip()[:300],
         "reviewVersion": PIECE_ID_VERSION,
@@ -470,6 +541,7 @@ def normalize_verification(raw: dict[str, Any], sample: dict[str, Any], proposed
         "exactEnough": exact,
         "confidenceScore": score,
         "musicalClues": clues,
+        "scoreAlignment": sanitized_score_alignment(raw),
         "topCandidates": sanitized_candidates(raw),
         "evidence": "; ".join(clues)[:220] or str(raw.get("notes") or "Exact piece not corroborated.").strip()[:220],
         "notes": str(raw.get("notes") or "").strip()[:300],
@@ -621,6 +693,7 @@ Context:
 Rules:
 - This is a same-video consensus task. Prefer the title that explains repeated material across windows, not a one-off stylistic guess.
 - If the source hint says orchestral work, identify the orchestral work and first-violin part, not solo violin repertoire.
+- If the source hint says all violin footage for the date is a confirmed piece, prefer that confirmed piece when it explains the repeated windows.
 - For an orchestral-work source, do not return concerto, caprice, showpiece, sonata, partita, or other solo repertoire unless the audio clearly contradicts the hint.
 - Compare the candidate titles against the audio and choose unknown if none are exact enough.
 - Do not infer a piece from generic technique: fast notes, arpeggios, ricochet, spiccato, scales, caprice-like writing, or virtuoso style.

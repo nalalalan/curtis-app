@@ -15,6 +15,7 @@ from .corrections import (
     compact_text,
     item_stale_after_source_correction,
     source_requires_confirmed_acceptance,
+    source_key_from_item,
     title_rejected_for_item,
     youtube_video_id,
 )
@@ -341,7 +342,14 @@ def parse_window_bounds(value: Any) -> tuple[int, int]:
     return int(match.group(1)), int(match.group(2))
 
 
+def correction_matches_source_key(correction: dict[str, Any], item: dict[str, Any]) -> bool:
+    key = str(correction.get("sourceKey") or "").strip()
+    return bool(key and source_key_from_item(item) == key)
+
+
 def correction_matches_sample(correction: dict[str, Any], sample: dict[str, Any]) -> bool:
+    if correction_matches_source_key(correction, sample):
+        return True
     source_url = str(correction.get("sourceUrl") or "")
     sample_url = str(sample.get("url") or "")
     if source_url and sample_url == source_url:
@@ -355,6 +363,8 @@ def correction_matches_sample(correction: dict[str, Any], sample: dict[str, Any]
 
 
 def correction_matches_inventory(correction: dict[str, Any], item: dict[str, Any]) -> bool:
+    if correction_matches_source_key(correction, item):
+        return True
     source_url = str(correction.get("sourceUrl") or "")
     item_url = str(item.get("url") or "")
     if source_url and item_url == source_url:
@@ -461,6 +471,8 @@ def title_matches(left: Any, right: Any) -> bool:
 
 
 def correction_matches_result(correction: dict[str, Any], result: dict[str, Any]) -> bool:
+    if correction_matches_source_key(correction, result):
+        return True
     source_url = str(correction.get("sourceUrl") or "")
     result_url = str(result.get("sourceUrl") or result.get("url") or "")
     if source_url and result_url == source_url:
@@ -533,6 +545,28 @@ def result_is_blind_audio_match(correction: dict[str, Any], result: dict[str, An
     return False
 
 
+def result_is_score_aligned(correction: dict[str, Any], result: dict[str, Any]) -> bool:
+    if not correction_matches_result(correction, result):
+        return False
+    alignment = result.get("scoreAlignment")
+    if not isinstance(alignment, dict):
+        return False
+    if alignment.get("possible") is not True:
+        return False
+    return bool(str(alignment.get("matchedSection") or alignment.get("matchedMeasures") or "").strip())
+
+
+def transcription_items(state: dict[str, Any]) -> list[dict[str, Any]]:
+    items = state.get("transcriptions", {}).get("items", [])
+    if not isinstance(items, list):
+        return []
+    return [item for item in items if isinstance(item, dict)]
+
+
+def transcription_ready(item: dict[str, Any]) -> bool:
+    return item.get("status") == "transcribed" and int(item.get("noteCount") or 0) >= 4
+
+
 def source_training_state(
     state: dict[str, Any],
     inventory: dict[str, list[dict[str, Any]]],
@@ -540,6 +574,7 @@ def source_training_state(
     piece_results: list[dict[str, Any]],
 ) -> dict[str, Any]:
     anchors: list[dict[str, Any]] = []
+    transcriptions = transcription_items(state)
     for correction in accepted_source_corrections(state):
         title = str(correction.get("acceptedTitle") or "").strip()
         if not title:
@@ -568,11 +603,20 @@ def source_training_state(
             or (inventory_items[0].get("url") if inventory_items else "")
             or ""
         ).strip()
+        reference_target = correction.get("referenceTarget") if isinstance(correction.get("referenceTarget"), dict) else {}
         blind_match_count = sum(1 for result in piece_results if result_is_blind_audio_match(correction, result))
-        score_aligned_count = 0
-        status = "blind_audio_title_match" if blind_match_count else "source_label_only"
+        score_aligned_count = sum(1 for result in piece_results if result_is_score_aligned(correction, result))
+        pitch_rhythm_items = [
+            item
+            for item in transcriptions
+            if correction_matches_result(correction, item) and transcription_ready(item)
+        ]
+        status = "score_alignment_started" if score_aligned_count else "blind_audio_title_match" if blind_match_count else "source_label_only"
+        if pitch_rhythm_items and not score_aligned_count and not blind_match_count:
+            status = "pitch_rhythm_extracted"
         if not samples:
-            status = "audio_window_needed"
+            status = "pitch_rhythm_extracted" if pitch_rhythm_items else "audio_window_needed"
+        latest_transcription = pitch_rhythm_items[0] if pitch_rhythm_items else {}
         anchors.append(
             {
                 "sourceKey": correction.get("sourceKey") or "",
@@ -585,17 +629,46 @@ def source_training_state(
                 "sampleWindows": stable_unique([str(sample.get("window") or "") for sample in samples])[:4],
                 "blindAudioMatchCount": blind_match_count,
                 "scoreAlignedWindowCount": score_aligned_count,
+                "pitchRhythmWindowCount": len(pitch_rhythm_items),
+                "referenceTargetStatus": reference_target.get("status") or "needed",
                 "scoreAlignment": {
-                    "status": "not_configured",
+                    "status": "score_match_proven" if score_aligned_count else "pitch_rhythm_extracted" if pitch_rhythm_items else "not_configured",
                     "matchedSection": "",
                     "matchedMeasures": "",
-                    "pitchRhythmExtracted": False,
-                    "referenceScore": "needed",
-                    "referenceAudio": "needed",
+                    "pitchRhythmExtracted": bool(pitch_rhythm_items),
+                    "latestTranscription": {
+                        "sourceTitle": latest_transcription.get("sourceTitle") or "",
+                        "sourceWindow": latest_transcription.get("sourceWindow") or "",
+                        "noteCount": latest_transcription.get("noteCount") or 0,
+                        "tempoBpm": latest_transcription.get("tempoBpm") or 0,
+                        "firstNotes": latest_transcription.get("fingerprint", {}).get("firstNotes", [])[:16]
+                        if isinstance(latest_transcription.get("fingerprint"), dict)
+                        else [],
+                    },
+                    "referenceScore": "target_ready" if reference_target else "needed",
+                    "referenceAudio": reference_target.get("referenceAudio") or "needed",
+                    "referenceTarget": {
+                        "composer": reference_target.get("composer") or "",
+                        "work": reference_target.get("work") or "",
+                        "movement": reference_target.get("movement") or "",
+                        "part": reference_target.get("part") or "",
+                        "scoreSource": reference_target.get("scoreSource") or "",
+                        "scoreUrl": reference_target.get("scoreUrl") or "",
+                        "alignmentGoal": reference_target.get("alignmentGoal") or "",
+                        "passageVocabulary": [
+                            str(item).strip()
+                            for item in reference_target.get("passageVocabulary", [])
+                            if str(item).strip()
+                        ][:8],
+                    },
                 },
                 "status": status,
                 "note": (
-                    "audio title match proven before source correction"
+                    "score passage alignment started"
+                    if score_aligned_count
+                    else "pitch/rhythm transcription extracted; score match not yet proven"
+                    if pitch_rhythm_items
+                    else "audio title match proven before source correction"
                     if blind_match_count
                     else "source label confirmed; score alignment not proven"
                 ),
@@ -605,19 +678,29 @@ def source_training_state(
     captured_count = sum(int(anchor.get("sampleCount") or 0) for anchor in anchors)
     blind_count = sum(int(anchor.get("blindAudioMatchCount") or 0) for anchor in anchors)
     score_count = sum(int(anchor.get("scoreAlignedWindowCount") or 0) for anchor in anchors)
+    pitch_rhythm_count = sum(int(anchor.get("pitchRhythmWindowCount") or 0) for anchor in anchors)
+    reference_count = sum(1 for anchor in anchors if anchor.get("referenceTargetStatus") == "reference_target_ready")
     status = "no_anchors"
     if confirmed_count and score_count:
         status = "score_alignment_started"
+    elif confirmed_count and pitch_rhythm_count:
+        status = "pitch_rhythm_extracted"
     elif confirmed_count and blind_count >= confirmed_count:
         status = "audio_title_match_ready"
     elif confirmed_count:
         status = "source_anchored"
     return {
         "status": status,
-        "label": f"{confirmed_count} anchors / {score_count} score matches",
+        "label": (
+            f"{reference_count} refs / {score_count} score matches"
+            if not pitch_rhythm_count
+            else f"{reference_count} refs / {pitch_rhythm_count} pitch windows"
+        ),
         "confirmedSourceCount": confirmed_count,
+        "referenceTargetCount": reference_count,
         "capturedAnchorWindowCount": captured_count,
         "blindAudioMatchCount": blind_count,
+        "pitchRhythmWindowCount": pitch_rhythm_count,
         "scoreAlignedWindowCount": score_count,
         "anchors": anchors,
         "method": "source-confirmed labels, pitch/rhythm extraction, score alignment, and reference-audio comparison",
@@ -686,6 +769,46 @@ def normalize_piece_daily(piece: dict[str, Any], daily: dict[str, Any], practice
     return {key: normalized[key] for key in sorted(normalized)[-21:]}
 
 
+def merge_daily_maps(current: dict[str, Any], incoming: dict[str, Any]) -> None:
+    current_daily = current.get("daily") if isinstance(current.get("daily"), dict) else {}
+    incoming_daily = incoming.get("daily") if isinstance(incoming.get("daily"), dict) else {}
+    merged = {str(day): dict(entry) for day, entry in current_daily.items() if isinstance(entry, dict)}
+    for day, entry in incoming_daily.items():
+        if not isinstance(entry, dict):
+            continue
+        day_key = str(day)
+        if day_key not in merged:
+            merged[day_key] = dict(entry)
+            continue
+        existing = merged[day_key]
+        existing_count = max(1, int(existing.get("sectionCount") or 1))
+        incoming_count = max(1, int(entry.get("sectionCount") or 1))
+        total_count = existing_count + incoming_count
+        existing_completion = int(existing.get("completionPercent") or 0)
+        incoming_completion = int(entry.get("completionPercent") or 0)
+        existing["completionPercent"] = round(
+            ((existing_completion * existing_count) + (incoming_completion * incoming_count)) / total_count
+        )
+        existing["sectionCount"] = total_count
+        existing["tip"] = better_tip(str(existing.get("tip") or ""), str(entry.get("tip") or incoming.get("tip") or ""))
+        existing["evidence"] = str(entry.get("evidence") or existing.get("evidence") or incoming.get("evidence") or "")[:220]
+        if str(entry.get("latestAt") or "") >= str(existing.get("latestAt") or ""):
+            existing["latestAt"] = entry.get("latestAt") or existing.get("latestAt")
+            for source_key in (
+                "sampleId",
+                "sectionId",
+                "sourceTitle",
+                "sourceUrl",
+                "sourceWindow",
+                "sourceStartSeconds",
+                "sourceEndSeconds",
+            ):
+                if entry.get(source_key) not in {None, ""}:
+                    existing[source_key] = entry.get(source_key)
+        merged[day_key] = existing
+    current["daily"] = {key: merged[key] for key in sorted(merged)[-21:]}
+
+
 def merge_enriched_pieces(pieces: list[dict[str, Any]]) -> list[dict[str, Any]]:
     merged: dict[str, dict[str, Any]] = {}
     for piece in pieces:
@@ -694,6 +817,7 @@ def merge_enriched_pieces(pieces: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if current is None:
             merged[key] = piece
             continue
+        merge_daily_maps(current, piece)
         current["sectionCount"] = int(current.get("sectionCount") or 0) + int(piece.get("sectionCount") or 0)
         current["completionPercent"] = max(int(current.get("completionPercent") or 0), int(piece.get("completionPercent") or 0))
         current["todayCompletionPercent"] = max(
@@ -703,14 +827,23 @@ def merge_enriched_pieces(pieces: list[dict[str, Any]]) -> list[dict[str, Any]]:
         current["tip"] = better_tip(str(current.get("tip") or ""), str(piece.get("tip") or ""))
         current["todayTip"] = better_tip(str(current.get("todayTip") or ""), str(piece.get("todayTip") or ""))
         evidence = " ".join(
-            part
-            for part in [str(current.get("evidence") or "").strip(), str(piece.get("evidence") or "").strip()]
-            if part
+            stable_unique(
+                [
+                    str(current.get("evidence") or "").strip(),
+                    str(piece.get("evidence") or "").strip(),
+                ]
+            )
         )
         current["evidence"] = evidence[:220]
-        if str(piece.get("latestAt") or "") > str(current.get("latestAt") or ""):
+        incoming_latest = str(piece.get("latestAt") or "")
+        current_latest = str(current.get("latestAt") or "")
+        incoming_day = str(piece.get("practiceDay") or "")
+        current_day = str(current.get("practiceDay") or "")
+        if incoming_latest > current_latest or (incoming_latest == current_latest and incoming_day > current_day):
             current["latestAt"] = piece.get("latestAt")
             current["todayLatestAt"] = piece.get("todayLatestAt") or current.get("todayLatestAt")
+            if str(piece.get("tip") or "").strip():
+                current["tip"] = piece.get("tip")
             for source_key in (
                 "sampleId",
                 "sectionId",
@@ -721,7 +854,7 @@ def merge_enriched_pieces(pieces: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "sourceEndSeconds",
                 "practiceDay",
             ):
-                if piece.get(source_key) not in {None, ""}:
+                if piece.get(source_key) not in {None, ""} or source_key in {"sampleId", "sectionId", "sourceUrl", "sourceWindow"}:
                     current[source_key] = piece.get(source_key)
         else:
             for source_key in (
@@ -935,6 +1068,7 @@ def base_ops(state: dict[str, Any], extra_blockers: list[str] | None = None) -> 
 
     inventory = state.get("inventory", {"youtube": [], "instagram": []})
     media_samples = [sample for sample in state.get("mediaSamples", []) if isinstance(sample, dict)]
+    transcriptions = transcription_items(state)
     review = derive_review(inventory, state.get("review"), media_samples, state)
     hard_blockers = inventory_blockers(blockers)
     status = "blocked" if hard_blockers else "ready"
@@ -975,9 +1109,30 @@ def base_ops(state: dict[str, Any], extra_blockers: list[str] | None = None) -> 
         "review": review,
         "media": {
             "lastMediaRun": state.get("lastMediaRun"),
+            "lastTranscriptionRun": state.get("lastTranscriptionRun"),
             "sampleCount": len(media_samples),
             "sampleIndex": sample_index,
             "samples": media_samples[:5],
+            "transcriptionCount": len(transcriptions),
+            "transcriptions": [
+                {
+                    "transcriptionId": item.get("transcriptionId"),
+                    "sampleId": item.get("sampleId"),
+                    "sourceTitle": item.get("sourceTitle"),
+                    "sourceWindow": item.get("sourceWindow"),
+                    "status": item.get("status"),
+                    "noteCount": item.get("noteCount"),
+                    "tempoBpm": item.get("tempoBpm"),
+                    "acceptedTitle": item.get("acceptedTitle"),
+                    "referenceMatches": item.get("referenceMatches", [])[:3]
+                    if isinstance(item.get("referenceMatches"), list)
+                    else [],
+                    "firstNotes": item.get("fingerprint", {}).get("firstNotes", [])[:16]
+                    if isinstance(item.get("fingerprint"), dict)
+                    else [],
+                }
+                for item in transcriptions[:5]
+            ],
         },
         "analysis": state.get("lastAnalysisRun"),
         "coach": state.get("lastCoachRun"),

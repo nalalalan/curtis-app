@@ -379,10 +379,12 @@ function trainingState(ops) {
 function trainingLabel(ops) {
   const training = trainingState(ops);
   if (!training) return "0 anchors";
-  const anchors = Number(training.confirmedSourceCount) || 0;
+  const anchors = Number(training.referenceTargetCount ?? training.confirmedSourceCount) || 0;
   const matches = Number(training.scoreAlignedWindowCount) || 0;
-  if (!anchors) return "0 anchors";
-  return `${anchors} anchors / ${matches} score matches`;
+  const pitchWindows = Number(training.pitchRhythmWindowCount) || 0;
+  if (!anchors) return "0 refs";
+  if (pitchWindows && !matches) return `${anchors} refs / ${pitchWindows} pitch windows`;
+  return `${anchors} refs / ${matches} score matches`;
 }
 
 function sourceForSampleId(ops, sampleId) {
@@ -914,16 +916,23 @@ function renderHighlight() {
   const highlight = primaryHighlight(backend.ops);
   activeHighlight = highlight || null;
   const rejectedTitle = rejectableTitle(highlight);
+  const frameShell = elements.highlightFrame.closest(".highlight-frame");
   elements.rejectPieceButton.hidden = !rejectedTitle;
   elements.rejectPieceButton.disabled = !backend.online || !rejectedTitle || !highlight?.url;
   elements.rejectPieceButton.textContent = "Reject title";
   if (!backend.online || !highlight?.url) {
+    if (frameShell) frameShell.hidden = true;
+    elements.highlightFrame.hidden = true;
     elements.highlightFrame.removeAttribute("src");
     elements.highlightMeta.textContent = backend.online ? "Clip pending." : "Backend offline.";
     elements.highlightWindow.textContent = "No evidence window.";
-    elements.highlightLink.href = PUBLIC_YOUTUBE_SOURCE;
+    elements.highlightLink.hidden = true;
+    elements.highlightLink.removeAttribute("href");
     return;
   }
+  if (frameShell) frameShell.hidden = false;
+  elements.highlightFrame.hidden = false;
+  elements.highlightLink.hidden = false;
   const start = Number(highlight.startSeconds) || 0;
   const end = Number(highlight.endSeconds) || (start ? start + 45 : 0);
   const embed = embedUrl(highlight.url, start, end);
