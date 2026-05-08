@@ -80,6 +80,13 @@ FIVE_ONE_REJECTED_TITLES = [
     "Eugène Ysaÿe Sonata No. 3 Ballade",
     "Ysaÿe Solo Violin Sonata No. 3, Op. 27 No. 3, Ballade",
     "Ysaye Solo Violin Sonata No. 3, Op. 27 No. 3, Ballade",
+    "Mozart",
+    "Wolfgang Amadeus Mozart",
+    "Mozart K. 216",
+    "Mozart Violin Concerto No. 3",
+    "Mozart Violin Concerto No. 3 in G major, K. 216",
+    "Mozart Violin Concerto No. 3 in G major, K. 216, 3rd movement",
+    "Wolfgang Amadeus Mozart Violin Concerto No. 3 in G major, K. 216",
 ]
 SOURCE_ACCEPTANCE_REJECT_COUNT = 3
 

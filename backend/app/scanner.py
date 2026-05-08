@@ -83,6 +83,10 @@ FIVE_ONE_REJECTED_REPERTOIRE_TITLES = (
     "ysa e sonata no 3 ballade",
     "ysaye solo violin sonata no 3",
     "ysa e solo violin sonata no 3",
+    "mozart",
+    "mozart k 216",
+    "mozart violin concerto no 3",
+    "mozart violin concerto no 3 in g major k 216",
 )
 LONG_SESSION_PRACTICE_FLOOR_SECONDS = int(os.getenv("CURTIS_LONG_SESSION_PRACTICE_FLOOR_SECONDS", str(2 * 60 * 60)))
 LONG_SESSION_LATE_SAMPLE_COUNT = int(os.getenv("CURTIS_LONG_SESSION_LATE_SAMPLE_COUNT", "3"))
