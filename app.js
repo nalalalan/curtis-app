@@ -254,7 +254,9 @@ function activeHoursLimitText(ops, records, totals) {
   const activeSeconds = Number(records?.totalActiveViolinSeconds) || 0;
   const coverage = percentText(activeSeconds, archiveSeconds);
   const blocker = ops?.media?.lastMediaRun?.blockers?.includes("youtube_media_fetch_requires_owner_browser_or_export");
+  const withheld = Number(records?.withheldNonViolinSampleCount) || 0;
   if (!archiveSeconds) return "Practice archive not indexed yet.";
+  if (withheld) return `${withheld} sampled media window${withheld === 1 ? "" : "s"} withheld until violin-positive audio is found.`;
   if (blocker) return `${coverage} measured. Full active-hours scan needs owner media export/browser access.`;
   if (records?.activeMeasurementStatus === "partial") return `${coverage} measured. Full active-hours scan still running/incomplete.`;
   return "Archive active-time coverage complete.";
@@ -438,6 +440,8 @@ function currentStateText(ops) {
   const practiceCount = Number(ops?.review?.practiceCandidateCount) || 0;
   const findingCount = skillFindings(ops).length;
   const strictCount = Number(records.scoreAudioOnlyRecordCount || records.failedTranscriptionRecordCount || 0);
+  const withheld = Number(records.withheldNonViolinSampleCount) || 0;
+  if (recordCount && withheld && !audioEvidenceCount) return `${withheld} sampled media windows withheld / no violin-positive audio yet / ${recordCount} indexed practice days.`;
   if (recordCount) return `${transcribedCount} verified transcription / ${strictCount} draft transcriptions / ${audioEvidenceCount} playable audio / ${processedCount} processed / ${recordCount} indexed practice days.`;
   if (findingCount) return `${findingCount} Curtis-focused findings. ${progressPlan(ops)?.oneFocus || "Review active."}`;
   const sectionCount = reviewSections(ops).length;
@@ -976,7 +980,10 @@ function renderStatus() {
     const audioEvidenceCount = Number(records.audioEvidenceRecordCount) || 0;
     const analyzedCount = analyzedRecords.length;
     const strictCount = Number(records.scoreAudioOnlyRecordCount || records.failedTranscriptionRecordCount || 0);
-    elements.studyCount.textContent = `${transcribedCount} verified / ${strictCount} draft / ${audioEvidenceCount} audio / ${analyzedCount} processed`;
+    const withheld = Number(records.withheldNonViolinSampleCount) || 0;
+    elements.studyCount.textContent = withheld && !audioEvidenceCount
+      ? `0 violin audio / ${withheld} withheld`
+      : `${transcribedCount} verified / ${strictCount} draft / ${audioEvidenceCount} audio / ${analyzedCount} processed`;
   }
   const activeSeconds = Number(records.totalActiveViolinSeconds) || 0;
   const archiveSeconds = archiveVideoSeconds(records, totals);

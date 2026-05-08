@@ -22,11 +22,55 @@ WEAK_TRANSCRIPTION_MIN_SECONDS = 8
 DRAFT_TRANSCRIPTION_MIN_SECONDS = 30
 WEAK_TRANSCRIPTION_MIN_NOTES = 12
 DRAFT_TRANSCRIPTION_MIN_NOTES = 48
+VIOLIN_POSITIVE_VALUES = {
+    "violin",
+    "violin_playing",
+    "violin_positive",
+    "violin_confirmed",
+    "confirmed_violin",
+    "verified_violin",
+    "verified_violin_playing",
+    "human_verified_violin",
+    "usable_violin",
+}
 
 
 def is_current_transcription(item: dict[str, Any]) -> bool:
     version = str(item.get("pipelineVersion") or "").strip()
     return not version or version == TRANSCRIPTION_PIPELINE_VERSION
+
+
+def sample_is_violin_positive(sample: dict[str, Any]) -> bool:
+    if not isinstance(sample, dict):
+        return False
+    if sample.get("containsViolin") is True or sample.get("violinDetected") is True:
+        return True
+    values = {
+        str(sample.get(field) or "").strip().lower()
+        for field in (
+            "instrument",
+            "instrumentDetected",
+            "violinPresence",
+            "violinStatus",
+            "practiceEvidenceStatus",
+            "audioEvidenceStatus",
+            "evidenceQuality",
+        )
+    }
+    return bool(values & VIOLIN_POSITIVE_VALUES)
+
+
+def violin_positive_sample_ids(samples: list[dict[str, Any]]) -> set[str]:
+    return {
+        str(sample.get("id") or "").strip()
+        for sample in samples
+        if sample_is_violin_positive(sample) and str(sample.get("id") or "").strip()
+    }
+
+
+def item_has_violin_positive_sample(item: dict[str, Any], sample_ids: set[str]) -> bool:
+    sample_id = str(item.get("sampleId") or item.get("id") or "").strip()
+    return bool(sample_id and sample_id in sample_ids)
 
 
 def video_match_keys(item: dict[str, Any]) -> set[str]:
@@ -1093,11 +1137,25 @@ def build_daily_records(
             grouped[day].append(video)
 
     records: list[dict[str, Any]] = []
+    all_violin_sample_ids = violin_positive_sample_ids(media_samples)
+    withheld_sample_count = sum(
+        1
+        for sample in media_samples
+        if isinstance(sample, dict) and sample.get("id") and not sample_is_violin_positive(sample)
+    )
     for day, videos in grouped.items():
         keys = set().union(*(video_match_keys(video) for video in videos))
-        day_samples = [sample for sample in media_samples if item_matches_keys(sample, keys)]
+        raw_day_samples = [sample for sample in media_samples if item_matches_keys(sample, keys)]
+        day_samples = [sample for sample in raw_day_samples if sample_is_violin_positive(sample)]
+        day_sample_ids = violin_positive_sample_ids(day_samples)
         day_transcriptions = sorted(
-            [item for item in transcriptions if item_matches_keys(item, keys) and is_current_transcription(item)],
+            [
+                item
+                for item in transcriptions
+                if item_matches_keys(item, keys)
+                and is_current_transcription(item)
+                and item_has_violin_positive_sample(item, day_sample_ids or all_violin_sample_ids)
+            ],
             key=lambda item: (
                 str(item.get("sourceTitle") or ""),
                 window_bounds(item)[0],
@@ -1107,8 +1165,13 @@ def build_daily_records(
         day_sections = [
             section
             for section in sections
-            if item_matches_keys(section, keys)
-            or any(str(section.get("sampleId") or "") == str(sample.get("id") or "") for sample in day_samples)
+            if (
+                item_has_violin_positive_sample(section, day_sample_ids or all_violin_sample_ids)
+                and (
+                    item_matches_keys(section, keys)
+                    or any(str(section.get("sampleId") or "") == str(sample.get("id") or "") for sample in day_samples)
+                )
+            )
         ]
         notation = notation_events(day_transcriptions)
         day_notation_systems = notation_systems(notation)
@@ -1255,6 +1318,9 @@ def build_daily_records(
         "unmeasuredUploadedVideoSeconds": unmeasured_uploaded,
         "unmeasuredUploadedVideoLabel": duration_seconds_label(unmeasured_uploaded) if unmeasured_uploaded else "",
         "activeMeasurementStatus": "partial" if unmeasured_uploaded else "complete" if total_uploaded else "pending",
+        "mediaSampleCount": len(media_samples),
+        "violinPositiveSampleCount": len(all_violin_sample_ids),
+        "withheldNonViolinSampleCount": withheld_sample_count,
         "transcribedRecordCount": sum(1 for record in records if record.get("transcription", {}).get("transcriptionReady")),
         "audioEvidenceRecordCount": sum(1 for record in records if record.get("transcription", {}).get("kind") in {"audio_evidence_only", "score_audio_evidence"}),
         "scoreAudioOnlyRecordCount": sum(1 for record in records if record.get("transcription", {}).get("reliability") == "score_audio_only"),
@@ -1262,7 +1328,11 @@ def build_daily_records(
         "failedTranscriptionRecordCount": sum(1 for record in records if record.get("transcription", {}).get("reliability") == "transcription_failed"),
         "records": records[:MAX_RECORDS],
         "method": "Groups title-confirmed practice videos by practice day, then attaches uploaded duration, active-time evidence, playable audio/video windows, score targets, and repertoire evidence.",
-        "limit": "Uploaded archive duration is visible separately. Exact active violin hours require fetched media and are incomplete until each practice video is segmented; unverified machine pitch events are not counted as transcription.",
+        "limit": (
+            "Uploaded archive duration is visible separately. Exact active violin hours require fetched media "
+            "and are incomplete until each practice video is segmented; media samples are withheld unless they "
+            "are explicitly violin-positive."
+        ),
     }
 
 

@@ -81,7 +81,7 @@ class DailyRecordTests(unittest.TestCase):
         daily = build_daily_records(
             inventory=inventory,
             state={},
-            media_samples=[{"id": "K38CgZhvF3Q", "path": "sample.mp4", "window": "*10-30"}],
+            media_samples=[{"id": "K38CgZhvF3Q", "path": "sample.mp4", "window": "*10-30", "containsViolin": True}],
             transcriptions=transcriptions,
             sections=[
                 {
@@ -181,8 +181,8 @@ class DailyRecordTests(unittest.TestCase):
             inventory=inventory,
             state={},
             media_samples=[
-                {"id": "wDfVpTU4I_I-old", "path": "old.mp4", "window": "*10-30"},
-                {"id": "wDfVpTU4I_I-current", "path": "current.mp4", "window": "*40-70"},
+                {"id": "wDfVpTU4I_I-old", "path": "old.mp4", "window": "*10-30", "containsViolin": True},
+                {"id": "wDfVpTU4I_I-current", "path": "current.mp4", "window": "*40-70", "containsViolin": True},
             ],
             transcriptions=[old_item, current_item],
             sections=[],
@@ -234,7 +234,7 @@ class DailyRecordTests(unittest.TestCase):
         daily = build_daily_records(
             inventory=inventory,
             state={},
-            media_samples=[{"id": "collapse", "path": "sample.mp4", "window": "*0-60"}],
+            media_samples=[{"id": "collapse", "path": "sample.mp4", "window": "*0-60", "containsViolin": True}],
             transcriptions=transcriptions,
             sections=[],
         )
@@ -364,7 +364,10 @@ class DailyRecordTests(unittest.TestCase):
         daily = build_daily_records(
             inventory=inventory,
             state={},
-            media_samples=[{"id": "K38CgZhvF3Q", "path": "sample.mp4", "window": "*10-100"}],
+            media_samples=[
+                {"id": "K38CgZhvF3Q", "path": "sample.mp4", "window": "*10-100", "containsViolin": True},
+                {"id": "K38CgZhvF3Q-empty", "path": "empty.mp4", "window": "*100-190", "containsViolin": True},
+            ],
             transcriptions=transcriptions,
             sections=[],
         )
@@ -379,6 +382,67 @@ class DailyRecordTests(unittest.TestCase):
         self.assertIn("active audio", record["clips"][0]["reason"])
         self.assertEqual(record["clips"][1]["activeTranscribedSeconds"], 44.2)
         self.assertIn("no reliable score-linked transcription", record["clips"][1]["reason"])
+
+    def test_unverified_media_samples_are_withheld_from_audio_and_transcription(self):
+        inventory = {
+            "youtube": [
+                {
+                    "id": "e8a0hrb4IzY",
+                    "title": "5-6-26",
+                    "url": "https://www.youtube.com/watch?v=e8a0hrb4IzY",
+                    "publishedAt": "2026-05-07T09:10:00Z",
+                    "durationSeconds": 600,
+                    "practiceCandidate": True,
+                }
+            ]
+        }
+        transcriptions = [
+            {
+                "transcriptionId": "bad-room-window",
+                "sampleId": "e8a0hrb4IzY-600",
+                "sourceUrl": "https://www.youtube.com/watch?v=e8a0hrb4IzY",
+                "sourceTitle": "5-6-26",
+                "sourceWindow": "*600-690",
+                "status": "transcribed",
+                "tempoBpm": 100,
+                "noteCount": 24,
+                "notes": [note("D4", index * 0.1, index * 0.1 + 0.08) for index in range(24)],
+            }
+        ]
+
+        daily = build_daily_records(
+            inventory=inventory,
+            state={},
+            media_samples=[
+                {
+                    "id": "e8a0hrb4IzY-600",
+                    "path": "room.mp4",
+                    "window": "*600-690",
+                    "violinPresence": "unverified",
+                }
+            ],
+            transcriptions=transcriptions,
+            sections=[
+                {
+                    "sampleId": "e8a0hrb4IzY-600",
+                    "url": "https://www.youtube.com/watch?v=e8a0hrb4IzY",
+                    "startSeconds": 600,
+                    "endSeconds": 640,
+                    "status": "candidate_playing_section",
+                }
+            ],
+        )
+        record = next(item for item in daily["records"] if item["practiceDay"] == "2026-05-06")
+
+        self.assertEqual(daily["audioEvidenceRecordCount"], 0)
+        self.assertEqual(daily["scoreAudioOnlyRecordCount"], 0)
+        self.assertEqual(daily["withheldNonViolinSampleCount"], 1)
+        self.assertEqual(daily["violinPositiveSampleCount"], 0)
+        self.assertEqual(record["activeViolinSeconds"], 0)
+        self.assertEqual(record["status"], "pending_media")
+        self.assertEqual(record["transcription"]["kind"], "pending")
+        self.assertFalse(record["transcription"]["notationSystems"])
+        self.assertNotIn("/api/curtis/media/sample", str(record["clips"]))
 
     def test_media_probe_uses_title_confirmed_ledger_not_broad_candidates(self):
         state = {
@@ -440,7 +504,13 @@ class DailyRecordTests(unittest.TestCase):
             }
         ]
 
-        daily = build_daily_records(inventory=inventory, state={}, media_samples=[], transcriptions=transcriptions, sections=[])
+        daily = build_daily_records(
+            inventory=inventory,
+            state={},
+            media_samples=[{"id": "wDfVpTU4I_I", "path": "sample.mp4", "window": "*100-180", "containsViolin": True}],
+            transcriptions=transcriptions,
+            sections=[],
+        )
         record = next(item for item in daily["records"] if item["practiceDay"] == "2026-05-01")
         transcription = record["transcription"]
 
