@@ -922,6 +922,7 @@ def build_daily_records(
     records.sort(key=lambda item: str(item.get("practiceDay") or ""), reverse=True)
     total_uploaded = sum(int(record.get("uploadedVideoSeconds") or 0) for record in records)
     total_active = sum(int(record.get("activeViolinSeconds") or 0) for record in records)
+    unmeasured_uploaded = max(0, total_uploaded - total_active)
     return {
         "status": "ready" if records else "pending",
         "recordCount": len(records),
@@ -929,10 +930,13 @@ def build_daily_records(
         "totalUploadedVideoLabel": duration_seconds_label(total_uploaded),
         "totalActiveViolinSeconds": total_active,
         "totalActiveViolinLabel": duration_seconds_label(total_active) if total_active else "",
+        "unmeasuredUploadedVideoSeconds": unmeasured_uploaded,
+        "unmeasuredUploadedVideoLabel": duration_seconds_label(unmeasured_uploaded) if unmeasured_uploaded else "",
+        "activeMeasurementStatus": "partial" if unmeasured_uploaded else "complete" if total_uploaded else "pending",
         "transcribedRecordCount": sum(1 for record in records if record.get("transcription", {}).get("status") == "ready"),
         "records": records[:MAX_RECORDS],
         "method": "Groups title-confirmed practice videos by practice day, then attaches uploaded duration, active-time evidence, machine notation, clips, heat-map fragments, and repertoire evidence.",
-        "limit": "Records without fetched/uploaded media stay pending; the app does not invent active violin time, notation, clips, or repertoire labels.",
+        "limit": "Uploaded archive duration is visible separately. Exact active violin hours require fetched media and are incomplete until each practice video is segmented; the app does not invent active violin time, notation, clips, or repertoire labels.",
     }
 
 

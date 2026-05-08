@@ -94,6 +94,13 @@ class DailyRecordTests(unittest.TestCase):
         )
         record = next(item for item in daily["records"] if item["practiceDay"] == "2026-05-02")
 
+        self.assertEqual(daily["activeMeasurementStatus"], "partial")
+        self.assertGreater(daily["totalUploadedVideoSeconds"], daily["totalActiveViolinSeconds"])
+        self.assertEqual(
+            daily["unmeasuredUploadedVideoSeconds"],
+            daily["totalUploadedVideoSeconds"] - daily["totalActiveViolinSeconds"],
+        )
+        self.assertIn("Uploaded archive duration is visible separately", daily["limit"])
         self.assertEqual(record["videoCount"], 2)
         self.assertEqual(record["uploadedVideoSeconds"], 900)
         self.assertLess(record["activeViolinSeconds"], record["uploadedVideoSeconds"])

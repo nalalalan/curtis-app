@@ -186,11 +186,13 @@ function formatDurationSeconds(seconds) {
   return `${secs}s`;
 }
 
-function practiceHoursText(totals) {
-  const seconds = Number(totals?.totalPracticeSeconds) || 0;
-  if (!seconds) return "0h";
-  const hours = seconds / 3600;
-  return hours >= 100 ? `${Math.round(hours)}h` : `${hours.toFixed(1)}h`;
+function percentText(part, total) {
+  const numerator = Number(part) || 0;
+  const denominator = Number(total) || 0;
+  if (!denominator || !numerator) return "0%";
+  const percent = (numerator / denominator) * 100;
+  if (percent > 0 && percent < 0.1) return "<0.1%";
+  return `${percent < 10 ? percent.toFixed(1) : Math.round(percent)}%`;
 }
 
 function activePracticeText(records) {
@@ -199,8 +201,31 @@ function activePracticeText(records) {
   return seconds ? formatDurationSeconds(seconds) : "pending";
 }
 
-function uploadedVideoText(records, totals) {
+function archiveVideoText(records, totals) {
   return records?.totalUploadedVideoLabel || totals?.totalPracticeLabel || "0h";
+}
+
+function archiveVideoSeconds(records, totals) {
+  return Number(records?.totalUploadedVideoSeconds) || Number(totals?.totalPracticeSeconds) || 0;
+}
+
+function unmeasuredArchiveText(records, totals) {
+  const explicit = Number(records?.unmeasuredUploadedVideoSeconds);
+  const seconds = Number.isFinite(explicit) && explicit > 0
+    ? explicit
+    : Math.max(0, archiveVideoSeconds(records, totals) - (Number(records?.totalActiveViolinSeconds) || 0));
+  return seconds ? formatDurationSeconds(seconds) : "0s";
+}
+
+function activeHoursLimitText(ops, records, totals) {
+  const archiveSeconds = archiveVideoSeconds(records, totals);
+  const activeSeconds = Number(records?.totalActiveViolinSeconds) || 0;
+  const coverage = percentText(activeSeconds, archiveSeconds);
+  const blocker = ops?.media?.lastMediaRun?.blockers?.includes("youtube_media_fetch_requires_owner_browser_or_export");
+  if (!archiveSeconds) return "Practice archive not indexed yet.";
+  if (blocker) return `${coverage} measured. Full active-hours scan needs owner media export/browser access.`;
+  if (records?.activeMeasurementStatus === "partial") return `${coverage} measured. Full active-hours scan still running/incomplete.`;
+  return "Archive active-time coverage complete.";
 }
 
 function timedUrl(url, startSeconds = 0) {
@@ -918,24 +943,27 @@ function renderStatus() {
     elements.studyCount.textContent = `${transcribedCount} transcribed / ${analyzedCount} processed`;
   }
   const activeSeconds = Number(records.totalActiveViolinSeconds) || 0;
-  const uploadedLabel = uploadedVideoText(records, totals);
-  setText(elements.totalPracticeHours, activePracticeText(records));
+  const archiveSeconds = archiveVideoSeconds(records, totals);
+  const archiveLabel = archiveVideoText(records, totals);
+  setText(elements.totalPracticeHours, archiveLabel);
   setText(
     elements.practiceSince,
-    activeSeconds
-      ? "Real active violin-playing time only."
-      : "Pending active-playing detection across the full practice archive."
-  );
-  setText(elements.uploadedVideoTime, uploadedLabel);
-  setText(
-    elements.uploadedVideoScope,
     [
-      totals?.sinceTitle ? `Since ${totals.sinceTitle}` : "Ledger pending",
+      totals?.sinceTitle ? `Since ${totals.sinceTitle}` : "Since marker pending",
       totals?.sincePublishedAt ? formatDate(totals.sincePublishedAt) : "",
       totals?.videoCount ? `${totals.videoCount} videos` : "",
-      "not counted as active practice"
+      "uploaded session duration"
     ].filter(Boolean).join(" / ")
   );
+  setText(elements.uploadedVideoTime, activePracticeText(records));
+  setText(
+    elements.uploadedVideoScope,
+    archiveSeconds
+      ? `${percentText(activeSeconds, archiveSeconds)} of archive measured from fetched clips.`
+      : "Full active-playing detection pending."
+  );
+  setText(elements.recordSummary, unmeasuredArchiveText(records, totals));
+  setText(elements.currentState, activeHoursLimitText(ops, records, totals));
   setText(elements.pieceCount, `${pieceList.length} ${pieceList.length === 1 ? "piece" : "pieces"}`);
   const dayTotal = Number(records.recordCount) || days.length;
   setText(elements.dayCount, `${dayTotal} ${dayTotal === 1 ? "day" : "days"}`);
@@ -944,11 +972,6 @@ function renderStatus() {
     elements.sourceLink.href = youtubeSourceHref(source);
     elements.sourceLink.textContent = source.replace("https://www.", "").replace("https://", "");
   }
-  setText(elements.currentState, currentStateText(ops));
-  setText(
-    elements.recordSummary,
-    `${Number(records.transcribedRecordCount) || 0} transcribed / ${analyzedRecords.length} processed / ${Number(records.recordCount) || 0} indexed`
-  );
   setText(elements.reviewedCount, `${reviewedVideos} reviewed`);
   setText(elements.sectionCount, `${sections.length} sections`);
   setText(elements.backendState, backend.online ? "Online" : "Offline");

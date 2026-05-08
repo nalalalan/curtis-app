@@ -1368,6 +1368,15 @@ h2 {
   color: var(--gold);
 }
 
+.evidence-summary article:first-child strong {
+  font-size: clamp(24px, 3.4vw, 34px);
+  line-height: .96;
+}
+
+.evidence-summary article:nth-child(3) strong {
+  color: var(--red);
+}
+
 .record-card {
   display: block;
   padding: 14px;
