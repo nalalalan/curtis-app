@@ -1,33 +1,33 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="3 3 122 122" role="img" aria-label="Curtis icon">
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="3 3 122 122" role="img" aria-label="Curtis icon">
   <defs>
     <filter id="d" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
-      <feDropShadow dx="0" dy="9" stdDeviation="5" flood-color="#2b211d" flood-opacity=".17"/>
-      <feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="#fffaf4" flood-opacity=".46"/>
+      <feDropShadow dx="0" dy="9" stdDeviation="5" flood-color="#2b211d" flood-opacity=".14"/>
+      <feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="#fffaf4" flood-opacity=".5"/>
     </filter>
     <g id="spoke">
-      <path d="M64 9v60" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
-      <rect x="58" y="20.5" width="12" height="32.5" rx="3.8" fill="currentColor"/>
+      <path d="M64 8v62" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/>
+      <rect x="57.8" y="20" width="12.4" height="34" rx="4.2" fill="currentColor"/>
     </g>
     <mask id="ring">
       <rect width="128" height="128" fill="#fff"/>
-      <circle cx="64" cy="64" r="25.5" fill="#000"/>
+      <circle cx="64" cy="64" r="24.5" fill="#000"/>
     </mask>
   </defs>
   <g filter="url(#d)" transform="translate(-3 -3) scale(1.047)">
-    <g opacity=".92" mask="url(#ring)">
-      <use href="#spoke" transform="rotate(320 64 64)" color="#c89a3d"/>
-      <use href="#spoke" transform="rotate(342 64 64)" color="#d88f9c"/>
-      <use href="#spoke" transform="rotate(4 64 64)" color="#d8a83e"/>
-      <use href="#spoke" transform="rotate(26 64 64)" color="#7d9fc1"/>
-      <use href="#spoke" transform="rotate(48 64 64)" color="#bf785d"/>
-      <use href="#spoke" transform="rotate(150 64 64)" color="#6f9b84"/>
-      <use href="#spoke" transform="rotate(172 64 64)" color="#c97f88"/>
-      <use href="#spoke" transform="rotate(194 64 64)" color="#d0a24a"/>
-      <use href="#spoke" transform="rotate(216 64 64)" color="#5f8f80"/>
-      <use href="#spoke" transform="rotate(238 64 64)" color="#d49aa0"/>
-      <use href="#spoke" transform="rotate(260 64 64)" color="#86a8c8"/>
-      <use href="#spoke" transform="rotate(282 64 64)" color="#7ca36d"/>
-      <use href="#spoke" transform="rotate(304 64 64)" color="#c48264"/>
+    <g opacity=".95" mask="url(#ring)">
+      <use href="#spoke" transform="rotate(320 64 64)" color="#c69242"/>
+      <use href="#spoke" transform="rotate(342 64 64)" color="#d98291"/>
+      <use href="#spoke" transform="rotate(4 64 64)" color="#e0ad47"/>
+      <use href="#spoke" transform="rotate(26 64 64)" color="#86a6c5"/>
+      <use href="#spoke" transform="rotate(48 64 64)" color="#c77b62"/>
+      <use href="#spoke" transform="rotate(150 64 64)" color="#75a18c"/>
+      <use href="#spoke" transform="rotate(172 64 64)" color="#d8939b"/>
+      <use href="#spoke" transform="rotate(194 64 64)" color="#d4a04b"/>
+      <use href="#spoke" transform="rotate(216 64 64)" color="#6f9d8b"/>
+      <use href="#spoke" transform="rotate(238 64 64)" color="#d69aa2"/>
+      <use href="#spoke" transform="rotate(260 64 64)" color="#8aaac8"/>
+      <use href="#spoke" transform="rotate(282 64 64)" color="#8aa77a"/>
+      <use href="#spoke" transform="rotate(304 64 64)" color="#cc8468"/>
     </g>
   </g>
 </svg>
