@@ -336,7 +336,7 @@ def notation_display_state(
         "displayNotation": False,
         "transcriptionReady": False,
         "displayLimit": (
-            f"{rendered_notes} detected pitch events are rejected from the staff view"
+            f"{rendered_notes} detected pitch events are kept out of notation until verified"
             + (f"; {api_omitted_notes} detected pitch events are outside the API event slice" if api_omitted_notes else "")
             + "."
         ),
@@ -512,14 +512,14 @@ def transcription_failure_summary(transcriptions: list[dict[str, Any]]) -> dict[
     dominant_note = notes.most_common(1)[0][0] if notes else ""
     if mode == "repeated_pitch_collapse":
         limit = (
-            f"Machine pitch extraction was rejected: the tracker collapsed into repeated {dominant_note or 'single-pitch'} events; "
-            "verified notation waits for score/audio match."
+            "The detected pitch trace did not match the audio closely enough to become notation. "
+            "Only verified note/rhythm evidence renders as sheet music."
         )
     else:
-        limit = limits[0] if limits else "Machine pitch extraction did not pass the score/audio verification gate."
+        limit = "Only verified note/rhythm evidence renders as sheet music."
     return {
         "qualityStatus": "score_audio_only",
-        "qualityLabel": "score/audio evidence",
+        "qualityLabel": "audio paired",
         "qualityLimit": limit,
         "failureMode": mode,
         "failureWindowCount": int(sum(modes.values())),
@@ -568,10 +568,10 @@ def transcription_quality(
             parts.append(f"{low_confidence} low-confidence note{'s' if low_confidence != 1 else ''}")
         return {
             "qualityStatus": "sanity_corrected_draft",
-            "qualityLabel": "score/audio evidence",
+            "qualityLabel": "audio paired",
             "qualityLimit": (
-                f"The machine pitch events contain {', '.join(parts)} and are rejected from the music view. "
-                f"They are not reliable transcription of what was played.{sparse_note}"
+                f"The machine pitch events contain {', '.join(parts)} and stay out of the music view. "
+                f"Only verified note/rhythm evidence renders as sheet music.{sparse_note}"
             ),
             "qualityMetrics": metrics,
             "segmentCount": segment_count,
@@ -579,18 +579,18 @@ def transcription_quality(
     if active_seconds < DRAFT_TRANSCRIPTION_MIN_SECONDS or note_count < DRAFT_TRANSCRIPTION_MIN_NOTES:
         return {
             "qualityStatus": "draft_fragment",
-            "qualityLabel": "score/audio evidence",
+            "qualityLabel": "audio paired",
             "qualityLimit": (
                 f"{duration_seconds_label(active_seconds)} and {note_count} pitch events were detected; "
-                f"use the paired audio and score evidence, not unverified machine notes.{sparse_note}"
+                f"the paired audio is kept for verification before notation renders.{sparse_note}"
             ),
             "qualityMetrics": metrics,
             "segmentCount": segment_count,
         }
     return {
         "qualityStatus": "usable_fragment",
-        "qualityLabel": "score/audio evidence",
-        "qualityLimit": f"Machine pitch events exist, but only score-verified transcription renders as notation.{sparse_note}",
+        "qualityLabel": "audio paired",
+        "qualityLimit": f"Machine pitch events exist, but only verified transcription renders as notation.{sparse_note}",
         "qualityMetrics": metrics,
         "segmentCount": segment_count,
     }
@@ -904,7 +904,7 @@ def clips_for_day(
             active_duration = float(transcription.get("durationSeconds") or 0.0)
         except (TypeError, ValueError):
             active_duration = 0.0
-        reason = f"{note_count} detected pitch events kept as score/audio evidence, not rendered notation."
+        reason = f"{note_count} detected pitch events paired with audio for verification before notation renders."
         quality = transcription.get("quality") if isinstance(transcription.get("quality"), dict) else {}
         if note_count <= 0:
             reason = (
@@ -913,9 +913,9 @@ def clips_for_day(
                 else "Audio scanned; no reliable score-linked transcription extracted."
             )
         elif quality.get("windowMode") == "detected_active_sections" and active_duration > 0:
-            reason = f"{note_count} detected pitch events from {duration_seconds_label(active_duration)} of active audio; notation renders only after score/audio verification."
+            reason = f"{note_count} detected pitch events from {duration_seconds_label(active_duration)} of active audio; notation renders only after note-for-note verification."
         if str(transcription.get("status") or "").startswith("failed_") or quality.get("failed"):
-            reason = quality.get("failureLimit") or "Machine pitch extraction did not pass verification; use the paired audio evidence."
+            reason = "Audio window kept for verification. Only note/rhythm evidence that matches the audio renders as notation."
         clips.append(
             {
                 "type": "transcribed_window",
@@ -1137,10 +1137,10 @@ def build_daily_records(
             quality = {
                 **quality,
                 "qualityStatus": "score_audio_only",
-                "qualityLabel": "score/audio evidence",
+                "qualityLabel": "audio paired",
                 "qualityLimit": (
-                    "Machine pitch events exist for sampled audio, but only score-verified note/rhythm notation renders. "
-                    "Use the paired audio and score evidence until the transcription matches the practice audio."
+                    "Machine pitch events exist for sampled audio, but only verified note/rhythm notation renders. "
+                    "The paired audio is kept for matching before it becomes transcription."
                 ),
                 "failureMode": "unverified_machine_pitch",
                 "failureWindowCount": len(day_transcriptions),
@@ -1185,9 +1185,9 @@ def build_daily_records(
                 "transcription": {
                     "status": "score_audio_only" if failure_summary or has_machine_pitch_events else "pending",
                     "displayTitle": (
-                        "Score-linked transcription"
+                        "Verified transcription"
                         if failure_summary or has_machine_pitch_events
-                        else "Score-linked transcription pending"
+                        else "Verified transcription"
                     ),
                     "kind": "score_audio_evidence" if has_machine_pitch_events else "pending",
                     "scoreLinked": False,
@@ -1209,7 +1209,7 @@ def build_daily_records(
                     "fullSessionLimit": transcription_session_limit(transcribed_seconds, uploaded_seconds),
                     "events": notation,
                     "repeatGroups": day_repeat_groups,
-                    "limit": "Audio evidence is available. Only full-session score-aligned notation that matches the audio is rendered as transcription.",
+                    "limit": "Audio evidence is available. Only full-session notation that matches the audio is rendered as transcription.",
                 },
                 "clips": clips,
                 "heatMap": {
@@ -1256,7 +1256,7 @@ def build_daily_records(
         "failedTranscriptionRecordCount": sum(1 for record in records if record.get("transcription", {}).get("reliability") == "transcription_failed"),
         "records": records[:MAX_RECORDS],
         "method": "Groups title-confirmed practice videos by practice day, then attaches uploaded duration, active-time evidence, playable audio/video windows, score targets, and repertoire evidence.",
-        "limit": "Uploaded archive duration is visible separately. Exact active violin hours require fetched media and are incomplete until each practice video is segmented; unverified machine pitch events are rejected from notation and are not counted as transcription.",
+        "limit": "Uploaded archive duration is visible separately. Exact active violin hours require fetched media and are incomplete until each practice video is segmented; unverified machine pitch events are not counted as transcription.",
     }
 
 

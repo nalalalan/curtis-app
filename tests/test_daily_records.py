@@ -140,7 +140,7 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(record["clips"][0]["localEndSeconds"], 20)
         self.assertNotIn("reading decoration", " ".join(video["title"] for video in record["videos"]))
 
-    def test_repeated_pitch_collapse_is_reported_as_score_audio_evidence(self):
+    def test_repeated_pitch_collapse_is_reported_as_audio_paired_evidence(self):
         inventory = {
             "youtube": [
                 {
@@ -193,9 +193,10 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(record["transcription"]["reliability"], "score_audio_only")
         self.assertEqual(record["transcription"]["failureMode"], "repeated_pitch_collapse")
         self.assertFalse(record["transcription"]["displayNotation"])
-        self.assertIn("collapsed into repeated D4", record["transcription"]["reliabilityLimit"])
+        self.assertEqual(record["transcription"]["qualityLabel"], "audio paired")
+        self.assertIn("Only verified note/rhythm evidence", record["transcription"]["reliabilityLimit"])
         self.assertIn("score", record["mainCurtisBlocker"])
-        self.assertIn("collapsed", record["clips"][0]["reason"])
+        self.assertIn("Only note/rhythm evidence", record["clips"][0]["reason"])
 
     def test_repertoire_promotes_only_confirmed_daily_evidence(self):
         inventory = {
@@ -399,7 +400,7 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(transcription["qualityStatus"], "score_audio_only")
         self.assertEqual(transcription["reliability"], "score_audio_only")
         self.assertEqual(transcription["failureMode"], "unverified_machine_pitch")
-        self.assertIn("rejected", transcription["displayLimit"])
+        self.assertIn("kept out of notation", transcription["displayLimit"])
 
 
 if __name__ == "__main__":
