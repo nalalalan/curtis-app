@@ -180,10 +180,19 @@ def active_seconds_from_transcriptions(transcriptions: list[dict[str, Any]]) -> 
     return int(round(total))
 
 
+def has_stable_notation(transcription: dict[str, Any]) -> bool:
+    if transcription.get("status") != "transcribed":
+        return False
+    notes = transcription.get("notes") if isinstance(transcription.get("notes"), list) else []
+    return any(isinstance(note, dict) and str(note.get("note") or "").strip() for note in notes)
+
+
 def transcription_window_seconds(transcriptions: list[dict[str, Any]]) -> int:
     total = 0.0
     seen: set[tuple[str, int, int]] = set()
     for transcription in transcriptions:
+        if not has_stable_notation(transcription):
+            continue
         start, end = window_bounds(transcription)
         if end <= start:
             continue
@@ -245,6 +254,8 @@ def transcription_coverage(
 def transcription_note_count(transcriptions: list[dict[str, Any]]) -> int:
     count = 0
     for transcription in transcriptions:
+        if not has_stable_notation(transcription):
+            continue
         notes = transcription.get("notes") if isinstance(transcription.get("notes"), list) else []
         count += sum(1 for note in notes if isinstance(note, dict) and note.get("note"))
     return count
@@ -592,7 +603,13 @@ def clips_for_day(
             active_duration = 0.0
         reason = f"{note_count} detected notes in the displayed notation window."
         quality = transcription.get("quality") if isinstance(transcription.get("quality"), dict) else {}
-        if quality.get("windowMode") == "detected_active_sections" and active_duration > 0:
+        if note_count <= 0:
+            reason = (
+                f"{duration_seconds_label(active_duration)} of active audio scanned; no stable note notation extracted."
+                if active_duration > 0
+                else "Audio scanned; no stable note notation extracted."
+            )
+        elif quality.get("windowMode") == "detected_active_sections" and active_duration > 0:
             reason = f"{note_count} detected notes from {duration_seconds_label(active_duration)} of active audio inside this sample."
         clips.append(
             {
@@ -605,6 +622,7 @@ def clips_for_day(
                 "durationSeconds": end - start,
                 "activeTranscribedSeconds": round(active_duration, 1) if active_duration else 0,
                 "noteCount": note_count,
+                "transcriptionStatus": transcription.get("status") or "",
                 "transcriptionId": transcription.get("transcriptionId") or "",
                 "pipelineVersion": transcription.get("pipelineVersion") or "",
                 "reason": reason,
@@ -775,18 +793,19 @@ def build_daily_records(
         heat_fragments = transcription_fragments(day_transcriptions)
         day_repeat_groups = repeat_groups(heat_fragments, day_transcriptions)
         note_count = transcription_note_count(day_transcriptions)
-        quality = transcription_quality(note_count, active_seconds, len(day_transcriptions))
+        notation_segments = [item for item in day_transcriptions if has_stable_notation(item)]
+        quality = transcription_quality(note_count, active_seconds, len(notation_segments))
         uploaded_seconds = sum(int(video.get("durationSeconds") or 0) for video in videos)
         processed_seconds = sum(sample_duration_seconds(sample) for sample in day_samples)
         transcribed_seconds = transcription_window_seconds(day_transcriptions)
         active_section_mode = any(
             isinstance(item.get("quality"), dict) and item["quality"].get("windowMode") == "detected_active_sections"
-            for item in day_transcriptions
+            for item in notation_segments
         )
         coverage = transcription_coverage(
             transcribed_seconds,
             uploaded_seconds,
-            len(day_transcriptions),
+            len(notation_segments),
             active_section_mode=active_section_mode,
         )
         clips = clips_for_day(videos, day_sections, day_transcriptions, day_samples)
@@ -813,7 +832,7 @@ def build_daily_records(
                 "transcription": {
                     "status": "ready" if notation else "pending",
                     "noteCount": note_count,
-                    "segmentCount": len(day_transcriptions),
+                    "segmentCount": len(notation_segments),
                     **coverage,
                     **quality,
                     "events": notation,

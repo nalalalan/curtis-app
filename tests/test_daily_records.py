@@ -208,6 +208,19 @@ class DailyRecordTests(unittest.TestCase):
                 "noteCount": 4,
                 "quality": {"windowMode": "detected_active_sections"},
                 "notes": [note("E5", 4, 4.3), note("F#5", 4.3, 4.6), note("G5", 4.6, 4.9), note("A5", 4.9, 5.2)],
+            },
+            {
+                "transcriptionId": "active-window-empty",
+                "sampleId": "K38CgZhvF3Q-empty",
+                "sourceUrl": "https://www.youtube.com/watch?v=K38CgZhvF3Q",
+                "sourceTitle": "5-2-26",
+                "sourceWindow": "*100-190",
+                "status": "no_stable_notes",
+                "durationSeconds": 44.2,
+                "tempoBpm": 0,
+                "noteCount": 0,
+                "quality": {"windowMode": "detected_active_sections"},
+                "notes": [],
             }
         ]
 
@@ -221,10 +234,13 @@ class DailyRecordTests(unittest.TestCase):
         record = next(item for item in daily["records"] if item["practiceDay"] == "2026-05-02")
 
         self.assertEqual(record["transcription"]["windowSeconds"], 12)
+        self.assertEqual(record["transcription"]["segmentCount"], 1)
         self.assertEqual(record["transcription"]["coverageStatus"], "active_sections_only")
         self.assertIn("active playing", record["transcription"]["coverageLimit"])
         self.assertEqual(record["clips"][0]["activeTranscribedSeconds"], 12.4)
         self.assertIn("active audio", record["clips"][0]["reason"])
+        self.assertEqual(record["clips"][1]["activeTranscribedSeconds"], 44.2)
+        self.assertIn("no stable note notation", record["clips"][1]["reason"])
 
     def test_media_probe_uses_title_confirmed_ledger_not_broad_candidates(self):
         state = {
