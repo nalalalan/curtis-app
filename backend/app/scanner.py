@@ -97,6 +97,16 @@ FIVE_ONE_REJECTED_REPERTOIRE_TITLES = (
     "mozart k 216",
     "mozart violin concerto no 3",
     "mozart violin concerto no 3 in g major k 216",
+    "glinka ruslan and lyudmila overture",
+    "ruslan and lyudmila overture",
+    "till eulenspiegel",
+    "strauss don juan",
+    "bartered bride overture",
+    "prokofiev classical symphony",
+    "dvorak carnival overture",
+    "shostakovich symphony no 5",
+    "ravel bolero",
+    "bolero",
 )
 LONG_SESSION_PRACTICE_FLOOR_SECONDS = int(os.getenv("CURTIS_LONG_SESSION_PRACTICE_FLOOR_SECONDS", str(2 * 60 * 60)))
 LONG_SESSION_LATE_SAMPLE_COUNT = int(os.getenv("CURTIS_LONG_SESSION_LATE_SAMPLE_COUNT", "3"))

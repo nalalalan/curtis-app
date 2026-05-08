@@ -106,6 +106,19 @@ FIVE_ONE_REJECTED_TITLES = [
     "Mozart Violin Concerto No. 3 in G major, K. 216",
     "Mozart Violin Concerto No. 3 in G major, K. 216, 3rd movement",
     "Wolfgang Amadeus Mozart Violin Concerto No. 3 in G major, K. 216",
+    "Mikhail Glinka Ruslan and Lyudmila Overture",
+    "Glinka Ruslan and Lyudmila Overture",
+    "Ruslan and Lyudmila Overture",
+    "Richard Strauss Till Eulenspiegel's Merry Pranks",
+    "Till Eulenspiegel's Merry Pranks",
+    "Richard Strauss Don Juan",
+    "Smetana The Bartered Bride Overture",
+    "The Bartered Bride Overture",
+    "Prokofiev Classical Symphony",
+    "Dvorak Carnival Overture",
+    "Shostakovich Symphony No. 5",
+    "Ravel Bolero",
+    "Bolero",
 ]
 SOURCE_ACCEPTANCE_REJECT_COUNT = 3
 
