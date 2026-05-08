@@ -106,13 +106,14 @@ class DailyRecordTests(unittest.TestCase):
         self.assertLess(record["activeViolinSeconds"], record["uploadedVideoSeconds"])
         self.assertEqual(record["activeTimeStatus"], "measured_from_pitch")
         self.assertEqual(daily["transcribedRecordCount"], 0)
-        self.assertEqual(daily["failedTranscriptionRecordCount"], 1)
+        self.assertEqual(daily["failedTranscriptionRecordCount"], 0)
+        self.assertEqual(daily["scoreAudioOnlyRecordCount"], 1)
         self.assertEqual(daily["audioEvidenceRecordCount"], 1)
         self.assertEqual(record["status"], "active_time_measured")
-        self.assertEqual(record["transcription"]["status"], "failed_quality_gate")
-        self.assertEqual(record["transcription"]["qualityStatus"], "transcription_failed")
-        self.assertEqual(record["transcription"]["kind"], "audio_evidence_only")
-        self.assertEqual(record["transcription"]["reliability"], "transcription_failed")
+        self.assertEqual(record["transcription"]["status"], "score_audio_only")
+        self.assertEqual(record["transcription"]["qualityStatus"], "score_audio_only")
+        self.assertEqual(record["transcription"]["kind"], "score_audio_evidence")
+        self.assertEqual(record["transcription"]["reliability"], "score_audio_only")
         self.assertEqual(record["transcription"]["failureMode"], "unverified_machine_pitch")
         self.assertFalse(record["transcription"]["displayNotation"])
         self.assertFalse(record["transcription"]["transcriptionReady"])
@@ -130,7 +131,7 @@ class DailyRecordTests(unittest.TestCase):
         self.assertTrue(any(event["kind"] == "rest" for event in record["transcription"]["events"]))
         self.assertTrue(any(event.get("uncertain") for event in record["transcription"]["events"]))
         self.assertEqual(record["pieces"][0]["title"], "Wieniawski Scherzo-Tarantelle, Op. 16")
-        self.assertIn("failed", record["mainCurtisBlocker"])
+        self.assertIn("score", record["mainCurtisBlocker"])
         self.assertEqual(record["heatMap"]["status"], "pending_score_alignment")
         self.assertEqual(record["heatMap"]["fragments"], [])
         self.assertEqual(record["clips"][0]["type"], "transcribed_window")
@@ -139,7 +140,7 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(record["clips"][0]["localEndSeconds"], 20)
         self.assertNotIn("reading decoration", " ".join(video["title"] for video in record["videos"]))
 
-    def test_repeated_pitch_collapse_is_reported_as_failed_transcription(self):
+    def test_repeated_pitch_collapse_is_reported_as_score_audio_evidence(self):
         inventory = {
             "youtube": [
                 {
@@ -167,7 +168,7 @@ class DailyRecordTests(unittest.TestCase):
                 "quality": {
                     "failed": True,
                     "failureMode": "repeated_pitch_collapse",
-                    "failureLimit": "Machine transcription was rejected because the note stream collapsed into repeated D4 events.",
+                    "failureLimit": "Machine pitch extraction was rejected because the note stream collapsed into repeated D4 events.",
                     "pitchCollapseDominantNote": "D4",
                     "pitchCollapseEventCount": 24,
                     "pitchCollapseDetectedOnsetCount": 28,
@@ -185,14 +186,15 @@ class DailyRecordTests(unittest.TestCase):
         )
         record = daily["records"][0]
 
-        self.assertEqual(daily["failedTranscriptionRecordCount"], 1)
-        self.assertEqual(record["transcription"]["status"], "failed_quality_gate")
-        self.assertEqual(record["transcription"]["qualityStatus"], "transcription_failed")
-        self.assertEqual(record["transcription"]["reliability"], "transcription_failed")
+        self.assertEqual(daily["failedTranscriptionRecordCount"], 0)
+        self.assertEqual(daily["scoreAudioOnlyRecordCount"], 1)
+        self.assertEqual(record["transcription"]["status"], "score_audio_only")
+        self.assertEqual(record["transcription"]["qualityStatus"], "score_audio_only")
+        self.assertEqual(record["transcription"]["reliability"], "score_audio_only")
         self.assertEqual(record["transcription"]["failureMode"], "repeated_pitch_collapse")
         self.assertFalse(record["transcription"]["displayNotation"])
         self.assertIn("collapsed into repeated D4", record["transcription"]["reliabilityLimit"])
-        self.assertIn("failed", record["mainCurtisBlocker"])
+        self.assertIn("score", record["mainCurtisBlocker"])
         self.assertIn("collapsed", record["clips"][0]["reason"])
 
     def test_repertoire_promotes_only_confirmed_daily_evidence(self):
@@ -393,11 +395,11 @@ class DailyRecordTests(unittest.TestCase):
         self.assertTrue(all(system["clip"]["mediaUrl"] == "/api/curtis/media/sample/wDfVpTU4I_I" for system in transcription["notationSystems"]))
         self.assertLess(transcription["renderedEventCount"], transcription["eventCount"])
         self.assertFalse(transcription["displayNotation"])
-        self.assertEqual(transcription["status"], "failed_quality_gate")
-        self.assertEqual(transcription["qualityStatus"], "transcription_failed")
-        self.assertEqual(transcription["reliability"], "transcription_failed")
+        self.assertEqual(transcription["status"], "score_audio_only")
+        self.assertEqual(transcription["qualityStatus"], "score_audio_only")
+        self.assertEqual(transcription["reliability"], "score_audio_only")
         self.assertEqual(transcription["failureMode"], "unverified_machine_pitch")
-        self.assertIn("hidden", transcription["displayLimit"])
+        self.assertIn("rejected", transcription["displayLimit"])
 
 
 if __name__ == "__main__":

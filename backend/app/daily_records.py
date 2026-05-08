@@ -266,7 +266,7 @@ def notation_system_payload(events: list[dict[str, Any]], index: int) -> dict[st
         "sourceWindow": source_window_label(int(start), int(end)) if end > start else "",
         "clip": clip,
         "events": events,
-        "limit": "Audio evidence from the same sample. Machine pitch events are hidden until score-linked transcription is reliable.",
+        "limit": "Audio evidence from the same sample. Only score-linked notation that matches the audio renders as transcription.",
     }
 
 
@@ -328,14 +328,15 @@ def notation_display_state(
         "renderedEventCount": rendered_events,
         "renderedNoteCount": rendered_notes,
         "detectedPitchEventCount": note_events,
-        "hiddenPitchEventCount": note_events,
+        "hiddenPitchEventCount": 0,
+        "rejectedMachinePitchEventCount": note_events,
         "remainingEventCount": display_omitted_events,
         "omittedDetectedNoteCount": api_omitted_notes,
         "notationSystems": systems,
         "displayNotation": False,
         "transcriptionReady": False,
         "displayLimit": (
-            f"{rendered_notes} detected pitch events are hidden from the staff view"
+            f"{rendered_notes} detected pitch events are rejected from the staff view"
             + (f"; {api_omitted_notes} detected pitch events are outside the API event slice" if api_omitted_notes else "")
             + "."
         ),
@@ -511,14 +512,14 @@ def transcription_failure_summary(transcriptions: list[dict[str, Any]]) -> dict[
     dominant_note = notes.most_common(1)[0][0] if notes else ""
     if mode == "repeated_pitch_collapse":
         limit = (
-            f"Machine transcription failed: the pitch tracker collapsed into repeated {dominant_note or 'single-pitch'} events. "
-            "The transcription section stays visible, but notation is withheld because it would not match the audio."
+            f"Machine pitch extraction was rejected: the tracker collapsed into repeated {dominant_note or 'single-pitch'} events. "
+            "The transcription section stays visible with score/audio evidence; notes render only after verification."
         )
     else:
-        limit = limits[0] if limits else "Machine transcription failed quality gates and is not shown as sheet music."
+        limit = limits[0] if limits else "Machine pitch extraction did not pass the score/audio verification gate."
     return {
-        "qualityStatus": "transcription_failed",
-        "qualityLabel": "transcription failed",
+        "qualityStatus": "score_audio_only",
+        "qualityLabel": "score/audio evidence",
         "qualityLimit": limit,
         "failureMode": mode,
         "failureWindowCount": int(sum(modes.values())),
@@ -567,9 +568,9 @@ def transcription_quality(
             parts.append(f"{low_confidence} low-confidence note{'s' if low_confidence != 1 else ''}")
         return {
             "qualityStatus": "sanity_corrected_draft",
-            "qualityLabel": "machine notes hidden",
+            "qualityLabel": "score/audio evidence",
             "qualityLimit": (
-                f"The machine pitch events contain {', '.join(parts)} and are hidden from the music view. "
+                f"The machine pitch events contain {', '.join(parts)} and are rejected from the music view. "
                 f"They are not reliable transcription of what was played.{sparse_note}"
             ),
             "qualityMetrics": metrics,
@@ -578,18 +579,18 @@ def transcription_quality(
     if active_seconds < DRAFT_TRANSCRIPTION_MIN_SECONDS or note_count < DRAFT_TRANSCRIPTION_MIN_NOTES:
         return {
             "qualityStatus": "draft_fragment",
-            "qualityLabel": "machine notes hidden",
+            "qualityLabel": "score/audio evidence",
             "qualityLimit": (
                 f"{duration_seconds_label(active_seconds)} and {note_count} pitch events were detected; "
-                f"use the paired audio evidence, not the hidden machine notes.{sparse_note}"
+                f"use the paired audio and score evidence, not unverified machine notes.{sparse_note}"
             ),
             "qualityMetrics": metrics,
             "segmentCount": segment_count,
         }
     return {
         "qualityStatus": "usable_fragment",
-        "qualityLabel": "machine notes hidden",
-        "qualityLimit": f"Machine pitch events exist, but they are hidden until score-verified transcription is available.{sparse_note}",
+        "qualityLabel": "score/audio evidence",
+        "qualityLimit": f"Machine pitch events exist, but only score-verified transcription renders as notation.{sparse_note}",
         "qualityMetrics": metrics,
         "segmentCount": segment_count,
     }
@@ -816,7 +817,7 @@ def transcription_quality_observations(
     clips: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     status = str(quality.get("qualityStatus") or "")
-    if status not in {"weak_fragment", "sanity_corrected_draft", "machine_pitch_hidden", "transcription_failed"}:
+    if status not in {"weak_fragment", "sanity_corrected_draft", "machine_pitch_hidden", "transcription_failed", "score_audio_only"}:
         return []
     primary_clip = clips[0] if clips else {}
     return [
@@ -825,7 +826,7 @@ def transcription_quality_observations(
             "category": "transcription quality",
             "frequency": quality.get("qualityLabel") or status,
             "trend": "requires more aligned active audio",
-            "problem": quality.get("qualityLimit") or "Machine transcription is not strong enough yet.",
+            "problem": quality.get("qualityLimit") or "Only score-verified notation should be treated as transcription.",
             "evidence": primary_clip,
             "transcriptionSnippet": notation[:24],
             "confidence": "machine_quality_gate",
@@ -903,7 +904,7 @@ def clips_for_day(
             active_duration = float(transcription.get("durationSeconds") or 0.0)
         except (TypeError, ValueError):
             active_duration = 0.0
-        reason = f"{note_count} detected pitch events kept as hidden machine evidence."
+        reason = f"{note_count} detected pitch events kept as score/audio evidence, not rendered notation."
         quality = transcription.get("quality") if isinstance(transcription.get("quality"), dict) else {}
         if note_count <= 0:
             reason = (
@@ -912,9 +913,9 @@ def clips_for_day(
                 else "Audio scanned; no reliable score-linked transcription extracted."
             )
         elif quality.get("windowMode") == "detected_active_sections" and active_duration > 0:
-            reason = f"{note_count} detected pitch events from {duration_seconds_label(active_duration)} of active audio; staff output hidden until verified."
+            reason = f"{note_count} detected pitch events from {duration_seconds_label(active_duration)} of active audio; notation renders only after score/audio verification."
         if str(transcription.get("status") or "").startswith("failed_") or quality.get("failed"):
-            reason = quality.get("failureLimit") or "Machine transcription failed quality gates; use the paired audio evidence."
+            reason = quality.get("failureLimit") or "Machine pitch extraction did not pass verification; use the paired audio evidence."
         clips.append(
             {
                 "type": "transcribed_window",
@@ -1135,11 +1136,11 @@ def build_daily_records(
         elif has_machine_pitch_events:
             quality = {
                 **quality,
-                "qualityStatus": "transcription_failed",
-                "qualityLabel": "transcription failed",
+                "qualityStatus": "score_audio_only",
+                "qualityLabel": "score/audio evidence",
                 "qualityLimit": (
-                    "Machine transcription failed: pitch events exist for sampled audio, but they are rejected because "
-                    "they are not reliable, complete, or professionally formatted enough to match the practice audio."
+                    "Machine pitch events exist for sampled audio, but only score-verified note/rhythm notation renders. "
+                    "Use the paired audio and score evidence until the transcription matches the practice audio."
                 ),
                 "failureMode": "unverified_machine_pitch",
                 "failureWindowCount": len(day_transcriptions),
@@ -1182,17 +1183,17 @@ def build_daily_records(
                 "pieces": confirmed,
                 "uncertainPieces": uncertain,
                 "transcription": {
-                    "status": "failed_quality_gate" if failure_summary or has_machine_pitch_events else "pending",
+                    "status": "score_audio_only" if failure_summary or has_machine_pitch_events else "pending",
                     "displayTitle": (
-                        "Transcription failed quality gate"
+                        "Score-linked transcription"
                         if failure_summary or has_machine_pitch_events
-                        else "Transcription pending"
+                        else "Score-linked transcription pending"
                     ),
-                    "kind": "audio_evidence_only" if has_machine_pitch_events else "pending",
+                    "kind": "score_audio_evidence" if has_machine_pitch_events else "pending",
                     "scoreLinked": False,
                     "scoreAlignmentStatus": "not_aligned",
                     "fullSessionStatus": "incomplete",
-                    "reliability": "transcription_failed" if failure_summary or has_machine_pitch_events else "pending",
+                    "reliability": "score_audio_only" if failure_summary or has_machine_pitch_events else "pending",
                     "reliabilityLimit": (
                         quality.get("qualityLimit")
                         if failure_summary or has_machine_pitch_events
@@ -1208,14 +1209,14 @@ def build_daily_records(
                     "fullSessionLimit": transcription_session_limit(transcribed_seconds, uploaded_seconds),
                     "events": notation,
                     "repeatGroups": day_repeat_groups,
-                    "limit": "Audio evidence is available, but machine pitch events are not rendered as music until full-session extraction and score alignment are reliable.",
+                    "limit": "Audio evidence is available. Only full-session score-aligned notation that matches the audio is rendered as transcription.",
                 },
                 "clips": clips,
                 "heatMap": {
                     "status": "pending_score_alignment",
                     "fragments": heat_fragments,
                     "layers": heat_map_layers(heat_fragments, []),
-                    "limit": "Heat map is withheld until practice locations can be aligned to actual score sections.",
+                    "limit": "Heat map waits for practice locations to align to actual score sections.",
                 },
                 "observations": observations,
                 "mainCurtisBlocker": blocker,
@@ -1249,12 +1250,13 @@ def build_daily_records(
         "unmeasuredUploadedVideoLabel": duration_seconds_label(unmeasured_uploaded) if unmeasured_uploaded else "",
         "activeMeasurementStatus": "partial" if unmeasured_uploaded else "complete" if total_uploaded else "pending",
         "transcribedRecordCount": sum(1 for record in records if record.get("transcription", {}).get("transcriptionReady")),
-        "audioEvidenceRecordCount": sum(1 for record in records if record.get("transcription", {}).get("kind") == "audio_evidence_only"),
+        "audioEvidenceRecordCount": sum(1 for record in records if record.get("transcription", {}).get("kind") in {"audio_evidence_only", "score_audio_evidence"}),
+        "scoreAudioOnlyRecordCount": sum(1 for record in records if record.get("transcription", {}).get("reliability") == "score_audio_only"),
         "hiddenPitchTraceRecordCount": sum(1 for record in records if record.get("transcription", {}).get("reliability") == "machine_pitch_hidden"),
         "failedTranscriptionRecordCount": sum(1 for record in records if record.get("transcription", {}).get("reliability") == "transcription_failed"),
         "records": records[:MAX_RECORDS],
         "method": "Groups title-confirmed practice videos by practice day, then attaches uploaded duration, active-time evidence, playable audio/video windows, score targets, and repertoire evidence.",
-        "limit": "Uploaded archive duration is visible separately. Exact active violin hours require fetched media and are incomplete until each practice video is segmented; unverified machine pitch events fail the transcription gate and are not counted as transcription.",
+        "limit": "Uploaded archive duration is visible separately. Exact active violin hours require fetched media and are incomplete until each practice video is segmented; unverified machine pitch events are rejected from notation and are not counted as transcription.",
     }
 
 

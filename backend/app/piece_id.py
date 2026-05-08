@@ -987,8 +987,8 @@ def withhold_model_title(result: dict[str, Any]) -> dict[str, Any]:
             "todayCompletionPercent": 0,
             "readinessStatus": "source_label_required",
             "evidenceQuality": "unconfirmed_model_title",
-            "candidateEvidence": "Model-only title withheld. Needs source label before it can appear as repertoire.",
-            "evidence": "Model-only title withheld. Needs source label before it can appear as repertoire.",
+            "candidateEvidence": "Model-only title needs a source label before it can appear as repertoire.",
+            "evidence": "Model-only title needs a source label before it can appear as repertoire.",
             "topCandidates": [],
             "musicalClues": [],
         }

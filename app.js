@@ -124,6 +124,32 @@ function shortText(value, limit = 135) {
   return `${clean.slice(0, limit - 1).trim()}...`;
 }
 
+function transcriptionDisplayText(value) {
+  let text = String(value || "").replace(/\s+/g, " ").trim();
+  if (!text) return "";
+  text = text
+    .replace(/Machine transcription failed:?/gi, "Machine pitch extraction needs score/audio verification:")
+    .replace(/transcription failed quality gate/gi, "score-linked transcription")
+    .replace(/transcription failed/gi, "score/audio evidence")
+    .replace(/failed transcription/gi, "score/audio evidence")
+    .replace(/failed quality gates?/gi, "did not pass score/audio verification")
+    .replace(/fail the transcription gate/gi, "do not pass score/audio verification")
+    .replace(/fails the transcription gate/gi, "does not pass score/audio verification")
+    .replace(/notation is withheld because it would not match the audio/gi, "notes are not rendered until they match the audio")
+    .replace(/The transcription section stays visible, but /gi, "")
+    .replace(/not shown as sheet music/gi, "not rendered as sheet music")
+    .replace(/staff output hidden until verified/gi, "notation renders only after score/audio verification")
+    .replace(/hidden machine evidence/gi, "score/audio evidence")
+    .replace(/hidden machine notes/gi, "unverified machine notes")
+    .replace(/hidden from/gi, "rejected from")
+    .replace(/withheld/gi, "not rendered");
+  return text.replace(/\s+/g, " ").trim();
+}
+
+function shortTranscriptionText(value, limit = 135) {
+  return shortText(transcriptionDisplayText(value), limit);
+}
+
 function formatDate(value) {
   if (!value) return "";
   const parsed = new Date(value);
@@ -405,8 +431,8 @@ function currentStateText(ops) {
   const processedCount = analyzedRecordList(ops).length;
   const practiceCount = Number(ops?.review?.practiceCandidateCount) || 0;
   const findingCount = skillFindings(ops).length;
-  const failedCount = Number(records.failedTranscriptionRecordCount || 0);
-  if (recordCount) return `${transcribedCount} verified transcription / ${failedCount} failed transcription / ${audioEvidenceCount} audio evidence / ${processedCount} processed / ${recordCount} indexed practice days.`;
+  const strictCount = Number(records.scoreAudioOnlyRecordCount || records.failedTranscriptionRecordCount || 0);
+  if (recordCount) return `${transcribedCount} verified transcription / ${strictCount} score-audio evidence / ${audioEvidenceCount} playable audio / ${processedCount} processed / ${recordCount} indexed practice days.`;
   if (findingCount) return `${findingCount} Curtis-focused findings. ${progressPlan(ops)?.oneFocus || "Review active."}`;
   const sectionCount = reviewSections(ops).length;
   if (sectionCount) return `${sectionCount} audio/video sections scanned. Musicianship judgment pending.`;
@@ -943,8 +969,8 @@ function renderStatus() {
     const transcribedCount = Number(records.transcribedRecordCount) || 0;
     const audioEvidenceCount = Number(records.audioEvidenceRecordCount) || 0;
     const analyzedCount = analyzedRecords.length;
-    const failedCount = Number(records.failedTranscriptionRecordCount || 0);
-    elements.studyCount.textContent = `${transcribedCount} verified / ${failedCount} failed / ${audioEvidenceCount} audio evidence / ${analyzedCount} processed`;
+    const strictCount = Number(records.scoreAudioOnlyRecordCount || records.failedTranscriptionRecordCount || 0);
+    elements.studyCount.textContent = `${transcribedCount} verified / ${strictCount} score-audio / ${audioEvidenceCount} audio / ${analyzedCount} processed`;
   }
   const activeSeconds = Number(records.totalActiveViolinSeconds) || 0;
   const archiveSeconds = archiveVideoSeconds(records, totals);
@@ -1137,7 +1163,7 @@ function renderNotationSheet(events, options = {}) {
   const repeatLabel = repeatGroup?.notationLabel || options?.repeatLabel || "";
   const repeatPattern = repeatGroup?.practicePattern || options?.practicePattern || "";
   const qualityLabel = options?.qualityLabel || "";
-  const qualityLimit = options?.qualityLimit || "";
+  const qualityLimit = transcriptionDisplayText(options?.qualityLimit || "");
   const systemLabel = options?.systemLabel || "";
   const captionTitle = systemLabel || repeatLabel || qualityLabel;
   const captionDetail = [repeatPattern || qualityLimit, keySignature.label && keySignature.label !== "key pending" ? keySignature.label : ""].filter(Boolean).join(" / ");
@@ -1219,11 +1245,23 @@ function renderNotationSheet(events, options = {}) {
   `;
 }
 
-function renderNotationWithheld(title = "Transcription not ready", detail = "Unverified machine pitch events are hidden until score-linked notation is reliable.") {
+function renderVerifiedNotationGate(
+  title = "Score-linked transcription",
+  detail = "Only note-for-note verified notation renders here. Use the paired audio and boxed score while alignment is pending.",
+  keySignature = {}
+) {
+  const staffLines = [30, 40, 50, 60, 70].map((y) => `<line x1="22" x2="698" y1="${y}" y2="${y}" />`).join("");
+  const signature = renderKeySignatureMarks(keySignature);
   return `
-    <div class="notation-withheld" aria-label="Transcription not ready">
-      <span>${escapeHtml(title)}</span>
-      <strong>${escapeHtml(detail)}</strong>
+    <div class="notation-gate" aria-label="${escapeHtml(title)}">
+      <svg viewBox="0 0 720 118" role="img">
+        <g class="staff-lines">${staffLines}</g>
+        <text class="treble-clef" x="29" y="70">&#119070;</text>
+        ${signature.svg}
+        <text class="notation-gate-title" x="154" y="48">${escapeHtml(shortText(title, 44))}</text>
+        <text class="notation-gate-detail" x="154" y="67">${escapeHtml(shortTranscriptionText(detail, 74))}</text>
+      </svg>
+      <strong>${escapeHtml(transcriptionDisplayText(detail))}</strong>
     </div>
   `;
 }
@@ -1232,23 +1270,16 @@ function renderTranscriptionStats(transcription) {
   const signature = normalizedKeySignature(transcription?.keySignature || {});
   const displayNotation = transcription?.displayNotation !== false && transcription?.transcriptionReady === true;
   const systems = Array.isArray(transcription?.notationSystems) ? transcription.notationSystems.length : 0;
-  const failed = transcription?.reliability === "transcription_failed" || transcription?.qualityStatus === "transcription_failed";
   const rows = displayNotation
     ? [
         ["Clef", transcription?.clef === "treble" ? "treble" : "pending"],
         ["Key", signature.label || "key pending"],
         ["Status", "verified"],
       ]
-    : failed
-    ? [
-        ["Music", "failed"],
-        ["Audio", systems ? `${systems} windows` : "pending"],
-        ["Reason", transcription?.failureDominantNote ? `pitch collapse ${transcription.failureDominantNote}` : "quality gate"],
-      ]
     : [
-        ["Music", "withheld"],
+        ["Notation", "verified only"],
         ["Audio", systems ? `${systems} windows` : "pending"],
-        ["Status", transcription?.status === "not_ready" ? "not ready" : transcription?.status || "pending"],
+        ["Score", transcription?.scoreLinked ? "linked" : "alignment pending"],
       ];
   return `
     <div class="transcription-stats" aria-label="Transcription state">
@@ -1268,7 +1299,6 @@ function renderNotationSystems(transcription, fallbackEvents = []) {
     : [{ label: "Line 1", events: Array.isArray(fallbackEvents) ? fallbackEvents : [], noteCount: 0, uncertainNoteCount: 0 }];
   const signature = transcription?.keySignature || {};
   const displayNotation = transcription?.displayNotation !== false && transcription?.transcriptionReady === true;
-  const failed = transcription?.reliability === "transcription_failed" || transcription?.qualityStatus === "transcription_failed";
   return `
     <div class="notation-systems" aria-label="Audio evidence windows">
       ${systems.map((system) => {
@@ -1285,7 +1315,11 @@ function renderNotationSystems(transcription, fallbackEvents = []) {
               keySignature: signature,
               systemLabel: system?.label || "",
               qualityLimit: system?.limit || transcription?.displayLimit || transcription?.coverageLimit || ""
-            }) : renderNotationWithheld(failed ? "Transcription failed" : "Music withheld", system?.limit || transcription?.reliabilityLimit || "Unverified machine pitch events are hidden.")}
+            }) : renderVerifiedNotationGate(
+              "Score-linked transcription",
+              transcriptionDisplayText(system?.limit || transcription?.reliabilityLimit || "Only verified note-for-note transcription is rendered."),
+              signature
+            )}
           </div>
         `;
       }).join("")}
@@ -1338,8 +1372,10 @@ function renderHeatMap(record) {
 }
 
 function recordStatusLabel(record) {
-  if (record?.transcription?.reliability === "transcription_failed") return "transcription failed";
-  if (record?.transcription?.qualityStatus === "transcription_failed") return "transcription failed";
+  if (record?.transcription?.reliability === "transcription_failed") return "score/audio evidence";
+  if (record?.transcription?.qualityStatus === "transcription_failed") return "score/audio evidence";
+  if (record?.transcription?.reliability === "score_audio_only") return "score/audio evidence";
+  if (record?.transcription?.qualityStatus === "score_audio_only") return "score/audio evidence";
   if (record?.transcription?.reliability === "machine_pitch_hidden") return "audio evidence";
   if (record?.transcription?.qualityStatus === "machine_pitch_hidden") return "audio evidence";
   if (record?.transcription?.qualityStatus === "weak_fragment") return "audio evidence";
@@ -1350,14 +1386,34 @@ function recordStatusLabel(record) {
   return "pending media";
 }
 
+function recordStatusTone(record) {
+  if (record?.transcription?.transcriptionReady === true) return "verified";
+  return "pending";
+}
+
 function transcriptionEvidenceLabel(transcription) {
-  if (transcription?.reliability === "transcription_failed" || transcription?.qualityStatus === "transcription_failed") {
-    return "transcription failed";
+  if (
+    transcription?.reliability === "transcription_failed"
+    || transcription?.qualityStatus === "transcription_failed"
+    || transcription?.reliability === "score_audio_only"
+    || transcription?.qualityStatus === "score_audio_only"
+  ) {
+    return "score/audio evidence";
   }
   if (transcription?.reliability === "machine_pitch_hidden" || transcription?.status === "not_ready") {
-    return "transcription not ready";
+    return "verified notation pending";
   }
   return transcription?.qualityLabel || (transcription?.status === "ready" ? "verified transcription" : "notation pending");
+}
+
+function transcriptionReasonLine(record) {
+  const transcription = record?.transcription || {};
+  const label = transcriptionEvidenceLabel(transcription);
+  if (label === "score/audio evidence") {
+    return "Transcription: score/audio evidence. Verified notation only; paired audio is below.";
+  }
+  const limit = transcription.reliabilityLimit || transcription.qualityLimit || transcription.fullSessionLimit || transcription.coverageLimit || "No score-linked transcription has been generated.";
+  return `Transcription: ${label}. ${shortTranscriptionText(limit, 180)}`;
 }
 
 function renderRepeatGroups(groups) {
@@ -1384,8 +1440,8 @@ function renderObservations(observations) {
       ${rows.map((item) => `
         <article>
           <span>${escapeHtml([item.category, item.frequency].filter(Boolean).join(" / "))}</span>
-          <strong>${escapeHtml(item.problem || "Observation pending.")}</strong>
-          <p>${escapeHtml(item.curtisReadinessIssue || "")}</p>
+          <strong>${escapeHtml(transcriptionDisplayText(item.problem || "Observation pending."))}</strong>
+          <p>${escapeHtml(transcriptionDisplayText(item.curtisReadinessIssue || ""))}</p>
         </article>
       `).join("")}
     </div>
@@ -1401,7 +1457,7 @@ function renderRepertoireUpdates(updates) {
         <article>
           <span>${escapeHtml([item.action, item.status].filter(Boolean).join(" / ") || "repertoire update")}</span>
           <strong>${escapeHtml(item.pieceTitle || "Piece")}</strong>
-          <em>${escapeHtml(shortText(item.reason || "Confirmed from practice evidence.", 120))}</em>
+          <em>${escapeHtml(shortTranscriptionText(item.reason || "Confirmed from practice evidence.", 120))}</em>
         </article>
       `).join("")}
     </div>
@@ -1585,8 +1641,8 @@ function renderClipEvidencePair({ clip, observation, repeatGroup, notationEvents
   const passage = observation?.passage || repeatGroup?.label || pieceTitle || "passage pending";
   const repeatText = repeatGroup?.notationLabel
     || (repeatGroup?.repeatCount ? `${repeatGroup?.label || "fragment"} x${repeatGroup.repeatCount}` : "");
-  const pattern = repeatGroup?.practicePattern || clip?.reason || observation?.frequency || "pattern pending";
-  const problem = observation?.problem || clip?.reason || "specific observation pending";
+  const pattern = repeatGroup?.practicePattern || transcriptionDisplayText(clip?.reason) || observation?.frequency || "pattern pending";
+  const problem = transcriptionDisplayText(observation?.problem || clip?.reason || "specific observation pending");
   const confidence = observation?.confidence || repeatGroup?.confidence || clip?.type || "confidence pending";
   return `
     <div class="clip-evidence-pair" aria-label="Clip linked to transcription evidence">
@@ -1608,7 +1664,7 @@ function renderClipEvidencePair({ clip, observation, repeatGroup, notationEvents
           <strong>${escapeHtml(shortText(confidence, 58))}</strong>
         </article>
       </div>
-      ${events.length ? renderNotationWithheld("Snippet withheld", "Unverified machine notes are not shown as music.") : `<p class="empty">Transcription snippet pending.</p>`}
+      ${events.length ? renderVerifiedNotationGate("Score-linked snippet", "Only verified notes render here; this clip stays paired with score evidence for alignment.", keySignature) : `<p class="empty">Verified transcription snippet pending.</p>`}
     </div>
   `;
 }
@@ -1638,7 +1694,7 @@ function renderRecordClips(record, includeFrame = false) {
         return `
           <a href="${escapeHtml(url)}">
             <span>${escapeHtml(clipWindowLabel(clip))}</span>
-            <strong>${escapeHtml(shortText(clip?.reason || clip?.label || "practice clip", 76))}</strong>
+            <strong>${escapeHtml(shortTranscriptionText(clip?.reason || clip?.label || "practice clip", 76))}</strong>
           </a>
         `;
       }).join("")}
@@ -1687,38 +1743,41 @@ function renderDailyRecord(record, index = 0) {
   const events = transcriptionEventsForClip(record, playableClip);
   const scoreSnippet = scoreSnippetForRecord(record);
   const openTarget = new URLSearchParams(window.location.search).get("open") || "";
-  const openForReview = (openTarget === "first" && index === 0) || openTarget === record.practiceDay;
+  const openForReview = openTarget
+    ? (openTarget === "first" && index === 0) || openTarget === record.practiceDay
+    : index === 0;
   const meta = [
     record.practiceDay,
     record.uploadedVideoLabel ? `${record.uploadedVideoLabel} uploaded` : "",
     record.activeViolinLabel ? `${record.activeViolinLabel} active` : record.activeTimeStatus === "pending_media" ? "active time pending" : "",
-    record.transcription?.noteCount ? transcriptionEvidenceLabel(record.transcription) : "notation pending"
+    transcriptionEvidenceLabel(record.transcription || {})
   ].filter(Boolean).join(" / ");
   return `
     <details class="record-card" data-status="${escapeHtml(record.status || "pending")}"${openForReview ? " open" : ""}>
       <summary class="record-summary">
         <span>${escapeHtml(meta)}</span>
         <strong>${escapeHtml(recordPieceText(record))}</strong>
-        <em>${escapeHtml(recordStatusLabel(record))}</em>
+        <em data-tone="${escapeHtml(recordStatusTone(record))}">${escapeHtml(recordStatusLabel(record))}</em>
         <small class="row-evidence-line">${escapeHtml(recordEvidenceLine(record, scoreSnippet))}</small>
+        <small class="row-transcription-line">${escapeHtml(transcriptionReasonLine(record))}</small>
       </summary>
       <div class="record-card-body record-essentials-body">
         <div class="practice-essentials">
           ${renderEmbeddedMedia(record, playableClip)}
           <section class="essential-panel">
-            <span>${escapeHtml(record?.transcription?.displayTitle || "Transcription pending")}</span>
+            <span>${escapeHtml(transcriptionDisplayText(record?.transcription?.displayTitle || "Score-linked transcription pending"))}</span>
             ${renderTranscriptionStats(record?.transcription || {})}
-            <small class="transcription-limit">${escapeHtml(record?.transcription?.reliabilityLimit || "Score-linked transcription pending.")}</small>
+            <small class="transcription-limit">${escapeHtml(transcriptionDisplayText(record?.transcription?.reliabilityLimit || "Score-linked transcription pending."))}</small>
             ${renderNotationSystems(record?.transcription || {}, events)}
-            <small class="transcription-limit">${escapeHtml(record?.transcription?.fullSessionLimit || record?.transcription?.coverageLimit || "Full-session transcription pending.")}</small>
+            <small class="transcription-limit">${escapeHtml(transcriptionDisplayText(record?.transcription?.fullSessionLimit || record?.transcription?.coverageLimit || "Full-session transcription pending."))}</small>
           </section>
           <section class="essential-panel">
             ${renderScoreHeatMap(record, scoreSnippet)}
           </section>
           <section class="essential-panel essential-state">
             <span>Limit</span>
-            <strong>${escapeHtml(record?.transcription?.qualityLimit || record.mainCurtisBlocker || "Evidence pending.")}</strong>
-            <small>${escapeHtml(record?.transcription?.coverageLimit || transcriptionCoverageText(record))}</small>
+            <strong>${escapeHtml(transcriptionDisplayText(record?.transcription?.qualityLimit || record.mainCurtisBlocker || "Evidence pending."))}</strong>
+            <small>${escapeHtml(transcriptionDisplayText(record?.transcription?.coverageLimit || transcriptionCoverageText(record)))}</small>
           </section>
         </div>
       </div>
@@ -1774,10 +1833,10 @@ function renderPieces() {
       </summary>
       <div class="piece-card-body">
         <div class="piece-evidence-copy">
-        <p>${escapeHtml(shortText(piece.reason || "Confirmed from daily practice evidence.", 150))}</p>
+        <p>${escapeHtml(shortTranscriptionText(piece.reason || "Confirmed from daily practice evidence.", 150))}</p>
         <div class="blocker-line repertoire-blocker">
           <span>Current blocker</span>
-          <strong>${escapeHtml(piece.mainCurtisBlocker || "Specific blocker pending.")}</strong>
+          <strong>${escapeHtml(transcriptionDisplayText(piece.mainCurtisBlocker || "Specific blocker pending."))}</strong>
         </div>
         <small class="piece-meta-line">Progress: ${escapeHtml(piece.currentProgressLabel || piece.progressStatus || "not scored")}</small>
         ${renderPieceEvidenceLedger(piece, evidence)}
@@ -1800,9 +1859,9 @@ function renderPieces() {
               <div class="evidence-row">
                 <a href="${escapeHtml(clipUrl)}">${escapeHtml([item.practiceDay, clipWindowLabel(clip)].filter(Boolean).join(" / "))}</a>
                 <span>${escapeHtml(item.confidence || "confirmed")}</span>
-                <small>${escapeHtml(shortText(item.reason || "Confirmed source evidence.", 130))}</small>
+                <small>${escapeHtml(shortTranscriptionText(item.reason || "Confirmed source evidence.", 130))}</small>
                 ${Array.isArray(item.transcriptionSnippet) && item.transcriptionSnippet.length
-                  ? renderNotationWithheld("Snippet withheld", "Repertoire evidence keeps the clip and score target; unverified machine notes are hidden.")
+                  ? renderVerifiedNotationGate("Score-linked snippet", "Clip and score target are kept together; only verified notes render as notation.", item?.score?.keySignature || {})
                   : ""}
                 ${itemIndex === 0 ? renderEvidenceScore(item) : ""}
               </div>

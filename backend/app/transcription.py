@@ -410,7 +410,7 @@ def transcription_failure_state(events: list[dict[str, Any]], quality: dict[str,
             "failureMode": "repeated_pitch_collapse",
             "failureLabel": "pitch collapse",
             "failureLimit": (
-                "Machine transcription was rejected because the note stream collapsed into repeated "
+                "Machine pitch extraction was rejected because the note stream collapsed into repeated "
                 f"{collapse.get('pitchCollapseDominantNote') or 'single-pitch'} events. "
                 "Use the paired audio evidence; do not treat these notes as the played passage."
             ),
@@ -822,9 +822,9 @@ def transcribe_path(path: Path, active_windows: list[dict[str, float]] | None = 
                 if quality.get("failureMode") == "repeated_pitch_collapse"
                 else "failed_transcription_quality",
                 "failureMode": quality.get("failureMode") or "transcription_failed",
-                "failureLabel": quality.get("failureLabel") or "transcription failed",
+                "failureLabel": quality.get("failureLabel") or "machine pitch rejected",
                 "failureLimit": quality.get("failureLimit")
-                or "Machine transcription failed quality gates and is not used as sheet music.",
+                or "Machine pitch extraction did not pass score/audio verification and is not used as sheet music.",
             }
         status = str(failure.get("status") or ("transcribed" if events else "no_stable_notes"))
         fingerprint = event_fingerprint(events, tempo) if status == "transcribed" else {}

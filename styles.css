@@ -1430,7 +1430,20 @@ h2 {
   white-space: nowrap;
 }
 
-.row-evidence-line {
+.record-summary em[data-tone="failed"] {
+  border-color: rgba(142, 79, 72, .2);
+  background: rgba(142, 79, 72, .06);
+  color: var(--red);
+}
+
+.record-summary em[data-tone="verified"] {
+  border-color: rgba(95, 118, 104, .22);
+  background: rgba(95, 118, 104, .08);
+  color: var(--green);
+}
+
+.row-evidence-line,
+.row-transcription-line {
   grid-column: 1 / -1;
   padding-right: 36px;
   color: var(--muted);
@@ -1438,6 +1451,10 @@ h2 {
   font-weight: 650;
   line-height: 1.25;
   overflow-wrap: anywhere;
+}
+
+.row-transcription-line {
+  color: var(--red);
 }
 
 .record-summary::after,
@@ -2016,25 +2033,54 @@ h2 {
   font-weight: 680;
 }
 
-.notation-withheld {
+.notation-gate {
   display: grid;
   gap: 4px;
-  padding: 10px 11px;
+  padding: 0 0 9px;
   border: 1px solid rgba(31, 41, 39, .12);
   border-radius: 7px;
   background: #fffdf8;
 }
 
-.notation-withheld span {
-  color: var(--muted);
-  font-size: 10px;
-  font-weight: 780;
-  letter-spacing: 0;
-  line-height: 1.1;
-  text-transform: uppercase;
+.notation-gate svg {
+  display: block;
+  width: 100%;
+  height: 118px;
 }
 
-.notation-withheld strong {
+.notation-gate .treble-clef,
+.notation-gate .key-signature-mark {
+  fill: var(--ink);
+  font-family: "Segoe UI Symbol", "Noto Music", Georgia, "Times New Roman", serif;
+}
+
+.notation-gate .treble-clef {
+  font-size: 42px;
+  font-weight: 500;
+}
+
+.notation-gate .key-signature-mark {
+  font-size: 22px;
+  font-weight: 760;
+}
+
+.notation-gate-title {
+  fill: var(--green);
+  font-family: Inter, Arial, sans-serif;
+  font-size: 16px;
+  font-weight: 780;
+}
+
+.notation-gate-detail {
+  fill: var(--muted);
+  font-family: Inter, Arial, sans-serif;
+  font-size: 11px;
+  font-weight: 660;
+}
+
+.notation-gate strong {
+  display: block;
+  padding: 0 11px;
   color: var(--ink);
   font-size: 12px;
   font-weight: 690;
