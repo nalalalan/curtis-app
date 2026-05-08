@@ -10,6 +10,7 @@ from .study_packets import (
     practice_ledger_videos,
     source_matches,
 )
+from .transcription import TRANSCRIPTION_PIPELINE_VERSION
 
 
 MAX_NOTATION_EVENTS = 192
@@ -21,6 +22,11 @@ WEAK_TRANSCRIPTION_MIN_SECONDS = 8
 DRAFT_TRANSCRIPTION_MIN_SECONDS = 30
 WEAK_TRANSCRIPTION_MIN_NOTES = 12
 DRAFT_TRANSCRIPTION_MIN_NOTES = 48
+
+
+def is_current_transcription(item: dict[str, Any]) -> bool:
+    version = str(item.get("pipelineVersion") or "").strip()
+    return not version or version == TRANSCRIPTION_PIPELINE_VERSION
 
 
 def video_match_keys(item: dict[str, Any]) -> set[str]:
@@ -1091,7 +1097,7 @@ def build_daily_records(
         keys = set().union(*(video_match_keys(video) for video in videos))
         day_samples = [sample for sample in media_samples if item_matches_keys(sample, keys)]
         day_transcriptions = sorted(
-            [item for item in transcriptions if item_matches_keys(item, keys)],
+            [item for item in transcriptions if item_matches_keys(item, keys) and is_current_transcription(item)],
             key=lambda item: (
                 str(item.get("sourceTitle") or ""),
                 window_bounds(item)[0],

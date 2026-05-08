@@ -2,6 +2,7 @@ import unittest
 
 from backend.app.daily_records import build_daily_records, build_repertoire_evidence
 from backend.app.media import practice_candidates
+from backend.app.transcription import TRANSCRIPTION_PIPELINE_VERSION
 
 
 def note(name, start, end, confidence=0.9):
@@ -139,6 +140,59 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(record["clips"][0]["localStartSeconds"], 0)
         self.assertEqual(record["clips"][0]["localEndSeconds"], 20)
         self.assertNotIn("reading decoration", " ".join(video["title"] for video in record["videos"]))
+
+    def test_stale_pipeline_transcriptions_do_not_surface_as_current_clips(self):
+        inventory = {
+            "youtube": [
+                {
+                    "id": "wDfVpTU4I_I",
+                    "title": "5-1-26",
+                    "url": "https://www.youtube.com/watch?v=wDfVpTU4I_I",
+                    "publishedAt": "2026-05-03T10:20:47Z",
+                    "durationSeconds": 300,
+                    "practiceCandidate": True,
+                }
+            ]
+        }
+        old_item = {
+            "transcriptionId": "old",
+            "sampleId": "wDfVpTU4I_I-old",
+            "sourceUrl": "https://www.youtube.com/watch?v=wDfVpTU4I_I",
+            "sourceTitle": "5-1-26",
+            "sourceWindow": "*10-30",
+            "status": "transcribed",
+            "pipelineVersion": "violin_pyin_onset_v3",
+            "noteCount": 24,
+            "notes": [note("D4", index * 0.1, index * 0.1 + 0.08) for index in range(24)],
+        }
+        current_item = {
+            "transcriptionId": "current",
+            "sampleId": "wDfVpTU4I_I-current",
+            "sourceUrl": "https://www.youtube.com/watch?v=wDfVpTU4I_I",
+            "sourceTitle": "5-1-26",
+            "sourceWindow": "*40-70",
+            "status": "transcribed",
+            "pipelineVersion": TRANSCRIPTION_PIPELINE_VERSION,
+            "noteCount": 24,
+            "notes": [note("G4", index * 0.1, index * 0.1 + 0.08) for index in range(24)],
+        }
+
+        daily = build_daily_records(
+            inventory=inventory,
+            state={},
+            media_samples=[
+                {"id": "wDfVpTU4I_I-old", "path": "old.mp4", "window": "*10-30"},
+                {"id": "wDfVpTU4I_I-current", "path": "current.mp4", "window": "*40-70"},
+            ],
+            transcriptions=[old_item, current_item],
+            sections=[],
+        )
+        record = next(item for item in daily["records"] if item["practiceDay"] == "2026-05-01")
+
+        self.assertEqual(record["clips"][0]["pipelineVersion"], TRANSCRIPTION_PIPELINE_VERSION)
+        self.assertEqual(record["clips"][0]["sampleId"], "wDfVpTU4I_I-current")
+        self.assertNotIn("violin_pyin_onset_v3", [clip.get("pipelineVersion") for clip in record["clips"]])
+        self.assertEqual(record["transcription"]["noteCount"], 24)
 
     def test_repeated_pitch_collapse_is_reported_as_audio_paired_evidence(self):
         inventory = {
