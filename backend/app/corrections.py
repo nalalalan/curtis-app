@@ -58,6 +58,12 @@ FIVE_ONE_REJECTED_TITLES = [
     "The Last Rose of Summer",
     "Ernst Grand Caprice on Schubert's Erlkonig",
     "Erlkonig",
+    "Sarasate",
+    "Pablo de Sarasate",
+    "Sarasate Introduction and Tarantella",
+    "Pablo de Sarasate Introduction and Tarantella, Op. 43",
+    "Sarasate Caprice Basque",
+    "Pablo de Sarasate Caprice Basque, Op. 24",
     "Pablo de Sarasate Carmen Fantasy, Op. 25",
     "Sarasate Carmen Fantasy",
     "Carmen Fantasy",
@@ -148,7 +154,8 @@ def builtin_correction(key: str) -> dict[str, Any] | None:
         "rejectedTitles": FIVE_ONE_REJECTED_TITLES,
         "acceptedTitle": "",
         "updatedAt": "2026-05-07T00:00:00+00:00",
-        "reason": "Alan-corrected false labels for this source.",
+        "sourceHint": "Violin I part of an orchestral work; not solo violin repertoire.",
+        "reason": "Alan-corrected false labels and source hint for this source.",
     }
 
 

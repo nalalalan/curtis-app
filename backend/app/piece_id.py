@@ -100,6 +100,14 @@ FIVE_ONE_REJECTED_PIECES = [
     "Bach Partita No. 3 Preludio",
 ]
 FIVE_ONE_SEEDED_CANDIDATES = [
+    "Glinka Ruslan and Lyudmila Overture, Violin I part",
+    "Mikhail Glinka Ruslan and Lyudmila Overture, first violin part",
+    "Richard Strauss Till Eulenspiegel's Merry Pranks, Violin I part",
+    "Richard Strauss Don Juan, Violin I part",
+    "Smetana The Bartered Bride Overture, Violin I part",
+    "Prokofiev Classical Symphony, Violin I part",
+    "Dvorak Carnival Overture, Violin I part",
+    "Shostakovich Symphony No. 5, Violin I part",
 ]
 FIVE_ONE_REJECTED_PIECES = FIVE_ONE_REJECTED_TITLES
 WEAK_TITLE_WORDS = {
@@ -189,6 +197,7 @@ def candidate_segment_starts(source: Path) -> list[int]:
 
 def piece_id_prompt(sample: dict[str, Any]) -> str:
     rejected = rejected_piece_text(sample)
+    source_hint = source_hint_text(sample)
     return f"""
 Return JSON only. Identify the exact classical violin repertoire from this audio excerpt.
 
@@ -196,9 +205,12 @@ Context:
 - Public YouTube practice capture: {sample.get("title") or "untitled"}
 - Window: {sample.get("window") or "unknown"}
 - Rejected false labels for this sample: {rejected}
+- Source hint from Alan: {source_hint}
 
 Rules:
 - This is a piece-identification task, not a coaching task.
+- If the source hint says orchestral work, identify the orchestral work and first-violin part, not a solo violin piece.
+- For an orchestral-work source, do not return concerto, caprice, showpiece, sonata, partita, or other solo repertoire unless the audio clearly contradicts the hint.
 - Name a piece only when the melody, harmony, rhythm, or quoted material makes the exact work clear.
 - Do not infer a piece from generic technique: fast notes, arpeggios, ricochet, spiccato, scales, caprice-like writing, or virtuoso style.
 - Fast arpeggios, ricochet, spiccato, or caprice-like writing alone are not enough to name Paganini or any other work.
@@ -227,6 +239,7 @@ JSON schema:
 
 def verification_prompt(sample: dict[str, Any], proposed_title: str) -> str:
     rejected = rejected_piece_text(sample)
+    source_hint = source_hint_text(sample)
     return f"""
 Return JSON only. Verify whether this exact audio excerpt clearly matches the proposed repertoire title.
 
@@ -235,9 +248,11 @@ Context:
 - Window: {sample.get("window") or "unknown"}
 - Proposed title from a separate model: {proposed_title}
 - Rejected false labels for this sample: {rejected}
+- Source hint from Alan: {source_hint}
 
 Rules:
 - This is a verification task. Do not agree with the proposed title unless the audible material clearly supports the exact work.
+- If the source hint says orchestral work, reject solo-repertoire proposals and verify only an orchestral work / violin I part.
 - A similar technique, texture, virtuoso style, fast arpeggios, spiccato, ricochet, or caprice-like writing is not enough.
 - Do not output a rejected false label.
 - If the proposed title is not exact enough, set title null, matchesProposed false, and exactEnough false.
@@ -404,6 +419,16 @@ def rejected_pieces_for_sample(sample: dict[str, Any]) -> list[str]:
 def rejected_piece_text(sample: dict[str, Any]) -> str:
     rejected = rejected_pieces_for_sample(sample)
     return ", ".join(rejected) if rejected else "none"
+
+
+def source_hint_text(sample: dict[str, Any]) -> str:
+    correction = correction_for_item(load_state(), sample)
+    hint = str(correction.get("sourceHint") or "").strip()
+    if hint:
+        return hint
+    if sample_matches_five_one(sample):
+        return "Violin I part of an orchestral work; not solo violin repertoire."
+    return "none"
 
 
 def title_is_rejected(title: str, sample: dict[str, Any]) -> bool:
@@ -650,6 +675,7 @@ def seeded_candidate_titles(sample: dict[str, Any], candidates: list[str]) -> li
 
 def consensus_prompt(sample: dict[str, Any], candidates: list[str]) -> str:
     rejected = rejected_piece_text(sample)
+    source_hint = source_hint_text(sample)
     candidates = seeded_candidate_titles(sample, candidates)
     candidate_text = "\n".join(f"- {title}" for title in candidates) if candidates else "- none"
     return f"""
@@ -659,11 +685,14 @@ Context:
 - Public YouTube practice capture: {sample.get("title") or "untitled"}
 - Source windows: {sample.get("window") or "multiple"}
 - Rejected false labels for this video: {rejected}
+- Source hint from Alan: {source_hint}
 - Candidate titles already proposed by window-level passes:
 {candidate_text}
 
 Rules:
 - This is a same-video consensus task. Prefer the title that explains repeated material across windows, not a one-off stylistic guess.
+- If the source hint says orchestral work, identify the orchestral work and first-violin part, not solo violin repertoire.
+- For an orchestral-work source, do not return concerto, caprice, showpiece, sonata, partita, or other solo repertoire unless the audio clearly contradicts the hint.
 - Compare the candidate titles against the audio and choose unknown if none are exact enough.
 - Do not infer a piece from generic technique: fast notes, arpeggios, ricochet, spiccato, scales, caprice-like writing, or virtuoso style.
 - Do not return a rejected false label.
