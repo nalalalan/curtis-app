@@ -5,24 +5,19 @@
       <feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="#fffaf4" flood-opacity=".46"/>
     </filter>
     <g id="spoke">
-      <rect x="60" y="21" width="8" height="28" rx="4" fill="currentColor"/>
+      <rect x="60.5" y="25" width="7" height="23" rx="3.5" fill="currentColor"/>
     </g>
   </defs>
   <g filter="url(#d)">
     <path d="M93 36a41 41 0 1 0 0 56" fill="none" stroke="#2d3036" stroke-width="15" stroke-linecap="round"/>
-    <g opacity=".94">
-      <use href="#spoke" transform="rotate(188 64 64)" color="#be725f"/>
-      <use href="#spoke" transform="rotate(210 64 64)" color="#e6d8c5"/>
-      <use href="#spoke" transform="rotate(232 64 64)" color="#73958b"/>
-      <use href="#spoke" transform="rotate(254 64 64)" color="#2d3036"/>
-      <use href="#spoke" transform="rotate(276 64 64)" color="#c5934f"/>
-      <use href="#spoke" transform="rotate(298 64 64)" color="#f3ecdf"/>
-      <use href="#spoke" transform="rotate(320 64 64)" color="#7d91ac"/>
-      <use href="#spoke" transform="rotate(342 64 64)" color="#b98755"/>
+    <g opacity=".88">
+      <use href="#spoke" transform="rotate(205 64 64)" color="#be725f"/>
+      <use href="#spoke" transform="rotate(232 64 64)" color="#e6d8c5"/>
+      <use href="#spoke" transform="rotate(259 64 64)" color="#73958b"/>
+      <use href="#spoke" transform="rotate(286 64 64)" color="#c5934f"/>
+      <use href="#spoke" transform="rotate(313 64 64)" color="#7d91ac"/>
     </g>
-    <path d="M93 36a41 41 0 1 0 0 56" fill="none" stroke="#2d3036" stroke-width="5.5" stroke-linecap="round" opacity=".88"/>
-    <circle cx="64" cy="64" r="18" fill="#fff8ed"/>
-    <path d="M75 51a18 18 0 1 0 0 26" fill="none" stroke="#34363a" stroke-width="5" stroke-linecap="round"/>
-    <circle cx="64" cy="64" r="4.6" fill="#c99739"/>
+    <circle cx="64" cy="64" r="17" fill="#fff8ed"/>
+    <circle cx="64" cy="64" r="5" fill="#c99739"/>
   </g>
 </svg>
