@@ -137,6 +137,7 @@ function transcriptionDisplayText(value) {
     .replace(/fails the transcription gate/gi, "does not pass score/audio verification")
     .replace(/notation is withheld because it would not match the audio/gi, "notes are not rendered until they match the audio")
     .replace(/The transcription section stays visible, but /gi, "")
+    .replace(/The transcription section stays visible with score\/audio evidence; ?/gi, "")
     .replace(/not shown as sheet music/gi, "not rendered as sheet music")
     .replace(/staff output hidden until verified/gi, "notation renders only after score/audio verification")
     .replace(/hidden machine evidence/gi, "score/audio evidence")

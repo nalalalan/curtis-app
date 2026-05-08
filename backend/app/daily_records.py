@@ -512,8 +512,8 @@ def transcription_failure_summary(transcriptions: list[dict[str, Any]]) -> dict[
     dominant_note = notes.most_common(1)[0][0] if notes else ""
     if mode == "repeated_pitch_collapse":
         limit = (
-            f"Machine pitch extraction was rejected: the tracker collapsed into repeated {dominant_note or 'single-pitch'} events. "
-            "The transcription section stays visible with score/audio evidence; notes render only after verification."
+            f"Machine pitch extraction was rejected: the tracker collapsed into repeated {dominant_note or 'single-pitch'} events; "
+            "verified notation waits for score/audio match."
         )
     else:
         limit = limits[0] if limits else "Machine pitch extraction did not pass the score/audio verification gate."
