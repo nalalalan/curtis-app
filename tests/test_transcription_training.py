@@ -1,13 +1,21 @@
 import unittest
+from unittest.mock import patch
 
+from backend.app import transcription as transcription_module
 from backend.app.scanner import derive_review
 from backend.app.study_packets import build_practice_study, build_practice_totals
 from backend.app.transcription import (
+    TRANSCRIPTION_PIPELINE_VERSION,
     compare_fingerprints,
     event_fingerprint,
+    f0_to_events,
     reference_matches_for,
     transcription_prior_hint,
 )
+
+
+def hz_for_midi(midi):
+    return 440.0 * (2 ** ((midi - 69) / 12))
 
 
 def fingerprint_for(midi_values):
@@ -26,6 +34,56 @@ def fingerprint_for(midi_values):
 
 
 class TranscriptionTrainingTests(unittest.TestCase):
+    def test_f0_to_events_rejects_pitches_below_violin_range(self):
+        import numpy
+
+        f0 = numpy.array([hz_for_midi(50), hz_for_midi(50), hz_for_midi(55), hz_for_midi(55), hz_for_midi(55), hz_for_midi(55)])
+        voiced = numpy.array([True, True, True, True, True, True])
+        probability = numpy.array([0.95, 0.95, 0.95, 0.95, 0.95, 0.95])
+
+        events = f0_to_events(f0, voiced, probability, 22050, 512, numpy)
+
+        self.assertEqual([event["note"] for event in events], ["G3"])
+
+    def test_f0_to_events_absorbs_single_frame_vibrato_noise(self):
+        import numpy
+
+        f0 = numpy.array([
+            hz_for_midi(69),
+            hz_for_midi(69),
+            hz_for_midi(70),
+            hz_for_midi(69),
+            hz_for_midi(69),
+            hz_for_midi(69),
+        ])
+        voiced = numpy.array([True, True, True, True, True, True])
+        probability = numpy.array([0.95, 0.95, 0.92, 0.95, 0.95, 0.95])
+
+        events = f0_to_events(f0, voiced, probability, 22050, 512, numpy)
+
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["note"], "A4")
+
+    def test_f0_to_events_requires_sustained_pitch_change(self):
+        import numpy
+
+        f0 = numpy.array([
+            hz_for_midi(69),
+            hz_for_midi(69),
+            hz_for_midi(69),
+            hz_for_midi(69),
+            hz_for_midi(71),
+            hz_for_midi(71),
+            hz_for_midi(71),
+            hz_for_midi(71),
+        ])
+        voiced = numpy.array([True, True, True, True, True, True, True, True])
+        probability = numpy.array([0.96, 0.96, 0.96, 0.96, 0.94, 0.94, 0.94, 0.94])
+
+        events = f0_to_events(f0, voiced, probability, 22050, 512, numpy)
+
+        self.assertEqual([event["note"] for event in events], ["A4", "B4"])
+
     def test_pitch_rhythm_fingerprint_matches_repeated_material(self):
         first = fingerprint_for([76, 78, 79, 81, 79, 78, 76, 74, 76, 78, 79, 81])
         second = fingerprint_for([76, 78, 79, 81, 79, 78, 76, 74, 76, 78, 79, 81])
@@ -40,12 +98,14 @@ class TranscriptionTrainingTests(unittest.TestCase):
             "sourceTitle": "5-2-26",
             "acceptedTitle": "Wieniawski Scherzo-Tarantelle, Op. 16",
             "status": "transcribed",
+            "pipelineVersion": TRANSCRIPTION_PIPELINE_VERSION,
             "noteCount": 12,
             "fingerprint": fingerprint_for([76, 78, 79, 81, 79, 78, 76, 74, 76, 78, 79, 81]),
         }
         incoming = {
             "transcriptionId": "5-3",
             "status": "transcribed",
+            "pipelineVersion": TRANSCRIPTION_PIPELINE_VERSION,
             "noteCount": 12,
             "fingerprint": fingerprint_for([76, 78, 79, 81, 79, 78, 76, 74, 76, 78, 79, 81]),
         }
@@ -54,6 +114,50 @@ class TranscriptionTrainingTests(unittest.TestCase):
 
         self.assertEqual(matches[0]["title"], "Wieniawski Scherzo-Tarantelle, Op. 16")
         self.assertEqual(matches[0]["basis"], "pitch_rhythm_fingerprint")
+
+    def test_transcribe_media_samples_reprocesses_stale_pipeline_output(self):
+        sample = {
+            "id": "sample-1",
+            "path": "C:\\media\\sample.mp4",
+            "window": "*0-10",
+            "title": "5-3-26",
+        }
+        sample_key = transcription_module.transcription_key(sample)
+        state = {
+            "mediaSamples": [sample],
+            "transcriptions": {
+                "items": [
+                    {
+                        "transcriptionId": sample_key,
+                        "pipelineVersion": "old",
+                        "status": "transcribed",
+                        "noteCount": 300,
+                    }
+                ]
+            },
+        }
+        saved = []
+
+        with (
+            patch.object(transcription_module, "load_state", return_value=state),
+            patch.object(transcription_module, "save_state", side_effect=lambda value: saved.append(value)),
+            patch.object(
+                transcription_module,
+                "build_transcription",
+                return_value={
+                    "transcriptionId": sample_key,
+                    "pipelineVersion": TRANSCRIPTION_PIPELINE_VERSION,
+                    "status": "transcribed",
+                    "noteCount": 12,
+                },
+            ),
+        ):
+            run = transcription_module.transcribe_media_samples(limit=1)
+
+        self.assertEqual(run["reprocessedCount"], 1)
+        self.assertEqual(saved[0]["transcriptions"]["items"][0]["pipelineVersion"], TRANSCRIPTION_PIPELINE_VERSION)
+        self.assertEqual(saved[0]["transcriptions"]["items"][0]["noteCount"], 12)
+        self.assertEqual(len(saved[0]["transcriptions"]["items"]), 1)
 
     def test_training_state_reports_pitch_rhythm_windows_without_claiming_score_match(self):
         state = {

@@ -14,9 +14,15 @@ from .state import load_state, save_state, utc_now
 
 MAX_TRANSCRIPTION_SECONDS = int(os.getenv("CURTIS_TRANSCRIPTION_MAX_SECONDS", "180"))
 TRANSCRIPTION_SAMPLE_LIMIT = int(os.getenv("CURTIS_TRANSCRIPTION_SAMPLE_LIMIT", "8"))
+TRANSCRIPTION_PIPELINE_VERSION = "violin_pyin_filtered_v2"
 MIN_NOTE_SECONDS = float(os.getenv("CURTIS_MIN_NOTE_SECONDS", "0.08"))
 MAX_STORED_NOTES = int(os.getenv("CURTIS_MAX_STORED_NOTES", "240"))
 PITCH_MATCH_THRESHOLD = float(os.getenv("CURTIS_PITCH_MATCH_THRESHOLD", "0.58"))
+VIOLIN_MIN_MIDI = int(os.getenv("CURTIS_VIOLIN_MIN_MIDI", "55"))
+VIOLIN_MAX_MIDI = int(os.getenv("CURTIS_VIOLIN_MAX_MIDI", "108"))
+MIN_VOICED_PROBABILITY = float(os.getenv("CURTIS_MIN_VOICED_PROBABILITY", "0.55"))
+NOTE_CHANGE_CONFIRM_FRAMES = int(os.getenv("CURTIS_NOTE_CHANGE_CONFIRM_FRAMES", "3"))
+NOTE_MERGE_GAP_SECONDS = float(os.getenv("CURTIS_NOTE_MERGE_GAP_SECONDS", "0.07"))
 NOTE_NAMES = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
 
 
@@ -137,24 +143,70 @@ def estimate_tempo(y: Any, sr: int, librosa: Any) -> float:
         return 0.0
 
 
+def merge_adjacent_same_note_events(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    merged: list[dict[str, Any]] = []
+    for event in events:
+        if not merged:
+            merged.append(dict(event))
+            continue
+        previous = merged[-1]
+        gap = float(event.get("startSeconds") or 0.0) - float(previous.get("endSeconds") or 0.0)
+        if event.get("midi") != previous.get("midi") or gap > NOTE_MERGE_GAP_SECONDS:
+            merged.append(dict(event))
+            continue
+        previous_duration = float(previous.get("durationSeconds") or 0.0)
+        event_duration = float(event.get("durationSeconds") or 0.0)
+        total_duration = max(0.001, previous_duration + gap + event_duration)
+        confidence = (
+            (float(previous.get("confidence") or 0.0) * previous_duration)
+            + (float(event.get("confidence") or 0.0) * event_duration)
+        ) / max(0.001, previous_duration + event_duration)
+        previous["endSeconds"] = event.get("endSeconds")
+        previous["durationSeconds"] = round(total_duration, 3)
+        previous["confidence"] = round(confidence, 3)
+    return merged
+
+
 def f0_to_events(f0: Any, voiced_flag: Any, voiced_prob: Any, sr: int, hop_length: int, numpy: Any) -> list[dict[str, Any]]:
     events: list[dict[str, Any]] = []
-    current: dict[str, Any] | None = None
+    current_start: float | None = None
     midi_buffer: list[int] = []
     prob_buffer: list[float] = []
+    pending_start: float | None = None
+    pending_midi: int | None = None
+    pending_midi_buffer: list[int] = []
+    pending_prob_buffer: list[float] = []
     last_time = 0.0
+    frame_seconds = hop_length / sr
+
+    def median_midi(values: list[int]) -> int:
+        return int(round(float(numpy.median(numpy.array(values)))))
+
+    def reset_pending() -> None:
+        nonlocal pending_start, pending_midi, pending_midi_buffer, pending_prob_buffer
+        pending_start = None
+        pending_midi = None
+        pending_midi_buffer = []
+        pending_prob_buffer = []
+
+    def absorb_pending_as_current() -> None:
+        nonlocal pending_midi_buffer, pending_prob_buffer
+        if pending_midi_buffer:
+            midi_buffer.extend(pending_midi_buffer)
+            prob_buffer.extend(pending_prob_buffer)
+        reset_pending()
 
     def close_event(end_time: float) -> None:
-        nonlocal current, midi_buffer, prob_buffer
-        if current is None or not midi_buffer:
-            current = None
+        nonlocal current_start, midi_buffer, prob_buffer
+        if current_start is None or not midi_buffer:
+            current_start = None
             midi_buffer = []
             prob_buffer = []
             return
-        start = float(current["startSeconds"])
+        start = float(current_start)
         duration = max(0.0, end_time - start)
         if duration >= MIN_NOTE_SECONDS:
-            midi = int(round(float(numpy.median(numpy.array(midi_buffer)))))
+            midi = median_midi(midi_buffer)
             events.append(
                 {
                     "startSeconds": round(start, 3),
@@ -165,7 +217,7 @@ def f0_to_events(f0: Any, voiced_flag: Any, voiced_prob: Any, sr: int, hop_lengt
                     "confidence": round(sum(prob_buffer) / max(1, len(prob_buffer)), 3),
                 }
             )
-        current = None
+        current_start = None
         midi_buffer = []
         prob_buffer = []
 
@@ -174,29 +226,57 @@ def f0_to_events(f0: Any, voiced_flag: Any, voiced_prob: Any, sr: int, hop_lengt
         last_time = time_seconds
         voiced = bool(voiced_flag[index]) if index < len(voiced_flag) else False
         probability = float(voiced_prob[index]) if index < len(voiced_prob) and not math.isnan(float(voiced_prob[index])) else 0.0
-        if not voiced or value is None or math.isnan(float(value)) or probability < 0.45:
+        if not voiced or value is None or math.isnan(float(value)) or probability < MIN_VOICED_PROBABILITY:
+            absorb_pending_as_current()
             close_event(time_seconds)
             continue
         midi = int(round(69 + 12 * math.log2(float(value) / 440.0)))
-        if midi < 43 or midi > 108:
+        if midi < VIOLIN_MIN_MIDI or midi > VIOLIN_MAX_MIDI:
+            absorb_pending_as_current()
             close_event(time_seconds)
             continue
-        if current is None:
-            current = {"startSeconds": time_seconds, "midi": midi}
+        if current_start is None:
+            current_start = time_seconds
             midi_buffer = [midi]
             prob_buffer = [probability]
+            reset_pending()
             continue
-        median_midi = int(round(float(numpy.median(numpy.array(midi_buffer)))))
-        if midi == median_midi:
+        current_midi = median_midi(midi_buffer)
+        if midi == current_midi:
+            absorb_pending_as_current()
             midi_buffer.append(midi)
             prob_buffer.append(probability)
+            continue
+        if pending_midi == midi:
+            pending_midi_buffer.append(midi)
+            pending_prob_buffer.append(probability)
         else:
-            close_event(time_seconds)
-            current = {"startSeconds": time_seconds, "midi": midi}
-            midi_buffer = [midi]
-            prob_buffer = [probability]
-    close_event(last_time + (hop_length / sr))
-    return events[:MAX_STORED_NOTES]
+            absorb_pending_as_current()
+            pending_start = time_seconds
+            pending_midi = midi
+            pending_midi_buffer = [midi]
+            pending_prob_buffer = [probability]
+        if len(pending_midi_buffer) >= NOTE_CHANGE_CONFIRM_FRAMES and pending_start is not None:
+            next_start = pending_start
+            next_midi_buffer = [*pending_midi_buffer]
+            next_prob_buffer = [*pending_prob_buffer]
+            close_event(next_start)
+            current_start = next_start
+            midi_buffer = next_midi_buffer
+            prob_buffer = next_prob_buffer
+            reset_pending()
+    if pending_midi_buffer and pending_start is not None and len(pending_midi_buffer) >= NOTE_CHANGE_CONFIRM_FRAMES:
+        next_start = pending_start
+        next_midi_buffer = [*pending_midi_buffer]
+        next_prob_buffer = [*pending_prob_buffer]
+        close_event(next_start)
+        current_start = next_start
+        midi_buffer = next_midi_buffer
+        prob_buffer = next_prob_buffer
+    else:
+        absorb_pending_as_current()
+    close_event(last_time + frame_seconds)
+    return merge_adjacent_same_note_events(events)[:MAX_STORED_NOTES]
 
 
 def notation_text(events: list[dict[str, Any]], tempo_bpm: float) -> str:
@@ -235,8 +315,8 @@ def transcribe_path(path: Path) -> dict[str, Any]:
         hop_length = 512
         f0, voiced_flag, voiced_prob = librosa.pyin(
             y,
-            fmin=librosa.note_to_hz("G2"),
-            fmax=librosa.note_to_hz("C8"),
+            fmin=librosa.midi_to_hz(VIOLIN_MIN_MIDI),
+            fmax=librosa.midi_to_hz(VIOLIN_MAX_MIDI),
             sr=sr,
             frame_length=2048,
             hop_length=hop_length,
@@ -246,16 +326,25 @@ def transcribe_path(path: Path) -> dict[str, Any]:
         voiced_ratio = round(float(numpy.nanmean(voiced_flag)) if len(voiced_flag) else 0.0, 3)
         return {
             "status": "transcribed" if events else "no_stable_notes",
+            "pipelineVersion": TRANSCRIPTION_PIPELINE_VERSION,
+            "method": "librosa_pyin_violin_range_hysteresis_note_segmentation",
             "durationSeconds": round(float(len(y) / sr), 2),
             "tempoBpm": tempo,
             "voicedFrameRatio": voiced_ratio,
             "noteCount": len(events),
             "notes": events,
             "fingerprint": event_fingerprint(events, tempo),
+            "quality": {
+                "range": f"{note_name(VIOLIN_MIN_MIDI)}-{note_name(VIOLIN_MAX_MIDI)}",
+                "minimumVoicedProbability": MIN_VOICED_PROBABILITY,
+                "noteChangeConfirmFrames": NOTE_CHANGE_CONFIRM_FRAMES,
+                "minimumNoteSeconds": MIN_NOTE_SECONDS,
+                "noteMergeGapSeconds": NOTE_MERGE_GAP_SECONDS,
+            },
             "notation": {
                 "format": "note:beats",
                 "text": notation_text(events, tempo),
-                "limit": "Machine transcription from practice audio; verify against score before treating as final notation.",
+                "limit": "Filtered monophonic violin-range transcription; verify against score before treating as final notation.",
             },
         }
     finally:
@@ -272,6 +361,7 @@ def learned_reference_items(state: dict[str, Any]) -> list[dict[str, Any]]:
         if isinstance(item, dict)
         and item.get("acceptedTitle")
         and item.get("status") == "transcribed"
+        and item.get("pipelineVersion") == TRANSCRIPTION_PIPELINE_VERSION
         and isinstance(item.get("fingerprint"), dict)
         and int(item.get("noteCount") or 0) >= 8
     ]
@@ -312,6 +402,7 @@ def build_transcription(sample: dict[str, Any], state: dict[str, Any]) -> dict[s
     item = {
         **result,
         "transcriptionId": transcription_key(sample),
+        "pipelineVersion": result.get("pipelineVersion") or TRANSCRIPTION_PIPELINE_VERSION,
         "sampleId": sample.get("id"),
         "sourceKey": source_key_from_item(sample),
         "sourceTitle": sample.get("title") or sample.get("sourceTitle") or "",
@@ -360,33 +451,41 @@ def transcribe_media_samples(limit: int | None = None) -> dict[str, Any]:
     state = load_state()
     sample_limit = TRANSCRIPTION_SAMPLE_LIMIT if limit is None else int(limit)
     samples = [sample for sample in state.get("mediaSamples", []) if isinstance(sample, dict)]
-    existing_ids = {
-        item.get("transcriptionId")
-        for item in state.get("transcriptions", {}).get("items", [])
-        if isinstance(item, dict) and item.get("transcriptionId")
-    }
-    selected = [
-        sample
-        for sample in samples
-        if sample.get("path") and transcription_key(sample) not in existing_ids
-    ][:sample_limit]
-    results = [build_transcription(sample, state) for sample in selected]
     existing = [
         item
         for item in state.get("transcriptions", {}).get("items", [])
         if isinstance(item, dict)
     ]
-    items = [*results, *existing][:80]
+    existing_by_id = {
+        str(item.get("transcriptionId")): item
+        for item in existing
+        if item.get("transcriptionId")
+    }
+    selected = [
+        sample
+        for sample in samples
+        if sample.get("path")
+        and (
+            transcription_key(sample) not in existing_by_id
+            or existing_by_id[transcription_key(sample)].get("pipelineVersion") != TRANSCRIPTION_PIPELINE_VERSION
+        )
+    ][:sample_limit]
+    results = [build_transcription(sample, state) for sample in selected]
+    replaced_ids = {item.get("transcriptionId") for item in results if item.get("transcriptionId")}
+    items = [*results, *[item for item in existing if item.get("transcriptionId") not in replaced_ids]][:80]
     state["transcriptions"] = {
         "items": items,
         "updatedAt": utc_now(),
-        "method": "librosa_pyin_pitch_track_note_segmentation",
-        "limit": "Machine note/rhythm extraction is evidence for matching; score-level claims require alignment verification.",
+        "method": "librosa_pyin_violin_range_hysteresis_note_segmentation",
+        "pipelineVersion": TRANSCRIPTION_PIPELINE_VERSION,
+        "limit": "Filtered monophonic violin-range note/rhythm extraction is evidence for matching; score-level claims require alignment verification.",
     }
     run = {
         "startedAt": utc_now(),
+        "pipelineVersion": TRANSCRIPTION_PIPELINE_VERSION,
         "status": "transcribed" if any(item.get("status") == "transcribed" for item in results) else "no_new_samples" if not selected else "blocked",
         "sampleCount": len(selected),
+        "reprocessedCount": sum(1 for sample in selected if transcription_key(sample) in existing_by_id),
         "transcribedCount": sum(1 for item in results if item.get("status") == "transcribed"),
         "noteCount": sum(int(item.get("noteCount") or 0) for item in results),
         "blockers": list(
