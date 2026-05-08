@@ -405,7 +405,8 @@ function currentStateText(ops) {
   const processedCount = analyzedRecordList(ops).length;
   const practiceCount = Number(ops?.review?.practiceCandidateCount) || 0;
   const findingCount = skillFindings(ops).length;
-  if (recordCount) return `${transcribedCount} verified transcription / ${audioEvidenceCount} audio evidence / ${processedCount} processed / ${recordCount} indexed practice days.`;
+  const failedCount = Number(records.failedTranscriptionRecordCount || 0);
+  if (recordCount) return `${transcribedCount} verified transcription / ${failedCount} failed transcription / ${audioEvidenceCount} audio evidence / ${processedCount} processed / ${recordCount} indexed practice days.`;
   if (findingCount) return `${findingCount} Curtis-focused findings. ${progressPlan(ops)?.oneFocus || "Review active."}`;
   const sectionCount = reviewSections(ops).length;
   if (sectionCount) return `${sectionCount} audio/video sections scanned. Musicianship judgment pending.`;
@@ -942,7 +943,8 @@ function renderStatus() {
     const transcribedCount = Number(records.transcribedRecordCount) || 0;
     const audioEvidenceCount = Number(records.audioEvidenceRecordCount) || 0;
     const analyzedCount = analyzedRecords.length;
-    elements.studyCount.textContent = `${transcribedCount} verified / ${audioEvidenceCount} audio evidence / ${analyzedCount} processed`;
+    const failedCount = Number(records.failedTranscriptionRecordCount || 0);
+    elements.studyCount.textContent = `${transcribedCount} verified / ${failedCount} failed / ${audioEvidenceCount} audio evidence / ${analyzedCount} processed`;
   }
   const activeSeconds = Number(records.totalActiveViolinSeconds) || 0;
   const archiveSeconds = archiveVideoSeconds(records, totals);
@@ -1230,11 +1232,18 @@ function renderTranscriptionStats(transcription) {
   const signature = normalizedKeySignature(transcription?.keySignature || {});
   const displayNotation = transcription?.displayNotation !== false && transcription?.transcriptionReady === true;
   const systems = Array.isArray(transcription?.notationSystems) ? transcription.notationSystems.length : 0;
+  const failed = transcription?.reliability === "transcription_failed" || transcription?.qualityStatus === "transcription_failed";
   const rows = displayNotation
     ? [
         ["Clef", transcription?.clef === "treble" ? "treble" : "pending"],
         ["Key", signature.label || "key pending"],
         ["Status", "verified"],
+      ]
+    : failed
+    ? [
+        ["Music", "failed"],
+        ["Audio", systems ? `${systems} windows` : "pending"],
+        ["Reason", transcription?.failureDominantNote ? `pitch collapse ${transcription.failureDominantNote}` : "quality gate"],
       ]
     : [
         ["Music", "withheld"],
@@ -1259,6 +1268,7 @@ function renderNotationSystems(transcription, fallbackEvents = []) {
     : [{ label: "Line 1", events: Array.isArray(fallbackEvents) ? fallbackEvents : [], noteCount: 0, uncertainNoteCount: 0 }];
   const signature = transcription?.keySignature || {};
   const displayNotation = transcription?.displayNotation !== false && transcription?.transcriptionReady === true;
+  const failed = transcription?.reliability === "transcription_failed" || transcription?.qualityStatus === "transcription_failed";
   return `
     <div class="notation-systems" aria-label="Audio evidence windows">
       ${systems.map((system) => {
@@ -1275,7 +1285,7 @@ function renderNotationSystems(transcription, fallbackEvents = []) {
               keySignature: signature,
               systemLabel: system?.label || "",
               qualityLimit: system?.limit || transcription?.displayLimit || transcription?.coverageLimit || ""
-            }) : renderNotationWithheld("Music withheld", system?.limit || transcription?.reliabilityLimit || "Unverified machine pitch events are hidden.")}
+            }) : renderNotationWithheld(failed ? "Transcription failed" : "Music withheld", system?.limit || transcription?.reliabilityLimit || "Unverified machine pitch events are hidden.")}
           </div>
         `;
       }).join("")}
@@ -1328,6 +1338,8 @@ function renderHeatMap(record) {
 }
 
 function recordStatusLabel(record) {
+  if (record?.transcription?.reliability === "transcription_failed") return "transcription failed";
+  if (record?.transcription?.qualityStatus === "transcription_failed") return "transcription failed";
   if (record?.transcription?.reliability === "machine_pitch_hidden") return "audio evidence";
   if (record?.transcription?.qualityStatus === "machine_pitch_hidden") return "audio evidence";
   if (record?.transcription?.qualityStatus === "weak_fragment") return "audio evidence";
@@ -1339,6 +1351,9 @@ function recordStatusLabel(record) {
 }
 
 function transcriptionEvidenceLabel(transcription) {
+  if (transcription?.reliability === "transcription_failed" || transcription?.qualityStatus === "transcription_failed") {
+    return "transcription failed";
+  }
   if (transcription?.reliability === "machine_pitch_hidden" || transcription?.status === "not_ready") {
     return "transcription not ready";
   }

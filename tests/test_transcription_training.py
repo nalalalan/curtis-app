@@ -13,6 +13,7 @@ from backend.app.transcription import (
     f0_to_onset_events,
     f0_to_events,
     pitch_sanity_filter,
+    transcription_failure_state,
     reference_matches_for,
     transcription_prior_hint,
 )
@@ -192,6 +193,26 @@ class TranscriptionTrainingTests(unittest.TestCase):
 
         self.assertEqual([event["midi"] for event in cleaned], [69, 71])
         self.assertEqual(quality["sanityGlitchDroppedCount"], 1)
+
+    def test_transcription_failure_state_rejects_repeated_pitch_collapse(self):
+        events = [note_event(62, index, confidence=0.91, duration=0.05) for index in range(24)]
+
+        failure = transcription_failure_state(events, {"detectedOnsetCount": 25})
+
+        self.assertTrue(failure["failed"])
+        self.assertEqual(failure["status"], "failed_pitch_collapse")
+        self.assertEqual(failure["failureMode"], "repeated_pitch_collapse")
+        self.assertEqual(failure["pitchCollapseDominantNote"], "D4")
+        self.assertIn("not acceptable sheet-music transcription", failure["pitchCollapseReason"])
+
+    def test_transcription_failure_state_keeps_diverse_fast_arpeggio_trace(self):
+        arpeggio = [62, 66, 69, 74, 78, 81] * 4
+        events = [note_event(midi, index, confidence=0.88, duration=0.05) for index, midi in enumerate(arpeggio)]
+
+        failure = transcription_failure_state(events, {"detectedOnsetCount": len(arpeggio)})
+
+        self.assertFalse(failure["failed"])
+        self.assertFalse(failure["pitchCollapseDetected"])
 
     def test_pitch_rhythm_fingerprint_matches_repeated_material(self):
         first = fingerprint_for([76, 78, 79, 81, 79, 78, 76, 74, 76, 78, 79, 81])

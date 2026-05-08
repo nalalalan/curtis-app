@@ -137,6 +137,62 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(record["clips"][0]["localEndSeconds"], 20)
         self.assertNotIn("reading decoration", " ".join(video["title"] for video in record["videos"]))
 
+    def test_repeated_pitch_collapse_is_reported_as_failed_transcription(self):
+        inventory = {
+            "youtube": [
+                {
+                    "id": "collapse",
+                    "title": "5-3-26",
+                    "url": "https://www.youtube.com/watch?v=collapse",
+                    "publishedAt": "2026-05-04T09:10:00Z",
+                    "durationSeconds": 300,
+                    "practiceCandidate": True,
+                }
+            ]
+        }
+        transcriptions = [
+            {
+                "transcriptionId": "collapse-1",
+                "sampleId": "collapse",
+                "sourceUrl": "https://www.youtube.com/watch?v=collapse",
+                "sourceTitle": "5-3-26",
+                "sourceWindow": "*0-60",
+                "status": "failed_pitch_collapse",
+                "durationSeconds": 42,
+                "tempoBpm": 108,
+                "noteCount": 24,
+                "notes": [note("D4", index * 0.05, index * 0.05 + 0.04) for index in range(24)],
+                "quality": {
+                    "failed": True,
+                    "failureMode": "repeated_pitch_collapse",
+                    "failureLimit": "Machine transcription was rejected because the note stream collapsed into repeated D4 events.",
+                    "pitchCollapseDominantNote": "D4",
+                    "pitchCollapseEventCount": 24,
+                    "pitchCollapseDetectedOnsetCount": 28,
+                    "windowMode": "detected_active_sections",
+                },
+            }
+        ]
+
+        daily = build_daily_records(
+            inventory=inventory,
+            state={},
+            media_samples=[{"id": "collapse", "path": "sample.mp4", "window": "*0-60"}],
+            transcriptions=transcriptions,
+            sections=[],
+        )
+        record = daily["records"][0]
+
+        self.assertEqual(daily["failedTranscriptionRecordCount"], 1)
+        self.assertEqual(record["transcription"]["status"], "failed_quality_gate")
+        self.assertEqual(record["transcription"]["qualityStatus"], "transcription_failed")
+        self.assertEqual(record["transcription"]["reliability"], "transcription_failed")
+        self.assertEqual(record["transcription"]["failureMode"], "repeated_pitch_collapse")
+        self.assertFalse(record["transcription"]["displayNotation"])
+        self.assertIn("collapsed into repeated D4", record["transcription"]["reliabilityLimit"])
+        self.assertIn("failed", record["mainCurtisBlocker"])
+        self.assertIn("collapsed", record["clips"][0]["reason"])
+
     def test_repertoire_promotes_only_confirmed_daily_evidence(self):
         inventory = {
             "youtube": [

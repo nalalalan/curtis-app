@@ -14,19 +14,21 @@ from .state import load_state, save_state, utc_now
 
 MAX_TRANSCRIPTION_SECONDS = int(os.getenv("CURTIS_TRANSCRIPTION_MAX_SECONDS", "180"))
 TRANSCRIPTION_SAMPLE_LIMIT = int(os.getenv("CURTIS_TRANSCRIPTION_SAMPLE_LIMIT", "8"))
-TRANSCRIPTION_PIPELINE_VERSION = "violin_pitch_sanity_pyin_v6"
-MIN_NOTE_SECONDS = float(os.getenv("CURTIS_MIN_NOTE_SECONDS", "0.08"))
+TRANSCRIPTION_PIPELINE_VERSION = "violin_pitch_sanity_pyin_v7"
+MIN_NOTE_SECONDS = float(os.getenv("CURTIS_MIN_NOTE_SECONDS", "0.055"))
 MIN_ONSET_NOTE_SECONDS = float(os.getenv("CURTIS_MIN_ONSET_NOTE_SECONDS", "0.04"))
 MAX_STORED_NOTES = int(os.getenv("CURTIS_MAX_STORED_NOTES", "240"))
 PITCH_MATCH_THRESHOLD = float(os.getenv("CURTIS_PITCH_MATCH_THRESHOLD", "0.58"))
 VIOLIN_MIN_MIDI = int(os.getenv("CURTIS_VIOLIN_MIN_MIDI", "55"))
 VIOLIN_MAX_MIDI = int(os.getenv("CURTIS_VIOLIN_MAX_MIDI", "108"))
 MIN_VOICED_PROBABILITY = float(os.getenv("CURTIS_MIN_VOICED_PROBABILITY", "0.50"))
-NOTE_CHANGE_CONFIRM_FRAMES = int(os.getenv("CURTIS_NOTE_CHANGE_CONFIRM_FRAMES", "3"))
+NOTE_CHANGE_CONFIRM_FRAMES = int(os.getenv("CURTIS_NOTE_CHANGE_CONFIRM_FRAMES", "2"))
 NOTE_MERGE_GAP_SECONDS = float(os.getenv("CURTIS_NOTE_MERGE_GAP_SECONDS", "0.07"))
 ONSET_EVENT_MULTIPLIER = float(os.getenv("CURTIS_ONSET_EVENT_MULTIPLIER", "1.12"))
 ONSET_MIN_VOICED_FRAMES = int(os.getenv("CURTIS_ONSET_MIN_VOICED_FRAMES", "1"))
 HARMONIC_MARGIN = float(os.getenv("CURTIS_HARMONIC_MARGIN", "8.0"))
+PITCH_FRAME_LENGTH = int(os.getenv("CURTIS_PITCH_FRAME_LENGTH", "1024"))
+PITCH_HOP_LENGTH = int(os.getenv("CURTIS_PITCH_HOP_LENGTH", "256"))
 LOW_CONFIDENCE_GLITCH_SECONDS = float(os.getenv("CURTIS_LOW_CONFIDENCE_GLITCH_SECONDS", "0.07"))
 LOW_CONFIDENCE_GLITCH_THRESHOLD = float(os.getenv("CURTIS_LOW_CONFIDENCE_GLITCH_THRESHOLD", "0.68"))
 OCTAVE_FLIP_MIN_SEMITONES = int(os.getenv("CURTIS_OCTAVE_FLIP_MIN_SEMITONES", "10"))
@@ -37,6 +39,10 @@ MIN_ACTIVE_WINDOW_NOTES = int(os.getenv("CURTIS_MIN_ACTIVE_WINDOW_NOTES", "4"))
 ACTIVE_SECTION_PADDING_SECONDS = float(os.getenv("CURTIS_ACTIVE_SECTION_PADDING_SECONDS", "0.35"))
 ACTIVE_SECTION_MERGE_GAP_SECONDS = float(os.getenv("CURTIS_ACTIVE_SECTION_MERGE_GAP_SECONDS", "0.55"))
 MAX_ACTIVE_TRANSCRIPTION_SECTIONS = int(os.getenv("CURTIS_MAX_ACTIVE_TRANSCRIPTION_SECTIONS", "12"))
+PITCH_COLLAPSE_MIN_EVENTS = int(os.getenv("CURTIS_PITCH_COLLAPSE_MIN_EVENTS", "14"))
+PITCH_COLLAPSE_MIN_RUN = int(os.getenv("CURTIS_PITCH_COLLAPSE_MIN_RUN", "10"))
+PITCH_COLLAPSE_DOMINANT_RATIO = float(os.getenv("CURTIS_PITCH_COLLAPSE_DOMINANT_RATIO", "0.82"))
+PITCH_COLLAPSE_MAX_PITCH_CLASSES = int(os.getenv("CURTIS_PITCH_COLLAPSE_MAX_PITCH_CLASSES", "2"))
 NOTE_NAMES = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
 
 
@@ -331,6 +337,88 @@ def pitch_sanity_filter(events: list[dict[str, Any]]) -> tuple[list[dict[str, An
     return kept[:MAX_STORED_NOTES], quality
 
 
+def longest_value_run(values: list[int]) -> int:
+    longest = 0
+    current = 0
+    previous: int | None = None
+    for value in values:
+        if previous is None or value != previous:
+            current = 1
+            previous = value
+        else:
+            current += 1
+        longest = max(longest, current)
+    return longest
+
+
+def pitch_collapse_report(events: list[dict[str, Any]], detected_onset_count: int = 0) -> dict[str, Any]:
+    midi_values = [event_midi(event) for event in events if isinstance(event, dict)]
+    midi_values = [midi for midi in midi_values if midi is not None]
+    if not midi_values:
+        return {
+            "pitchCollapseDetected": False,
+            "pitchCollapseReason": "",
+            "pitchCollapseDominantNote": "",
+            "pitchCollapseDominantRatio": 0.0,
+            "pitchCollapseLongestRun": 0,
+            "pitchCollapseUniquePitchClasses": 0,
+        }
+    pitch_classes = [midi % 12 for midi in midi_values]
+    midi_counts = Counter(midi_values)
+    dominant_midi, dominant_count = midi_counts.most_common(1)[0]
+    dominant_ratio = dominant_count / max(1, len(midi_values))
+    unique_pitch_classes = len(set(pitch_classes))
+    longest_midi_run = longest_value_run(midi_values)
+    longest_pitch_class_run = longest_value_run(pitch_classes)
+    enough_events = len(midi_values) >= PITCH_COLLAPSE_MIN_EVENTS
+    repeated_single_pitch = (
+        dominant_ratio >= PITCH_COLLAPSE_DOMINANT_RATIO
+        and unique_pitch_classes <= PITCH_COLLAPSE_MAX_PITCH_CLASSES
+    )
+    long_run = (
+        longest_midi_run >= PITCH_COLLAPSE_MIN_RUN
+        or longest_pitch_class_run >= PITCH_COLLAPSE_MIN_RUN
+    )
+    onset_rich_trace = detected_onset_count >= max(PITCH_COLLAPSE_MIN_EVENTS, int(len(midi_values) * 0.65))
+    collapsed = enough_events and repeated_single_pitch and (long_run or onset_rich_trace)
+    reason = ""
+    if collapsed:
+        reason = (
+            "The pitch tracker produced a near-single-note stream despite many note events/onsets; "
+            "this is not acceptable sheet-music transcription."
+        )
+    return {
+        "pitchCollapseDetected": collapsed,
+        "pitchCollapseReason": reason,
+        "pitchCollapseDominantNote": note_name(dominant_midi),
+        "pitchCollapseDominantCount": dominant_count,
+        "pitchCollapseDominantRatio": round(dominant_ratio, 3),
+        "pitchCollapseLongestRun": int(max(longest_midi_run, longest_pitch_class_run)),
+        "pitchCollapseUniqueMidiCount": len(midi_counts),
+        "pitchCollapseUniquePitchClasses": unique_pitch_classes,
+        "pitchCollapseEventCount": len(midi_values),
+        "pitchCollapseDetectedOnsetCount": int(detected_onset_count),
+    }
+
+
+def transcription_failure_state(events: list[dict[str, Any]], quality: dict[str, Any]) -> dict[str, Any]:
+    collapse = pitch_collapse_report(events, int(quality.get("detectedOnsetCount") or 0))
+    if collapse.get("pitchCollapseDetected"):
+        return {
+            "failed": True,
+            "status": "failed_pitch_collapse",
+            "failureMode": "repeated_pitch_collapse",
+            "failureLabel": "pitch collapse",
+            "failureLimit": (
+                "Machine transcription was rejected because the note stream collapsed into repeated "
+                f"{collapse.get('pitchCollapseDominantNote') or 'single-pitch'} events. "
+                "Use the paired audio evidence; do not treat these notes as the played passage."
+            ),
+            **collapse,
+        }
+    return {"failed": False, **collapse}
+
+
 def f0_to_events(f0: Any, voiced_flag: Any, voiced_prob: Any, sr: int, hop_length: int, numpy: Any) -> list[dict[str, Any]]:
     events: list[dict[str, Any]] = []
     current_start: float | None = None
@@ -551,13 +639,13 @@ def pitch_tracking_signal(y: Any, librosa: Any, numpy: Any) -> tuple[Any, str]:
 
 def transcribe_audio_array(y: Any, sr: int, librosa: Any, numpy: Any) -> dict[str, Any]:
     pitch_y, preprocessing = pitch_tracking_signal(y, librosa, numpy)
-    hop_length = 512
+    hop_length = PITCH_HOP_LENGTH
     f0, voiced_flag, voiced_prob = librosa.pyin(
         pitch_y,
         fmin=librosa.midi_to_hz(VIOLIN_MIN_MIDI),
         fmax=librosa.midi_to_hz(VIOLIN_MAX_MIDI),
         sr=sr,
-        frame_length=2048,
+        frame_length=PITCH_FRAME_LENGTH,
         hop_length=hop_length,
     )
     tempo = estimate_tempo(y, sr, librosa)
@@ -570,19 +658,21 @@ def transcribe_audio_array(y: Any, sr: int, librosa: Any, numpy: Any) -> dict[st
     raw_events, segmentation_source = choose_transcription_events(pitch_events, onset_events)
     events, sanity_quality = pitch_sanity_filter(raw_events)
     voiced_ratio = round(float(numpy.nanmean(voiced_flag)) if len(voiced_flag) else 0.0, 3)
+    quality = {
+        "preprocessing": preprocessing,
+        "segmentationSource": segmentation_source,
+        "pitchEventCount": len(pitch_events),
+        "onsetEventCount": len(onset_events),
+        "selectedEventCount": len(events),
+        "detectedOnsetCount": len(onset_frames),
+        **sanity_quality,
+    }
+    failure = transcription_failure_state(events, quality)
     return {
         "events": events,
         "tempoBpm": tempo,
         "voicedFrameRatio": voiced_ratio,
-        "quality": {
-            "preprocessing": preprocessing,
-            "segmentationSource": segmentation_source,
-            "pitchEventCount": len(pitch_events),
-            "onsetEventCount": len(onset_events),
-            "selectedEventCount": len(events),
-            "detectedOnsetCount": len(onset_frames),
-            **sanity_quality,
-        },
+        "quality": {**quality, **failure},
     }
 
 
@@ -597,6 +687,9 @@ def transcribe_active_windows(
     tempos: list[float] = []
     voiced_ratios: list[float] = []
     quality_totals = Counter()
+    failure_modes = Counter()
+    collapse_notes = Counter()
+    failure_limits: set[str] = set()
     preprocessing = set()
     segmentation = set()
     total_seconds = 0.0
@@ -631,8 +724,16 @@ def transcribe_active_windows(
             "sanityOctaveAdjustedCount",
             "sanityLargeLeapCount",
             "sanityLowConfidenceNoteCount",
+            "pitchCollapseEventCount",
+            "pitchCollapseDetectedOnsetCount",
         ):
             quality_totals[key] += int(quality.get(key) or 0)
+        if quality.get("failed"):
+            failure_modes[str(quality.get("failureMode") or "transcription_failed")] += 1
+            if quality.get("pitchCollapseDominantNote"):
+                collapse_notes[str(quality.get("pitchCollapseDominantNote"))] += 1
+            if quality.get("failureLimit"):
+                failure_limits.add(str(quality.get("failureLimit")))
         if len(chunk_events) < MIN_ACTIVE_WINDOW_NOTES:
             quality_totals["omittedSparseWindowCount"] += 1
             total_seconds += end - start
@@ -667,6 +768,15 @@ def transcribe_active_windows(
             "sanityLargeLeapCount": int(quality_totals["sanityLargeLeapCount"]),
             "sanityLowConfidenceNoteCount": int(quality_totals["sanityLowConfidenceNoteCount"]),
             "omittedSparseWindowCount": int(quality_totals["omittedSparseWindowCount"]),
+            "failed": bool(failure_modes),
+            "failureMode": failure_modes.most_common(1)[0][0] if failure_modes else "",
+            "failureLabel": "pitch collapse" if failure_modes.get("repeated_pitch_collapse") else "",
+            "failureLimit": sorted(failure_limits)[0] if failure_limits else "",
+            "pitchCollapseDetected": bool(failure_modes.get("repeated_pitch_collapse")),
+            "pitchCollapseDominantNote": collapse_notes.most_common(1)[0][0] if collapse_notes else "",
+            "pitchCollapseWindowCount": int(sum(failure_modes.values())),
+            "pitchCollapseEventCount": int(quality_totals["pitchCollapseEventCount"]),
+            "pitchCollapseDetectedOnsetCount": int(quality_totals["pitchCollapseDetectedOnsetCount"]),
         },
     }
 
@@ -704,36 +814,59 @@ def transcribe_path(path: Path, active_windows: list[dict[str, float]] | None = 
         events = transcription["events"]
         tempo = transcription["tempoBpm"]
         quality = transcription["quality"]
+        failure = transcription_failure_state(events, quality)
+        if quality.get("failed") and not failure.get("failed"):
+            failure = {
+                "failed": True,
+                "status": "failed_pitch_collapse"
+                if quality.get("failureMode") == "repeated_pitch_collapse"
+                else "failed_transcription_quality",
+                "failureMode": quality.get("failureMode") or "transcription_failed",
+                "failureLabel": quality.get("failureLabel") or "transcription failed",
+                "failureLimit": quality.get("failureLimit")
+                or "Machine transcription failed quality gates and is not used as sheet music.",
+            }
+        status = str(failure.get("status") or ("transcribed" if events else "no_stable_notes"))
+        fingerprint = event_fingerprint(events, tempo) if status == "transcribed" else {}
         return {
-            "status": "transcribed" if events else "no_stable_notes",
+            "status": status,
             "pipelineVersion": TRANSCRIPTION_PIPELINE_VERSION,
-            "method": "librosa_active_section_harmonic_pyin_with_pitch_sanity_filter",
+            "method": "librosa_active_section_onset_pyin_with_pitch_collapse_gate",
             "durationSeconds": transcription["durationSeconds"],
             "tempoBpm": tempo,
             "voicedFrameRatio": transcription["voicedFrameRatio"],
             "noteCount": len(events),
             "notes": events,
-            "fingerprint": event_fingerprint(events, tempo),
+            "fingerprint": fingerprint,
             "quality": {
                 "range": f"{note_name(VIOLIN_MIN_MIDI)}-{note_name(VIOLIN_MAX_MIDI)}",
                 "minimumVoicedProbability": MIN_VOICED_PROBABILITY,
                 "noteChangeConfirmFrames": NOTE_CHANGE_CONFIRM_FRAMES,
                 "minimumNoteSeconds": MIN_NOTE_SECONDS,
                 "minimumOnsetNoteSeconds": MIN_ONSET_NOTE_SECONDS,
+                "pitchFrameLength": PITCH_FRAME_LENGTH,
+                "pitchHopLength": PITCH_HOP_LENGTH,
                 "noteMergeGapSeconds": NOTE_MERGE_GAP_SECONDS,
                 "lowConfidenceGlitchSeconds": LOW_CONFIDENCE_GLITCH_SECONDS,
                 "lowConfidenceGlitchThreshold": LOW_CONFIDENCE_GLITCH_THRESHOLD,
                 "octaveFlipMinSemitones": OCTAVE_FLIP_MIN_SEMITONES,
                 "minimumActiveWindowNotes": MIN_ACTIVE_WINDOW_NOTES,
+                "pitchCollapseMinEvents": PITCH_COLLAPSE_MIN_EVENTS,
+                "pitchCollapseDominantRatio": PITCH_COLLAPSE_DOMINANT_RATIO,
                 "windowMode": window_mode,
                 "activeWindowCount": len(transcription["activeWindows"]),
                 "activeWindows": transcription["activeWindows"],
                 **quality,
+                **failure,
             },
             "notation": {
                 "format": "note:beats",
                 "text": notation_text(events, tempo),
-                "limit": "Pitch-sanity-filtered monophonic draft from detected active sections; octave-adjusted or low-confidence notes remain uncertain until score alignment verifies them.",
+                "limit": (
+                    str(failure.get("failureLimit"))
+                    if failure.get("failed")
+                    else "Pitch-sanity-filtered monophonic draft from detected active sections; octave-adjusted or low-confidence notes remain uncertain until score alignment verifies them."
+                ),
             },
         }
     finally:
@@ -866,17 +999,26 @@ def transcribe_media_samples(limit: int | None = None) -> dict[str, Any]:
     state["transcriptions"] = {
         "items": items,
         "updatedAt": utc_now(),
-        "method": "librosa_active_section_harmonic_pyin_with_pitch_sanity_filter",
+        "method": "librosa_active_section_onset_pyin_with_pitch_collapse_gate",
         "pipelineVersion": TRANSCRIPTION_PIPELINE_VERSION,
-        "limit": "Pitch-sanity-filtered monophonic note/rhythm extraction is draft evidence for matching; score-level claims require alignment verification.",
+        "limit": "Machine pitch/rhythm extraction is stored only as hidden evidence. Repeated-pitch collapse is rejected and cannot train piece matching; score-level claims require alignment verification.",
     }
     run = {
         "startedAt": utc_now(),
         "pipelineVersion": TRANSCRIPTION_PIPELINE_VERSION,
-        "status": "transcribed" if any(item.get("status") == "transcribed" for item in results) else "no_new_samples" if not selected else "blocked",
+        "status": (
+            "transcribed"
+            if any(item.get("status") == "transcribed" for item in results)
+            else "no_new_samples"
+            if not selected
+            else "failed_quality_gates"
+            if any(str(item.get("status") or "").startswith("failed_") for item in results)
+            else "blocked"
+        ),
         "sampleCount": len(selected),
         "reprocessedCount": sum(1 for sample in selected if transcription_key(sample) in existing_by_id),
         "transcribedCount": sum(1 for item in results if item.get("status") == "transcribed"),
+        "failedQualityCount": sum(1 for item in results if str(item.get("status") or "").startswith("failed_")),
         "noteCount": sum(int(item.get("noteCount") or 0) for item in results),
         "blockers": list(
             dict.fromkeys(
@@ -894,6 +1036,7 @@ def transcribe_media_samples(limit: int | None = None) -> dict[str, Any]:
                 "noteCount": item.get("noteCount"),
                 "tempoBpm": item.get("tempoBpm"),
                 "acceptedTitle": item.get("acceptedTitle"),
+                "failureMode": item.get("quality", {}).get("failureMode") if isinstance(item.get("quality"), dict) else "",
                 "referenceMatches": item.get("referenceMatches", [])[:3],
             }
             for item in results
