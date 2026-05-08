@@ -13,7 +13,7 @@ import httpx
 
 from .analyzer import active_ranges, extract_wav as extract_full_wav, parse_window_start, rms_windows
 from .coach import aggregate_piece_reviews, decode_json, piece_title_is_identified
-from .corrections import FIVE_ONE_REJECTED_TITLES, correction_for_item
+from .corrections import FIVE_ONE_REJECTED_TITLES, correction_for_item, item_stale_after_source_correction
 from .settings import OPENAI_AUDIO_MODEL, OPENAI_PIECE_VERIFY_MODEL
 from .state import load_state, save_state, utc_now
 
@@ -944,7 +944,7 @@ def identify_pieces_from_samples(limit: int = 4) -> dict[str, Any]:
     previous = [
         item
         for item in review.get("pieceIdentifications", [])
-        if isinstance(item, dict)
+        if isinstance(item, dict) and not item_stale_after_source_correction(state, item)
     ]
     processed_ids = {
         item.get("sampleId")
@@ -998,6 +998,7 @@ def identify_pieces_from_samples(limit: int = 4) -> dict[str, Any]:
             and (
                 str(piece.get("reviewVersion") or "") != PIECE_ID_VERSION
                 or not source_window_allowed(piece, samples_by_url)
+                or item_stale_after_source_correction(state, piece)
             )
         )
     ]

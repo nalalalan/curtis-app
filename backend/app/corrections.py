@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from datetime import datetime, timezone
 from typing import Any
 
 from .state import utc_now
@@ -135,6 +136,39 @@ def title_rejected_for_item(title: Any, state: dict[str, Any], item: dict[str, A
     return False
 
 
+def parsed_at(value: Any) -> datetime | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed
+    except ValueError:
+        return None
+
+
+def item_stale_after_source_correction(state: dict[str, Any], item: dict[str, Any] | None) -> bool:
+    item = item or {}
+    key = source_key_from_item(item)
+    if not key:
+        return False
+    correction = correction_for_key(state, key)
+    if not correction.get("rejectedTitles"):
+        return False
+    corrected_at = parsed_at(correction.get("updatedAt"))
+    if corrected_at is None:
+        return False
+    item_times = [
+        parsed_at(item.get("createdAt")),
+        parsed_at(item.get("latestAt")),
+        parsed_at(item.get("updatedAt")),
+    ]
+    item_times = [value for value in item_times if value is not None]
+    return not item_times or max(item_times) <= corrected_at
+
+
 def rejected_title_on_item(state: dict[str, Any], item: dict[str, Any] | None) -> bool:
     item = item or {}
     titles: list[Any] = [
@@ -202,7 +236,7 @@ def scrub_rejected_source(state: dict[str, Any], key: str) -> int:
             if (
                 isinstance(item, dict)
                 and item_matches_source_key(item, key)
-                and rejected_title_on_item(state, item)
+                and (rejected_title_on_item(state, item) or item_stale_after_source_correction(state, item))
             ):
                 scrubbed.append(scrubbed_piece_item(item))
                 changed += 1
@@ -217,7 +251,7 @@ def scrub_rejected_source(state: dict[str, Any], key: str) -> int:
             if (
                 isinstance(item, dict)
                 and item_matches_source_key(item, key)
-                and rejected_title_on_item(state, item)
+                and (rejected_title_on_item(state, item) or item_stale_after_source_correction(state, item))
             ):
                 scrubbed_results.append(scrubbed_piece_item(item))
                 changed += 1
