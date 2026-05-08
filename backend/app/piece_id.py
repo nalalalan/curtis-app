@@ -15,6 +15,7 @@ from .analyzer import active_ranges, extract_wav as extract_full_wav, parse_wind
 from .coach import aggregate_piece_reviews, decode_json, piece_title_is_identified
 from .corrections import (
     FIVE_ONE_REJECTED_TITLES,
+    compact_text,
     correction_for_item,
     item_stale_after_source_correction,
     scrubbed_piece_item,
@@ -922,6 +923,14 @@ def withhold_model_title(result: dict[str, Any]) -> dict[str, Any]:
     return withheld
 
 
+def matched_title(left: Any, right: Any) -> bool:
+    left_compact = compact_text(left)
+    right_compact = compact_text(right)
+    if not left_compact or not right_compact:
+        return False
+    return left_compact == right_compact or left_compact in right_compact or right_compact in left_compact
+
+
 def apply_source_correction_gate(state: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
     if result.get("status") == "blocked":
         return result
@@ -930,6 +939,28 @@ def apply_source_correction_gate(state: dict[str, Any], result: dict[str, Any]) 
     if accepted_title:
         source_tip = str(correction.get("sourceTip") or "Record one clean source take for scoring.").strip()
         accepted = dict(result)
+        raw_titles = [
+            result.get("title"),
+            result.get("proposedTitle"),
+            result.get("candidateTitle"),
+            result.get("verificationTitle"),
+        ]
+        verification = result.get("verification")
+        if isinstance(verification, dict):
+            raw_titles.append(verification.get("title"))
+        model_matched_accepted = (
+            result.get("status") == "piece_identified"
+            and str(result.get("evidenceQuality") or "") == "verified_piece_id"
+            and any(matched_title(title, accepted_title) for title in raw_titles)
+        )
+        raw_title = next(
+            (
+                str(title).strip()
+                for title in raw_titles
+                if str(title or "").strip() and str(title).strip() != "Piece being identified"
+            ),
+            "",
+        )
         accepted.update(
             {
                 "status": "piece_identified",
@@ -947,6 +978,10 @@ def apply_source_correction_gate(state: dict[str, Any], result: dict[str, Any]) 
                 "candidateEvidence": "Alan-confirmed source label. Scoring pending judged playing evidence.",
                 "evidence": "Alan-confirmed source label. Scoring pending judged playing evidence.",
                 "immediateTip": source_tip,
+                "sourceConfirmed": True,
+                "sourceCorrectionApplied": True,
+                "modelMatchedAcceptedTitle": model_matched_accepted,
+                "modelTitleBeforeSourceCorrection": raw_title,
                 "topCandidates": [],
                 "musicalClues": [],
                 "verification": {

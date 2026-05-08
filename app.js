@@ -24,6 +24,7 @@ const elements = {
   inventoryCount: document.querySelector("#inventoryCount"),
   practiceState: document.querySelector("#practiceState"),
   reviewState: document.querySelector("#reviewState"),
+  trainingState: document.querySelector("#trainingState"),
   modelState: document.querySelector("#modelState"),
   sourceLink: document.querySelector("#sourceLink"),
   runScanButton: document.querySelector("#runScanButton"),
@@ -367,6 +368,21 @@ function sampleIndex(ops) {
 
 function pieceIdResults(ops) {
   return Array.isArray(ops?.pieceId?.results) ? ops.pieceId.results : [];
+}
+
+function trainingState(ops) {
+  return ops?.review?.training && typeof ops.review.training === "object"
+    ? ops.review.training
+    : null;
+}
+
+function trainingLabel(ops) {
+  const training = trainingState(ops);
+  if (!training) return "0 anchors";
+  const anchors = Number(training.confirmedSourceCount) || 0;
+  const matches = Number(training.scoreAlignedWindowCount) || 0;
+  if (!anchors) return "0 anchors";
+  return `${anchors} anchors / ${matches} score matches`;
 }
 
 function sourceForSampleId(ops, sampleId) {
@@ -721,6 +737,7 @@ function renderStatus() {
     ? `${practiceCount} candidates / ${longFormCount} long`
     : `${practiceCount} candidates`;
   elements.reviewState.textContent = sections.length ? `${sections.length} sections` : "Unjudged";
+  elements.trainingState.textContent = trainingLabel(ops);
   elements.modelState.textContent = model;
   elements.evidenceState.textContent = findings.length ? `${findings.length} findings` : sections.length ? "Sections ready" : "Unjudged";
   elements.workingState.textContent = workingText(ops);

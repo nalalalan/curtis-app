@@ -12,6 +12,7 @@ from .analyzer import parse_window_start
 from .auth import youtube_auth_status
 from .corrections import (
     accepted_source_corrections,
+    compact_text,
     item_stale_after_source_correction,
     source_requires_confirmed_acceptance,
     title_rejected_for_item,
@@ -441,6 +442,189 @@ def accepted_source_pieces(
     return pieces
 
 
+def correction_video_id(correction: dict[str, Any]) -> str:
+    video_id = youtube_video_id(correction.get("sourceUrl")) or youtube_video_id(correction.get("sourceKey"))
+    if video_id:
+        return video_id
+    key = str(correction.get("sourceKey") or "")
+    if key.startswith("youtube:"):
+        return key.split(":", 1)[1]
+    return ""
+
+
+def title_matches(left: Any, right: Any) -> bool:
+    left_compact = compact_text(left)
+    right_compact = compact_text(right)
+    if not left_compact or not right_compact:
+        return False
+    return left_compact == right_compact or left_compact in right_compact or right_compact in left_compact
+
+
+def correction_matches_result(correction: dict[str, Any], result: dict[str, Any]) -> bool:
+    source_url = str(correction.get("sourceUrl") or "")
+    result_url = str(result.get("sourceUrl") or result.get("url") or "")
+    if source_url and result_url == source_url:
+        return True
+    video_id = correction_video_id(correction)
+    result_signal = " ".join(
+        str(result.get(key) or "")
+        for key in (
+            "id",
+            "sampleId",
+            "url",
+            "sourceUrl",
+            "title",
+            "sourceTitle",
+            "sampleTitle",
+            "sourceWindow",
+        )
+    )
+    return bool(video_id and video_id.lower() in result_signal.lower())
+
+
+def review_piece_results(state: dict[str, Any], existing: dict[str, Any]) -> list[dict[str, Any]]:
+    candidate_sources = [
+        existing.get("pieceIdentifications"),
+        state.get("review", {}).get("pieceIdentifications") if isinstance(state.get("review"), dict) else None,
+        state.get("lastPieceIdRun", {}).get("results") if isinstance(state.get("lastPieceIdRun"), dict) else None,
+    ]
+    results: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str, str]] = set()
+    for source in candidate_sources:
+        if not isinstance(source, list):
+            continue
+        for item in source:
+            if not isinstance(item, dict):
+                continue
+            key = (
+                str(item.get("sampleId") or item.get("id") or ""),
+                str(item.get("sourceUrl") or item.get("url") or ""),
+                str(item.get("title") or item.get("proposedTitle") or ""),
+                str(item.get("evidenceQuality") or ""),
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            results.append(item)
+    return results
+
+
+def result_is_blind_audio_match(correction: dict[str, Any], result: dict[str, Any]) -> bool:
+    if not correction_matches_result(correction, result):
+        return False
+    accepted_title = str(correction.get("acceptedTitle") or "").strip()
+    if not accepted_title:
+        return False
+    if result.get("modelMatchedAcceptedTitle") is True:
+        return True
+    if (
+        result.get("status") == "piece_identified"
+        and str(result.get("evidenceQuality") or "") == "verified_piece_id"
+    ):
+        return any(
+            title_matches(title, accepted_title)
+            for title in (
+                result.get("title"),
+                result.get("proposedTitle"),
+                result.get("candidateTitle"),
+                result.get("verificationTitle"),
+            )
+        )
+    return False
+
+
+def source_training_state(
+    state: dict[str, Any],
+    inventory: dict[str, list[dict[str, Any]]],
+    media_samples: list[dict[str, Any]],
+    piece_results: list[dict[str, Any]],
+) -> dict[str, Any]:
+    anchors: list[dict[str, Any]] = []
+    for correction in accepted_source_corrections(state):
+        title = str(correction.get("acceptedTitle") or "").strip()
+        if not title:
+            continue
+        samples = [
+            sample
+            for sample in media_samples
+            if isinstance(sample, dict) and correction_matches_sample(correction, sample)
+        ]
+        samples.sort(key=lambda sample: parse_window_start(str(sample.get("window") or "")))
+        inventory_items = [
+            item
+            for items in inventory.values()
+            for item in items
+            if isinstance(item, dict) and correction_matches_inventory(correction, item)
+        ]
+        source_title = str(
+            correction.get("sourceTitle")
+            or (samples[0].get("title") if samples else "")
+            or (inventory_items[0].get("title") if inventory_items else "")
+            or ""
+        ).strip()
+        source_url = str(
+            correction.get("sourceUrl")
+            or (samples[0].get("url") if samples else "")
+            or (inventory_items[0].get("url") if inventory_items else "")
+            or ""
+        ).strip()
+        blind_match_count = sum(1 for result in piece_results if result_is_blind_audio_match(correction, result))
+        score_aligned_count = 0
+        status = "blind_audio_title_match" if blind_match_count else "source_label_only"
+        if not samples:
+            status = "audio_window_needed"
+        anchors.append(
+            {
+                "sourceKey": correction.get("sourceKey") or "",
+                "title": title,
+                "sourceTitle": source_title,
+                "sourceUrl": source_url,
+                "practiceDay": practice_day_from_title(source_title),
+                "sourceConfirmed": True,
+                "sampleCount": len(samples),
+                "sampleWindows": stable_unique([str(sample.get("window") or "") for sample in samples])[:4],
+                "blindAudioMatchCount": blind_match_count,
+                "scoreAlignedWindowCount": score_aligned_count,
+                "scoreAlignment": {
+                    "status": "not_configured",
+                    "matchedSection": "",
+                    "matchedMeasures": "",
+                    "pitchRhythmExtracted": False,
+                    "referenceScore": "needed",
+                    "referenceAudio": "needed",
+                },
+                "status": status,
+                "note": (
+                    "audio title match proven before source correction"
+                    if blind_match_count
+                    else "source label confirmed; score alignment not proven"
+                ),
+            }
+        )
+    confirmed_count = len(anchors)
+    captured_count = sum(int(anchor.get("sampleCount") or 0) for anchor in anchors)
+    blind_count = sum(int(anchor.get("blindAudioMatchCount") or 0) for anchor in anchors)
+    score_count = sum(int(anchor.get("scoreAlignedWindowCount") or 0) for anchor in anchors)
+    status = "no_anchors"
+    if confirmed_count and score_count:
+        status = "score_alignment_started"
+    elif confirmed_count and blind_count >= confirmed_count:
+        status = "audio_title_match_ready"
+    elif confirmed_count:
+        status = "source_anchored"
+    return {
+        "status": status,
+        "label": f"{confirmed_count} anchors / {score_count} score matches",
+        "confirmedSourceCount": confirmed_count,
+        "capturedAnchorWindowCount": captured_count,
+        "blindAudioMatchCount": blind_count,
+        "scoreAlignedWindowCount": score_count,
+        "anchors": anchors,
+        "method": "source-confirmed labels, pitch/rhythm extraction, score alignment, and reference-audio comparison",
+        "limit": "Alan-confirmed labels train the source memory; score proof requires extracted notes/rhythm aligned to a score or reference recording.",
+    }
+
+
 def better_tip(current: str, incoming: str) -> str:
     current_clean = str(current or "").strip()
     incoming_clean = str(incoming or "").strip()
@@ -678,13 +862,17 @@ def derive_review(
     state: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     existing = existing or {}
+    state = state or {}
+    media_samples = media_samples or []
     today = today_local_day()
     sections = existing.get("notableSections") if isinstance(existing.get("notableSections"), list) else []
     findings = sanitized_findings(existing.get("skillFindings") if isinstance(existing.get("skillFindings"), list) else [])
     raw_pieces = existing.get("pieces") if isinstance(existing.get("pieces"), list) else []
-    source_label_pieces = accepted_source_pieces(state or {}, inventory, media_samples)
+    source_label_pieces = accepted_source_pieces(state, inventory, media_samples)
     pieces = enriched_pieces([*source_label_pieces, *raw_pieces], today, media_samples)
     today_pieces = [piece for piece in pieces if piece.get("isActiveToday")]
+    piece_results = review_piece_results(state, existing)
+    training = source_training_state(state, inventory, media_samples, piece_results)
     progress_plan = existing.get("progressPlan") if isinstance(existing.get("progressPlan"), dict) else None
     youtube_items = inventory.get("youtube", [])
     practice_candidates = [
@@ -720,6 +908,7 @@ def derive_review(
         "today": today,
         "todayPiece": today_pieces[0] if today_pieces else None,
         "todayPieceCount": len(today_pieces),
+        "training": training,
         "progressPlan": progress_plan,
         "currentWork": current_work,
         "strongestSignal": "Unjudged",

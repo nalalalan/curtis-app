@@ -1,7 +1,7 @@
 import unittest
 
 from backend.app.piece_id import apply_source_correction_gate
-from backend.app.scanner import accepted_source_pieces, enriched_pieces
+from backend.app.scanner import accepted_source_pieces, derive_review, enriched_pieces
 from backend.app.corrections import correction_for_item, title_rejected_for_item
 
 
@@ -162,6 +162,74 @@ class PieceTitleGuardTests(unittest.TestCase):
             wieniawski["daily"]["2026-05-02"]["tip"],
             wieniawski["tip"],
         )
+
+    def test_training_state_separates_source_anchors_from_audio_matches(self):
+        media_samples = [
+            {
+                "id": "K38CgZhvF3Q-600",
+                "url": "https://www.youtube.com/watch?v=K38CgZhvF3Q",
+                "title": "5-2-26",
+                "window": "*600-645",
+            }
+        ]
+        existing = {
+            "pieceIdentifications": [
+                {
+                    "status": "piece_identified",
+                    "title": "Wieniawski Scherzo-Tarantelle, Op. 16",
+                    "sourceUrl": "https://www.youtube.com/watch?v=K38CgZhvF3Q",
+                    "sourceTitle": "5-2-26",
+                    "sampleId": "K38CgZhvF3Q-600",
+                    "evidenceQuality": "human_verified_source_label",
+                }
+            ]
+        }
+
+        review = derive_review({"youtube": []}, existing, media_samples, {})
+        training = review["training"]
+        by_title = {anchor["title"]: anchor for anchor in training["anchors"]}
+
+        self.assertEqual(training["confirmedSourceCount"], 2)
+        self.assertEqual(training["blindAudioMatchCount"], 0)
+        self.assertEqual(training["scoreAlignedWindowCount"], 0)
+        self.assertEqual(training["label"], "2 anchors / 0 score matches")
+        self.assertEqual(by_title["Wieniawski Scherzo-Tarantelle, Op. 16"]["sampleCount"], 1)
+        self.assertEqual(
+            by_title["Wieniawski Scherzo-Tarantelle, Op. 16"]["status"],
+            "source_label_only",
+        )
+        self.assertEqual(
+            by_title["Wieniawski Scherzo-Tarantelle, Op. 16"]["scoreAlignment"]["status"],
+            "not_configured",
+        )
+
+    def test_training_state_counts_only_pre_correction_audio_matches(self):
+        media_samples = [
+            {
+                "id": "K38CgZhvF3Q-600",
+                "url": "https://www.youtube.com/watch?v=K38CgZhvF3Q",
+                "title": "5-2-26",
+                "window": "*600-645",
+            }
+        ]
+        existing = {
+            "pieceIdentifications": [
+                {
+                    "status": "piece_identified",
+                    "title": "Wieniawski Scherzo-Tarantelle, Op. 16",
+                    "sourceUrl": "https://www.youtube.com/watch?v=K38CgZhvF3Q",
+                    "sourceTitle": "5-2-26",
+                    "sampleId": "K38CgZhvF3Q-600",
+                    "evidenceQuality": "human_verified_source_label",
+                    "modelMatchedAcceptedTitle": True,
+                }
+            ]
+        }
+
+        review = derive_review({"youtube": []}, existing, media_samples, {})
+
+        self.assertEqual(review["training"]["blindAudioMatchCount"], 1)
+        self.assertEqual(review["training"]["scoreAlignedWindowCount"], 0)
 
 
 if __name__ == "__main__":
