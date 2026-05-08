@@ -293,6 +293,7 @@ class TranscriptionTrainingTests(unittest.TestCase):
             "path": "C:\\media\\sample.mp4",
             "window": "*0-10",
             "title": "5-3-26",
+            "containsViolin": True,
         }
         sample_key = transcription_module.transcription_key(sample)
         state = {

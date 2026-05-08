@@ -12,8 +12,14 @@ from typing import Any
 
 import httpx
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
-ROOT = Path(__file__).resolve().parents[1]
+from backend.app.analyzer import classify_violin_presence
+
+
+ROOT = REPO_ROOT
 RUNTIME = ROOT / ".runtime"
 TOKEN_PATH = RUNTIME / "curtis-upload-token.txt"
 MEDIA_DIR = RUNTIME / "owner-media"
@@ -82,7 +88,7 @@ def sample_starts(item: dict[str, Any]) -> list[int]:
         return [0]
     latest = max(0, duration - SAMPLE_SECONDS - 30)
     window_count = max(1, WINDOWS_PER_VIDEO)
-    anchors = [SAMPLE_START_SECONDS]
+    anchors = [SAMPLE_START_SECONDS, 5 * 60, 15 * 60]
     if window_count > 1:
         step = duration / window_count
         anchors.extend(int(step * index) for index in range(1, window_count))
@@ -256,7 +262,22 @@ def download_sample(item: dict[str, Any]) -> Path:
     raise RuntimeError(output[-1200:])
 
 
-def upload_sample(client: httpx.Client, token: str, item: dict[str, Any], path: Path) -> dict[str, Any]:
+def local_violin_presence(path: Path) -> dict[str, Any]:
+    try:
+        return classify_violin_presence(path)
+    except Exception as exc:
+        return {
+            "containsViolin": False,
+            "violinPresence": "unverified",
+            "practiceEvidenceStatus": "needs_violin_verification",
+            "violinSamplerVersion": "violin_presence_v1",
+            "violinSamplerScore": 0,
+            "violinSamplerBlocker": "local_violin_presence_scan_failed",
+            "violinSamplerDetail": str(exc)[:180],
+        }
+
+
+def upload_sample(client: httpx.Client, token: str, item: dict[str, Any], path: Path, presence: dict[str, Any]) -> dict[str, Any]:
     with path.open("rb") as handle:
         response = client.post(
             f"{API_BASE}/api/curtis/media/upload",
@@ -266,6 +287,12 @@ def upload_sample(client: httpx.Client, token: str, item: dict[str, Any], path: 
                 "title": str(item.get("title") or ""),
                 "url": str(item.get("url") or ""),
                 "window": str(item.get("sampleWindow") or sample_window(item)),
+                "containsViolin": "true" if presence.get("containsViolin") else "false",
+                "violinPresence": str(presence.get("violinPresence") or ""),
+                "practiceEvidenceStatus": str(presence.get("practiceEvidenceStatus") or ""),
+                "violinSamplerScore": str(presence.get("violinSamplerScore") or ""),
+                "violinSamplerVersion": str(presence.get("violinSamplerVersion") or ""),
+                "violinSamplerFeatures": json.dumps(presence.get("violinSamplerFeatures") or {}, ensure_ascii=False),
             },
             files={"file": (path.name, handle, "application/octet-stream")},
             timeout=180,
@@ -306,16 +333,28 @@ def main() -> int:
             return 1
         uploaded: list[dict[str, Any]] = []
         blockers: list[dict[str, Any]] = []
+        classified: list[dict[str, Any]] = []
         updated: dict[str, Any] = ops
         for item in candidates[: max(1, BATCH_SIZE)]:
             try:
                 sample_path = download_sample(item)
-                updated = upload_sample(client, token, item, sample_path)
+                presence = local_violin_presence(sample_path)
+                updated = upload_sample(client, token, item, sample_path, presence)
+                classified.append(
+                    {
+                        "id": item.get("sampleId") or item.get("id"),
+                        "score": presence.get("violinSamplerScore"),
+                        "violinPresence": presence.get("violinPresence"),
+                        "containsViolin": presence.get("containsViolin"),
+                    }
+                )
                 uploaded.append(
                     {
                         "id": item.get("sampleId") or item.get("id"),
                         "video": item.get("title"),
                         "window": item.get("sampleWindow") or sample_window(item),
+                        "violinPresence": presence.get("violinPresence"),
+                        "score": presence.get("violinSamplerScore"),
                     }
                 )
             except Exception as exc:
@@ -330,6 +369,7 @@ def main() -> int:
     print(json.dumps({
         "status": "sample_uploaded" if uploaded else "blocked",
         "uploaded": uploaded,
+        "classified": classified,
         "blocked": blockers[:3],
         "mediaAccess": updated.get("review", {}).get("mediaAccess"),
         "samples": len(updated.get("media", {}).get("samples", [])),

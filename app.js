@@ -256,7 +256,8 @@ function activeHoursLimitText(ops, records, totals) {
   const blocker = ops?.media?.lastMediaRun?.blockers?.includes("youtube_media_fetch_requires_owner_browser_or_export");
   const withheld = Number(records?.withheldNonViolinSampleCount) || 0;
   if (!archiveSeconds) return "Practice archive not indexed yet.";
-  if (withheld) return `${withheld} sampled media window${withheld === 1 ? "" : "s"} withheld until violin-positive audio is found.`;
+  if (withheld && !activeSeconds) return `${withheld} sampled media window${withheld === 1 ? "" : "s"} withheld until violin-positive audio is found.`;
+  if (withheld) return `${coverage} measured from violin-positive windows; ${withheld} sampled window${withheld === 1 ? "" : "s"} withheld.`;
   if (blocker) return `${coverage} measured. Full active-hours scan needs owner media export/browser access.`;
   if (records?.activeMeasurementStatus === "partial") return `${coverage} measured. Full active-hours scan still running/incomplete.`;
   return "Archive active-time coverage complete.";

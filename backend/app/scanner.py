@@ -1097,6 +1097,9 @@ def base_ops(state: dict[str, Any], extra_blockers: list[str] | None = None) -> 
             "sizeBytes": sample.get("sizeBytes"),
             "violinPresence": sample.get("violinPresence"),
             "practiceEvidenceStatus": sample.get("practiceEvidenceStatus"),
+            "containsViolin": sample.get("containsViolin"),
+            "violinSamplerScore": sample.get("violinSamplerScore"),
+            "violinSamplerVersion": sample.get("violinSamplerVersion"),
         }
         for sample in media_samples
         if sample.get("id")

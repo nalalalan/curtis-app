@@ -11,7 +11,7 @@ from typing import Any
 
 import httpx
 
-from .analyzer import active_ranges, extract_wav as extract_full_wav, parse_window_start, rms_windows
+from .analyzer import active_ranges, extract_wav as extract_full_wav, parse_window_start, rms_windows, sample_is_violin_positive
 from .coach import aggregate_piece_reviews, decode_json, piece_title_is_identified
 from .corrections import (
     FIVE_ONE_REJECTED_TITLES,
@@ -1102,7 +1102,11 @@ def apply_source_correction_gate(state: dict[str, Any], result: dict[str, Any]) 
 def identify_pieces_from_samples(limit: int = 4) -> dict[str, Any]:
     state = load_state()
     review = state.setdefault("review", {})
-    samples = [sample for sample in state.get("mediaSamples", []) if isinstance(sample, dict)]
+    samples = [
+        sample
+        for sample in state.get("mediaSamples", [])
+        if isinstance(sample, dict) and sample_is_violin_positive(sample)
+    ]
     samples_by_url: dict[str, list[dict[str, Any]]] = {}
     for sample in samples:
         url = str(sample.get("url") or "")

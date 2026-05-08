@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from .analyzer import classify_violin_presence
 from .settings import (
     MEDIA_DIR,
     MEDIA_PROBE_LIMIT,
@@ -45,12 +46,16 @@ def sample_windows(item: dict[str, Any], max_windows: int = MEDIA_SAMPLE_WINDOWS
     if not isinstance(duration, int) or duration <= MEDIA_SAMPLE_SECONDS + 60:
         return [f"*0-{MEDIA_SAMPLE_SECONDS}"]
     latest_start = max(0, duration - MEDIA_SAMPLE_SECONDS - 30)
-    anchors = [
-        MEDIA_SAMPLE_START_SECONDS,
-        int(duration * 0.33),
-        int(duration * 0.66),
-        latest_start,
-    ]
+    anchors = [MEDIA_SAMPLE_START_SECONDS]
+    if max_windows >= 6:
+        anchors.extend([5 * 60, 15 * 60])
+    anchors.extend(
+        [
+            int(duration * 0.33),
+            int(duration * 0.66),
+            latest_start,
+        ]
+    )
     starts: list[int] = []
     for raw_start in anchors:
         start = max(0, min(int(raw_start), latest_start))
@@ -82,6 +87,21 @@ def classify_media_error(output: str) -> str:
     if "ffmpeg" in lowered:
         return "ffmpeg_unavailable"
     return "youtube_media_fetch_failed"
+
+
+def violin_presence_metadata(path: Path) -> dict[str, Any]:
+    try:
+        return classify_violin_presence(path)
+    except Exception as exc:  # pragma: no cover - defensive media boundary
+        return {
+            "containsViolin": False,
+            "violinPresence": "unverified",
+            "practiceEvidenceStatus": "needs_violin_verification",
+            "violinSamplerVersion": "violin_presence_v1",
+            "violinSamplerScore": 0,
+            "violinSamplerBlocker": "violin_presence_scan_failed",
+            "violinSamplerDetail": str(exc)[:180],
+        }
 
 
 async def run_command(args: list[str], timeout: int = 240) -> tuple[int, str]:
@@ -157,14 +177,14 @@ async def probe_youtube_media(limit: int = MEDIA_PROBE_LIMIT) -> dict[str, Any]:
             files = sorted(MEDIA_DIR.glob(f"{current_id}.*"), key=lambda path: path.stat().st_mtime, reverse=True)
             if code == 0 and files:
                 media_file = files[0]
+                presence = violin_presence_metadata(media_file)
                 sample = {
                     "id": current_id,
                     "url": item["url"],
                     "title": item.get("title"),
                     "createdAt": utc_now(),
                     "status": "media_sample_ready",
-                    "violinPresence": "unverified",
-                    "practiceEvidenceStatus": "needs_violin_verification",
+                    **presence,
                     "path": str(media_file),
                     "sizeBytes": media_file.stat().st_size,
                     "window": window,
@@ -195,6 +215,7 @@ def record_uploaded_sample(
     title: str = "",
     url: str = "",
     window: str = "",
+    metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     MEDIA_DIR.mkdir(parents=True, exist_ok=True)
     safe_id = "".join(char for char in video_id if char.isalnum() or char in {"_", "-"})[:80] or "uploaded"
@@ -203,14 +224,18 @@ def record_uploaded_sample(
     shutil.move(str(source_path), target)
 
     state = load_state()
+    presence = violin_presence_metadata(target)
+    incoming = metadata or {}
+    if presence.get("violinSamplerBlocker") and incoming.get("violinSamplerVersion"):
+        presence = {**presence, **incoming}
+
     sample = {
         "id": safe_id,
         "url": url,
         "title": title or safe_id,
         "createdAt": utc_now(),
         "status": "media_sample_ready",
-        "violinPresence": "unverified",
-        "practiceEvidenceStatus": "needs_violin_verification",
+        **presence,
         "path": str(target),
         "sizeBytes": target.stat().st_size,
         "window": window,

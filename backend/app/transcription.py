@@ -7,7 +7,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-from .analyzer import parse_window_start, run_process
+from .analyzer import parse_window_start, run_process, sample_is_violin_positive
 from .corrections import correction_for_item, source_key_from_item
 from .state import load_state, save_state, utc_now
 
@@ -1144,6 +1144,7 @@ def transcribe_media_samples(limit: int | None = None) -> dict[str, Any]:
         sample
         for sample in samples
         if sample.get("path")
+        and sample_is_violin_positive(sample)
         and (
             transcription_key(sample) not in existing_by_id
             or existing_by_id[transcription_key(sample)].get("pipelineVersion") != TRANSCRIPTION_PIPELINE_VERSION

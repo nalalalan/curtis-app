@@ -295,6 +295,12 @@ async def media_upload(
     title: str = Form(""),
     url: str = Form(""),
     window: str = Form(""),
+    contains_violin: str = Form("", alias="containsViolin"),
+    violin_presence: str = Form("", alias="violinPresence"),
+    practice_evidence_status: str = Form("", alias="practiceEvidenceStatus"),
+    violin_sampler_score: str = Form("", alias="violinSamplerScore"),
+    violin_sampler_version: str = Form("", alias="violinSamplerVersion"),
+    violin_sampler_features: str = Form("", alias="violinSamplerFeatures"),
     authorization: str = Header(""),
 ) -> dict[str, Any]:
     token = authorization.removeprefix("Bearer").strip()
@@ -306,7 +312,15 @@ async def media_upload(
         while chunk := await file.read(1024 * 1024):
             temp_file.write(chunk)
         temp_path = Path(temp_file.name)
-    record_uploaded_sample(temp_path, video_id=video_id, title=title, url=url, window=window)
+    metadata = {
+        "containsViolin": contains_violin.strip().lower() in {"1", "true", "yes"},
+        "violinPresence": violin_presence,
+        "practiceEvidenceStatus": practice_evidence_status,
+        "violinSamplerScore": violin_sampler_score,
+        "violinSamplerVersion": violin_sampler_version,
+        "violinSamplerFeatures": violin_sampler_features,
+    }
+    record_uploaded_sample(temp_path, video_id=video_id, title=title, url=url, window=window, metadata=metadata)
     analyze_media_samples()
     transcribe_media_samples()
     identify_pieces_from_samples()
