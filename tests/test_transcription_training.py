@@ -7,7 +7,9 @@ from backend.app.study_packets import build_practice_study, build_practice_total
 from backend.app.transcription import (
     TRANSCRIPTION_PIPELINE_VERSION,
     compare_fingerprints,
+    choose_transcription_events,
     event_fingerprint,
+    f0_to_onset_events,
     f0_to_events,
     reference_matches_for,
     transcription_prior_hint,
@@ -83,6 +85,27 @@ class TranscriptionTrainingTests(unittest.TestCase):
         events = f0_to_events(f0, voiced, probability, 22050, 512, numpy)
 
         self.assertEqual([event["note"] for event in events], ["A4", "B4"])
+
+    def test_onset_segmentation_preserves_repeated_same_note_attacks(self):
+        import numpy
+
+        f0 = numpy.array([hz_for_midi(69)] * 12)
+        voiced = numpy.array([True] * 12)
+        probability = numpy.array([0.95] * 12)
+        onset_frames = numpy.array([4, 8])
+
+        events = f0_to_onset_events(f0, voiced, probability, onset_frames, 22050, 512, numpy)
+
+        self.assertEqual([event["note"] for event in events], ["A4", "A4", "A4"])
+
+    def test_choose_transcription_events_prefers_richer_onset_segmentation(self):
+        pitch_events = [{"note": "A4"}, {"note": "B4"}]
+        onset_events = [{"note": value} for value in ("A4", "A4", "B4", "B4", "C5", "D5")]
+
+        events, source = choose_transcription_events(pitch_events, onset_events)
+
+        self.assertEqual(source, "onset_segmented_pyin")
+        self.assertEqual(events, onset_events)
 
     def test_pitch_rhythm_fingerprint_matches_repeated_material(self):
         first = fingerprint_for([76, 78, 79, 81, 79, 78, 76, 74, 76, 78, 79, 81])

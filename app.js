@@ -1046,6 +1046,10 @@ function renderNotationSheet(events, options = {}) {
   const repeatGroup = options?.repeatGroup && typeof options.repeatGroup === "object" ? options.repeatGroup : null;
   const repeatLabel = repeatGroup?.notationLabel || options?.repeatLabel || "";
   const repeatPattern = repeatGroup?.practicePattern || options?.practicePattern || "";
+  const qualityLabel = options?.qualityLabel || "";
+  const qualityLimit = options?.qualityLimit || "";
+  const captionTitle = repeatLabel || qualityLabel;
+  const captionDetail = repeatPattern || qualityLimit;
   const repeatClass = repeatLabel ? " notation-repeat" : "";
   const repeatMarks = repeatLabel ? `
     <g class="notation-repeat-mark" aria-label="${escapeHtml(shortText(repeatLabel, 72))}">
@@ -1070,10 +1074,10 @@ function renderNotationSheet(events, options = {}) {
           ${repeatMarks}
         </svg>
         <span>Notation pending.</span>
-        ${repeatLabel ? `
+        ${captionTitle ? `
           <div class="notation-repeat-caption">
-            <b>${escapeHtml(shortText(repeatLabel, 72))}</b>
-            <em>${escapeHtml(shortText(repeatPattern || "repeated loop", 92))}</em>
+            <b>${escapeHtml(shortText(captionTitle, 72))}</b>
+            <em>${escapeHtml(shortText(captionDetail || "machine evidence", 92))}</em>
           </div>
         ` : ""}
       </div>
@@ -1109,10 +1113,10 @@ function renderNotationSheet(events, options = {}) {
         ${repeatMarks}
         ${marks}
       </svg>
-      ${repeatLabel ? `
+      ${captionTitle ? `
         <div class="notation-repeat-caption">
-          <b>${escapeHtml(shortText(repeatLabel, 72))}</b>
-          <em>${escapeHtml(shortText(repeatPattern || "repeated loop", 92))}</em>
+          <b>${escapeHtml(shortText(captionTitle, 72))}</b>
+          <em>${escapeHtml(shortText(captionDetail || "machine evidence", 92))}</em>
         </div>
       ` : ""}
     </div>
@@ -1164,9 +1168,18 @@ function renderHeatMap(record) {
 }
 
 function recordStatusLabel(record) {
+  if (record?.transcription?.qualityStatus === "weak_fragment") return "weak notation";
+  if (record?.transcription?.qualityStatus === "draft_fragment") return "draft notation";
   if (record?.status === "transcribed") return "transcribed";
   if (record?.status === "active_time_measured") return "active measured";
   return "pending media";
+}
+
+function transcriptionEvidenceLabel(transcription) {
+  const count = Number(transcription?.noteCount) || 0;
+  const label = transcription?.qualityLabel || (transcription?.status === "ready" ? "machine fragment" : "notation pending");
+  if (!count) return label;
+  return `${label} / ${count} notes`;
 }
 
 function renderRepeatGroups(groups) {
@@ -1223,6 +1236,7 @@ function renderTranscriptionProof(record, scoreSnippet) {
   const section = scoreSnippet?.title || repeatGroup?.label || "section pending";
   const confidence = piece?.confidence || record?.evidenceStatus || record?.transcription?.status || "pending";
   const noteCount = Number(record?.transcription?.noteCount) || 0;
+  const notationLabel = noteCount ? transcriptionEvidenceLabel(record?.transcription) : "pending";
   const scoreReadiness = scoreSnippet?.readiness || scoreSnippet?.score?.status || piece?.score?.status || "score match pending";
   const windowLabel = scoreSnippet?.practiceLabel || record?.processedSampleLabel || record?.activeViolinLabel || "";
   return `
@@ -1245,7 +1259,7 @@ function renderTranscriptionProof(record, scoreSnippet) {
       </article>
       <article>
         <span>Notation</span>
-        <strong>${escapeHtml(noteCount ? `${noteCount} notes` : "pending")}</strong>
+        <strong>${escapeHtml(notationLabel)}</strong>
       </article>
       <article>
         <span>Window</span>
@@ -1373,8 +1387,7 @@ function recordEvidenceLine(record, scoreSnippet) {
     confirmed ? "source confirmed" : uncertain ? "piece uncertain" : "piece pending",
   ];
   if (record?.transcription?.status === "ready") {
-    const count = Number(record?.transcription?.noteCount) || 0;
-    parts.push(count ? `${count} notes rendered` : "notation rendered");
+    parts.push(transcriptionEvidenceLabel(record.transcription));
   } else if (record?.activeTimeStatus && record.activeTimeStatus !== "pending_media") {
     parts.push("active time measured");
   } else {
@@ -1396,7 +1409,7 @@ function renderDailyRecord(record, index = 0) {
     record.practiceDay,
     record.uploadedVideoLabel ? `${record.uploadedVideoLabel} uploaded` : "",
     record.activeViolinLabel ? `${record.activeViolinLabel} active` : record.activeTimeStatus === "pending_media" ? "active time pending" : "",
-    record.transcription?.noteCount ? `${record.transcription.noteCount} notes` : "notation pending"
+    record.transcription?.noteCount ? transcriptionEvidenceLabel(record.transcription) : "notation pending"
   ].filter(Boolean).join(" / ");
   return `
     <details class="record-card" data-status="${escapeHtml(record.status || "pending")}">
@@ -1415,7 +1428,11 @@ function renderDailyRecord(record, index = 0) {
         </div>
         ${renderTranscriptionProof(record, scoreSnippet)}
         ${renderRepertoireUpdates(record.repertoireUpdates)}
-        ${renderNotationSheet(events, { repeatGroup: record?.transcription?.repeatGroups?.[0] })}
+        ${renderNotationSheet(events, {
+          repeatGroup: record?.transcription?.repeatGroups?.[0],
+          qualityLabel: record?.transcription?.qualityLabel,
+          qualityLimit: record?.transcription?.qualityLimit
+        })}
         ${renderRepeatGroups(record?.transcription?.repeatGroups)}
         ${renderObservations(record.observations)}
         <small>${escapeHtml(record.nextStep || "")}</small>

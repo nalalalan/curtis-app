@@ -15,6 +15,10 @@ from .study_packets import (
 MAX_NOTATION_EVENTS = 96
 MAX_RECORDS = 120
 MAX_CLIPS_PER_DAY = 5
+WEAK_TRANSCRIPTION_MIN_SECONDS = 8
+DRAFT_TRANSCRIPTION_MIN_SECONDS = 30
+WEAK_TRANSCRIPTION_MIN_NOTES = 12
+DRAFT_TRANSCRIPTION_MIN_NOTES = 48
 
 
 def video_match_keys(item: dict[str, Any]) -> set[str]:
@@ -148,6 +152,49 @@ def active_seconds_from_transcriptions(transcriptions: list[dict[str, Any]]) -> 
             if isinstance(note, dict):
                 total += max(0.0, float(note.get("durationSeconds") or 0.0))
     return int(round(total))
+
+
+def transcription_note_count(transcriptions: list[dict[str, Any]]) -> int:
+    count = 0
+    for transcription in transcriptions:
+        notes = transcription.get("notes") if isinstance(transcription.get("notes"), list) else []
+        count += sum(1 for note in notes if isinstance(note, dict) and note.get("note"))
+    return count
+
+
+def transcription_quality(note_count: int, active_seconds: int, segment_count: int) -> dict[str, Any]:
+    if note_count <= 0:
+        return {
+            "qualityStatus": "pending",
+            "qualityLabel": "notation pending",
+            "qualityLimit": "No stable violin notes have been extracted yet.",
+        }
+    if active_seconds < WEAK_TRANSCRIPTION_MIN_SECONDS or note_count < WEAK_TRANSCRIPTION_MIN_NOTES:
+        return {
+            "qualityStatus": "weak_fragment",
+            "qualityLabel": "weak fragment",
+            "qualityLimit": (
+                f"Only {duration_seconds_label(active_seconds) or '0s'} and {note_count} notes were detected; "
+                "this is not enough to call it a daily transcription."
+            ),
+            "segmentCount": segment_count,
+        }
+    if active_seconds < DRAFT_TRANSCRIPTION_MIN_SECONDS or note_count < DRAFT_TRANSCRIPTION_MIN_NOTES:
+        return {
+            "qualityStatus": "draft_fragment",
+            "qualityLabel": "draft fragment",
+            "qualityLimit": (
+                f"{duration_seconds_label(active_seconds)} and {note_count} notes were detected; "
+                "use this as machine evidence, not finished sheet music."
+            ),
+            "segmentCount": segment_count,
+        }
+    return {
+        "qualityStatus": "usable_fragment",
+        "qualityLabel": "usable fragment",
+        "qualityLimit": "Machine transcription is long enough to inspect, but score alignment is still required.",
+        "segmentCount": segment_count,
+    }
 
 
 def active_seconds_from_sections(sections: list[dict[str, Any]]) -> int:
@@ -361,6 +408,30 @@ def problem_observations(
             "transcriptionSnippet": notation[:24],
             "confidence": "machine_observed_no_repeated_problem",
             "curtisReadinessIssue": "This is not a readiness score; it only means the current extraction did not isolate a repeated blocker.",
+        }
+    ]
+
+
+def transcription_quality_observations(
+    quality: dict[str, Any],
+    notation: list[dict[str, Any]],
+    clips: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    status = str(quality.get("qualityStatus") or "")
+    if status != "weak_fragment":
+        return []
+    primary_clip = clips[0] if clips else {}
+    return [
+        {
+            "passage": "machine transcription",
+            "category": "transcription quality",
+            "frequency": quality.get("qualityLabel") or status,
+            "trend": "requires more aligned active audio",
+            "problem": quality.get("qualityLimit") or "Machine transcription is not strong enough yet.",
+            "evidence": primary_clip,
+            "transcriptionSnippet": notation[:24],
+            "confidence": "machine_quality_gate",
+            "curtisReadinessIssue": "This evidence can guide review, but it is not strong enough to judge Curtis readiness.",
         }
     ]
 
@@ -593,10 +664,15 @@ def build_daily_records(
         uncertain = uncertain_pieces_for_day(day_transcriptions)
         heat_fragments = transcription_fragments(day_transcriptions)
         day_repeat_groups = repeat_groups(heat_fragments, day_transcriptions)
+        note_count = transcription_note_count(day_transcriptions)
+        quality = transcription_quality(note_count, active_seconds, len(day_transcriptions))
         uploaded_seconds = sum(int(video.get("durationSeconds") or 0) for video in videos)
         processed_seconds = sum(sample_duration_seconds(sample) for sample in day_samples)
         clips = clips_for_day(videos, day_sections, day_transcriptions)
-        observations = problem_observations(notation, heat_fragments, clips, day_transcriptions, active_status)
+        observations = [
+            *transcription_quality_observations(quality, notation, clips),
+            *problem_observations(notation, heat_fragments, clips, day_transcriptions, active_status),
+        ][:6]
         blocker = main_curtis_blocker(observations)
         records.append(
             {
@@ -615,11 +691,12 @@ def build_daily_records(
                 "uncertainPieces": uncertain,
                 "transcription": {
                     "status": "ready" if notation else "pending",
-                    "noteCount": sum(int(item.get("noteCount") or 0) for item in day_transcriptions),
+                    "noteCount": note_count,
                     "segmentCount": len(day_transcriptions),
+                    **quality,
                     "events": notation,
                     "repeatGroups": day_repeat_groups,
-                    "limit": "Machine notation from detected monophonic violin pitch/rhythm; uncertain notes are marked.",
+                    "limit": "Onset-aware machine notation from detected monophonic violin pitch/rhythm; weak fragments are marked instead of treated as finished sheet music.",
                 },
                 "clips": clips,
                 "heatMap": {

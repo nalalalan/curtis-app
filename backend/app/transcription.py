@@ -14,15 +14,18 @@ from .state import load_state, save_state, utc_now
 
 MAX_TRANSCRIPTION_SECONDS = int(os.getenv("CURTIS_TRANSCRIPTION_MAX_SECONDS", "180"))
 TRANSCRIPTION_SAMPLE_LIMIT = int(os.getenv("CURTIS_TRANSCRIPTION_SAMPLE_LIMIT", "8"))
-TRANSCRIPTION_PIPELINE_VERSION = "violin_pyin_filtered_v2"
+TRANSCRIPTION_PIPELINE_VERSION = "violin_pyin_onset_v3"
 MIN_NOTE_SECONDS = float(os.getenv("CURTIS_MIN_NOTE_SECONDS", "0.08"))
+MIN_ONSET_NOTE_SECONDS = float(os.getenv("CURTIS_MIN_ONSET_NOTE_SECONDS", "0.04"))
 MAX_STORED_NOTES = int(os.getenv("CURTIS_MAX_STORED_NOTES", "240"))
 PITCH_MATCH_THRESHOLD = float(os.getenv("CURTIS_PITCH_MATCH_THRESHOLD", "0.58"))
 VIOLIN_MIN_MIDI = int(os.getenv("CURTIS_VIOLIN_MIN_MIDI", "55"))
 VIOLIN_MAX_MIDI = int(os.getenv("CURTIS_VIOLIN_MAX_MIDI", "108"))
-MIN_VOICED_PROBABILITY = float(os.getenv("CURTIS_MIN_VOICED_PROBABILITY", "0.55"))
+MIN_VOICED_PROBABILITY = float(os.getenv("CURTIS_MIN_VOICED_PROBABILITY", "0.50"))
 NOTE_CHANGE_CONFIRM_FRAMES = int(os.getenv("CURTIS_NOTE_CHANGE_CONFIRM_FRAMES", "3"))
 NOTE_MERGE_GAP_SECONDS = float(os.getenv("CURTIS_NOTE_MERGE_GAP_SECONDS", "0.07"))
+ONSET_EVENT_MULTIPLIER = float(os.getenv("CURTIS_ONSET_EVENT_MULTIPLIER", "1.12"))
+ONSET_MIN_VOICED_FRAMES = int(os.getenv("CURTIS_ONSET_MIN_VOICED_FRAMES", "1"))
 NOTE_NAMES = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
 
 
@@ -42,6 +45,25 @@ def transcription_key(sample: dict[str, Any]) -> str:
 def note_name(midi: int) -> str:
     octave = (midi // 12) - 1
     return f"{NOTE_NAMES[midi % 12]}{octave}"
+
+
+def midi_from_hz(value: float) -> int:
+    return int(round(69 + 12 * math.log2(float(value) / 440.0)))
+
+
+def valid_frame_midi(value: Any, voiced: bool, probability: float) -> int | None:
+    if not voiced or value is None or probability < MIN_VOICED_PROBABILITY:
+        return None
+    try:
+        frequency = float(value)
+    except (TypeError, ValueError):
+        return None
+    if math.isnan(frequency) or frequency <= 0:
+        return None
+    midi = midi_from_hz(frequency)
+    if midi < VIOLIN_MIN_MIDI or midi > VIOLIN_MAX_MIDI:
+        return None
+    return midi
 
 
 def compact_counts(values: list[str], limit: int = 60) -> dict[str, int]:
@@ -226,12 +248,8 @@ def f0_to_events(f0: Any, voiced_flag: Any, voiced_prob: Any, sr: int, hop_lengt
         last_time = time_seconds
         voiced = bool(voiced_flag[index]) if index < len(voiced_flag) else False
         probability = float(voiced_prob[index]) if index < len(voiced_prob) and not math.isnan(float(voiced_prob[index])) else 0.0
-        if not voiced or value is None or math.isnan(float(value)) or probability < MIN_VOICED_PROBABILITY:
-            absorb_pending_as_current()
-            close_event(time_seconds)
-            continue
-        midi = int(round(69 + 12 * math.log2(float(value) / 440.0)))
-        if midi < VIOLIN_MIN_MIDI or midi > VIOLIN_MAX_MIDI:
+        midi = valid_frame_midi(value, voiced, probability)
+        if midi is None:
             absorb_pending_as_current()
             close_event(time_seconds)
             continue
@@ -279,6 +297,89 @@ def f0_to_events(f0: Any, voiced_flag: Any, voiced_prob: Any, sr: int, hop_lengt
     return merge_adjacent_same_note_events(events)[:MAX_STORED_NOTES]
 
 
+def f0_to_onset_events(
+    f0: Any,
+    voiced_flag: Any,
+    voiced_prob: Any,
+    onset_frames: Any,
+    sr: int,
+    hop_length: int,
+    numpy: Any,
+) -> list[dict[str, Any]]:
+    frame_count = len(f0)
+    if not frame_count:
+        return []
+    frame_seconds = hop_length / sr
+    raw_boundaries = [0]
+    for frame in onset_frames:
+        try:
+            index = int(frame)
+        except (TypeError, ValueError):
+            continue
+        if 0 < index < frame_count:
+            raw_boundaries.append(index)
+    raw_boundaries.append(frame_count)
+    boundaries = sorted(set(raw_boundaries))
+    events: list[dict[str, Any]] = []
+    for start_frame, end_frame in zip(boundaries, boundaries[1:]):
+        if end_frame <= start_frame:
+            continue
+        midi_values: list[int] = []
+        probabilities: list[float] = []
+        first_voiced: int | None = None
+        last_voiced: int | None = None
+        for index in range(start_frame, end_frame):
+            voiced = bool(voiced_flag[index]) if index < len(voiced_flag) else False
+            probability = float(voiced_prob[index]) if index < len(voiced_prob) and not math.isnan(float(voiced_prob[index])) else 0.0
+            midi = valid_frame_midi(f0[index], voiced, probability)
+            if midi is None:
+                continue
+            if first_voiced is None:
+                first_voiced = index
+            last_voiced = index
+            midi_values.append(midi)
+            probabilities.append(probability)
+        if len(midi_values) < ONSET_MIN_VOICED_FRAMES or first_voiced is None or last_voiced is None:
+            continue
+        segment_frames = max(1, end_frame - start_frame)
+        voiced_fraction = len(midi_values) / segment_frames
+        event_start_frame = start_frame if voiced_fraction >= 0.35 else first_voiced
+        event_end_frame = end_frame if voiced_fraction >= 0.35 else last_voiced + 1
+        start = float(event_start_frame * frame_seconds)
+        end = float(event_end_frame * frame_seconds)
+        duration = max(0.0, end - start)
+        if duration < MIN_ONSET_NOTE_SECONDS:
+            end = start + MIN_ONSET_NOTE_SECONDS
+            duration = MIN_ONSET_NOTE_SECONDS
+        midi = int(round(float(numpy.median(numpy.array(midi_values)))))
+        events.append(
+            {
+                "startSeconds": round(start, 3),
+                "endSeconds": round(end, 3),
+                "durationSeconds": round(duration, 3),
+                "midi": midi,
+                "note": note_name(midi),
+                "confidence": round(sum(probabilities) / max(1, len(probabilities)), 3),
+            }
+        )
+        if len(events) >= MAX_STORED_NOTES:
+            break
+    return events
+
+
+def choose_transcription_events(
+    pitch_events: list[dict[str, Any]],
+    onset_events: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], str]:
+    if not onset_events:
+        return pitch_events, "pitch_hysteresis"
+    if len(onset_events) >= max(len(pitch_events) + 4, int(len(pitch_events) * ONSET_EVENT_MULTIPLIER)):
+        return onset_events[:MAX_STORED_NOTES], "onset_segmented_pyin"
+    if not pitch_events and onset_events:
+        return onset_events[:MAX_STORED_NOTES], "onset_segmented_pyin"
+    return pitch_events, "pitch_hysteresis"
+
+
 def notation_text(events: list[dict[str, Any]], tempo_bpm: float) -> str:
     if not events:
         return ""
@@ -322,12 +423,18 @@ def transcribe_path(path: Path) -> dict[str, Any]:
             hop_length=hop_length,
         )
         tempo = estimate_tempo(y, sr, librosa)
-        events = f0_to_events(f0, voiced_flag, voiced_prob, sr, hop_length, numpy)
+        try:
+            onset_frames = librosa.onset.onset_detect(y=y, sr=sr, hop_length=hop_length, units="frames")
+        except Exception:
+            onset_frames = []
+        pitch_events = f0_to_events(f0, voiced_flag, voiced_prob, sr, hop_length, numpy)
+        onset_events = f0_to_onset_events(f0, voiced_flag, voiced_prob, onset_frames, sr, hop_length, numpy)
+        events, segmentation_source = choose_transcription_events(pitch_events, onset_events)
         voiced_ratio = round(float(numpy.nanmean(voiced_flag)) if len(voiced_flag) else 0.0, 3)
         return {
             "status": "transcribed" if events else "no_stable_notes",
             "pipelineVersion": TRANSCRIPTION_PIPELINE_VERSION,
-            "method": "librosa_pyin_violin_range_hysteresis_note_segmentation",
+            "method": "librosa_pyin_violin_range_onset_aware_note_segmentation",
             "durationSeconds": round(float(len(y) / sr), 2),
             "tempoBpm": tempo,
             "voicedFrameRatio": voiced_ratio,
@@ -339,12 +446,18 @@ def transcribe_path(path: Path) -> dict[str, Any]:
                 "minimumVoicedProbability": MIN_VOICED_PROBABILITY,
                 "noteChangeConfirmFrames": NOTE_CHANGE_CONFIRM_FRAMES,
                 "minimumNoteSeconds": MIN_NOTE_SECONDS,
+                "minimumOnsetNoteSeconds": MIN_ONSET_NOTE_SECONDS,
                 "noteMergeGapSeconds": NOTE_MERGE_GAP_SECONDS,
+                "segmentationSource": segmentation_source,
+                "pitchEventCount": len(pitch_events),
+                "onsetEventCount": len(onset_events),
+                "selectedEventCount": len(events),
+                "detectedOnsetCount": len(onset_frames),
             },
             "notation": {
                 "format": "note:beats",
                 "text": notation_text(events, tempo),
-                "limit": "Filtered monophonic violin-range transcription; verify against score before treating as final notation.",
+                "limit": "Onset-aware monophonic violin-range draft transcription; verify against score before treating as final notation.",
             },
         }
     finally:
@@ -476,9 +589,9 @@ def transcribe_media_samples(limit: int | None = None) -> dict[str, Any]:
     state["transcriptions"] = {
         "items": items,
         "updatedAt": utc_now(),
-        "method": "librosa_pyin_violin_range_hysteresis_note_segmentation",
+        "method": "librosa_pyin_violin_range_onset_aware_note_segmentation",
         "pipelineVersion": TRANSCRIPTION_PIPELINE_VERSION,
-        "limit": "Filtered monophonic violin-range note/rhythm extraction is evidence for matching; score-level claims require alignment verification.",
+        "limit": "Onset-aware monophonic violin-range note/rhythm extraction is draft evidence for matching; score-level claims require alignment verification.",
     }
     run = {
         "startedAt": utc_now(),
