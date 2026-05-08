@@ -1,7 +1,7 @@
 import unittest
 
 from backend.app.scanner import derive_review
-from backend.app.study_packets import build_practice_study
+from backend.app.study_packets import build_practice_study, build_practice_totals
 from backend.app.transcription import (
     compare_fingerprints,
     event_fingerprint,
@@ -194,6 +194,83 @@ class TranscriptionTrainingTests(unittest.TestCase):
         self.assertEqual(snippet["score"]["page"], 45)
         self.assertTrue(snippet["score"]["boxes"])
         self.assertEqual(snippet["audio"]["url"], "https://www.youtube.com/watch?v=wDfVpTU4I_I")
+
+    def test_practice_totals_start_at_violin_one_and_exclude_unrelated_long_videos(self):
+        inventory = {
+            "youtube": [
+                {
+                    "id": "unrelated",
+                    "title": "alan makes the reading decoration bday present",
+                    "url": "https://www.youtube.com/watch?v=unrelated00",
+                    "publishedAt": "2025-12-21T21:42:04Z",
+                    "durationSeconds": 24610,
+                    "practiceCandidate": True,
+                },
+                {
+                    "id": "old-cover",
+                    "title": "Violin Cover",
+                    "url": "https://www.youtube.com/watch?v=oldcover000",
+                    "publishedAt": "2013-11-26T09:14:30Z",
+                    "durationSeconds": 148,
+                    "practiceCandidate": True,
+                },
+                {
+                    "id": "otHfHMgDo2g",
+                    "title": "violin 1",
+                    "url": "https://www.youtube.com/watch?v=otHfHMgDo2g",
+                    "publishedAt": "2025-12-20T19:47:20Z",
+                    "durationSeconds": 3608,
+                    "practiceCandidate": True,
+                },
+                {
+                    "id": "wDfVpTU4I_I",
+                    "title": "5-1-26",
+                    "url": "https://www.youtube.com/watch?v=wDfVpTU4I_I",
+                    "publishedAt": "2026-05-03T10:20:47Z",
+                    "durationSeconds": 16421,
+                    "practiceCandidate": True,
+                },
+            ]
+        }
+
+        totals = build_practice_totals(inventory)
+
+        self.assertEqual(totals["status"], "ready")
+        self.assertEqual(totals["sinceTitle"], "violin 1")
+        self.assertEqual(totals["videoCount"], 2)
+        self.assertEqual(totals["totalPracticeSeconds"], 20029)
+        self.assertEqual([video["title"] for video in totals["videos"]], ["5-1-26", "violin 1"])
+        self.assertNotIn("reading decoration", " ".join(video["title"] for video in totals["videos"]))
+
+    def test_practice_study_adds_pending_rows_for_every_practice_log_since_marker(self):
+        inventory = {
+            "youtube": [
+                {
+                    "id": "otHfHMgDo2g",
+                    "title": "violin 1",
+                    "url": "https://www.youtube.com/watch?v=otHfHMgDo2g",
+                    "publishedAt": "2025-12-20T19:47:20Z",
+                    "durationSeconds": 3608,
+                    "practiceCandidate": True,
+                },
+                {
+                    "id": "later",
+                    "title": "4-18-26",
+                    "url": "https://www.youtube.com/watch?v=later000000",
+                    "publishedAt": "2026-04-21T17:48:03Z",
+                    "durationSeconds": 8052,
+                    "practiceCandidate": True,
+                },
+            ]
+        }
+
+        study = build_practice_study({}, inventory, [], [])
+        by_title = {item["sourceTitle"]: item for item in study["days"]}
+
+        self.assertEqual(study["practiceTotals"]["videoCount"], 2)
+        self.assertEqual(by_title["violin 1"]["status"], "transcription_pending")
+        self.assertEqual(by_title["4-18-26"]["totalPracticeSeconds"], 8052)
+        self.assertEqual(by_title["4-18-26"]["pieceTitle"], "Piece being identified")
 
 
 if __name__ == "__main__":

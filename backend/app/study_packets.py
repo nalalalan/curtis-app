@@ -8,6 +8,11 @@ from .corrections import accepted_source_corrections, compact_text, source_key_f
 from .score_assets import score_page_url
 
 
+VIOLIN_PRACTICE_TITLE_RE = re.compile(r"^violin(?:\s+\d+)?$", re.IGNORECASE)
+VIOLIN_ONE_TITLE_RE = re.compile(r"^violin\s+1$", re.IGNORECASE)
+DATED_PRACTICE_TITLE_RE = re.compile(r"^\d{1,2}[-_/]\d{1,2}[-_/]\d{2,4}$")
+
+
 def practice_day_from_title(value: Any) -> str:
     match = re.search(r"\b(\d{1,2})[-_/](\d{1,2})[-_/](\d{2,4})\b", str(value or ""))
     if not match:
@@ -20,15 +25,22 @@ def practice_day_from_title(value: Any) -> str:
     return f"{year:04d}-{month:02d}-{day:02d}"
 
 
-def local_day(value: Any) -> str:
+def parsed_datetime(value: Any) -> datetime | None:
     if not value:
-        return ""
+        return None
     try:
         parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
     except ValueError:
-        return ""
+        return None
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def local_day(value: Any) -> str:
+    parsed = parsed_datetime(value)
+    if not parsed:
+        return ""
     return parsed.date().isoformat()
 
 
@@ -41,6 +53,120 @@ def parse_window_bounds(value: Any) -> tuple[int, int]:
 
 def stable_unique(values: list[str]) -> list[str]:
     return list(dict.fromkeys(value for value in values if value))
+
+
+def inventory_items_from(inventory: dict[str, list[dict[str, Any]]] | list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if isinstance(inventory, dict):
+        return [
+            item
+            for items in inventory.values()
+            for item in items
+            if isinstance(item, dict)
+        ]
+    return [item for item in inventory if isinstance(item, dict)]
+
+
+def item_duration_seconds(item: dict[str, Any] | None) -> int:
+    if not item:
+        return 0
+    try:
+        return max(0, int(float(item.get("durationSeconds") or 0)))
+    except (TypeError, ValueError):
+        return 0
+
+
+def duration_seconds_label(seconds: int | float) -> str:
+    total = max(0, int(seconds or 0))
+    hours = total // 3600
+    minutes = (total % 3600) // 60
+    secs = total % 60
+    if hours:
+        return f"{hours}h {minutes}m" if minutes else f"{hours}h"
+    if minutes:
+        return f"{minutes}m {secs}s" if secs else f"{minutes}m"
+    return f"{secs}s"
+
+
+def title_is_practice_log(value: Any) -> bool:
+    title = str(value or "").strip()
+    return bool(VIOLIN_PRACTICE_TITLE_RE.match(title) or DATED_PRACTICE_TITLE_RE.match(title))
+
+
+def inventory_sort_key(item: dict[str, Any]) -> tuple[datetime, str]:
+    parsed = parsed_datetime(item.get("publishedAt")) or datetime.min.replace(tzinfo=timezone.utc)
+    return parsed, str(item.get("title") or "")
+
+
+def practice_start_marker(items: list[dict[str, Any]]) -> dict[str, Any] | None:
+    exact = [item for item in items if VIOLIN_ONE_TITLE_RE.match(str(item.get("title") or "").strip())]
+    if exact:
+        return sorted(exact, key=inventory_sort_key)[0]
+    candidates = [item for item in items if title_is_practice_log(item.get("title"))]
+    return sorted(candidates, key=inventory_sort_key)[0] if candidates else None
+
+
+def practice_ledger_videos(inventory: dict[str, list[dict[str, Any]]] | list[dict[str, Any]]) -> list[dict[str, Any]]:
+    items = sorted(inventory_items_from(inventory), key=inventory_sort_key)
+    marker = practice_start_marker(items)
+    if not marker:
+        return []
+    marker_time = parsed_datetime(marker.get("publishedAt"))
+    ledger: list[dict[str, Any]] = []
+    for item in items:
+        if not title_is_practice_log(item.get("title")):
+            continue
+        published_at = parsed_datetime(item.get("publishedAt"))
+        if marker_time and published_at and published_at < marker_time:
+            continue
+        if marker_time and not published_at and item is not marker:
+            continue
+        duration_seconds = item_duration_seconds(item)
+        if duration_seconds <= 0:
+            continue
+        title = str(item.get("title") or "Practice video").strip()
+        published_value = str(item.get("publishedAt") or "").strip()
+        ledger.append(
+            {
+                "sourceKey": item.get("sourceKey") or source_key_from_item(item),
+                "title": title,
+                "url": str(item.get("url") or item.get("sourceUrl") or "").strip(),
+                "publishedAt": published_value,
+                "uploadedDate": local_day(published_value),
+                "practiceDay": practice_day_from_title(title) or local_day(published_value),
+                "duration": item.get("duration") or "",
+                "durationSeconds": duration_seconds,
+                "durationLabel": duration_seconds_label(duration_seconds),
+                "method": "title-confirmed practice log",
+            }
+        )
+    return ledger
+
+
+def build_practice_totals(inventory: dict[str, list[dict[str, Any]]] | list[dict[str, Any]]) -> dict[str, Any]:
+    items = sorted(inventory_items_from(inventory), key=inventory_sort_key)
+    marker = practice_start_marker(items)
+    ledger = practice_ledger_videos(items)
+    total_seconds = sum(item["durationSeconds"] for item in ledger)
+    latest = ledger[-1] if ledger else {}
+    marker_published_at = str(marker.get("publishedAt") or "").strip() if marker else ""
+    marker_title = str(marker.get("title") or "").strip() if marker else ""
+    status = "ready" if ledger else "marker_missing" if items else "pending"
+    return {
+        "status": status,
+        "sinceTitle": marker_title,
+        "sincePublishedAt": marker_published_at,
+        "sinceDate": local_day(marker_published_at),
+        "latestTitle": latest.get("title") or "",
+        "latestPublishedAt": latest.get("publishedAt") or "",
+        "latestDate": latest.get("uploadedDate") or "",
+        "videoCount": len(ledger),
+        "totalPracticeSeconds": total_seconds,
+        "totalPracticeHours": round(total_seconds / 3600, 2) if total_seconds else 0,
+        "totalPracticeLabel": duration_seconds_label(total_seconds),
+        "videos": list(reversed(ledger)),
+        "method": "Practice hours count violin-numbered and date-titled public practice logs from the violin 1 marker onward.",
+        "limit": "This is session duration from public video metadata. Exact violin-playing minutes require audio/video section segmentation.",
+    }
 
 
 def source_matches(correction: dict[str, Any], item: dict[str, Any] | None) -> bool:
@@ -81,13 +207,20 @@ def source_record(
     start, end = parse_window_bounds(source_window)
     if not end and start:
         end = start + 45
+    duration_seconds = item_duration_seconds(inventory) or item_duration_seconds(sample)
+    published_at = str(inventory.get("publishedAt") or sample.get("publishedAt") or "").strip()
     return {
+        "sourceKey": correction.get("sourceKey") or source_key_from_item(inventory) or source_key_from_item(sample),
         "sourceTitle": source_title,
         "sourceUrl": source_url,
         "sourceWindow": source_window,
         "sourceStartSeconds": start,
         "sourceEndSeconds": end,
         "practiceDay": practice_day_from_title(source_title) or local_day(inventory.get("publishedAt")),
+        "uploadedAt": published_at,
+        "uploadedDate": local_day(published_at),
+        "durationSeconds": duration_seconds,
+        "durationLabel": duration_seconds_label(duration_seconds) if duration_seconds else "",
         "sampleCount": len(matching_samples),
         "inventory": inventory,
         "sample": sample,
@@ -213,6 +346,7 @@ def build_snippet(
         start = int(source.get("sourceStartSeconds") or 0)
     if not end:
         end = int(source.get("sourceEndSeconds") or 0) or (start + 45 if start else 0)
+    practice_seconds = max(0, end - start) if end > start else 0
     passage = ""
     vocabulary = target.get("passageVocabulary") if isinstance(target.get("passageVocabulary"), list) else []
     if vocabulary:
@@ -239,9 +373,13 @@ def build_snippet(
             "url": source.get("sourceUrl") or "",
             "startSeconds": start,
             "endSeconds": end,
+            "durationSeconds": practice_seconds,
+            "durationLabel": duration_seconds_label(practice_seconds) if practice_seconds else "",
             "window": source_window,
-            "label": f"{start}-{end}" if start and end else "clip pending",
+            "label": f"{start}-{end}" if end > start else "clip pending",
         },
+        "practiceSeconds": practice_seconds,
+        "practiceLabel": duration_seconds_label(practice_seconds) if practice_seconds else "",
         "transcription": packet,
         "feedback": snippet_feedback(str(correction.get("acceptedTitle") or ""), str(correction.get("sourceTip") or ""), transcription),
         "readiness": readiness_text(transcription, score_image_url),
@@ -253,14 +391,17 @@ def build_practice_study(
     inventory: dict[str, list[dict[str, Any]]],
     media_samples: list[dict[str, Any]],
     pieces: list[dict[str, Any]],
+    practice_totals: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     inventory_items = [item for items in inventory.values() for item in items if isinstance(item, dict)]
+    practice_totals = practice_totals or build_practice_totals(inventory)
     transcriptions = [
         item
         for item in state.get("transcriptions", {}).get("items", [])
         if isinstance(item, dict)
     ]
     day_packets: list[dict[str, Any]] = []
+    covered_sources: set[str] = set()
     for correction in accepted_source_corrections(state):
         title = str(correction.get("acceptedTitle") or "").strip()
         if not title:
@@ -282,19 +423,66 @@ def build_practice_study(
             for index, transcription in enumerate(snippet_sources)
         ]
         latest_transcription = matching_transcriptions[0] if matching_transcriptions else None
+        covered_sources.update(
+            stable_unique(
+                [
+                    str(source.get("sourceKey") or ""),
+                    str(source.get("sourceUrl") or ""),
+                    compact_text(source.get("sourceTitle")),
+                ]
+            )
+        )
         day_packets.append(
             {
                 "id": correction.get("sourceKey") or title,
+                "sourceKey": source.get("sourceKey") or correction.get("sourceKey") or "",
                 "practiceDay": source.get("practiceDay") or "",
+                "uploadedAt": source.get("uploadedAt") or "",
+                "uploadedDate": source.get("uploadedDate") or "",
                 "sourceTitle": source.get("sourceTitle") or "",
                 "sourceUrl": source.get("sourceUrl") or "",
                 "pieceTitle": title,
                 "status": "transcribed" if latest_transcription else "score_target_ready",
                 "completionPercent": int(latest_daily.get("completionPercent") or 0),
+                "totalPracticeSeconds": int(source.get("durationSeconds") or 0),
+                "totalPracticeLabel": source.get("durationLabel") or "",
                 "tip": str(latest_daily.get("tip") or correction.get("sourceTip") or snippets[0].get("feedback") or "").strip(),
                 "transcription": transcription_packet(latest_transcription),
                 "snippetCount": len(snippets),
                 "snippets": snippets,
+            }
+        )
+    for video in practice_totals.get("videos", []):
+        if not isinstance(video, dict):
+            continue
+        keys = stable_unique(
+            [
+                str(video.get("sourceKey") or ""),
+                str(video.get("url") or ""),
+                compact_text(video.get("title")),
+            ]
+        )
+        if any(key in covered_sources for key in keys):
+            continue
+        covered_sources.update(keys)
+        day_packets.append(
+            {
+                "id": video.get("sourceKey") or video.get("url") or video.get("title") or "practice-video",
+                "sourceKey": video.get("sourceKey") or "",
+                "practiceDay": video.get("practiceDay") or "",
+                "uploadedAt": video.get("publishedAt") or "",
+                "uploadedDate": video.get("uploadedDate") or "",
+                "sourceTitle": video.get("title") or "",
+                "sourceUrl": video.get("url") or "",
+                "pieceTitle": "Piece being identified",
+                "status": "transcription_pending",
+                "completionPercent": 0,
+                "totalPracticeSeconds": int(video.get("durationSeconds") or 0),
+                "totalPracticeLabel": video.get("durationLabel") or "",
+                "tip": "Transcription and score alignment pending for this practice day.",
+                "transcription": transcription_packet(None),
+                "snippetCount": 0,
+                "snippets": [],
             }
         )
     day_packets = sorted(
@@ -307,7 +495,10 @@ def build_practice_study(
         "dayCount": len(day_packets),
         "snippetCount": sum(int(item.get("snippetCount") or 0) for item in day_packets),
         "transcribedDayCount": sum(1 for item in day_packets if item.get("status") == "transcribed"),
-        "days": day_packets[:21],
-        "method": "source-confirmed practice days, machine transcription, cached public-domain score pages, boxed target passages, and timed practice clips",
+        "totalPracticeSeconds": practice_totals.get("totalPracticeSeconds") or 0,
+        "totalPracticeLabel": practice_totals.get("totalPracticeLabel") or "",
+        "practiceTotals": practice_totals,
+        "days": day_packets[:120],
+        "method": "source-confirmed study packets plus the full title-confirmed practice-video ledger from violin 1 onward",
         "limit": "Exact measure proof requires aligning extracted notes/rhythm to the score; source-confirmed labels are not a musical readiness score.",
     }

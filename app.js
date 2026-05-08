@@ -27,6 +27,8 @@ const elements = {
   trainingState: document.querySelector("#trainingState"),
   modelState: document.querySelector("#modelState"),
   sourceLink: document.querySelector("#sourceLink"),
+  totalPracticeHours: document.querySelector("#totalPracticeHours"),
+  practiceSince: document.querySelector("#practiceSince"),
   runScanButton: document.querySelector("#runScanButton"),
   probeMediaButton: document.querySelector("#probeMediaButton"),
   currentState: document.querySelector("#currentState"),
@@ -162,6 +164,23 @@ function formatClock(seconds) {
   const secs = Math.floor(total % 60);
   if (hours) return `${hours}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
   return `${minutes}:${String(secs).padStart(2, "0")}`;
+}
+
+function formatDurationSeconds(seconds) {
+  const total = Math.max(0, Math.floor(Number(seconds) || 0));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+  if (hours) return minutes ? `${hours}h ${minutes}m` : `${hours}h`;
+  if (minutes) return secs ? `${minutes}m ${secs}s` : `${minutes}m`;
+  return `${secs}s`;
+}
+
+function practiceHoursText(totals) {
+  const seconds = Number(totals?.totalPracticeSeconds) || 0;
+  if (!seconds) return "0h";
+  const hours = seconds / 3600;
+  return hours >= 100 ? `${Math.round(hours)}h` : `${hours.toFixed(1)}h`;
 }
 
 function timedUrl(url, startSeconds = 0) {
@@ -391,6 +410,11 @@ function practiceStudy(ops) {
     : { days: [], snippetCount: 0, dayCount: 0, transcribedDayCount: 0 };
 }
 
+function practiceTotals(ops) {
+  const totals = ops?.review?.practiceTotals || ops?.review?.practiceStudy?.practiceTotals || {};
+  return totals && typeof totals === "object" ? totals : {};
+}
+
 function studyDays(ops) {
   const study = practiceStudy(ops);
   return Array.isArray(study.days) ? study.days : [];
@@ -430,6 +454,7 @@ function trainingLabel(ops) {
 function studyStatusLabel(value) {
   if (value === "transcribed") return "transcribed";
   if (value === "score_target_ready") return "score ready";
+  if (value === "transcription_pending") return "transcription pending";
   if (value === "identified") return "identified";
   if (value === "identifying") return "identifying";
   return value || "pending";
@@ -756,6 +781,8 @@ function practiceDays(ops) {
       url: video.url,
       viewCount: video.viewCount,
       duration: video.duration,
+      totalPracticeSeconds: Number(study?.totalPracticeSeconds) || Number(video.durationSeconds) || 0,
+      totalPracticeLabel: study?.totalPracticeLabel || "",
       samples: daySamples.length,
       sections: daySections.length,
       detected: [...new Set(detected)].slice(0, 3),
@@ -783,6 +810,7 @@ function renderStatus() {
   const highlight = primaryHighlight(ops);
   const days = practiceDays(ops);
   const study = practiceStudy(ops);
+  const totals = practiceTotals(ops);
 
   elements.youtubeState.textContent = backend.online ? youtubeLabel(ops) : "Offline";
   elements.inventoryCount.textContent = `${inventory.length} videos`;
@@ -806,15 +834,27 @@ function renderStatus() {
   elements.pieceTip.textContent = pieceTip(piece);
   elements.detectionState.textContent = detectionStatus(highlight);
   if (elements.studyCount) {
-    elements.studyCount.textContent = `${Number(study.snippetCount) || 0} ${Number(study.snippetCount) === 1 ? "snippet" : "snippets"}`;
+    elements.studyCount.textContent = `${Number(study.snippetCount) || 0} ${Number(study.snippetCount) === 1 ? "snippet" : "snippets"} / ${Number(study.dayCount) || 0} days`;
+  }
+  if (elements.totalPracticeHours) {
+    elements.totalPracticeHours.textContent = practiceHoursText(totals);
+  }
+  if (elements.practiceSince) {
+    const sinceParts = [
+      totals?.sinceTitle ? `Since ${totals.sinceTitle}` : "Ledger pending",
+      totals?.sincePublishedAt ? formatDate(totals.sincePublishedAt) : "",
+      totals?.videoCount ? `${totals.videoCount} videos` : ""
+    ].filter(Boolean);
+    elements.practiceSince.textContent = sinceParts.join(" / ");
   }
   elements.pieceCount.textContent = `${pieceList.length} ${pieceList.length === 1 ? "piece" : "pieces"}`;
-  elements.dayCount.textContent = `${days.length} ${days.length === 1 ? "day" : "days"}`;
+  const dayTotal = Number(study.dayCount) || days.length;
+  elements.dayCount.textContent = `${dayTotal} ${dayTotal === 1 ? "day" : "days"}`;
   const source = youtubeSource(ops);
   elements.sourceLink.href = youtubeSourceHref(source);
   elements.sourceLink.textContent = source.replace("https://www.", "").replace("https://", "");
   elements.currentState.textContent = currentStateText(ops);
-  elements.recordSummary.textContent = `${inventory.length} videos / ${sections.length} sections / ${Number(study.snippetCount) || 0} snippets`;
+  elements.recordSummary.textContent = `${inventory.length} videos / ${practiceHoursText(totals)} / ${Number(study.snippetCount) || 0} snippets`;
   elements.reviewedCount.textContent = `${reviewedVideos} reviewed`;
   elements.sectionCount.textContent = `${sections.length} sections`;
   elements.backendState.textContent = backend.online ? "Online" : "Offline";
@@ -879,17 +919,25 @@ function renderStudySnippet(packet, snippet) {
   const score = snippet?.score || {};
   const scoreHref = score.sourceUrl || score.pdfUrl || "";
   const clipUrl = snippetClipUrl(snippet, packet.sourceUrl);
-  const timeLabel = snippet?.audio?.startSeconds
-    ? `${formatClock(snippet.audio.startSeconds)}-${formatClock(snippet.audio.endSeconds || snippet.audio.startSeconds + 45)}`
-    : "clip";
+  const startSeconds = Number(snippet?.audio?.startSeconds) || 0;
+  const rawEndSeconds = Number(snippet?.audio?.endSeconds) || 0;
+  const hasTimedWindow = rawEndSeconds > startSeconds;
+  const timeLabel = hasTimedWindow
+    ? `${formatClock(startSeconds)}-${formatClock(rawEndSeconds)}`
+    : "open video";
+  const sectionSeconds = hasTimedWindow
+    ? rawEndSeconds - startSeconds
+    : Number(snippet?.practiceSeconds || snippet?.audio?.durationSeconds) || 0;
+  const daySeconds = Number(packet?.totalPracticeSeconds) || 0;
   return `
     <article class="study-card">
       <div class="study-copy">
-        <span>${escapeHtml([packet.practiceDay, studyStatusLabel(snippet.status), transcription.noteCount ? `${transcription.noteCount} notes` : ""].filter(Boolean).join(" / "))}</span>
+        <span>${escapeHtml([packet.practiceDay, daySeconds ? `${formatDurationSeconds(daySeconds)} day` : "", studyStatusLabel(snippet.status), transcription.noteCount ? `${transcription.noteCount} notes` : ""].filter(Boolean).join(" / "))}</span>
         <strong>${escapeHtml(packet.pieceTitle || snippet.pieceTitle || "Piece being identified")}</strong>
         <p>${escapeHtml(snippet.feedback || packet.tip || "")}</p>
         <div class="study-meta">
           <a href="${escapeHtml(clipUrl)}">${escapeHtml(timeLabel)}</a>
+          ${sectionSeconds ? `<em>${escapeHtml(formatDurationSeconds(sectionSeconds))} section</em>` : ""}
           ${scoreHref ? `<a href="${escapeHtml(scoreHref)}">score</a>` : ""}
           <em>${escapeHtml(snippet.readiness || "Score match pending.")}</em>
         </div>
@@ -1114,17 +1162,19 @@ function renderDays() {
     const windowText = start ? `${formatClock(start)}-${formatClock(end)}` : "clip pending";
     const packet = day.study;
     const transcription = packet?.transcription || {};
+    const totalPracticeText = day.totalPracticeSeconds ? formatDurationSeconds(day.totalPracticeSeconds) : day.duration || "";
     const packetText = packet
       ? [
           transcription.noteCount ? `${transcription.noteCount} notes` : "score ready",
           packet.snippetCount ? `${packet.snippetCount} snippet` : "",
+          packet.totalPracticeLabel ? `${packet.totalPracticeLabel} total` : "",
           packet.tip || ""
         ].filter(Boolean).join(" / ")
       : "";
     return `
       <article class="day-row" data-status="${escapeHtml(day.status)}">
         <div>
-          <span>${escapeHtml([day.date, day.samples ? `${day.samples} samples` : "", day.sections ? `${day.sections} sections` : ""].filter(Boolean).join(" / "))}</span>
+          <span>${escapeHtml([day.date, totalPracticeText, day.samples ? `${day.samples} samples` : "", day.sections ? `${day.sections} sections` : ""].filter(Boolean).join(" / "))}</span>
           <strong>${escapeHtml(day.title)}</strong>
           <p>${escapeHtml(detected)}</p>
           ${day.tip ? `<small>${escapeHtml(day.tip)}</small>` : ""}

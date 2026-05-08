@@ -132,7 +132,7 @@ button:hover,
 
 .paper-strip {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 18px;
   align-items: center;
   margin-bottom: 14px;
@@ -172,6 +172,41 @@ button:hover,
   font-size: 14px;
   font-weight: 620;
   line-height: 1.35;
+}
+
+.practice-total {
+  display: grid;
+  min-width: 138px;
+  gap: 3px;
+  justify-items: end;
+  padding-left: 18px;
+  border-left: 1px solid rgba(31, 41, 39, .1);
+}
+
+.practice-total span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 820;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.practice-total strong {
+  color: var(--green);
+  font-size: 32px;
+  font-weight: 780;
+  line-height: .98;
+  white-space: nowrap;
+}
+
+.practice-total em {
+  max-width: 190px;
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 650;
+  line-height: 1.25;
+  text-align: right;
 }
 
 .paper-shell {
@@ -1408,6 +1443,18 @@ h2 {
     font-size: 23px;
     line-height: 1.08;
     word-break: break-word;
+  }
+
+  .practice-total {
+    min-width: 0;
+    justify-items: start;
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  .practice-total em {
+    max-width: 100%;
+    text-align: left;
   }
 
   .today-grid article,
