@@ -5,19 +5,29 @@
       <feDropShadow dx="0" dy="1" stdDeviation="1" flood-color="#fffaf4" flood-opacity=".46"/>
     </filter>
     <g id="spoke">
-      <rect x="60.5" y="25" width="7" height="23" rx="3.5" fill="currentColor"/>
+      <path d="M64 12v54" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+      <rect x="58.5" y="24" width="11" height="26" rx="3.5" fill="currentColor"/>
     </g>
+    <mask id="ring">
+      <rect width="128" height="128" fill="#fff"/>
+      <circle cx="64" cy="64" r="31" fill="#000"/>
+    </mask>
   </defs>
-  <g filter="url(#d)">
-    <path d="M93 36a41 41 0 1 0 0 56" fill="none" stroke="#5a534b" stroke-width="11.5" stroke-linecap="round"/>
-    <g opacity=".88">
-      <use href="#spoke" transform="rotate(205 64 64)" color="#be725f"/>
-      <use href="#spoke" transform="rotate(232 64 64)" color="#e6d8c5"/>
-      <use href="#spoke" transform="rotate(259 64 64)" color="#73958b"/>
-      <use href="#spoke" transform="rotate(286 64 64)" color="#c5934f"/>
-      <use href="#spoke" transform="rotate(313 64 64)" color="#7d91ac"/>
+  <g filter="url(#d)" transform="translate(-3 -3) scale(1.047)">
+    <g opacity=".92" mask="url(#ring)">
+      <use href="#spoke" transform="rotate(320 64 64)" color="#5a534b"/>
+      <use href="#spoke" transform="rotate(342 64 64)" color="#8aa0bd"/>
+      <use href="#spoke" transform="rotate(4 64 64)" color="#c99739"/>
+      <use href="#spoke" transform="rotate(26 64 64)" color="#5a534b"/>
+      <use href="#spoke" transform="rotate(48 64 64)" color="#b98755"/>
+      <use href="#spoke" transform="rotate(150 64 64)" color="#be725f"/>
+      <use href="#spoke" transform="rotate(172 64 64)" color="#5a534b"/>
+      <use href="#spoke" transform="rotate(194 64 64)" color="#d8c9b8"/>
+      <use href="#spoke" transform="rotate(216 64 64)" color="#5a534b"/>
+      <use href="#spoke" transform="rotate(238 64 64)" color="#73958b"/>
+      <use href="#spoke" transform="rotate(260 64 64)" color="#5a534b"/>
+      <use href="#spoke" transform="rotate(282 64 64)" color="#d8c9b8"/>
+      <use href="#spoke" transform="rotate(304 64 64)" color="#5a534b"/>
     </g>
-    <circle cx="64" cy="64" r="17" fill="#fff8ed"/>
-    <circle cx="64" cy="64" r="5" fill="#c99739"/>
   </g>
 </svg>
