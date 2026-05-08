@@ -181,7 +181,7 @@ def active_seconds_from_transcriptions(transcriptions: list[dict[str, Any]]) -> 
 
 
 def transcription_window_seconds(transcriptions: list[dict[str, Any]]) -> int:
-    total = 0
+    total = 0.0
     seen: set[tuple[str, int, int]] = set()
     for transcription in transcriptions:
         start, end = window_bounds(transcription)
@@ -195,14 +195,23 @@ def transcription_window_seconds(transcriptions: list[dict[str, Any]]) -> int:
         if key in seen:
             continue
         seen.add(key)
-        total += end - start
-    return total
+        quality = transcription.get("quality") if isinstance(transcription.get("quality"), dict) else {}
+        try:
+            active_duration = float(transcription.get("durationSeconds") or 0.0)
+        except (TypeError, ValueError):
+            active_duration = 0.0
+        if quality.get("windowMode") == "detected_active_sections" and active_duration > 0:
+            total += active_duration
+        else:
+            total += end - start
+    return int(round(total))
 
 
 def transcription_coverage(
     transcribed_seconds: int,
     uploaded_seconds: int,
     segment_count: int,
+    active_section_mode: bool = False,
 ) -> dict[str, Any]:
     if transcribed_seconds <= 0:
         return {
@@ -223,11 +232,13 @@ def transcription_coverage(
             + (f" from {duration_seconds_label(uploaded_seconds)} uploaded" if uploaded_seconds else "")
         ),
         "coverageLimit": (
-            "The notation is only for the sampled playable window shown here, not the full practice day."
+            "The notation covers detected active playing inside sampled clips, not the full practice day."
+            if active_section_mode
+            else "The notation is only for the sampled playable window shown here, not the full practice day."
             if segment_count <= 1
             else "The notation combines sampled playable windows, not the full practice day."
         ),
-        "coverageStatus": "sample_window_only",
+        "coverageStatus": "active_sections_only" if active_section_mode else "sample_window_only",
     }
 
 
@@ -575,6 +586,14 @@ def clips_for_day(
         if end <= start:
             continue
         note_count = int(transcription.get("noteCount") or 0)
+        try:
+            active_duration = float(transcription.get("durationSeconds") or 0.0)
+        except (TypeError, ValueError):
+            active_duration = 0.0
+        reason = f"{note_count} detected notes in the displayed notation window."
+        quality = transcription.get("quality") if isinstance(transcription.get("quality"), dict) else {}
+        if quality.get("windowMode") == "detected_active_sections" and active_duration > 0:
+            reason = f"{note_count} detected notes from {duration_seconds_label(active_duration)} of active audio inside this sample."
         clips.append(
             {
                 "type": "transcribed_window",
@@ -584,10 +603,11 @@ def clips_for_day(
                 "startSeconds": start,
                 "endSeconds": end,
                 "durationSeconds": end - start,
+                "activeTranscribedSeconds": round(active_duration, 1) if active_duration else 0,
                 "noteCount": note_count,
                 "transcriptionId": transcription.get("transcriptionId") or "",
                 "pipelineVersion": transcription.get("pipelineVersion") or "",
-                "reason": f"{note_count} detected notes in the displayed notation window.",
+                "reason": reason,
                 **clip_media_fields(transcription, samples),
             }
         )
@@ -759,7 +779,16 @@ def build_daily_records(
         uploaded_seconds = sum(int(video.get("durationSeconds") or 0) for video in videos)
         processed_seconds = sum(sample_duration_seconds(sample) for sample in day_samples)
         transcribed_seconds = transcription_window_seconds(day_transcriptions)
-        coverage = transcription_coverage(transcribed_seconds, uploaded_seconds, len(day_transcriptions))
+        active_section_mode = any(
+            isinstance(item.get("quality"), dict) and item["quality"].get("windowMode") == "detected_active_sections"
+            for item in day_transcriptions
+        )
+        coverage = transcription_coverage(
+            transcribed_seconds,
+            uploaded_seconds,
+            len(day_transcriptions),
+            active_section_mode=active_section_mode,
+        )
         clips = clips_for_day(videos, day_sections, day_transcriptions, day_samples)
         observations = [
             *transcription_quality_observations(quality, notation, clips),

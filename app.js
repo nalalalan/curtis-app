@@ -1383,7 +1383,7 @@ function renderEmbeddedMedia(record, preferredClip = null) {
       </div>
     `;
   }
-  const label = clip?.type === "transcribed_window" ? "Transcribed clip" : "Local clip";
+  const label = clip?.type === "transcribed_window" ? "Transcribed sample" : "Local clip";
   return `
     <div class="embedded-media" aria-label="Playable local practice clip">
       <div class="embedded-media-header">

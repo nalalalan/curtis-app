@@ -182,6 +182,50 @@ class DailyRecordTests(unittest.TestCase):
         self.assertTrue(repertoire["entries"][0]["heatMap"]["fragments"])
         self.assertIn("Practice density", [layer["label"] for layer in repertoire["entries"][0]["heatMap"]["layers"]])
 
+    def test_daily_record_coverage_counts_active_transcribed_audio(self):
+        inventory = {
+            "youtube": [
+                {
+                    "id": "K38CgZhvF3Q",
+                    "title": "5-2-26",
+                    "url": "https://www.youtube.com/watch?v=K38CgZhvF3Q",
+                    "publishedAt": "2026-05-03T09:10:00Z",
+                    "durationSeconds": 600,
+                    "practiceCandidate": True,
+                }
+            ]
+        }
+        transcriptions = [
+            {
+                "transcriptionId": "active-window",
+                "sampleId": "K38CgZhvF3Q",
+                "sourceUrl": "https://www.youtube.com/watch?v=K38CgZhvF3Q",
+                "sourceTitle": "5-2-26",
+                "sourceWindow": "*10-100",
+                "status": "transcribed",
+                "durationSeconds": 12.4,
+                "tempoBpm": 100,
+                "noteCount": 4,
+                "quality": {"windowMode": "detected_active_sections"},
+                "notes": [note("E5", 4, 4.3), note("F#5", 4.3, 4.6), note("G5", 4.6, 4.9), note("A5", 4.9, 5.2)],
+            }
+        ]
+
+        daily = build_daily_records(
+            inventory=inventory,
+            state={},
+            media_samples=[{"id": "K38CgZhvF3Q", "path": "sample.mp4", "window": "*10-100"}],
+            transcriptions=transcriptions,
+            sections=[],
+        )
+        record = next(item for item in daily["records"] if item["practiceDay"] == "2026-05-02")
+
+        self.assertEqual(record["transcription"]["windowSeconds"], 12)
+        self.assertEqual(record["transcription"]["coverageStatus"], "active_sections_only")
+        self.assertIn("active playing", record["transcription"]["coverageLimit"])
+        self.assertEqual(record["clips"][0]["activeTranscribedSeconds"], 12.4)
+        self.assertIn("active audio", record["clips"][0]["reason"])
+
     def test_media_probe_uses_title_confirmed_ledger_not_broad_candidates(self):
         state = {
             "inventory": {

@@ -6,6 +6,7 @@ from backend.app.scanner import derive_review
 from backend.app.study_packets import build_practice_study, build_practice_totals
 from backend.app.transcription import (
     TRANSCRIPTION_PIPELINE_VERSION,
+    active_windows_for_sample,
     compare_fingerprints,
     choose_transcription_events,
     event_fingerprint,
@@ -36,6 +37,39 @@ def fingerprint_for(midi_values):
 
 
 class TranscriptionTrainingTests(unittest.TestCase):
+    def test_active_windows_for_sample_uses_detected_playing_sections(self):
+        sample = {"id": "sample-1", "window": "*100-190"}
+        state = {
+            "review": {
+                "notableSections": [
+                    {
+                        "sampleId": "sample-1",
+                        "status": "candidate_playing_section",
+                        "startSeconds": 110,
+                        "endSeconds": 114,
+                    },
+                    {
+                        "sampleId": "sample-1",
+                        "status": "candidate_playing_section",
+                        "startSeconds": 114,
+                        "endSeconds": 118,
+                    },
+                    {
+                        "sampleId": "other",
+                        "status": "candidate_playing_section",
+                        "startSeconds": 120,
+                        "endSeconds": 125,
+                    },
+                ]
+            }
+        }
+
+        windows = active_windows_for_sample(sample, state)
+
+        self.assertEqual(len(windows), 1)
+        self.assertAlmostEqual(windows[0]["start"], 9.65)
+        self.assertAlmostEqual(windows[0]["end"], 18.35)
+
     def test_f0_to_events_rejects_pitches_below_violin_range(self):
         import numpy
 

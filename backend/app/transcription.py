@@ -14,7 +14,7 @@ from .state import load_state, save_state, utc_now
 
 MAX_TRANSCRIPTION_SECONDS = int(os.getenv("CURTIS_TRANSCRIPTION_MAX_SECONDS", "180"))
 TRANSCRIPTION_SAMPLE_LIMIT = int(os.getenv("CURTIS_TRANSCRIPTION_SAMPLE_LIMIT", "8"))
-TRANSCRIPTION_PIPELINE_VERSION = "violin_harmonic_pyin_onset_v4"
+TRANSCRIPTION_PIPELINE_VERSION = "violin_active_section_pyin_v5"
 MIN_NOTE_SECONDS = float(os.getenv("CURTIS_MIN_NOTE_SECONDS", "0.08"))
 MIN_ONSET_NOTE_SECONDS = float(os.getenv("CURTIS_MIN_ONSET_NOTE_SECONDS", "0.04"))
 MAX_STORED_NOTES = int(os.getenv("CURTIS_MAX_STORED_NOTES", "240"))
@@ -27,6 +27,9 @@ NOTE_MERGE_GAP_SECONDS = float(os.getenv("CURTIS_NOTE_MERGE_GAP_SECONDS", "0.07"
 ONSET_EVENT_MULTIPLIER = float(os.getenv("CURTIS_ONSET_EVENT_MULTIPLIER", "1.12"))
 ONSET_MIN_VOICED_FRAMES = int(os.getenv("CURTIS_ONSET_MIN_VOICED_FRAMES", "1"))
 HARMONIC_MARGIN = float(os.getenv("CURTIS_HARMONIC_MARGIN", "8.0"))
+ACTIVE_SECTION_PADDING_SECONDS = float(os.getenv("CURTIS_ACTIVE_SECTION_PADDING_SECONDS", "0.35"))
+ACTIVE_SECTION_MERGE_GAP_SECONDS = float(os.getenv("CURTIS_ACTIVE_SECTION_MERGE_GAP_SECONDS", "0.55"))
+MAX_ACTIVE_TRANSCRIPTION_SECTIONS = int(os.getenv("CURTIS_MAX_ACTIVE_TRANSCRIPTION_SECTIONS", "12"))
 NOTE_NAMES = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
 
 
@@ -154,6 +157,55 @@ def extract_audio_wav(source: Path, target: Path) -> tuple[bool, str]:
         timeout=300,
     )
     return code == 0 and target.exists() and target.stat().st_size > 44, output
+
+
+def parsed_window_duration(value: str) -> int:
+    raw = str(value or "")
+    if "*" not in raw:
+        return 0
+    try:
+        start_raw, end_raw = raw.split("*", 1)[1].split("-", 1)
+        start = int(float(start_raw))
+        end = int(float(end_raw))
+    except (IndexError, TypeError, ValueError):
+        return 0
+    return max(0, end - start)
+
+
+def active_windows_for_sample(sample: dict[str, Any], state: dict[str, Any]) -> list[dict[str, float]]:
+    sample_id = str(sample.get("id") or "").strip()
+    if not sample_id:
+        return []
+    base_start = parse_window_start(str(sample.get("window") or ""))
+    sample_duration = parsed_window_duration(str(sample.get("window") or ""))
+    sections = state.get("review", {}).get("notableSections", [])
+    windows: list[dict[str, float]] = []
+    for section in sections if isinstance(sections, list) else []:
+        if not isinstance(section, dict) or str(section.get("sampleId") or "") != sample_id:
+            continue
+        if section.get("status") != "candidate_playing_section":
+            continue
+        try:
+            start = float(section.get("startSeconds") or 0) - base_start
+            end = float(section.get("endSeconds") or 0) - base_start
+        except (TypeError, ValueError):
+            continue
+        if end <= start:
+            continue
+        padded_start = max(0.0, start - ACTIVE_SECTION_PADDING_SECONDS)
+        padded_end = end + ACTIVE_SECTION_PADDING_SECONDS
+        if sample_duration:
+            padded_end = min(float(sample_duration), padded_end)
+        if padded_end - padded_start >= 0.5:
+            windows.append({"start": round(padded_start, 3), "end": round(padded_end, 3)})
+    windows.sort(key=lambda item: item["start"])
+    merged: list[dict[str, float]] = []
+    for window in windows:
+        if not merged or window["start"] - merged[-1]["end"] > ACTIVE_SECTION_MERGE_GAP_SECONDS:
+            merged.append(dict(window))
+            continue
+        merged[-1]["end"] = max(merged[-1]["end"], window["end"])
+    return merged[:MAX_ACTIVE_TRANSCRIPTION_SECTIONS]
 
 
 def estimate_tempo(y: Any, sr: int, librosa: Any) -> float:
@@ -408,7 +460,106 @@ def pitch_tracking_signal(y: Any, librosa: Any, numpy: Any) -> tuple[Any, str]:
     return normalized, "trimmed_normalized"
 
 
-def transcribe_path(path: Path) -> dict[str, Any]:
+def transcribe_audio_array(y: Any, sr: int, librosa: Any, numpy: Any) -> dict[str, Any]:
+    pitch_y, preprocessing = pitch_tracking_signal(y, librosa, numpy)
+    hop_length = 512
+    f0, voiced_flag, voiced_prob = librosa.pyin(
+        pitch_y,
+        fmin=librosa.midi_to_hz(VIOLIN_MIN_MIDI),
+        fmax=librosa.midi_to_hz(VIOLIN_MAX_MIDI),
+        sr=sr,
+        frame_length=2048,
+        hop_length=hop_length,
+    )
+    tempo = estimate_tempo(y, sr, librosa)
+    try:
+        onset_frames = librosa.onset.onset_detect(y=pitch_y, sr=sr, hop_length=hop_length, units="frames")
+    except Exception:
+        onset_frames = []
+    pitch_events = f0_to_events(f0, voiced_flag, voiced_prob, sr, hop_length, numpy)
+    onset_events = f0_to_onset_events(f0, voiced_flag, voiced_prob, onset_frames, sr, hop_length, numpy)
+    events, segmentation_source = choose_transcription_events(pitch_events, onset_events)
+    voiced_ratio = round(float(numpy.nanmean(voiced_flag)) if len(voiced_flag) else 0.0, 3)
+    return {
+        "events": events,
+        "tempoBpm": tempo,
+        "voicedFrameRatio": voiced_ratio,
+        "quality": {
+            "preprocessing": preprocessing,
+            "segmentationSource": segmentation_source,
+            "pitchEventCount": len(pitch_events),
+            "onsetEventCount": len(onset_events),
+            "selectedEventCount": len(events),
+            "detectedOnsetCount": len(onset_frames),
+        },
+    }
+
+
+def transcribe_active_windows(
+    y: Any,
+    sr: int,
+    active_windows: list[dict[str, float]],
+    librosa: Any,
+    numpy: Any,
+) -> dict[str, Any]:
+    events: list[dict[str, Any]] = []
+    tempos: list[float] = []
+    voiced_ratios: list[float] = []
+    quality_totals = Counter()
+    preprocessing = set()
+    segmentation = set()
+    total_seconds = 0.0
+    used_windows: list[dict[str, float]] = []
+    duration = float(len(y) / sr)
+    for window in active_windows:
+        start = max(0.0, min(duration, float(window.get("start") or 0.0)))
+        end = max(start, min(duration, float(window.get("end") or 0.0)))
+        if end - start < 0.5:
+            continue
+        start_index = int(start * sr)
+        end_index = int(end * sr)
+        chunk = y[start_index:end_index]
+        if chunk.size == 0:
+            continue
+        chunk, trim_index = librosa.effects.trim(chunk, top_db=35)
+        if chunk.size == 0:
+            continue
+        trim_offset = start + (float(trim_index[0]) / sr if len(trim_index) else 0.0)
+        result = transcribe_audio_array(chunk, sr, librosa, numpy)
+        chunk_events = result["events"]
+        for event in chunk_events:
+            shifted = dict(event)
+            shifted["startSeconds"] = round(trim_offset + float(event.get("startSeconds") or 0.0), 3)
+            shifted["endSeconds"] = round(trim_offset + float(event.get("endSeconds") or 0.0), 3)
+            events.append(shifted)
+        if result["tempoBpm"]:
+            tempos.append(float(result["tempoBpm"]))
+        voiced_ratios.append(float(result["voicedFrameRatio"] or 0.0))
+        quality = result.get("quality", {})
+        preprocessing.add(str(quality.get("preprocessing") or ""))
+        segmentation.add(str(quality.get("segmentationSource") or ""))
+        for key in ("pitchEventCount", "onsetEventCount", "selectedEventCount", "detectedOnsetCount"):
+            quality_totals[key] += int(quality.get(key) or 0)
+        total_seconds += end - start
+        used_windows.append({"start": round(start, 3), "end": round(end, 3)})
+    return {
+        "events": events[:MAX_STORED_NOTES],
+        "tempoBpm": round(float(numpy.median(numpy.array(tempos))), 1) if tempos else 0.0,
+        "voicedFrameRatio": round(sum(voiced_ratios) / max(1, len(voiced_ratios)), 3),
+        "durationSeconds": round(total_seconds, 2),
+        "activeWindows": used_windows,
+        "quality": {
+            "preprocessing": "+".join(sorted(item for item in preprocessing if item)) or "none",
+            "segmentationSource": "+".join(sorted(item for item in segmentation if item)) or "none",
+            "pitchEventCount": int(quality_totals["pitchEventCount"]),
+            "onsetEventCount": int(quality_totals["onsetEventCount"]),
+            "selectedEventCount": int(quality_totals["selectedEventCount"]),
+            "detectedOnsetCount": int(quality_totals["detectedOnsetCount"]),
+        },
+    }
+
+
+def transcribe_path(path: Path, active_windows: list[dict[str, float]] | None = None) -> dict[str, Any]:
     try:
         import librosa  # type: ignore
         import numpy  # type: ignore
@@ -427,35 +578,27 @@ def transcribe_path(path: Path) -> dict[str, Any]:
         y, sr = librosa.load(str(wav_path), sr=22050, mono=True, duration=MAX_TRANSCRIPTION_SECONDS)
         if y.size == 0:
             return {"status": "blocked", "blocker": "empty_audio"}
-        y, _ = librosa.effects.trim(y, top_db=35)
-        if y.size == 0:
-            return {"status": "blocked", "blocker": "no_audible_audio"}
-        pitch_y, preprocessing = pitch_tracking_signal(y, librosa, numpy)
-        hop_length = 512
-        f0, voiced_flag, voiced_prob = librosa.pyin(
-            pitch_y,
-            fmin=librosa.midi_to_hz(VIOLIN_MIN_MIDI),
-            fmax=librosa.midi_to_hz(VIOLIN_MAX_MIDI),
-            sr=sr,
-            frame_length=2048,
-            hop_length=hop_length,
-        )
-        tempo = estimate_tempo(y, sr, librosa)
-        try:
-            onset_frames = librosa.onset.onset_detect(y=pitch_y, sr=sr, hop_length=hop_length, units="frames")
-        except Exception:
-            onset_frames = []
-        pitch_events = f0_to_events(f0, voiced_flag, voiced_prob, sr, hop_length, numpy)
-        onset_events = f0_to_onset_events(f0, voiced_flag, voiced_prob, onset_frames, sr, hop_length, numpy)
-        events, segmentation_source = choose_transcription_events(pitch_events, onset_events)
-        voiced_ratio = round(float(numpy.nanmean(voiced_flag)) if len(voiced_flag) else 0.0, 3)
+        if active_windows:
+            transcription = transcribe_active_windows(y, sr, active_windows, librosa, numpy)
+            window_mode = "detected_active_sections"
+        else:
+            y, _ = librosa.effects.trim(y, top_db=35)
+            if y.size == 0:
+                return {"status": "blocked", "blocker": "no_audible_audio"}
+            transcription = transcribe_audio_array(y, sr, librosa, numpy)
+            transcription["durationSeconds"] = round(float(len(y) / sr), 2)
+            transcription["activeWindows"] = []
+            window_mode = "whole_sample_window"
+        events = transcription["events"]
+        tempo = transcription["tempoBpm"]
+        quality = transcription["quality"]
         return {
             "status": "transcribed" if events else "no_stable_notes",
             "pipelineVersion": TRANSCRIPTION_PIPELINE_VERSION,
-            "method": "librosa_harmonic_pyin_violin_range_onset_aware_note_segmentation",
-            "durationSeconds": round(float(len(y) / sr), 2),
+            "method": "librosa_active_section_harmonic_pyin_note_segmentation",
+            "durationSeconds": transcription["durationSeconds"],
             "tempoBpm": tempo,
-            "voicedFrameRatio": voiced_ratio,
+            "voicedFrameRatio": transcription["voicedFrameRatio"],
             "noteCount": len(events),
             "notes": events,
             "fingerprint": event_fingerprint(events, tempo),
@@ -466,17 +609,15 @@ def transcribe_path(path: Path) -> dict[str, Any]:
                 "minimumNoteSeconds": MIN_NOTE_SECONDS,
                 "minimumOnsetNoteSeconds": MIN_ONSET_NOTE_SECONDS,
                 "noteMergeGapSeconds": NOTE_MERGE_GAP_SECONDS,
-                "segmentationSource": segmentation_source,
-                "pitchEventCount": len(pitch_events),
-                "onsetEventCount": len(onset_events),
-                "selectedEventCount": len(events),
-                "detectedOnsetCount": len(onset_frames),
-                "preprocessing": preprocessing,
+                "windowMode": window_mode,
+                "activeWindowCount": len(transcription["activeWindows"]),
+                "activeWindows": transcription["activeWindows"],
+                **quality,
             },
             "notation": {
                 "format": "note:beats",
                 "text": notation_text(events, tempo),
-                "limit": "Harmonic-isolated monophonic violin-range draft transcription; verify against score before treating as final notation.",
+                "limit": "Detected-active-section monophonic violin-range draft transcription; verify against score before treating as final notation.",
             },
         }
     finally:
@@ -523,7 +664,8 @@ def reference_matches_for(transcription: dict[str, Any], state: dict[str, Any]) 
 
 def build_transcription(sample: dict[str, Any], state: dict[str, Any]) -> dict[str, Any]:
     path = Path(str(sample.get("path") or ""))
-    result = transcribe_path(path)
+    active_windows = active_windows_for_sample(sample, state)
+    result = transcribe_path(path, active_windows=active_windows)
     correction = correction_for_item(state, sample)
     base_start = parse_window_start(str(sample.get("window") or ""))
     for event in result.get("notes", []) if isinstance(result.get("notes"), list) else []:
@@ -608,9 +750,9 @@ def transcribe_media_samples(limit: int | None = None) -> dict[str, Any]:
     state["transcriptions"] = {
         "items": items,
         "updatedAt": utc_now(),
-        "method": "librosa_harmonic_pyin_violin_range_onset_aware_note_segmentation",
+        "method": "librosa_active_section_harmonic_pyin_note_segmentation",
         "pipelineVersion": TRANSCRIPTION_PIPELINE_VERSION,
-        "limit": "Harmonic-isolated monophonic violin-range note/rhythm extraction is draft evidence for matching; score-level claims require alignment verification.",
+        "limit": "Detected-active-section monophonic violin-range note/rhythm extraction is draft evidence for matching; score-level claims require alignment verification.",
     }
     run = {
         "startedAt": utc_now(),
