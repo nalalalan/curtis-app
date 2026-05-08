@@ -1590,6 +1590,53 @@ h2 {
   stroke-width: 1;
 }
 
+.notation-repeat svg {
+  height: 124px;
+}
+
+.notation-repeat-mark line,
+.notation-repeat-mark path {
+  fill: none;
+  stroke: var(--clay);
+  stroke-linecap: round;
+  stroke-width: 2;
+}
+
+.notation-repeat-mark circle {
+  fill: var(--clay);
+}
+
+.notation-repeat-mark text {
+  fill: var(--clay);
+  font-family: Inter, Arial, sans-serif;
+  font-size: 13px;
+  font-weight: 780;
+}
+
+.notation-repeat-caption {
+  display: grid;
+  gap: 2px;
+  padding: 0 10px 9px;
+  border-top: 1px solid rgba(31, 41, 39, .08);
+}
+
+.notation-repeat-caption b {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 760;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.notation-repeat-caption em {
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 630;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
 .notation-note ellipse {
   fill: #253330;
 }
@@ -1735,6 +1782,14 @@ h2 {
 
 .clip-evidence-pair .notation-sheet svg {
   height: 70px;
+}
+
+.clip-evidence-pair .notation-repeat svg {
+  height: 84px;
+}
+
+.clip-evidence-pair .notation-repeat-caption {
+  padding: 0 9px 8px;
 }
 
 .clip-evidence-pair .empty {

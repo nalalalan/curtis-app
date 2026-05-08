@@ -1012,17 +1012,42 @@ function notationDurationClass(kind) {
   return ["sixteenth", "eighth", "quarter", "half", "whole"].includes(clean) ? clean : "quarter";
 }
 
-function renderNotationSheet(events) {
+function renderNotationSheet(events, options = {}) {
   const items = Array.isArray(events) ? events.slice(0, 42) : [];
   const staffLines = [30, 40, 50, 60, 70].map((y) => `<line x1="22" x2="698" y1="${y}" y2="${y}" />`).join("");
+  const repeatGroup = options?.repeatGroup && typeof options.repeatGroup === "object" ? options.repeatGroup : null;
+  const repeatLabel = repeatGroup?.notationLabel || options?.repeatLabel || "";
+  const repeatPattern = repeatGroup?.practicePattern || options?.practicePattern || "";
+  const repeatClass = repeatLabel ? " notation-repeat" : "";
+  const repeatMarks = repeatLabel ? `
+    <g class="notation-repeat-mark" aria-label="${escapeHtml(shortText(repeatLabel, 72))}">
+      <line x1="46" x2="46" y1="25" y2="75"></line>
+      <line x1="51" x2="51" y1="25" y2="75"></line>
+      <circle cx="58" cy="42" r="2.2"></circle>
+      <circle cx="58" cy="58" r="2.2"></circle>
+      <line x1="676" x2="676" y1="25" y2="75"></line>
+      <line x1="681" x2="681" y1="25" y2="75"></line>
+      <circle cx="669" cy="42" r="2.2"></circle>
+      <circle cx="669" cy="58" r="2.2"></circle>
+      <path d="M66 18 H654"></path>
+      <text x="654" y="17" text-anchor="end">${escapeHtml(shortText(repeatLabel, 34))}</text>
+    </g>
+  ` : "";
   if (!items.length) {
     return `
-      <div class="notation-sheet notation-empty" aria-label="Sheet-music-style transcription pending">
+      <div class="notation-sheet notation-empty${repeatClass}" aria-label="Sheet-music-style transcription pending">
         <svg viewBox="0 0 720 104" role="img">
           <g class="staff-lines">${staffLines}</g>
           <text x="34" y="57">G</text>
+          ${repeatMarks}
         </svg>
         <span>Notation pending.</span>
+        ${repeatLabel ? `
+          <div class="notation-repeat-caption">
+            <b>${escapeHtml(shortText(repeatLabel, 72))}</b>
+            <em>${escapeHtml(shortText(repeatPattern || "repeated loop", 92))}</em>
+          </div>
+        ` : ""}
       </div>
     `;
   }
@@ -1049,12 +1074,19 @@ function renderNotationSheet(events) {
     `;
   }).join("");
   return `
-    <div class="notation-sheet" aria-label="Sheet-music-style machine transcription">
+    <div class="notation-sheet${repeatClass}" aria-label="Sheet-music-style machine transcription">
       <svg viewBox="0 0 720 104" role="img">
         <g class="staff-lines">${staffLines}</g>
         <text x="34" y="57">G</text>
+        ${repeatMarks}
         ${marks}
       </svg>
+      ${repeatLabel ? `
+        <div class="notation-repeat-caption">
+          <b>${escapeHtml(shortText(repeatLabel, 72))}</b>
+          <em>${escapeHtml(shortText(repeatPattern || "repeated loop", 92))}</em>
+        </div>
+      ` : ""}
     </div>
   `;
 }
@@ -1201,7 +1233,7 @@ function renderClipEvidencePair({ clip, observation, repeatGroup, notationEvents
           <strong>${escapeHtml(shortText(confidence, 58))}</strong>
         </article>
       </div>
-      ${events.length ? renderNotationSheet(events.slice(0, 18)) : `<p class="empty">Transcription snippet pending.</p>`}
+      ${events.length ? renderNotationSheet(events.slice(0, 18), { repeatGroup }) : `<p class="empty">Transcription snippet pending.</p>`}
     </div>
   `;
 }
@@ -1277,7 +1309,7 @@ function renderDailyRecord(record, index = 0) {
           <span>Main Curtis-level blocker today</span>
           <strong>${escapeHtml(record.mainCurtisBlocker || "Pending evidence.")}</strong>
         </div>
-        ${renderNotationSheet(events)}
+        ${renderNotationSheet(events, { repeatGroup: record?.transcription?.repeatGroups?.[0] })}
         ${renderRepeatGroups(record?.transcription?.repeatGroups)}
         ${renderObservations(record.observations)}
         <small>${escapeHtml(record.nextStep || "")}</small>
