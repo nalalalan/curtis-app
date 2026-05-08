@@ -457,6 +457,14 @@ function pieceLabel(piece) {
   return "Piece being identified";
 }
 
+function currentPieceLabel(piece) {
+  const label = pieceLabel(piece);
+  if (!isIdentifiedPiece(piece)) return label;
+  return label
+    .replace(/^(.+?) Violin Concerto No\. /, "$1 Concerto No. ")
+    .replace(/\s+in\s+[A-G][#b]?\s+(major|minor),\s+/i, ", ");
+}
+
 function pieceStatusLabel(piece) {
   if (!piece || !isIdentifiedPiece(piece)) return "identifying";
   if (piece.confidence === "clear") return "detected";
@@ -707,7 +715,7 @@ function renderStatus() {
     ? plan.sessionPlan.slice(0, 3)
     : ["Capture clear violin audio."];
   elements.sessionPlan.innerHTML = session.map((item) => `<li>${escapeHtml(item)}</li>`).join("");
-  elements.pieceState.textContent = pieceLabel(piece);
+  elements.pieceState.textContent = currentPieceLabel(piece);
   elements.pieceProgress.textContent = progressText(piece);
   elements.pieceTip.textContent = pieceTip(piece);
   elements.detectionState.textContent = detectionStatus(highlight);
