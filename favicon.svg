@@ -9,7 +9,7 @@
     </g>
   </defs>
   <g filter="url(#d)">
-    <path d="M93 36a41 41 0 1 0 0 56" fill="none" stroke="#2d3036" stroke-width="15" stroke-linecap="round"/>
+    <path d="M93 36a41 41 0 1 0 0 56" fill="none" stroke="#4a4641" stroke-width="12" stroke-linecap="round"/>
     <g opacity=".88">
       <use href="#spoke" transform="rotate(205 64 64)" color="#be725f"/>
       <use href="#spoke" transform="rotate(232 64 64)" color="#e6d8c5"/>
