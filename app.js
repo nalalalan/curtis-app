@@ -1023,6 +1023,35 @@ function renderTranscriptionStaff(transcription) {
   `;
 }
 
+function renderScoreHeatMap(record, scoreSnippet) {
+  const score = scoreSnippet?.score || {};
+  const imageUrl = scoreImageUrl(score);
+  if (!imageUrl) {
+    return `<div class="score-placeholder score-heat-placeholder">Score heat map pending.</div>`;
+  }
+  const boxes = scoreBoxes(score);
+  const fragments = Array.isArray(record?.heatMap?.fragments) ? record.heatMap.fragments : [];
+  const primary = fragments[0] || {};
+  const intensity = Math.max(0.18, Math.min(1, Number(primary.intensity) || 0.35));
+  return `
+    <div class="score-heat-panel" aria-label="Heat map on score">
+      <div class="score-heat-header">
+        <span>Score heat map</span>
+        <strong>${escapeHtml(shortText(primary.label || "measure alignment pending", 62))}</strong>
+      </div>
+      <div class="score-image score-heat-image">
+        <img src="${escapeHtml(imageUrl)}" alt="">
+        ${boxes.map((box) => `
+          <span class="score-heat-box" style="left:${Number(box.x) || 0}%; top:${Number(box.y) || 0}%; width:${Number(box.width) || 1}%; height:${Number(box.height) || 1}%; --heat:${intensity};">
+            <b>${escapeHtml(box.label || "practice area")}</b>
+          </span>
+        `).join("")}
+      </div>
+      <small>${escapeHtml(scoreSnippet?.readiness || "Exact measure heat map pending score alignment.")}</small>
+    </div>
+  `;
+}
+
 function renderEvidenceScore(item) {
   if (!item?.score || typeof item.score !== "object") return "";
   const imageUrl = scoreImageUrl(item.score);
@@ -1296,6 +1325,43 @@ function renderClipFrame(clip, label = "Evidence clip") {
   `;
 }
 
+function mediaFragmentUrl(clip) {
+  const url = assetUrl(clip?.mediaUrl || "");
+  if (!url) return "";
+  const start = Math.max(0, Number(clip?.localStartSeconds) || 0);
+  const end = Math.max(start, Number(clip?.localEndSeconds) || 0);
+  return `${url}#t=${start.toFixed(2)}${end > start ? `,${end.toFixed(2)}` : ""}`;
+}
+
+function primaryPlayableClip(record) {
+  const clips = Array.isArray(record?.clips) ? record.clips : [];
+  return clips.find((clip) => clip?.mediaUrl) || clips[0] || null;
+}
+
+function renderEmbeddedMedia(record) {
+  const clip = primaryPlayableClip(record);
+  const src = mediaFragmentUrl(clip);
+  if (!src) {
+    return `
+      <div class="embedded-media embedded-media-pending">
+        <span>Local clip</span>
+        <strong>sample pending</strong>
+        <small>Stored YouTube metadata is not playable media.</small>
+      </div>
+    `;
+  }
+  return `
+    <div class="embedded-media" aria-label="Playable local practice clip">
+      <div class="embedded-media-header">
+        <span>Local clip</span>
+        <strong>${escapeHtml(clipWindowLabel(clip))}</strong>
+      </div>
+      <video controls preload="metadata" src="${escapeHtml(src)}"></video>
+      <audio controls preload="metadata" src="${escapeHtml(src)}"></audio>
+    </div>
+  `;
+}
+
 function renderClipEvidencePair({ clip, observation, repeatGroup, notationEvents, pieceTitle }) {
   if (!clip && !observation && !repeatGroup && !(Array.isArray(notationEvents) && notationEvents.length)) return "";
   const events = Array.isArray(notationEvents) && notationEvents.length
@@ -1419,29 +1485,26 @@ function renderDailyRecord(record, index = 0) {
         <em>${escapeHtml(recordStatusLabel(record))}</em>
         <small class="row-evidence-line">${escapeHtml(recordEvidenceLine(record, scoreSnippet))}</small>
       </summary>
-      <div class="record-card-body">
-        <div class="record-main">
-        <p>${escapeHtml(record.summary || "")}</p>
-        <div class="blocker-line">
-          <span>Main Curtis-level blocker today</span>
-          <strong>${escapeHtml(record.mainCurtisBlocker || "Pending evidence.")}</strong>
+      <div class="record-card-body record-essentials-body">
+        <div class="practice-essentials">
+          ${renderEmbeddedMedia(record)}
+          <section class="essential-panel">
+            <span>Transcription</span>
+            ${renderNotationSheet(events, {
+              repeatGroup: record?.transcription?.repeatGroups?.[0],
+              qualityLabel: record?.transcription?.qualityLabel,
+              qualityLimit: record?.transcription?.qualityLimit
+            })}
+          </section>
+          <section class="essential-panel">
+            ${renderScoreHeatMap(record, scoreSnippet)}
+          </section>
+          <section class="essential-panel essential-state">
+            <span>Essential state</span>
+            <strong>${escapeHtml(record?.transcription?.qualityLimit || record.mainCurtisBlocker || "Evidence pending.")}</strong>
+            <small>${escapeHtml("Sample windows only; whole-session transcription pending.")}</small>
+          </section>
         </div>
-        ${renderTranscriptionProof(record, scoreSnippet)}
-        ${renderRepertoireUpdates(record.repertoireUpdates)}
-        ${renderNotationSheet(events, {
-          repeatGroup: record?.transcription?.repeatGroups?.[0],
-          qualityLabel: record?.transcription?.qualityLabel,
-          qualityLimit: record?.transcription?.qualityLimit
-        })}
-        ${renderRepeatGroups(record?.transcription?.repeatGroups)}
-        ${renderObservations(record.observations)}
-        <small>${escapeHtml(record.nextStep || "")}</small>
-        </div>
-        <aside class="record-side">
-          ${renderRecordClips(record, index === 0)}
-          ${renderHeatMap(record)}
-          ${scoreSnippet ? renderScoreImage(scoreSnippet) : `<div class="score-placeholder">Score snippet pending.</div>`}
-        </aside>
       </div>
     </details>
   `;

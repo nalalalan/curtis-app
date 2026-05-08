@@ -1296,11 +1296,14 @@ h2 {
 .evidence-summary {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  gap: 14px;
 }
 
 .evidence-summary {
-  margin-bottom: 14px;
+  margin: 8px 0 14px;
+  padding: 10px 0;
+  border-top: 1px solid rgba(31, 41, 39, .1);
+  border-bottom: 1px solid rgba(31, 41, 39, .1);
 }
 
 .header-metrics article,
@@ -1310,6 +1313,14 @@ h2 {
   border: 1px solid rgba(31, 41, 39, .12);
   border-radius: 8px;
   background: rgba(255, 253, 248, .72);
+}
+
+.evidence-summary article {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .header-metrics span,
@@ -1333,9 +1344,9 @@ h2 {
   display: block;
   margin: 4px 0;
   color: var(--green);
-  font-size: 24px;
+  font-size: 17px;
   font-weight: 780;
-  line-height: 1;
+  line-height: 1.05;
   overflow-wrap: anywhere;
 }
 
@@ -1348,10 +1359,6 @@ h2 {
   font-weight: 640;
   line-height: 1.25;
   overflow-wrap: anywhere;
-}
-
-.evidence-summary article:first-child {
-  background: rgba(95, 118, 104, .08);
 }
 
 .evidence-summary article:nth-child(2) strong {
@@ -1458,6 +1465,154 @@ h2 {
   gap: 14px;
   align-items: start;
   padding-top: 14px;
+}
+
+.record-essentials-body {
+  display: block;
+}
+
+.practice-essentials {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.essential-panel,
+.embedded-media,
+.score-heat-panel {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.essential-panel {
+  padding: 0;
+}
+
+.essential-panel > span,
+.embedded-media-header span,
+.score-heat-header span,
+.essential-state span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 780;
+  line-height: 1.15;
+  text-transform: uppercase;
+}
+
+.embedded-media {
+  padding: 10px;
+  border: 1px solid rgba(31, 41, 39, .12);
+  border-radius: 8px;
+  background: rgba(255, 253, 248, .62);
+}
+
+.embedded-media-header,
+.score-heat-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.embedded-media-header strong,
+.score-heat-header strong {
+  display: block;
+  min-width: 0;
+  margin: 0;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 720;
+  line-height: 1.2;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.embedded-media video,
+.embedded-media audio {
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+
+.embedded-media video {
+  max-height: 360px;
+  border-radius: 7px;
+  background: #111715;
+  aspect-ratio: 16 / 9;
+}
+
+.embedded-media audio {
+  height: 36px;
+}
+
+.embedded-media-pending {
+  border-style: dashed;
+}
+
+.embedded-media-pending strong {
+  display: block;
+  margin: 0;
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.2;
+}
+
+.embedded-media small,
+.score-heat-panel small,
+.essential-state small {
+  margin-top: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 640;
+  line-height: 1.25;
+}
+
+.score-heat-panel .score-image {
+  min-height: 190px;
+}
+
+.score-heat-box {
+  position: absolute;
+  display: block;
+  border: 2px solid rgba(142, 79, 72, .82);
+  border-radius: 4px;
+  background: rgba(166, 111, 86, calc(.13 + (var(--heat) * .2)));
+  box-shadow: 0 0 0 999px rgba(255, 253, 248, .05);
+}
+
+.score-heat-box b {
+  position: absolute;
+  top: -23px;
+  left: 0;
+  display: inline-flex;
+  min-height: 20px;
+  max-width: 210px;
+  align-items: center;
+  padding: 3px 6px;
+  border-radius: 5px;
+  background: rgba(255, 253, 248, .94);
+  color: var(--ink);
+  font-size: 10px;
+  font-weight: 760;
+  line-height: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.essential-state {
+  padding: 10px 0 0;
+  border-top: 1px solid rgba(31, 41, 39, .1);
+}
+
+.essential-state strong {
+  display: block;
+  margin: 0;
+  color: var(--red);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.28;
 }
 
 .record-main,
@@ -2468,10 +2623,25 @@ h2 {
   .skill-row,
   .study-card,
   .record-card-body,
+  .embedded-media-header,
+  .score-heat-header,
   .piece-row,
   .day-row,
   .mini-days li {
     grid-template-columns: 1fr;
+  }
+
+  .embedded-media-header strong,
+  .score-heat-header strong {
+    text-align: left;
+  }
+
+  .embedded-media video {
+    max-height: 240px;
+  }
+
+  .score-heat-box b {
+    max-width: 150px;
   }
 
   .video-row em,

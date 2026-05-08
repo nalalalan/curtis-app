@@ -26,7 +26,7 @@ from .media import probe_youtube_media, record_uploaded_sample
 from .piece_id import identify_pieces_from_samples
 from .scanner import base_ops, run_scan
 from .score_assets import ensure_score_page
-from .settings import ROOT_DIR, SCAN_INTERVAL_SECONDS, SERVICE_NAME, allowed_origins, token_matches
+from .settings import MEDIA_DIR, ROOT_DIR, RUNTIME_DIR, SCAN_INTERVAL_SECONDS, SERVICE_NAME, allowed_origins, token_matches
 from .state import load_state, save_state
 from .transcription import transcribe_media_samples
 
@@ -111,6 +111,35 @@ def _paper_file_response(path: Path, *, media_type: str, filename: str | None = 
     return FileResponse(path, media_type=media_type, filename=filename)
 
 
+def sample_media_type(path: Path) -> str:
+    suffix = path.suffix.lower()
+    if suffix in {".mp4", ".m4v"}:
+        return "video/mp4"
+    if suffix == ".webm":
+        return "video/webm"
+    if suffix in {".m4a", ".aac"}:
+        return "audio/mp4"
+    if suffix == ".mp3":
+        return "audio/mpeg"
+    if suffix == ".wav":
+        return "audio/wav"
+    return "application/octet-stream"
+
+
+def resolved_runtime_media_path(raw_path: str) -> Path:
+    try:
+        path = Path(raw_path).resolve(strict=True)
+        runtime = RUNTIME_DIR.resolve()
+        media = MEDIA_DIR.resolve()
+    except OSError as exc:
+        raise HTTPException(status_code=404, detail="media sample not found") from exc
+    in_runtime = path == runtime or runtime in path.parents
+    in_media = path == media or media in path.parents
+    if not (in_runtime or in_media):
+        raise HTTPException(status_code=403, detail="media sample outside runtime storage")
+    return path
+
+
 @app.get("/api/curtis/ops-check")
 async def ops_check() -> dict[str, Any]:
     return base_ops(load_state())
@@ -148,6 +177,17 @@ async def score_page(asset_id: str, page: int) -> FileResponse:
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"score page unavailable: {str(exc)[:180]}") from exc
     return FileResponse(target, media_type="image/jpeg")
+
+
+@app.get("/api/curtis/media/sample/{sample_id}")
+async def media_sample_file(sample_id: str) -> FileResponse:
+    state = load_state()
+    samples = [sample for sample in state.get("mediaSamples", []) if isinstance(sample, dict)]
+    sample = next((item for item in samples if str(item.get("id") or "") == sample_id), None)
+    if not sample:
+        raise HTTPException(status_code=404, detail="media sample not found")
+    path = resolved_runtime_media_path(str(sample.get("path") or ""))
+    return FileResponse(path, media_type=sample_media_type(path))
 
 
 @app.post("/api/curtis/sources")

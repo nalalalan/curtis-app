@@ -84,6 +84,32 @@ def source_window_label(start: int, end: int) -> str:
     return f"{start}-{end}" if end > start else ""
 
 
+def sample_by_id(media_samples: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    samples: dict[str, dict[str, Any]] = {}
+    for sample in media_samples:
+        sample_id = str(sample.get("id") or "").strip()
+        if sample_id and sample_id not in samples:
+            samples[sample_id] = sample
+    return samples
+
+
+def clip_media_fields(item: dict[str, Any], samples: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    sample_id = str(item.get("sampleId") or item.get("id") or "").strip()
+    sample = samples.get(sample_id, {})
+    if not sample:
+        return {"sampleId": sample_id}
+    sample_start, _ = window_bounds(sample)
+    start, end = window_bounds(item)
+    local_start = max(0, start - sample_start) if start else 0
+    local_end = max(local_start, end - sample_start) if end else 0
+    return {
+        "sampleId": sample_id,
+        "mediaUrl": f"/api/curtis/media/sample/{sample_id}",
+        "localStartSeconds": local_start,
+        "localEndSeconds": local_end,
+    }
+
+
 def note_duration_kind(seconds: float, tempo_bpm: float) -> str:
     beat_seconds = 60.0 / tempo_bpm if tempo_bpm > 0 else 0.5
     beats = max(0.125, seconds / beat_seconds)
@@ -484,8 +510,10 @@ def clips_for_day(
     videos: list[dict[str, Any]],
     sections: list[dict[str, Any]],
     transcriptions: list[dict[str, Any]],
+    media_samples: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     clips: list[dict[str, Any]] = []
+    samples = sample_by_id(media_samples)
     for section in sorted(sections, key=lambda item: float(item.get("meanRms") or 0.0), reverse=True):
         start, end = window_bounds(section)
         if end <= start:
@@ -500,6 +528,7 @@ def clips_for_day(
                 "endSeconds": end,
                 "durationSeconds": end - start,
                 "reason": section.get("note") or "Audio-active practice section.",
+                **clip_media_fields(section, samples),
             }
         )
     for transcription in transcriptions:
@@ -516,6 +545,7 @@ def clips_for_day(
                 "endSeconds": end,
                 "durationSeconds": end - start,
                 "reason": f"{int(transcription.get('noteCount') or 0)} detected notes.",
+                **clip_media_fields(transcription, samples),
             }
         )
     if not clips:
@@ -668,7 +698,7 @@ def build_daily_records(
         quality = transcription_quality(note_count, active_seconds, len(day_transcriptions))
         uploaded_seconds = sum(int(video.get("durationSeconds") or 0) for video in videos)
         processed_seconds = sum(sample_duration_seconds(sample) for sample in day_samples)
-        clips = clips_for_day(videos, day_sections, day_transcriptions)
+        clips = clips_for_day(videos, day_sections, day_transcriptions, day_samples)
         observations = [
             *transcription_quality_observations(quality, notation, clips),
             *problem_observations(notation, heat_fragments, clips, day_transcriptions, active_status),
