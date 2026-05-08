@@ -928,6 +928,7 @@ def apply_source_correction_gate(state: dict[str, Any], result: dict[str, Any]) 
     correction = correction_for_item(state, result)
     accepted_title = str(correction.get("acceptedTitle") or "").strip()
     if accepted_title:
+        source_tip = str(correction.get("sourceTip") or "Record one clean source take for scoring.").strip()
         accepted = dict(result)
         accepted.update(
             {
@@ -945,7 +946,7 @@ def apply_source_correction_gate(state: dict[str, Any], result: dict[str, Any]) 
                 "reviewVersion": "human_source_label_v1",
                 "candidateEvidence": "Alan-confirmed source label. Scoring pending judged playing evidence.",
                 "evidence": "Alan-confirmed source label. Scoring pending judged playing evidence.",
-                "immediateTip": "Haydn finale: light bow, even rhythm.",
+                "immediateTip": source_tip,
                 "topCandidates": [],
                 "musicalClues": [],
                 "verification": {

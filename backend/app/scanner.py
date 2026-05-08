@@ -398,6 +398,7 @@ def accepted_source_pieces(
             end_seconds = start_seconds + 45
         practice_day = practice_day_from_title(source_title)
         updated_at = str(correction.get("acceptedAt") or correction.get("updatedAt") or sample.get("createdAt") or utc_now())
+        source_tip = str(correction.get("sourceTip") or "Record one clean source take for scoring.").strip()
         pieces.append(
             {
                 "title": title,
@@ -409,7 +410,7 @@ def accepted_source_pieces(
                 "evidenceQuality": "human_verified_source_label",
                 "evidence": "Alan-confirmed source label. Scoring pending judged playing evidence.",
                 "candidateEvidence": "Alan-confirmed source label. Scoring pending judged playing evidence.",
-                "tip": "Haydn finale: light bow, even rhythm.",
+                "tip": source_tip,
                 "sampleId": sample.get("id") or "",
                 "sourceTitle": source_title,
                 "sourceUrl": source_url,
@@ -424,7 +425,7 @@ def accepted_source_pieces(
                     practice_day: {
                         "completionPercent": 0,
                         "sectionCount": max(1, len(matching_samples)),
-                        "tip": "Haydn finale: light bow, even rhythm.",
+                        "tip": source_tip,
                         "evidence": "Alan-confirmed source label. Scoring pending judged playing evidence.",
                         "latestAt": updated_at,
                         "sampleId": sample.get("id") or "",

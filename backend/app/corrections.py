@@ -9,6 +9,8 @@ from .state import utc_now
 
 FIVE_ONE_KEY = "youtube:wDfVpTU4I_I"
 FIVE_ONE_ACCEPTED_TITLE = "Haydn Symphony No. 94, IV. Finale, Violin I part"
+FIVE_TWO_KEY = "youtube:K38CgZhvF3Q"
+FIVE_TWO_ACCEPTED_TITLE = "Wieniawski Scherzo-Tarantelle, Op. 16"
 FIVE_ONE_REJECTED_TITLES = [
     "Paganini",
     "Paganini Violin Concerto No. 1",
@@ -199,6 +201,7 @@ FIVE_ONE_REJECTED_TITLES = [
     "John Williams Raiders March, Violin I part",
 ]
 SOURCE_ACCEPTANCE_REJECT_COUNT = 3
+BUILTIN_CORRECTION_KEYS = [FIVE_ONE_KEY, FIVE_TWO_KEY]
 
 
 def compact_text(value: Any) -> str:
@@ -223,6 +226,8 @@ def source_key(*, url: Any = "", title: Any = "", sample_id: Any = "", video_id:
     title_key = compact_text(title)
     if "5 1 26" in title_key:
         return FIVE_ONE_KEY
+    if "5 2 26" in title_key:
+        return FIVE_TWO_KEY
     return f"title:{title_key}" if title_key else ""
 
 
@@ -236,18 +241,31 @@ def source_key_from_item(item: dict[str, Any] | None) -> str:
 
 
 def builtin_correction(key: str) -> dict[str, Any] | None:
-    if key != FIVE_ONE_KEY:
-        return None
-    return {
-        "sourceKey": FIVE_ONE_KEY,
-        "sourceTitle": "5-1-26",
-        "sourceUrl": "https://www.youtube.com/watch?v=wDfVpTU4I_I",
-        "rejectedTitles": FIVE_ONE_REJECTED_TITLES,
-        "acceptedTitle": FIVE_ONE_ACCEPTED_TITLE,
-        "updatedAt": "2026-05-08T00:00:00+00:00",
-        "sourceHint": "Alan-confirmed source label: Haydn Symphony No. 94, last movement, Violin I part.",
-        "reason": "Alan-corrected false labels and supplied the accepted 5/1 source label.",
-    }
+    if key == FIVE_ONE_KEY:
+        return {
+            "sourceKey": FIVE_ONE_KEY,
+            "sourceTitle": "5-1-26",
+            "sourceUrl": "https://www.youtube.com/watch?v=wDfVpTU4I_I",
+            "rejectedTitles": FIVE_ONE_REJECTED_TITLES,
+            "acceptedTitle": FIVE_ONE_ACCEPTED_TITLE,
+            "sourceTip": "Haydn finale: light bow, even rhythm.",
+            "updatedAt": "2026-05-08T00:00:00+00:00",
+            "sourceHint": "Alan-confirmed source label: Haydn Symphony No. 94, last movement, Violin I part.",
+            "reason": "Alan-corrected false labels and supplied the accepted 5/1 source label.",
+        }
+    if key == FIVE_TWO_KEY:
+        return {
+            "sourceKey": FIVE_TWO_KEY,
+            "sourceTitle": "5-2-26",
+            "sourceUrl": "https://www.youtube.com/watch?v=K38CgZhvF3Q",
+            "rejectedTitles": [],
+            "acceptedTitle": FIVE_TWO_ACCEPTED_TITLE,
+            "sourceTip": "Scherzo-Tarantelle: keep the bow stroke small, even, and rhythm-first before tempo.",
+            "updatedAt": "2026-05-08T00:00:00+00:00",
+            "sourceHint": "Alan-confirmed source label: Wieniawski Scherzo-Tarantelle, Op. 16.",
+            "reason": "Alan supplied the accepted 5/2 source label.",
+        }
+    return None
 
 
 def correction_for_key(state: dict[str, Any], key: str) -> dict[str, Any]:
@@ -278,7 +296,7 @@ def correction_for_item(state: dict[str, Any], item: dict[str, Any] | None) -> d
 
 
 def accepted_source_corrections(state: dict[str, Any]) -> list[dict[str, Any]]:
-    keys = [FIVE_ONE_KEY]
+    keys = list(BUILTIN_CORRECTION_KEYS)
     stored = state.get("sourceCorrections")
     if isinstance(stored, dict):
         keys.extend(str(key) for key in stored if str(key).strip())

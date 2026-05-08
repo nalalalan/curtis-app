@@ -74,6 +74,7 @@ If OAuth callback storage is not used, set all of:
 - Owner-media helper uploads authenticated samples to `/api/curtis/media/upload` when local browser/export access can provide bytes, using `/api/curtis/ops-check` sample indexes to skip already captured windows and distribute capture across long practice logs.
 - `/api/curtis/ops-check` exposes day-specific piece progress fields for the first-screen piece, percent, and major tip.
 - Piece names require confirmed source evidence before they appear as repertoire. Model-only labels from `/api/curtis/piece-id/run` are withheld as `Piece being identified`, even when the model is confident.
+- Source-confirmed labels currently include 5/1 Haydn Symphony No. 94 IV and 5/2 Wieniawski Scherzo-Tarantelle, Op. 16.
 - Authenticated YouTube mode uses OAuth `mine=true` channel access and the uploads playlist for the connected account.
 - YouTube media judgment is blocked until a permitted video media path exists; the Data API does not provide raw video content.
 - Instagram automation inventories authorized account media through Graph API and marks media URLs for section processing when present.
