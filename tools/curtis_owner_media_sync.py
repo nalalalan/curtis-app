@@ -30,6 +30,7 @@ SAMPLE_START_SECONDS = int(os.getenv("CURTIS_OWNER_SAMPLE_START_SECONDS", str(10
 WINDOWS_PER_VIDEO = int(os.getenv("CURTIS_OWNER_WINDOWS_PER_VIDEO", "8"))
 BATCH_SIZE = int(os.getenv("CURTIS_OWNER_BATCH_SIZE", "4"))
 WINDOW_RE = re.compile(r"\*(\d+)-(\d+)")
+CACHED_BROWSER_RE = re.compile(r"(?P<video_id>.+)-(?P<start>\d+)(?:-[^-]+)?-browser$")
 BUNDLED_NODE = (
     Path.home()
     / ".cache"
@@ -109,6 +110,26 @@ def sample_video_id(sample: dict[str, Any]) -> str:
     return raw_id
 
 
+def live_sample_keys(ops: dict[str, Any]) -> tuple[set[str], set[tuple[str, int]]]:
+    media = ops.get("media", {}) if isinstance(ops.get("media"), dict) else {}
+    samples = media.get("sampleIndex") or media.get("samples") or []
+    sampled_ids = {
+        str(sample.get("id"))
+        for sample in samples
+        if isinstance(sample, dict) and sample.get("id")
+    }
+    sampled_windows: set[tuple[str, int]] = set()
+    for sample in samples:
+        if not isinstance(sample, dict) or not sample.get("id"):
+            continue
+        start = parse_window_start(str(sample.get("window") or ""))
+        if start is not None:
+            video_id = sample_video_id(sample)
+            sampled_ids.add(f"{video_id}-{start}")
+            sampled_windows.add((str(sample.get("url") or ""), start))
+    return sampled_ids, sampled_windows
+
+
 def with_sample_window(item: dict[str, Any], start: int) -> dict[str, Any]:
     return {
         **item,
@@ -118,24 +139,60 @@ def with_sample_window(item: dict[str, Any], start: int) -> dict[str, Any]:
     }
 
 
+def cached_sample_info(path: Path) -> tuple[str, int] | None:
+    match = CACHED_BROWSER_RE.match(path.stem)
+    if not match:
+        return None
+    return match.group("video_id"), int(match.group("start"))
+
+
+def cached_media_candidates(ops: dict[str, Any]) -> list[dict[str, Any]]:
+    inventory = ops.get("inventory", {}).get("youtube", [])
+    sampled_ids, sampled_windows = live_sample_keys(ops)
+    by_id = {
+        str(item.get("id")): item
+        for item in inventory
+        if isinstance(item, dict) and item.get("id") and item.get("url")
+    }
+    candidates: list[dict[str, Any]] = []
+    if not MEDIA_DIR.exists():
+        return candidates
+    include_negative = os.getenv("CURTIS_OWNER_UPLOAD_CACHED_NEGATIVES", "").strip().lower() in {"1", "true", "yes", "on"}
+    for path in sorted(MEDIA_DIR.glob("*-browser.webm")):
+        info = cached_sample_info(path)
+        if not info:
+            continue
+        video_id, start = info
+        item = by_id.get(video_id)
+        if not item:
+            continue
+        sample_id_value = sample_id(item, start)
+        key = (str(item.get("url") or ""), start)
+        if sample_id_value in sampled_ids or key in sampled_windows:
+            continue
+        presence = local_violin_presence(path)
+        if not include_negative and not presence.get("containsViolin"):
+            continue
+        candidate = with_sample_window(item, start)
+        candidate["cachedPath"] = str(path)
+        candidate["localPresence"] = presence
+        candidates.append(candidate)
+    return sorted(
+        candidates,
+        key=lambda item: (
+            bool(item.get("localPresence", {}).get("containsViolin")),
+            float(item.get("localPresence", {}).get("violinSamplerScore") or 0),
+            str(item.get("publishedAt") or ""),
+        ),
+        reverse=True,
+    )
+
+
 def media_candidates(ops: dict[str, Any]) -> list[dict[str, Any]]:
     inventory = ops.get("inventory", {}).get("youtube", [])
-    media = ops.get("media", {}) if isinstance(ops.get("media"), dict) else {}
-    samples = media.get("sampleIndex") or media.get("samples") or []
-    sampled_ids = {
-        str(sample.get("id"))
-        for sample in samples
-        if isinstance(sample, dict) and sample.get("id")
-    }
-    sampled_windows = set()
-    for sample in samples:
-        if not isinstance(sample, dict) or not sample.get("id"):
-            continue
-        start = parse_window_start(str(sample.get("window") or ""))
-        if start is not None:
-            video_id = sample_video_id(sample)
-            sampled_ids.add(f"{video_id}-{start}")
-            sampled_windows.add((str(sample.get("url") or ""), start))
+    sampled_ids, sampled_windows = live_sample_keys(ops)
+    cached = cached_media_candidates(ops)
+    cached_ids = {str(item.get("sampleId")) for item in cached if item.get("sampleId")}
 
     by_video: list[list[dict[str, Any]]] = []
     for item in sorted(inventory, key=inventory_sort_key, reverse=True):
@@ -150,7 +207,7 @@ def media_candidates(ops: dict[str, Any]) -> list[dict[str, Any]]:
         for start in sample_starts(item):
             candidate = with_sample_window(item, start)
             key = (str(item.get("url") or ""), start)
-            if str(candidate["sampleId"]) not in sampled_ids and key not in sampled_windows:
+            if str(candidate["sampleId"]) not in sampled_ids and str(candidate["sampleId"]) not in cached_ids and key not in sampled_windows:
                 windows.append(candidate)
         if windows:
             by_video.append(windows)
@@ -161,7 +218,7 @@ def media_candidates(ops: dict[str, Any]) -> list[dict[str, Any]]:
         for windows in by_video:
             if index < len(windows):
                 candidates.append(windows[index])
-    return candidates
+    return [*cached, *candidates]
 
 
 def inventory_sort_key(item: dict[str, Any]) -> tuple[int, str, int]:
@@ -226,6 +283,11 @@ def browser_capture_sample(item: dict[str, Any]) -> Path:
 
 
 def download_sample(item: dict[str, Any]) -> Path:
+    cached = item.get("cachedPath")
+    if cached:
+        cached_path = Path(str(cached))
+        if cached_path.exists() and cached_path.stat().st_size:
+            return cached_path
     MEDIA_DIR.mkdir(parents=True, exist_ok=True)
     video_id = str(item.get("sampleId") or item["id"])
     output_template = str(MEDIA_DIR / f"{video_id}.%(ext)s")
@@ -338,7 +400,7 @@ def main() -> int:
         for item in candidates[: max(1, BATCH_SIZE)]:
             try:
                 sample_path = download_sample(item)
-                presence = local_violin_presence(sample_path)
+                presence = item.get("localPresence") if isinstance(item.get("localPresence"), dict) else local_violin_presence(sample_path)
                 updated = upload_sample(client, token, item, sample_path, presence)
                 classified.append(
                     {
