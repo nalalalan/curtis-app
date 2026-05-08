@@ -14,7 +14,7 @@ from .state import load_state, save_state, utc_now
 
 MAX_TRANSCRIPTION_SECONDS = int(os.getenv("CURTIS_TRANSCRIPTION_MAX_SECONDS", "180"))
 TRANSCRIPTION_SAMPLE_LIMIT = int(os.getenv("CURTIS_TRANSCRIPTION_SAMPLE_LIMIT", "8"))
-TRANSCRIPTION_PIPELINE_VERSION = "violin_pitch_sanity_pyin_v7"
+TRANSCRIPTION_PIPELINE_VERSION = "violin_pitch_sanity_spectral_v8"
 MIN_NOTE_SECONDS = float(os.getenv("CURTIS_MIN_NOTE_SECONDS", "0.055"))
 MIN_ONSET_NOTE_SECONDS = float(os.getenv("CURTIS_MIN_ONSET_NOTE_SECONDS", "0.04"))
 MAX_STORED_NOTES = int(os.getenv("CURTIS_MAX_STORED_NOTES", "240"))
@@ -43,6 +43,9 @@ PITCH_COLLAPSE_MIN_EVENTS = int(os.getenv("CURTIS_PITCH_COLLAPSE_MIN_EVENTS", "1
 PITCH_COLLAPSE_MIN_RUN = int(os.getenv("CURTIS_PITCH_COLLAPSE_MIN_RUN", "10"))
 PITCH_COLLAPSE_DOMINANT_RATIO = float(os.getenv("CURTIS_PITCH_COLLAPSE_DOMINANT_RATIO", "0.82"))
 PITCH_COLLAPSE_MAX_PITCH_CLASSES = int(os.getenv("CURTIS_PITCH_COLLAPSE_MAX_PITCH_CLASSES", "2"))
+SPECTRAL_MIN_CONFIDENCE = float(os.getenv("CURTIS_SPECTRAL_MIN_CONFIDENCE", "0.18"))
+SPECTRAL_MIN_SEGMENT_SECONDS = float(os.getenv("CURTIS_SPECTRAL_MIN_SEGMENT_SECONDS", "0.035"))
+SPECTRAL_HARMONIC_COUNT = int(os.getenv("CURTIS_SPECTRAL_HARMONIC_COUNT", "5"))
 NOTE_NAMES = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
 
 
@@ -401,6 +404,135 @@ def pitch_collapse_report(events: list[dict[str, Any]], detected_onset_count: in
     }
 
 
+def pitch_diversity(events: list[dict[str, Any]]) -> dict[str, Any]:
+    midi_values = [event_midi(event) for event in events if isinstance(event, dict)]
+    midi_values = [midi for midi in midi_values if midi is not None]
+    if not midi_values:
+        return {
+            "count": 0,
+            "uniqueMidi": 0,
+            "uniquePitchClasses": 0,
+            "dominantRatio": 0.0,
+            "longestRun": 0,
+        }
+    counts = Counter(midi_values)
+    _, dominant_count = counts.most_common(1)[0]
+    pitch_classes = [midi % 12 for midi in midi_values]
+    return {
+        "count": len(midi_values),
+        "uniqueMidi": len(counts),
+        "uniquePitchClasses": len(set(pitch_classes)),
+        "dominantRatio": round(dominant_count / max(1, len(midi_values)), 3),
+        "longestRun": longest_value_run(midi_values),
+    }
+
+
+def spectral_candidate_score(
+    magnitudes: Any,
+    frequencies: Any,
+    candidate_hz: float,
+    numpy: Any,
+) -> float:
+    score = 0.0
+    nyquist = float(frequencies[-1]) if len(frequencies) else 0.0
+    for harmonic in range(1, max(1, SPECTRAL_HARMONIC_COUNT) + 1):
+        target = candidate_hz * harmonic
+        if not nyquist or target >= nyquist:
+            break
+        weight = 1.0 / harmonic
+        score += weight * float(numpy.interp(target, frequencies, magnitudes))
+    return score
+
+
+def spectral_pitch_for_segment(segment: Any, sr: int, librosa: Any, numpy: Any) -> dict[str, Any] | None:
+    if segment.size <= 0:
+        return None
+    try:
+        cleaned = librosa.util.normalize(segment)
+    except Exception:
+        cleaned = segment
+    rms = float(numpy.sqrt(numpy.mean(numpy.square(cleaned)))) if cleaned.size else 0.0
+    if rms <= 0.002:
+        return None
+    window = numpy.hanning(cleaned.size)
+    magnitudes = numpy.abs(numpy.fft.rfft(cleaned * window))
+    frequencies = numpy.fft.rfftfreq(cleaned.size, 1.0 / sr)
+    if magnitudes.size <= 4 or frequencies.size != magnitudes.size:
+        return None
+    scores: list[tuple[float, int]] = []
+    for midi in range(VIOLIN_MIN_MIDI, VIOLIN_MAX_MIDI + 1):
+        hz = float(librosa.midi_to_hz(midi))
+        scores.append((spectral_candidate_score(magnitudes, frequencies, hz, numpy), midi))
+    scores.sort(reverse=True)
+    best_score, best_midi = scores[0]
+    if best_score <= 0:
+        return None
+    second_score = scores[1][0] if len(scores) > 1 else 0.0
+    total_top = sum(score for score, _ in scores[:8]) or best_score
+    confidence = max(0.0, min(1.0, (best_score - second_score) / max(best_score, 1e-9)))
+    relative = best_score / max(total_top, 1e-9)
+    if relative < SPECTRAL_MIN_CONFIDENCE:
+        return None
+    return {
+        "midi": int(best_midi),
+        "note": note_name(int(best_midi)),
+        "confidence": round(max(confidence, relative), 3),
+        "spectralRelativeScore": round(relative, 3),
+    }
+
+
+def spectral_onset_events(
+    y: Any,
+    onset_frames: Any,
+    sr: int,
+    hop_length: int,
+    librosa: Any,
+    numpy: Any,
+) -> list[dict[str, Any]]:
+    frame_count = max(1, int(math.ceil(len(y) / max(1, hop_length))))
+    raw_boundaries = [0]
+    for frame in onset_frames:
+        try:
+            index = int(frame)
+        except (TypeError, ValueError):
+            continue
+        if 0 < index < frame_count:
+            raw_boundaries.append(index)
+    raw_boundaries.append(frame_count)
+    boundaries = sorted(set(raw_boundaries))
+    events: list[dict[str, Any]] = []
+    for start_frame, end_frame in zip(boundaries, boundaries[1:]):
+        if end_frame <= start_frame:
+            continue
+        start_sample = int(start_frame * hop_length)
+        end_sample = min(len(y), int(end_frame * hop_length))
+        if end_sample <= start_sample:
+            continue
+        start = float(start_sample / sr)
+        end = float(end_sample / sr)
+        duration = end - start
+        if duration < SPECTRAL_MIN_SEGMENT_SECONDS:
+            continue
+        segment = y[start_sample:end_sample]
+        pitch = spectral_pitch_for_segment(segment, sr, librosa, numpy)
+        if not pitch:
+            continue
+        events.append(
+            {
+                "startSeconds": round(start, 3),
+                "endSeconds": round(end, 3),
+                "durationSeconds": round(duration, 3),
+                "midi": pitch["midi"],
+                "note": pitch["note"],
+                "confidence": pitch["confidence"],
+                "spectralRelativeScore": pitch["spectralRelativeScore"],
+            }
+        )
+        if len(events) >= MAX_STORED_NOTES:
+            break
+    return events
+
+
 def transcription_failure_state(events: list[dict[str, Any]], quality: dict[str, Any]) -> dict[str, Any]:
     collapse = pitch_collapse_report(events, int(quality.get("detectedOnsetCount") or 0))
     if collapse.get("pitchCollapseDetected"):
@@ -600,7 +732,23 @@ def f0_to_onset_events(
 def choose_transcription_events(
     pitch_events: list[dict[str, Any]],
     onset_events: list[dict[str, Any]],
+    spectral_events: list[dict[str, Any]] | None = None,
 ) -> tuple[list[dict[str, Any]], str]:
+    spectral_events = spectral_events or []
+    spectral_diversity = pitch_diversity(spectral_events)
+    pitch_diversity_state = pitch_diversity(pitch_events)
+    onset_diversity_state = pitch_diversity(onset_events)
+    pitch_collapsed = pitch_collapse_report(pitch_events, len(onset_events)).get("pitchCollapseDetected")
+    onset_collapsed = pitch_collapse_report(onset_events, len(onset_events)).get("pitchCollapseDetected")
+    spectral_is_useful = (
+        len(spectral_events) >= MIN_ACTIVE_WINDOW_NOTES
+        and spectral_diversity["uniquePitchClasses"] >= max(3, pitch_diversity_state["uniquePitchClasses"])
+        and spectral_diversity["dominantRatio"] <= 0.72
+    )
+    if spectral_is_useful and (pitch_collapsed or onset_collapsed):
+        return spectral_events[:MAX_STORED_NOTES], "spectral_onset_rescue"
+    if spectral_is_useful and spectral_diversity["uniquePitchClasses"] > onset_diversity_state["uniquePitchClasses"] + 1:
+        return spectral_events[:MAX_STORED_NOTES], "spectral_onset"
     if not onset_events:
         return pitch_events, "pitch_hysteresis"
     if len(onset_events) >= max(len(pitch_events) + 4, int(len(pitch_events) * ONSET_EVENT_MULTIPLIER)):
@@ -655,7 +803,8 @@ def transcribe_audio_array(y: Any, sr: int, librosa: Any, numpy: Any) -> dict[st
         onset_frames = []
     pitch_events = f0_to_events(f0, voiced_flag, voiced_prob, sr, hop_length, numpy)
     onset_events = f0_to_onset_events(f0, voiced_flag, voiced_prob, onset_frames, sr, hop_length, numpy)
-    raw_events, segmentation_source = choose_transcription_events(pitch_events, onset_events)
+    spectral_events = spectral_onset_events(pitch_y, onset_frames, sr, hop_length, librosa, numpy)
+    raw_events, segmentation_source = choose_transcription_events(pitch_events, onset_events, spectral_events)
     events, sanity_quality = pitch_sanity_filter(raw_events)
     voiced_ratio = round(float(numpy.nanmean(voiced_flag)) if len(voiced_flag) else 0.0, 3)
     quality = {
@@ -663,8 +812,13 @@ def transcribe_audio_array(y: Any, sr: int, librosa: Any, numpy: Any) -> dict[st
         "segmentationSource": segmentation_source,
         "pitchEventCount": len(pitch_events),
         "onsetEventCount": len(onset_events),
+        "spectralEventCount": len(spectral_events),
+        "rawSelectedEventCount": len(raw_events),
         "selectedEventCount": len(events),
         "detectedOnsetCount": len(onset_frames),
+        "pitchDiversity": pitch_diversity(pitch_events),
+        "onsetDiversity": pitch_diversity(onset_events),
+        "spectralDiversity": pitch_diversity(spectral_events),
         **sanity_quality,
     }
     failure = transcription_failure_state(events, quality)
@@ -717,6 +871,7 @@ def transcribe_active_windows(
         for key in (
             "pitchEventCount",
             "onsetEventCount",
+            "spectralEventCount",
             "rawSelectedEventCount",
             "selectedEventCount",
             "detectedOnsetCount",
@@ -760,6 +915,7 @@ def transcribe_active_windows(
             "segmentationSource": "+".join(sorted(item for item in segmentation if item)) or "none",
             "pitchEventCount": int(quality_totals["pitchEventCount"]),
             "onsetEventCount": int(quality_totals["onsetEventCount"]),
+            "spectralEventCount": int(quality_totals["spectralEventCount"]),
             "rawSelectedEventCount": int(quality_totals["rawSelectedEventCount"]),
             "selectedEventCount": int(quality_totals["selectedEventCount"]),
             "detectedOnsetCount": int(quality_totals["detectedOnsetCount"]),
@@ -831,7 +987,7 @@ def transcribe_path(path: Path, active_windows: list[dict[str, float]] | None = 
         return {
             "status": status,
             "pipelineVersion": TRANSCRIPTION_PIPELINE_VERSION,
-            "method": "librosa_active_section_onset_pyin_with_pitch_collapse_gate",
+            "method": "librosa_active_section_onset_pyin_spectral_pitch_with_collapse_gate",
             "durationSeconds": transcription["durationSeconds"],
             "tempoBpm": tempo,
             "voicedFrameRatio": transcription["voicedFrameRatio"],
@@ -999,7 +1155,7 @@ def transcribe_media_samples(limit: int | None = None) -> dict[str, Any]:
     state["transcriptions"] = {
         "items": items,
         "updatedAt": utc_now(),
-        "method": "librosa_active_section_onset_pyin_with_pitch_collapse_gate",
+        "method": "librosa_active_section_onset_pyin_spectral_pitch_with_collapse_gate",
         "pipelineVersion": TRANSCRIPTION_PIPELINE_VERSION,
         "limit": "Machine pitch/rhythm extraction is stored only as hidden evidence. Repeated-pitch collapse is rejected and cannot train piece matching; score-level claims require alignment verification.",
     }

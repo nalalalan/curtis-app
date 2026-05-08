@@ -13,6 +13,7 @@ from backend.app.transcription import (
     f0_to_onset_events,
     f0_to_events,
     pitch_sanity_filter,
+    spectral_onset_events,
     transcription_failure_state,
     reference_matches_for,
     transcription_prior_hint,
@@ -212,6 +213,47 @@ class TranscriptionTrainingTests(unittest.TestCase):
         failure = transcription_failure_state(events, {"detectedOnsetCount": len(arpeggio)})
 
         self.assertFalse(failure["failed"])
+        self.assertFalse(failure["pitchCollapseDetected"])
+
+    def test_choose_transcription_events_rescues_collapsed_pyin_with_spectral_onsets(self):
+        collapsed_pyin = [note_event(62, index, confidence=0.91, duration=0.05) for index in range(24)]
+        spectral_arpeggio = [
+            note_event(midi, index, confidence=0.72, duration=0.05)
+            for index, midi in enumerate([62, 66, 69, 73, 76, 81] * 4)
+        ]
+
+        events, source = choose_transcription_events(collapsed_pyin, [], spectral_arpeggio)
+
+        self.assertEqual(source, "spectral_onset_rescue")
+        self.assertGreaterEqual(len({event["midi"] % 12 for event in events}), 4)
+
+    def test_spectral_onset_events_tracks_fast_arpeggio_pitches(self):
+        import librosa  # type: ignore
+        import numpy  # type: ignore
+
+        sr = 22050
+        hop_length = 256
+        pattern = [62, 66, 69, 73, 76, 81] * 2
+        duration = 0.085
+        chunks = []
+        for midi in pattern:
+            frequency = hz_for_midi(midi)
+            t = numpy.linspace(0, duration, int(sr * duration), endpoint=False)
+            envelope = numpy.hanning(t.size)
+            chunk = (
+                numpy.sin(2 * numpy.pi * frequency * t)
+                + 0.32 * numpy.sin(2 * numpy.pi * frequency * 2 * t)
+                + 0.18 * numpy.sin(2 * numpy.pi * frequency * 3 * t)
+            ) * envelope
+            chunks.append(chunk)
+        y = numpy.concatenate(chunks)
+        onset_frames = [round(index * duration * sr / hop_length) for index in range(1, len(pattern))]
+
+        events = spectral_onset_events(y, onset_frames, sr, hop_length, librosa, numpy)
+        failure = transcription_failure_state(events, {"detectedOnsetCount": len(onset_frames)})
+
+        self.assertGreaterEqual(len(events), 8)
+        self.assertGreaterEqual(len({event["midi"] % 12 for event in events}), 4)
         self.assertFalse(failure["pitchCollapseDetected"])
 
     def test_pitch_rhythm_fingerprint_matches_repeated_material(self):
