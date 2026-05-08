@@ -1504,7 +1504,9 @@ function recordEvidenceLine(record, scoreSnippet) {
 
 function renderDailyRecord(record, index = 0) {
   const playableClip = primaryPlayableClip(record);
+  const allEvents = Array.isArray(record?.transcription?.events) ? record.transcription.events : [];
   const events = transcriptionEventsForClip(record, playableClip);
+  const showRecordRepeat = !playableClip || playableClip.type !== "transcribed_window" || events.length === allEvents.length;
   const scoreSnippet = scoreSnippetForRecord(record);
   const meta = [
     record.practiceDay,
@@ -1526,9 +1528,9 @@ function renderDailyRecord(record, index = 0) {
           <section class="essential-panel">
             <span>Transcription</span>
             ${renderNotationSheet(events, {
-              repeatGroup: record?.transcription?.repeatGroups?.[0],
+              repeatGroup: showRecordRepeat ? record?.transcription?.repeatGroups?.[0] : null,
               qualityLabel: record?.transcription?.qualityLabel,
-              qualityLimit: record?.transcription?.qualityLimit
+              qualityLimit: record?.transcription?.coverageLabel || record?.transcription?.qualityLimit
             })}
           </section>
           <section class="essential-panel">
