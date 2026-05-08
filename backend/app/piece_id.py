@@ -13,7 +13,13 @@ import httpx
 
 from .analyzer import active_ranges, extract_wav as extract_full_wav, parse_window_start, rms_windows
 from .coach import aggregate_piece_reviews, decode_json, piece_title_is_identified
-from .corrections import FIVE_ONE_REJECTED_TITLES, correction_for_item, item_stale_after_source_correction
+from .corrections import (
+    FIVE_ONE_REJECTED_TITLES,
+    correction_for_item,
+    item_stale_after_source_correction,
+    scrubbed_piece_item,
+    source_requires_confirmed_acceptance,
+)
 from .settings import OPENAI_AUDIO_MODEL, OPENAI_PIECE_VERIFY_MODEL
 from .state import load_state, save_state, utc_now
 
@@ -925,6 +931,18 @@ def piece_review_from_identification(result: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def apply_source_correction_gate(state: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
+    if result.get("status") != "piece_identified" or not source_requires_confirmed_acceptance(state, result):
+        return result
+    candidate_title = str(result.get("title") or result.get("proposedTitle") or "").strip()
+    gated = scrubbed_piece_item(result)
+    gated["status"] = "source_correction_unresolved"
+    gated["candidateTitle"] = candidate_title[:140]
+    gated["candidateEvidence"] = "Repeated corrected false labels for this source. Exact piece pending."
+    gated["evidence"] = "Repeated corrected false labels for this source. Exact piece pending."
+    return gated
+
+
 def identify_pieces_from_samples(limit: int = 4) -> dict[str, Any]:
     state = load_state()
     review = state.setdefault("review", {})
@@ -942,7 +960,7 @@ def identify_pieces_from_samples(limit: int = 4) -> dict[str, Any]:
     if not prioritized_samples:
         prioritized_samples = sorted(samples, key=lambda sample: sample_window_start(sample))
     previous = [
-        item
+        apply_source_correction_gate(state, item)
         for item in review.get("pieceIdentifications", [])
         if isinstance(item, dict) and not item_stale_after_source_correction(state, item)
     ]
@@ -952,7 +970,7 @@ def identify_pieces_from_samples(limit: int = 4) -> dict[str, Any]:
         if item.get("sampleId") and item.get("reviewVersion") == PIECE_ID_VERSION
     }
     selected = [sample for sample in prioritized_samples if sample.get("id") not in processed_ids][:limit]
-    results = [identify_sample(sample) for sample in selected]
+    results = [apply_source_correction_gate(state, identify_sample(sample)) for sample in selected]
     all_results = [*results, *previous]
     consensus_processed_urls = {
         item.get("url")
@@ -981,12 +999,16 @@ def identify_pieces_from_samples(limit: int = 4) -> dict[str, Any]:
         video_results = [result for result in all_results if result.get("url") == url or result.get("sourceUrl") == url]
         result = identify_video_consensus(items, video_results)
         if result is not None:
-            consensus_results.append(result)
+            consensus_results.append(apply_source_correction_gate(state, result))
     results = [*consensus_results, *results]
     usable_piece_reviews = [
         piece_review_from_identification(result)
         for result in results
-        if result.get("status") == "piece_identified" and source_window_allowed(result, samples_by_url)
+        if (
+            result.get("status") == "piece_identified"
+            and source_window_allowed(result, samples_by_url)
+            and not source_requires_confirmed_acceptance(state, result)
+        )
     ]
     review["pieceIdentifications"] = [*results, *previous][:80]
     review["pieces"] = [
@@ -999,6 +1021,7 @@ def identify_pieces_from_samples(limit: int = 4) -> dict[str, Any]:
                 str(piece.get("reviewVersion") or "") != PIECE_ID_VERSION
                 or not source_window_allowed(piece, samples_by_url)
                 or item_stale_after_source_correction(state, piece)
+                or source_requires_confirmed_acceptance(state, piece)
             )
         )
     ]

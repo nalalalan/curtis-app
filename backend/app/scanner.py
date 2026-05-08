@@ -10,7 +10,7 @@ import httpx
 
 from .analyzer import parse_window_start
 from .auth import youtube_auth_status
-from .corrections import item_stale_after_source_correction, title_rejected_for_item
+from .corrections import item_stale_after_source_correction, source_requires_confirmed_acceptance, title_rejected_for_item
 from .platforms import credential_state, fetch_instagram_inventory, fetch_youtube_inventory
 from .settings import (
     OPENAI_AUDIO_MODEL,
@@ -194,7 +194,11 @@ def piece_matches_five_one(piece: dict[str, Any] | None) -> bool:
 def rejected_repertoire_title(value: Any, piece: dict[str, Any] | None = None) -> bool:
     compact = re.sub(r"[^a-z0-9]+", " ", str(value or "").lower()).strip()
     state = load_state()
-    if item_stale_after_source_correction(state, piece) or title_rejected_for_item(value, state, piece):
+    if (
+        item_stale_after_source_correction(state, piece)
+        or source_requires_confirmed_acceptance(state, piece)
+        or title_rejected_for_item(value, state, piece)
+    ):
         return True
     rejected_titles = list(REJECTED_REPERTOIRE_TITLES)
     if piece_matches_five_one(piece):

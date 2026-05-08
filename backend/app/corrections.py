@@ -24,6 +24,17 @@ FIVE_ONE_REJECTED_TITLES = [
     "Mendelssohn Violin Concerto",
     "Mendelssohn Violin Concerto in E minor, Op. 64",
     "Felix Mendelssohn Violin Concerto in E minor, Op. 64",
+    "Brahms",
+    "Johannes Brahms",
+    "Brahms Hungarian Dance No. 5",
+    "Brahms Hungarian Dance No. 5 (arranged for violin)",
+    "Hungarian Dance No. 5",
+    "Sibelius",
+    "Jean Sibelius",
+    "Sibelius Violin Concerto",
+    "Sibelius Violin Concerto in D minor, Op. 47",
+    "Sibelius Violin Concerto in D minor, Op. 47, 3rd movement",
+    "Jean Sibelius Violin Concerto in D minor, Op. 47, 3rd movement",
     "Wieniawski",
     "Wieniawski Violin Concerto No. 2",
     "Wieniawski Polonaise Brillante No. 1 in D major, Op. 4",
@@ -50,6 +61,7 @@ FIVE_ONE_REJECTED_TITLES = [
     "J.S. Bach Partita No. 3 in E major, BWV 1006, Preludio",
     "Bach Partita No. 3 Preludio",
 ]
+SOURCE_ACCEPTANCE_REJECT_COUNT = 3
 
 
 def compact_text(value: Any) -> str:
@@ -139,6 +151,21 @@ def title_rejected_for_item(title: Any, state: dict[str, Any], item: dict[str, A
         ):
             return True
     return False
+
+
+def source_requires_confirmed_acceptance(state: dict[str, Any], item: dict[str, Any] | None) -> bool:
+    key = source_key_from_item(item)
+    if not key:
+        return False
+    correction = correction_for_key(state, key)
+    if compact_text(correction.get("acceptedTitle")):
+        return False
+    rejected_titles = {
+        compact_text(title)
+        for title in correction.get("rejectedTitles", [])
+        if compact_text(title)
+    }
+    return len(rejected_titles) >= SOURCE_ACCEPTANCE_REJECT_COUNT
 
 
 def parsed_at(value: Any) -> datetime | None:
@@ -241,7 +268,11 @@ def scrub_rejected_source(state: dict[str, Any], key: str) -> int:
             if (
                 isinstance(item, dict)
                 and item_matches_source_key(item, key)
-                and (rejected_title_on_item(state, item) or item_stale_after_source_correction(state, item))
+                and (
+                    rejected_title_on_item(state, item)
+                    or item_stale_after_source_correction(state, item)
+                    or source_requires_confirmed_acceptance(state, item)
+                )
             ):
                 scrubbed.append(scrubbed_piece_item(item))
                 changed += 1
@@ -256,7 +287,11 @@ def scrub_rejected_source(state: dict[str, Any], key: str) -> int:
             if (
                 isinstance(item, dict)
                 and item_matches_source_key(item, key)
-                and (rejected_title_on_item(state, item) or item_stale_after_source_correction(state, item))
+                and (
+                    rejected_title_on_item(state, item)
+                    or item_stale_after_source_correction(state, item)
+                    or source_requires_confirmed_acceptance(state, item)
+                )
             ):
                 scrubbed_results.append(scrubbed_piece_item(item))
                 changed += 1
@@ -277,7 +312,10 @@ def scrub_rejected_source(state: dict[str, Any], key: str) -> int:
         "url": key.split(":", 1)[1] if key.startswith("youtube:") else "",
         "sourceTitle": key.split(":", 1)[1] if key.startswith("title:") else "",
     }
-    if current_work and title_rejected_for_item(current_work, state, key_item):
+    if current_work and (
+        title_rejected_for_item(current_work, state, key_item)
+        or source_requires_confirmed_acceptance(state, key_item)
+    ):
         review["currentWork"] = "Piece identification pending verified source evidence."
         changed += 1
 
