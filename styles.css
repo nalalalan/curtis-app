@@ -1910,6 +1910,11 @@ h2 {
   background: #fffdf8;
 }
 
+.notation-sheet.notation-draft {
+  border-color: rgba(166, 111, 86, .18);
+  background: rgba(255, 252, 246, .9);
+}
+
 .notation-sheet svg {
   display: block;
   width: 100%;
@@ -1987,6 +1992,10 @@ h2 {
   font-weight: 630;
   line-height: 1.2;
   overflow-wrap: anywhere;
+}
+
+.notation-draft .notation-repeat-caption b {
+  color: var(--clay);
 }
 
 .notation-note ellipse {
