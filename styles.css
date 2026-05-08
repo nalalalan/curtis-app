@@ -335,7 +335,7 @@ button:disabled {
 
 .today-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.16fr) minmax(100px, .4fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -349,7 +349,12 @@ button:disabled {
 }
 
 .today-grid .detected-card {
+  grid-column: 1 / -1;
   background: rgba(95, 118, 104, .09);
+}
+
+.today-grid article:nth-child(4) {
+  grid-column: 1 / -1;
 }
 
 .today-grid span,
@@ -379,8 +384,8 @@ button:disabled {
 
 .today-grid article:nth-child(2) strong {
   color: var(--green);
-  font-size: 28px;
-  line-height: 1;
+  font-size: 24px;
+  line-height: 1.06;
 }
 
 .highlight-panel {
@@ -1142,8 +1147,21 @@ h2 {
   }
 
   .shell {
-    width: calc(100% - 24px);
-    padding-top: 14px;
+    width: 100%;
+    max-width: 390px;
+    margin: 0;
+    padding: 14px 12px 46px;
+  }
+
+  .paper-strip,
+  .today-panel,
+  .highlight-panel,
+  .piece-panel,
+  .day-panel,
+  .status-strip article {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
   }
 
   .paper-shell {
@@ -1201,11 +1219,12 @@ h2 {
   .highlight-meta,
   .piece-row,
   .day-row {
-    max-width: calc(100vw - 58px);
+    max-width: 100%;
   }
 
   .today-grid strong {
     max-width: 100%;
+    overflow-wrap: anywhere;
   }
 
   .paper-hero {

@@ -8,6 +8,7 @@ from .state import utc_now
 
 
 FIVE_ONE_KEY = "youtube:wDfVpTU4I_I"
+FIVE_ONE_ACCEPTED_TITLE = "Haydn Symphony No. 94, IV. Finale, Violin I part"
 FIVE_ONE_REJECTED_TITLES = [
     "Paganini",
     "Paganini Violin Concerto No. 1",
@@ -159,6 +160,43 @@ FIVE_ONE_REJECTED_TITLES = [
     "Kodaly Dances of Galanta, Violin I part",
     "Khachaturian Sabre Dance, Violin I part",
     "Holst The Planets, Mercury, Violin I part",
+    "Rossini The Barber of Seville Overture, Violin I part",
+    "Rossini L'italiana in Algeri Overture, Violin I part",
+    "Rossini La Scala di Seta Overture, Violin I part",
+    "Beethoven Symphony No. 5, Scherzo or finale, Violin I part",
+    "Beethoven Symphony No. 3, Scherzo, Violin I part",
+    "Beethoven Egmont Overture, Violin I part",
+    "Weber Euryanthe Overture, Violin I part",
+    "Auber Fra Diavolo Overture, Violin I part",
+    "Suppe Poet and Peasant Overture, Violin I part",
+    "Suppe Light Cavalry Overture, Violin I part",
+    "Offenbach Orpheus in the Underworld Overture, Violin I part",
+    "Johann Strauss II Die Fledermaus Overture, Violin I part",
+    "Johann Strauss II Tritsch-Tratsch Polka, Violin I part",
+    "Johann Strauss II Perpetuum Mobile, Violin I part",
+    "Johann Strauss II Thunder and Lightning Polka, Violin I part",
+    "Josef Strauss Feuerfest Polka, Violin I part",
+    "Glinka Kamarinskaya, Violin I part",
+    "Rimsky-Korsakov Russian Easter Overture, Violin I part",
+    "Rimsky-Korsakov The Tsar's Bride Overture, Violin I part",
+    "Borodin Symphony No. 2, Violin I part",
+    "Mussorgsky Night on Bald Mountain, Violin I part",
+    "Grieg Holberg Suite, Praeludium, Violin I part",
+    "Grieg Peer Gynt, In the Hall of the Mountain King, Violin I part",
+    "Copland Rodeo, Hoe-Down, Violin I part",
+    "Copland El Salon Mexico, Violin I part",
+    "Bernstein Candide Overture, Violin I part",
+    "Bernstein West Side Story, Mambo, Violin I part",
+    "Bernstein West Side Story, America, Violin I part",
+    "Arturo Marquez Danzon No. 2, Violin I part",
+    "Moncayo Huapango, Violin I part",
+    "Ginastera Estancia, Malambo, Violin I part",
+    "Revueltas Sensemaya, Violin I part",
+    "Gershwin Cuban Overture, Violin I part",
+    "Gershwin An American in Paris, Violin I part",
+    "John Adams Short Ride in a Fast Machine, Violin I part",
+    "John Williams Star Wars Main Title, Violin I part",
+    "John Williams Raiders March, Violin I part",
 ]
 SOURCE_ACCEPTANCE_REJECT_COUNT = 3
 
@@ -205,10 +243,10 @@ def builtin_correction(key: str) -> dict[str, Any] | None:
         "sourceTitle": "5-1-26",
         "sourceUrl": "https://www.youtube.com/watch?v=wDfVpTU4I_I",
         "rejectedTitles": FIVE_ONE_REJECTED_TITLES,
-        "acceptedTitle": "",
-        "updatedAt": "2026-05-07T00:00:00+00:00",
-        "sourceHint": "Violin I part of an orchestral work; not solo violin repertoire.",
-        "reason": "Alan-corrected false labels and source hint for this source.",
+        "acceptedTitle": FIVE_ONE_ACCEPTED_TITLE,
+        "updatedAt": "2026-05-08T00:00:00+00:00",
+        "sourceHint": "Alan-confirmed source label: Haydn Symphony No. 94, last movement, Violin I part.",
+        "reason": "Alan-corrected false labels and supplied the accepted 5/1 source label.",
     }
 
 
@@ -237,6 +275,19 @@ def correction_for_key(state: dict[str, Any], key: str) -> dict[str, Any]:
 def correction_for_item(state: dict[str, Any], item: dict[str, Any] | None) -> dict[str, Any]:
     key = source_key_from_item(item)
     return correction_for_key(state, key) if key else {"rejectedTitles": [], "acceptedTitle": ""}
+
+
+def accepted_source_corrections(state: dict[str, Any]) -> list[dict[str, Any]]:
+    keys = [FIVE_ONE_KEY]
+    stored = state.get("sourceCorrections")
+    if isinstance(stored, dict):
+        keys.extend(str(key) for key in stored if str(key).strip())
+    accepted: list[dict[str, Any]] = []
+    for key in dict.fromkeys(keys):
+        correction = correction_for_key(state, key)
+        if compact_text(correction.get("acceptedTitle")):
+            accepted.append(correction)
+    return accepted
 
 
 def title_rejected_for_item(title: Any, state: dict[str, Any], item: dict[str, Any] | None) -> bool:
@@ -289,6 +340,20 @@ def item_stale_after_source_correction(state: dict[str, Any], item: dict[str, An
     correction = correction_for_key(state, key)
     if not correction.get("rejectedTitles"):
         return False
+    accepted = compact_text(correction.get("acceptedTitle"))
+    if accepted:
+        title_candidates = [
+            item.get("title"),
+            item.get("proposedTitle"),
+            item.get("candidateTitle"),
+            item.get("verificationTitle"),
+        ]
+        if any(
+            (candidate := compact_text(title))
+            and (candidate == accepted or candidate in accepted or accepted in candidate)
+            for title in title_candidates
+        ):
+            return False
     corrected_at = parsed_at(correction.get("updatedAt"))
     if corrected_at is None:
         return False
@@ -452,6 +517,40 @@ def learn_rejection(
             "sourceUrl": source_url,
             "sourceTitle": source_title,
             "rejectedTitles": list(dict.fromkeys(item for item in rejected if item)),
+            "updatedAt": utc_now(),
+        }
+    )
+    if note.strip():
+        notes = [str(item).strip() for item in current.get("notes", []) if str(item).strip()]
+        current["notes"] = [note.strip(), *notes][:10]
+    corrections[key] = current
+    return current
+
+
+def learn_acceptance(
+    state: dict[str, Any],
+    *,
+    source_url: str = "",
+    source_title: str = "",
+    video_id: str = "",
+    accepted_title: str = "",
+    note: str = "",
+) -> dict[str, Any]:
+    key = source_key(url=source_url, title=source_title, video_id=video_id)
+    accepted_title = accepted_title.strip()
+    if not key:
+        raise ValueError("source key required")
+    if not accepted_title or accepted_title == "Piece being identified":
+        raise ValueError("accepted title required")
+    corrections = state.setdefault("sourceCorrections", {})
+    current = dict(corrections.get(key) or {})
+    current.update(
+        {
+            "sourceKey": key,
+            "sourceUrl": source_url,
+            "sourceTitle": source_title,
+            "acceptedTitle": accepted_title,
+            "acceptedAt": utc_now(),
             "updatedAt": utc_now(),
         }
     )

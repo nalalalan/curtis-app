@@ -462,11 +462,13 @@ function currentPieceLabel(piece) {
   if (!isIdentifiedPiece(piece)) return label;
   return label
     .replace(/^(.+?) Violin Concerto No\. /, "$1 Concerto No. ")
-    .replace(/\s+in\s+[A-G][#b]?\s+(major|minor),\s+/i, ", ");
+    .replace(/\s+in\s+[A-G][#b]?\s+(major|minor),\s+/i, ", ")
+    .replace(/,\s*Violin I part$/i, ", Vln I");
 }
 
 function pieceStatusLabel(piece) {
   if (!piece || !isIdentifiedPiece(piece)) return "identifying";
+  if (piece.evidenceQuality === "human_verified_source_label") return "confirmed";
   if (piece.confidence === "clear") return "detected";
   return piece.confidence || "detected";
 }
@@ -640,13 +642,22 @@ function practiceDays(ops) {
       const sample = sourceForSampleId(ops, result.sampleId);
       return result.url === video.url || sample?.url === video.url || sampleIds.has(result.sampleId);
     });
-    const dayPieces = repertoire.filter((piece) => {
+    const pieceDailyEntry = (piece) => {
+      const daily = piece?.daily && typeof piece.daily === "object" ? Object.values(piece.daily) : [];
+      return daily.find((item) => {
+        const sample = sourceForSampleId(ops, item?.sampleId);
+        return item?.sourceUrl === video.url || sample?.url === video.url || sampleIds.has(item?.sampleId);
+      }) || null;
+    };
+    const dayPieceRows = repertoire.map((piece) => ({ piece, daily: pieceDailyEntry(piece) })).filter(({ piece, daily }) => {
       const source = sourceForSampleId(ops, piece.sampleId);
-      return piece.sourceUrl === video.url || source?.url === video.url || sampleIds.has(piece.sampleId);
+      return Boolean(daily || piece.sourceUrl === video.url || source?.url === video.url || sampleIds.has(piece.sampleId));
     });
+    const dayPieces = dayPieceRows.map((row) => row.piece);
     const daySections = sections.filter((section) => section.url === video.url || sampleIds.has(section.sampleId));
     const identified = dayResults.filter((result) => result.status === "piece_identified");
-    const identifiedPieces = dayPieces.filter((piece) => isIdentifiedPiece(piece));
+    const identifiedPieceRows = dayPieceRows.filter(({ piece }) => isIdentifiedPiece(piece));
+    const identifiedPieces = identifiedPieceRows.map((row) => row.piece);
     const unverified = dayResults.filter((result) => result.status === "piece_candidate_unverified");
     const detected = [...identified.map(resultDetectedLabel), ...identifiedPieces.map(pieceLabel), ...unverified.map(resultDetectedLabel)]
       .filter(Boolean);
@@ -663,9 +674,12 @@ function practiceDays(ops) {
               : { title: video.title, url: video.url, startSeconds: 0, endSeconds: 0, detectedTitle: "Piece being identified", status: "metadata" };
     const percentCandidates = [
       ...identified.map((item) => Number(item.completionPercent) || 0),
-      ...identifiedPieces.map((item) => Math.max(Number(item.todayCompletionPercent) || 0, Number(item.completionPercent) || 0))
+      ...identifiedPieceRows.map(({ piece, daily }) => Math.max(
+        Number(daily?.completionPercent) || 0,
+        Number(piece.completionPercent) || 0
+      ))
     ];
-    const tip = identified[0]?.immediateTip || identifiedPieces[0]?.todayTip || identifiedPieces[0]?.tip || unverified[0]?.immediateTip || "";
+    const tip = identified[0]?.immediateTip || identifiedPieceRows[0]?.daily?.tip || identifiedPieces[0]?.tip || unverified[0]?.immediateTip || "";
     const identifiedCount = identified.length + identifiedPieces.length;
     return {
       title: video.title || "Practice",

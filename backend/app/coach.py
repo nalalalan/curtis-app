@@ -621,10 +621,10 @@ def aggregate_piece_reviews(existing: list[Any], incoming: list[dict[str, Any]])
             confidence = "unknown"
         evidence_quality = str(item.get("evidenceQuality") or "usable")
         has_source_window = bool(item.get("sampleId") and item.get("sourceUrl") and item.get("sourceStartSeconds") is not None)
+        human_source_label = evidence_quality == "human_verified_source_label" and bool(item.get("sourceUrl"))
         piece_identified = (
             confidence == "clear"
-            and evidence_quality == "verified_piece_id"
-            and has_source_window
+            and ((evidence_quality == "verified_piece_id" and has_source_window) or human_source_label)
             and piece_title_is_identified(raw_title)
         )
         title = canonical_piece_title(raw_title) if piece_identified else "Piece being identified"

@@ -36,45 +36,7 @@ PIECE_VERIFY_MODEL = OPENAI_PIECE_VERIFY_MODEL
 # Alan corrections are source-specific. These do not ban future videos from
 # identifying this repertoire when he actually practices it.
 DEFAULT_REJECTED_PIECES = []
-FIVE_ONE_SEEDED_CANDIDATES = [
-    "Rossini The Barber of Seville Overture, Violin I part",
-    "Rossini L'italiana in Algeri Overture, Violin I part",
-    "Rossini La Scala di Seta Overture, Violin I part",
-    "Beethoven Symphony No. 5, Scherzo or finale, Violin I part",
-    "Beethoven Symphony No. 3, Scherzo, Violin I part",
-    "Beethoven Egmont Overture, Violin I part",
-    "Weber Euryanthe Overture, Violin I part",
-    "Auber Fra Diavolo Overture, Violin I part",
-    "Suppe Poet and Peasant Overture, Violin I part",
-    "Suppe Light Cavalry Overture, Violin I part",
-    "Offenbach Orpheus in the Underworld Overture, Violin I part",
-    "Johann Strauss II Die Fledermaus Overture, Violin I part",
-    "Johann Strauss II Tritsch-Tratsch Polka, Violin I part",
-    "Johann Strauss II Perpetuum Mobile, Violin I part",
-    "Johann Strauss II Thunder and Lightning Polka, Violin I part",
-    "Josef Strauss Feuerfest Polka, Violin I part",
-    "Glinka Kamarinskaya, Violin I part",
-    "Rimsky-Korsakov Russian Easter Overture, Violin I part",
-    "Rimsky-Korsakov The Tsar's Bride Overture, Violin I part",
-    "Borodin Symphony No. 2, Violin I part",
-    "Mussorgsky Night on Bald Mountain, Violin I part",
-    "Grieg Holberg Suite, Praeludium, Violin I part",
-    "Grieg Peer Gynt, In the Hall of the Mountain King, Violin I part",
-    "Copland Rodeo, Hoe-Down, Violin I part",
-    "Copland El Salon Mexico, Violin I part",
-    "Bernstein Candide Overture, Violin I part",
-    "Bernstein West Side Story, Mambo, Violin I part",
-    "Bernstein West Side Story, America, Violin I part",
-    "Arturo Marquez Danzon No. 2, Violin I part",
-    "Moncayo Huapango, Violin I part",
-    "Ginastera Estancia, Malambo, Violin I part",
-    "Revueltas Sensemaya, Violin I part",
-    "Gershwin Cuban Overture, Violin I part",
-    "Gershwin An American in Paris, Violin I part",
-    "John Adams Short Ride in a Fast Machine, Violin I part",
-    "John Williams Star Wars Main Title, Violin I part",
-    "John Williams Raiders March, Violin I part",
-]
+FIVE_ONE_SEEDED_CANDIDATES = []
 FIVE_ONE_REJECTED_PIECES = FIVE_ONE_REJECTED_TITLES
 WEAK_TITLE_WORDS = {
     "a",
@@ -922,14 +884,44 @@ def piece_review_from_identification(result: dict[str, Any]) -> dict[str, Any]:
         "sourceStartSeconds": result.get("sourceStartSeconds"),
         "sourceEndSeconds": result.get("sourceEndSeconds"),
         "createdAt": result.get("createdAt") or utc_now(),
-        "reviewVersion": PIECE_ID_VERSION,
-        "evidenceQuality": "verified_piece_id" if result.get("status") == "piece_identified" else "weak",
+        "reviewVersion": result.get("reviewVersion") or PIECE_ID_VERSION,
+        "evidenceQuality": result.get("evidenceQuality") or ("verified_piece_id" if result.get("status") == "piece_identified" else "weak"),
     }
 
 
 def apply_source_correction_gate(state: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
     if result.get("status") == "blocked":
         return result
+    correction = correction_for_item(state, result)
+    accepted_title = str(correction.get("acceptedTitle") or "").strip()
+    if accepted_title:
+        accepted = dict(result)
+        accepted.update(
+            {
+                "status": "piece_identified",
+                "title": accepted_title,
+                "proposedTitle": accepted_title,
+                "candidateTitle": accepted_title,
+                "verificationTitle": accepted_title,
+                "confidence": "clear",
+                "confidenceScore": 100,
+                "completionPercent": 0,
+                "todayCompletionPercent": 0,
+                "readinessStatus": "identified_not_scored",
+                "evidenceQuality": "human_verified_source_label",
+                "reviewVersion": "human_source_label_v1",
+                "candidateEvidence": "Alan-confirmed source label. Scoring pending judged playing evidence.",
+                "evidence": "Alan-confirmed source label. Scoring pending judged playing evidence.",
+                "immediateTip": "Haydn finale: light bow, even rhythm.",
+                "topCandidates": [],
+                "musicalClues": [],
+                "verification": {
+                    "status": "accepted_by_source_correction",
+                    "title": accepted_title,
+                },
+            }
+        )
+        return accepted
     titles: list[Any] = [
         result.get("title"),
         result.get("proposedTitle"),
@@ -1018,7 +1010,7 @@ def identify_pieces_from_samples(limit: int = 4) -> dict[str, Any]:
     results = [*consensus_results, *results]
     usable_piece_reviews = [
         piece_review_from_identification(result)
-        for result in results
+        for result in [*results, *previous]
         if (
             result.get("status") == "piece_identified"
             and source_window_allowed(result, samples_by_url)

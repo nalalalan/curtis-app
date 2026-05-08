@@ -10,7 +10,13 @@ import httpx
 
 from .analyzer import parse_window_start
 from .auth import youtube_auth_status
-from .corrections import item_stale_after_source_correction, source_requires_confirmed_acceptance, title_rejected_for_item
+from .corrections import (
+    accepted_source_corrections,
+    item_stale_after_source_correction,
+    source_requires_confirmed_acceptance,
+    title_rejected_for_item,
+    youtube_video_id,
+)
 from .platforms import credential_state, fetch_instagram_inventory, fetch_youtube_inventory
 from .settings import (
     OPENAI_AUDIO_MODEL,
@@ -41,6 +47,7 @@ REPERTOIRE_NAME_TERMS = (
     "bruch",
     "dont",
     "fiorillo",
+    "haydn",
     "kreisler",
     "kreutzer",
     "lalo",
@@ -147,6 +154,43 @@ FIVE_ONE_REJECTED_REPERTOIRE_TITLES = (
     "kodaly dances of galanta",
     "khachaturian sabre dance",
     "holst the planets mercury",
+    "rossini the barber of seville overture",
+    "rossini l italiana in algeri overture",
+    "rossini la scala di seta overture",
+    "beethoven symphony no 5 scherzo or finale",
+    "beethoven symphony no 3 scherzo",
+    "beethoven egmont overture",
+    "weber euryanthe overture",
+    "auber fra diavolo overture",
+    "suppe poet and peasant overture",
+    "suppe light cavalry overture",
+    "offenbach orpheus in the underworld overture",
+    "johann strauss ii die fledermaus overture",
+    "johann strauss ii tritsch tratsch polka",
+    "johann strauss ii perpetuum mobile",
+    "johann strauss ii thunder and lightning polka",
+    "josef strauss feuerfest polka",
+    "glinka kamarinskaya",
+    "rimsky korsakov russian easter overture",
+    "rimsky korsakov the tsar s bride overture",
+    "borodin symphony no 2",
+    "mussorgsky night on bald mountain",
+    "grieg holberg suite praeludium",
+    "grieg peer gynt in the hall of the mountain king",
+    "copland rodeo hoe down",
+    "copland el salon mexico",
+    "bernstein candide overture",
+    "bernstein west side story mambo",
+    "bernstein west side story america",
+    "arturo marquez danzon no 2",
+    "moncayo huapango",
+    "ginastera estancia malambo",
+    "revueltas sensemaya",
+    "gershwin cuban overture",
+    "gershwin an american in paris",
+    "john adams short ride in a fast machine",
+    "john williams star wars main title",
+    "john williams raiders march",
 )
 LONG_SESSION_PRACTICE_FLOOR_SECONDS = int(os.getenv("CURTIS_LONG_SESSION_PRACTICE_FLOOR_SECONDS", str(2 * 60 * 60)))
 LONG_SESSION_LATE_SAMPLE_COUNT = int(os.getenv("CURTIS_LONG_SESSION_LATE_SAMPLE_COUNT", "3"))
@@ -288,6 +332,113 @@ def canonical_piece_title(value: Any) -> str:
     return title
 
 
+def parse_window_bounds(value: Any) -> tuple[int, int]:
+    match = re.search(r"\*(\d+)-(\d+)", str(value or ""))
+    if not match:
+        return 0, 0
+    return int(match.group(1)), int(match.group(2))
+
+
+def correction_matches_sample(correction: dict[str, Any], sample: dict[str, Any]) -> bool:
+    source_url = str(correction.get("sourceUrl") or "")
+    sample_url = str(sample.get("url") or "")
+    if source_url and sample_url == source_url:
+        return True
+    source_video_id = youtube_video_id(source_url or correction.get("sourceKey"))
+    sample_signal = " ".join(
+        str(sample.get(key) or "")
+        for key in ("id", "url", "title")
+    )
+    return bool(source_video_id and source_video_id.lower() in sample_signal.lower())
+
+
+def correction_matches_inventory(correction: dict[str, Any], item: dict[str, Any]) -> bool:
+    source_url = str(correction.get("sourceUrl") or "")
+    item_url = str(item.get("url") or "")
+    if source_url and item_url == source_url:
+        return True
+    source_video_id = youtube_video_id(source_url or correction.get("sourceKey"))
+    item_signal = " ".join(
+        str(item.get(key) or "")
+        for key in ("id", "url", "title")
+    )
+    return bool(source_video_id and source_video_id.lower() in item_signal.lower())
+
+
+def accepted_source_pieces(
+    state: dict[str, Any],
+    inventory: dict[str, list[dict[str, Any]]],
+    media_samples: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    pieces: list[dict[str, Any]] = []
+    for correction in accepted_source_corrections(state):
+        title = str(correction.get("acceptedTitle") or "").strip()
+        if not title:
+            continue
+        matching_samples = [
+            sample
+            for sample in media_samples
+            if isinstance(sample, dict) and correction_matches_sample(correction, sample)
+        ]
+        matching_samples.sort(key=lambda sample: parse_window_start(str(sample.get("window") or "")))
+        sample = matching_samples[0] if matching_samples else {}
+        inventory_items = [
+            item
+            for items in inventory.values()
+            for item in items
+            if isinstance(item, dict) and correction_matches_inventory(correction, item)
+        ]
+        inventory_item = inventory_items[0] if inventory_items else {}
+        source_title = str(correction.get("sourceTitle") or sample.get("title") or inventory_item.get("title") or "").strip()
+        source_url = str(correction.get("sourceUrl") or sample.get("url") or inventory_item.get("url") or "").strip()
+        window = str(sample.get("window") or "").strip()
+        start_seconds, end_seconds = parse_window_bounds(window)
+        if not end_seconds and start_seconds:
+            end_seconds = start_seconds + 45
+        practice_day = practice_day_from_title(source_title)
+        updated_at = str(correction.get("acceptedAt") or correction.get("updatedAt") or sample.get("createdAt") or utc_now())
+        pieces.append(
+            {
+                "title": title,
+                "confidence": "clear",
+                "confidenceScore": 100,
+                "completionPercent": 0,
+                "todayCompletionPercent": 0,
+                "readinessStatus": "identified_not_scored",
+                "evidenceQuality": "human_verified_source_label",
+                "evidence": "Alan-confirmed source label. Scoring pending judged playing evidence.",
+                "candidateEvidence": "Alan-confirmed source label. Scoring pending judged playing evidence.",
+                "tip": "Haydn finale: light bow, even rhythm.",
+                "sampleId": sample.get("id") or "",
+                "sourceTitle": source_title,
+                "sourceUrl": source_url,
+                "sourceWindow": window,
+                "sourceStartSeconds": start_seconds,
+                "sourceEndSeconds": end_seconds,
+                "latestAt": updated_at,
+                "createdAt": updated_at,
+                "reviewVersion": "human_source_label_v1",
+                "sectionCount": max(1, len(matching_samples)),
+                "daily": {
+                    practice_day: {
+                        "completionPercent": 0,
+                        "sectionCount": max(1, len(matching_samples)),
+                        "tip": "Haydn finale: light bow, even rhythm.",
+                        "evidence": "Alan-confirmed source label. Scoring pending judged playing evidence.",
+                        "latestAt": updated_at,
+                        "sampleId": sample.get("id") or "",
+                        "sourceTitle": source_title,
+                        "sourceUrl": source_url,
+                        "sourceWindow": window,
+                        "sourceStartSeconds": start_seconds,
+                        "sourceEndSeconds": end_seconds,
+                    }
+                } if practice_day else {},
+            }
+        )
+    return pieces
+
+
 def better_tip(current: str, incoming: str) -> str:
     current_clean = str(current or "").strip()
     incoming_clean = str(incoming or "").strip()
@@ -426,14 +577,20 @@ def enriched_pieces(pieces: list[Any], today: str, media_samples: list[dict[str,
             and piece.get("sourceStartSeconds") is not None
         )
         verified_piece_id = str(piece.get("evidenceQuality") or "") == "verified_piece_id"
+        human_verified_source_label = str(piece.get("evidenceQuality") or "") == "human_verified_source_label"
         current_piece_id_version = str(piece.get("reviewVersion") or "") == CONFIRMED_PIECE_ID_VERSION
         if (
             str(piece.get("confidence") or "unknown").lower() != "clear"
             or rejected_repertoire_title(piece.get("title"), piece)
-            or not has_source_window
-            or not verified_piece_id
-            or not current_piece_id_version
-            or untrusted_long_session_source(piece, media_samples)
+            or (
+                not human_verified_source_label
+                and (
+                    not has_source_window
+                    or not verified_piece_id
+                    or not current_piece_id_version
+                    or untrusted_long_session_source(piece, media_samples)
+                )
+            )
         ):
             piece["title"] = "Piece being identified"
             piece["confidence"] = "unknown"
@@ -513,16 +670,15 @@ def derive_review(
     inventory: dict[str, list[dict[str, Any]]],
     existing: dict[str, Any] | None = None,
     media_samples: list[dict[str, Any]] | None = None,
+    state: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     existing = existing or {}
     today = today_local_day()
     sections = existing.get("notableSections") if isinstance(existing.get("notableSections"), list) else []
     findings = sanitized_findings(existing.get("skillFindings") if isinstance(existing.get("skillFindings"), list) else [])
-    pieces = enriched_pieces(
-        existing.get("pieces") if isinstance(existing.get("pieces"), list) else [],
-        today,
-        media_samples,
-    )
+    raw_pieces = existing.get("pieces") if isinstance(existing.get("pieces"), list) else []
+    source_label_pieces = accepted_source_pieces(state or {}, inventory, media_samples)
+    pieces = enriched_pieces([*source_label_pieces, *raw_pieces], today, media_samples)
     today_pieces = [piece for piece in pieces if piece.get("isActiveToday")]
     progress_plan = existing.get("progressPlan") if isinstance(existing.get("progressPlan"), dict) else None
     youtube_items = inventory.get("youtube", [])
@@ -546,6 +702,8 @@ def derive_review(
         current_work = "Practice corpus indexed. Section listening pending."
     elif sections:
         current_work = existing.get("currentWork") or "Section evidence recorded."
+    if pieces and str(pieces[0].get("confidence") or "") == "clear":
+        current_work = f"Piece identified: {pieces[0]['title']}"
     media_access = existing.get("mediaAccess")
     if media_access not in {"blocked", "sample_ready"}:
         media_access = "metadata_only"
@@ -583,7 +741,7 @@ def base_ops(state: dict[str, Any], extra_blockers: list[str] | None = None) -> 
 
     inventory = state.get("inventory", {"youtube": [], "instagram": []})
     media_samples = [sample for sample in state.get("mediaSamples", []) if isinstance(sample, dict)]
-    review = derive_review(inventory, state.get("review"), media_samples)
+    review = derive_review(inventory, state.get("review"), media_samples, state)
     hard_blockers = inventory_blockers(blockers)
     status = "blocked" if hard_blockers else "ready"
     if not hard_blockers and review.get("inventoryCount"):
@@ -678,7 +836,7 @@ async def run_scan(incoming_sources: dict[str, Any] | None = None) -> dict[str, 
 
     state["inventory"] = inventory
     media_samples = [sample for sample in state.get("mediaSamples", []) if isinstance(sample, dict)]
-    state["review"] = derive_review(inventory, state.get("review"), media_samples)
+    state["review"] = derive_review(inventory, state.get("review"), media_samples, state)
 
     run = {
         "startedAt": utc_now(),
