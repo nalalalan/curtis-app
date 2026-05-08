@@ -1217,6 +1217,44 @@ function renderRepertoireUpdates(updates) {
   `;
 }
 
+function renderTranscriptionProof(record, scoreSnippet) {
+  const piece = Array.isArray(record?.pieces) ? record.pieces[0] : null;
+  const repeatGroup = Array.isArray(record?.transcription?.repeatGroups) ? record.transcription.repeatGroups[0] : null;
+  const section = scoreSnippet?.title || repeatGroup?.label || "section pending";
+  const confidence = piece?.confidence || record?.evidenceStatus || record?.transcription?.status || "pending";
+  const noteCount = Number(record?.transcription?.noteCount) || 0;
+  const scoreReadiness = scoreSnippet?.readiness || scoreSnippet?.score?.status || piece?.score?.status || "score match pending";
+  const windowLabel = scoreSnippet?.practiceLabel || record?.processedSampleLabel || record?.activeViolinLabel || "";
+  return `
+    <div class="transcription-proof-ledger" aria-label="Transcription evidence state">
+      <article>
+        <span>Piece</span>
+        <strong>${escapeHtml(recordPieceText(record))}</strong>
+      </article>
+      <article>
+        <span>Section</span>
+        <strong>${escapeHtml(shortText(section, 54))}</strong>
+      </article>
+      <article>
+        <span>Confidence</span>
+        <strong>${escapeHtml(shortText(confidence, 54))}</strong>
+      </article>
+      <article>
+        <span>Score</span>
+        <strong>${escapeHtml(shortText(scoreReadiness, 74))}</strong>
+      </article>
+      <article>
+        <span>Notation</span>
+        <strong>${escapeHtml(noteCount ? `${noteCount} notes` : "pending")}</strong>
+      </article>
+      <article>
+        <span>Window</span>
+        <strong>${escapeHtml(windowLabel || "pending")}</strong>
+      </article>
+    </div>
+  `;
+}
+
 function clipWindowLabel(clip) {
   const start = Number(clip?.startSeconds) || 0;
   const end = Number(clip?.endSeconds) || 0;
@@ -1353,6 +1391,7 @@ function renderDailyRecord(record, index = 0) {
           <span>Main Curtis-level blocker today</span>
           <strong>${escapeHtml(record.mainCurtisBlocker || "Pending evidence.")}</strong>
         </div>
+        ${renderTranscriptionProof(record, scoreSnippet)}
         ${renderRepertoireUpdates(record.repertoireUpdates)}
         ${renderNotationSheet(events, { repeatGroup: record?.transcription?.repeatGroups?.[0] })}
         ${renderRepeatGroups(record?.transcription?.repeatGroups)}
