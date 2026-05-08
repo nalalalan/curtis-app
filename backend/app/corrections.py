@@ -66,6 +66,20 @@ FIVE_ONE_REJECTED_TITLES = [
     "Zigeunerweisen",
     "J.S. Bach Partita No. 3 in E major, BWV 1006, Preludio",
     "Bach Partita No. 3 Preludio",
+    "Kreisler Praeludium and Allegro",
+    "Fritz Kreisler Praeludium and Allegro",
+    "Praeludium and Allegro",
+    "Praeludium and Allegro in the Style of Pugnani",
+    "Sarasate Zapateado",
+    "Sarasate Zapateado Op. 23 No. 2",
+    "Pablo de Sarasate Zapateado, Op. 23 No. 2",
+    "Zapateado",
+    "Ysaye Sonata No. 3 Ballade",
+    "Ysaÿe Sonata No. 3 Ballade",
+    "Eugene Ysaye Sonata No. 3 Ballade",
+    "Eugène Ysaÿe Sonata No. 3 Ballade",
+    "Ysaÿe Solo Violin Sonata No. 3, Op. 27 No. 3, Ballade",
+    "Ysaye Solo Violin Sonata No. 3, Op. 27 No. 3, Ballade",
 ]
 SOURCE_ACCEPTANCE_REJECT_COUNT = 3
 
