@@ -1255,6 +1255,7 @@ h2 {
   white-space: nowrap;
 }
 
+.curtis-shell,
 .two-section-shell {
   max-width: 1040px;
 }
@@ -1344,14 +1345,67 @@ h2 {
 }
 
 .record-card {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, .72fr);
-  gap: 14px;
-  align-items: start;
+  display: block;
   padding: 14px;
   border: 1px solid rgba(31, 41, 39, .11);
   border-radius: 8px;
   background: rgba(245, 247, 242, .82);
+}
+
+.record-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px 12px;
+  align-items: center;
+  cursor: pointer;
+  list-style: none;
+}
+
+.record-summary::-webkit-details-marker {
+  display: none;
+}
+
+.record-summary span {
+  grid-column: 1 / -1;
+  font-size: 12px;
+  font-weight: 680;
+  text-transform: none;
+}
+
+.record-summary strong {
+  margin: 0;
+  font-size: 16px;
+}
+
+.record-summary em {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 9px;
+  border: 1px solid rgba(31, 41, 39, .11);
+  border-radius: 999px;
+  background: rgba(255, 253, 248, .8);
+  color: var(--green);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 760;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.record-card[open] .record-summary {
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(31, 41, 39, .1);
+}
+
+.record-card-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, .72fr);
+  gap: 14px;
+  align-items: start;
+  padding-top: 14px;
 }
 
 .record-main,
@@ -1367,6 +1421,11 @@ h2 {
   font-weight: 740;
   line-height: 1.15;
   overflow-wrap: anywhere;
+}
+
+.record-card .record-summary strong {
+  margin: 0;
+  font-size: 16px;
 }
 
 .record-main > span {
@@ -1607,6 +1666,41 @@ h2 {
   border-bottom: 1px solid rgba(31, 41, 39, .1);
 }
 
+.heat-layers {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.heat-layers span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px solid rgba(31, 41, 39, .09);
+  border-radius: 7px;
+  background: rgba(255, 253, 248, .72);
+}
+
+.heat-layers b {
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 740;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.heat-layers em {
+  color: var(--muted);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 660;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+  text-transform: uppercase;
+}
+
 .heat-row {
   display: grid;
   grid-template-columns: minmax(72px, .8fr) minmax(80px, 1fr) 34px;
@@ -1777,12 +1871,17 @@ h2 {
   font-weight: 620;
 }
 
+.pending-index {
+  background: rgba(255, 253, 248, .55);
+  font-size: 13px;
+}
+
 @media (max-width: 820px) {
   .current-band,
   .practice-header,
   .header-metrics,
   .evidence-summary,
-  .record-card,
+  .record-card-body,
   .today-layout,
   .today-grid,
   .work-grid,
@@ -2007,7 +2106,7 @@ h2 {
   .video-row,
   .skill-row,
   .study-card,
-  .record-card,
+  .record-card-body,
   .piece-row,
   .day-row,
   .mini-days li {

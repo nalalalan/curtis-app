@@ -376,9 +376,10 @@ function currentStateText(ops) {
   const records = dailyRecords(ops);
   const recordCount = Number(records.recordCount) || 0;
   const transcribedCount = Number(records.transcribedRecordCount) || 0;
+  const processedCount = analyzedRecordList(ops).length;
   const practiceCount = Number(ops?.review?.practiceCandidateCount) || 0;
   const findingCount = skillFindings(ops).length;
-  if (recordCount) return `${transcribedCount} transcribed records / ${recordCount} practice days.`;
+  if (recordCount) return `${transcribedCount} transcribed / ${processedCount} processed / ${recordCount} indexed practice days.`;
   if (findingCount) return `${findingCount} Curtis-focused findings. ${progressPlan(ops)?.oneFocus || "Review active."}`;
   const sectionCount = reviewSections(ops).length;
   if (sectionCount) return `${sectionCount} audio/video sections scanned. Musicianship judgment pending.`;
@@ -425,8 +426,12 @@ function dailyRecordList(ops) {
   return Array.isArray(records) ? records : [];
 }
 
+function analyzedRecordList(ops) {
+  return dailyRecordList(ops).filter((record) => record?.status && record.status !== "pending_media");
+}
+
 function latestDailyRecord(ops) {
-  return dailyRecordList(ops)[0] || null;
+  return analyzedRecordList(ops)[0] || dailyRecordList(ops)[0] || null;
 }
 
 function repertoireEvidence(ops) {
@@ -880,6 +885,7 @@ function renderStatus() {
   const highlight = primaryHighlight(ops);
   const days = practiceDays(ops);
   const records = dailyRecords(ops);
+  const analyzedRecords = analyzedRecordList(ops);
   const latestRecord = latestDailyRecord(ops);
   const latestPiece = Array.isArray(latestRecord?.pieces) && latestRecord.pieces.length ? latestRecord.pieces[0] : null;
   const totals = practiceTotals(ops);
@@ -908,7 +914,8 @@ function renderStatus() {
   if (elements.studyCount) {
     const recordCount = Number(records.recordCount) || 0;
     const transcribedCount = Number(records.transcribedRecordCount) || 0;
-    elements.studyCount.textContent = `${transcribedCount} transcribed / ${recordCount} days`;
+    const analyzedCount = analyzedRecords.length;
+    elements.studyCount.textContent = `${transcribedCount} transcribed / ${analyzedCount} processed`;
   }
   const activeSeconds = Number(records.totalActiveViolinSeconds) || 0;
   const uploadedLabel = uploadedVideoText(records, totals);
@@ -938,7 +945,10 @@ function renderStatus() {
     elements.sourceLink.textContent = source.replace("https://www.", "").replace("https://", "");
   }
   setText(elements.currentState, currentStateText(ops));
-  setText(elements.recordSummary, `${Number(records.transcribedRecordCount) || 0} transcribed / ${Number(records.recordCount) || 0} days`);
+  setText(
+    elements.recordSummary,
+    `${Number(records.transcribedRecordCount) || 0} transcribed / ${analyzedRecords.length} processed / ${Number(records.recordCount) || 0} indexed`
+  );
   setText(elements.reviewedCount, `${reviewedVideos} reviewed`);
   setText(elements.sectionCount, `${sections.length} sections`);
   setText(elements.backendState, backend.online ? "Online" : "Offline");
@@ -1051,11 +1061,25 @@ function renderNotationSheet(events) {
 
 function renderHeatMap(record) {
   const fragments = Array.isArray(record?.heatMap?.fragments) ? record.heatMap.fragments : [];
+  const layers = Array.isArray(record?.heatMap?.layers) ? record.heatMap.layers.slice(0, 4) : [];
   if (!fragments.length) {
     return `<div class="heat-map heat-map-empty"><span>Heat map pending transcription.</span></div>`;
   }
   return `
     <div class="heat-map" aria-label="Repeated passage heat map">
+      ${layers.length ? `
+        <div class="heat-layers" aria-label="Heat map layers">
+          ${layers.map((layer) => {
+            const items = Array.isArray(layer.items) ? layer.items.length : 0;
+            return `
+              <span data-status="${escapeHtml(layer.status || "pending")}">
+                <b>${escapeHtml(layer.label || "Layer")}</b>
+                <em>${escapeHtml(items ? `${items} signals` : layer.status || "pending")}</em>
+              </span>
+            `;
+          }).join("")}
+        </div>
+      ` : ""}
       ${fragments.slice(0, 6).map((fragment) => {
         const intensity = Math.max(0.08, Math.min(1, Number(fragment.intensity) || 0));
         return `
@@ -1068,6 +1092,12 @@ function renderHeatMap(record) {
       }).join("")}
     </div>
   `;
+}
+
+function recordStatusLabel(record) {
+  if (record?.status === "transcribed") return "transcribed";
+  if (record?.status === "active_time_measured") return "active measured";
+  return "pending media";
 }
 
 function renderRepeatGroups(groups) {
@@ -1141,9 +1171,11 @@ function recordPieceText(record) {
   return "Piece evidence pending";
 }
 
-function renderDailyRecord(record) {
+function renderDailyRecord(record, index = 0) {
   const events = record?.transcription?.events || [];
   const scoreSnippet = scoreSnippetForRecord(record);
+  const hasEvidence = Boolean(events.length || (Array.isArray(record?.clips) && record.clips.length) || (Array.isArray(record?.heatMap?.fragments) && record.heatMap.fragments.length));
+  const open = hasEvidence && index === 0 ? " open" : "";
   const meta = [
     record.practiceDay,
     record.uploadedVideoLabel ? `${record.uploadedVideoLabel} uploaded` : "",
@@ -1151,9 +1183,14 @@ function renderDailyRecord(record) {
     record.transcription?.noteCount ? `${record.transcription.noteCount} notes` : "notation pending"
   ].filter(Boolean).join(" / ");
   return `
-    <article class="record-card" data-status="${escapeHtml(record.status || "pending")}">
-      <div class="record-main">
+    <details class="record-card" data-status="${escapeHtml(record.status || "pending")}"${open}>
+      <summary class="record-summary">
         <span>${escapeHtml(meta)}</span>
+        <strong>${escapeHtml(recordPieceText(record))}</strong>
+        <em>${escapeHtml(recordStatusLabel(record))}</em>
+      </summary>
+      <div class="record-card-body">
+        <div class="record-main">
         <strong>${escapeHtml(recordPieceText(record))}</strong>
         <p>${escapeHtml(record.summary || "")}</p>
         <div class="blocker-line">
@@ -1164,28 +1201,38 @@ function renderDailyRecord(record) {
         ${renderRepeatGroups(record?.transcription?.repeatGroups)}
         ${renderObservations(record.observations)}
         <small>${escapeHtml(record.nextStep || "")}</small>
+        </div>
+        <aside class="record-side">
+          ${renderRecordClips(record)}
+          ${renderHeatMap(record)}
+          ${scoreSnippet ? renderScoreImage(scoreSnippet) : `<div class="score-placeholder">Score snippet pending.</div>`}
+        </aside>
       </div>
-      <aside class="record-side">
-        ${renderRecordClips(record)}
-        ${renderHeatMap(record)}
-        ${scoreSnippet ? renderScoreImage(scoreSnippet) : `<div class="score-placeholder">Score snippet pending.</div>`}
-      </aside>
-    </article>
+    </details>
   `;
 }
 
 function renderStudy() {
   if (!elements.studyList) return;
   const records = dailyRecordList(backend.ops);
+  const analyzed = analyzedRecordList(backend.ops);
+  const pendingCount = Math.max(0, records.length - analyzed.length);
   if (!backend.online) {
     elements.studyList.innerHTML = `<p class="empty">Backend offline.</p>`;
     return;
   }
-  if (!records.length) {
-    elements.studyList.innerHTML = `<p class="empty">Daily records pending YouTube inventory.</p>`;
+  if (!analyzed.length) {
+    elements.studyList.innerHTML = records.length
+      ? `<p class="empty">Indexed practice days are waiting for active-playing detection.</p>`
+      : `<p class="empty">Daily records pending YouTube inventory.</p>`;
     return;
   }
-  elements.studyList.innerHTML = records.slice(0, 4).map(renderDailyRecord).join("");
+  elements.studyList.innerHTML = [
+    analyzed.map((record, index) => renderDailyRecord(record, index)).join(""),
+    pendingCount
+      ? `<p class="empty pending-index">${pendingCount} indexed practice days are waiting for active-playing detection. Uploaded video is still stored separately and is not counted as active practice.</p>`
+      : ""
+  ].join("");
 }
 
 function renderPieces() {
@@ -1211,6 +1258,7 @@ function renderPieces() {
           <span>Current blocker</span>
           <strong>${escapeHtml(piece.mainCurtisBlocker || "Specific blocker pending.")}</strong>
         </div>
+        <small class="piece-meta-line">Progress: ${escapeHtml(piece.currentProgressLabel || piece.progressStatus || "not scored")}</small>
         ${renderObservations(piece.observations)}
         <div class="evidence-list">
           ${evidence.map((item) => {
