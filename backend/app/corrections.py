@@ -257,8 +257,15 @@ def wieniawski_reference_target() -> dict[str, Any]:
         "work": "Scherzo-Tarantelle, Op. 16",
         "movement": "",
         "part": "Solo violin",
-        "scoreSource": "Wieniawski Society source page",
-        "scoreUrl": "https://wieniawski.com/scherzo_tarantella_op_16.html",
+        "scoreSource": "IMSLP public-domain solo part",
+        "scoreUrl": "https://imslp.org/wiki/Scherzo_tarantelle%2C_Op.16_%28Wieniawski%2C_Henri%29",
+        "scorePdfUrl": "https://s9.imslp.org/files/imglnks/usimg/b/b0/IMSLP724668-PMLP17451-01._WIENIAWSKI_-_SCHERZO_TARANTELLE%2C_OP._16_%28GILSON%29_-_Solo_Part.pdf",
+        "scoreAssetId": "wieniawski-scherzo-tarantelle-vln",
+        "scorePage": 2,
+        "scoreBoxes": [
+            {"x": 14, "y": 14, "width": 74, "height": 12, "label": "Presto opening"},
+            {"x": 13, "y": 26, "width": 75, "height": 20, "label": "early repetition pattern"},
+        ],
         "referenceAudio": "needed",
         "alignmentGoal": "Match extracted solo-violin pitch/rhythm to Scherzo-Tarantelle sections, then report phrase, section, or measure range.",
         "passageVocabulary": [
@@ -291,6 +298,13 @@ def builtin_correction(key: str) -> dict[str, Any] | None:
                 "part": "Violin I",
                 "scoreSource": "IMSLP",
                 "scoreUrl": "https://imslp.org/wiki/Symphony_No.94_%28Haydn%2C_Joseph%29",
+                "scorePdfUrl": "https://vmirror.imslp.org/files/imglnks/usimg/8/87/IMSLP360278-PMLP34746-Haydn%3B_Symphony_94_Corrected.pdf",
+                "scoreAssetId": "haydn-94-finale-score",
+                "scorePage": 45,
+                "scoreBoxes": [
+                    {"x": 17, "y": 35, "width": 72, "height": 8, "label": "Violin I opening figure"},
+                    {"x": 17, "y": 75, "width": 72, "height": 7, "label": "Violin I continuation"},
+                ],
                 "referenceAudio": "needed",
                 "alignmentGoal": "Match extracted violin pitch/rhythm to the Finale violin I part, then report section or measure range.",
                 "passageVocabulary": [
@@ -319,7 +333,7 @@ def builtin_correction(key: str) -> dict[str, Any] | None:
         return {
             "sourceKey": FIVE_THREE_KEY,
             "sourceTitle": "5-3-26",
-            "sourceUrl": "",
+            "sourceUrl": "https://www.youtube.com/watch?v=Njh8_zq9_DM",
             "rejectedTitles": [],
             "acceptedTitle": FIVE_TWO_ACCEPTED_TITLE,
             "sourceTip": "Scherzo-Tarantelle: preserve the bounce without letting repetitions grow large.",

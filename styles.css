@@ -321,6 +321,7 @@ button:disabled {
 
 .today-panel,
 .highlight-panel,
+.study-panel,
 .piece-panel,
 .day-panel {
   border-top: 4px solid var(--green);
@@ -359,6 +360,7 @@ button:disabled {
 
 .today-grid span,
 .status-strip span,
+.study-card span,
 .day-row span,
 .highlight-meta span,
 .mini-days span,
@@ -477,6 +479,7 @@ button:disabled {
 }
 
 .piece-panel,
+.study-panel,
 .day-panel {
   margin-bottom: 12px;
 }
@@ -769,6 +772,197 @@ h2 {
 .piece-list {
   display: grid;
   gap: 8px;
+}
+
+.study-list {
+  display: grid;
+  gap: 10px;
+}
+
+.study-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, .68fr);
+  gap: 12px;
+  align-items: stretch;
+  padding: 12px;
+  border: 1px solid rgba(31, 41, 39, .11);
+  border-radius: 8px;
+  background: rgba(245, 247, 242, .82);
+}
+
+.study-copy {
+  min-width: 0;
+}
+
+.study-card strong {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 17px;
+  font-weight: 730;
+  line-height: 1.18;
+  overflow-wrap: anywhere;
+}
+
+.study-card p {
+  margin: 0 0 8px;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 640;
+  line-height: 1.3;
+}
+
+.study-card code {
+  display: block;
+  max-width: 100%;
+  padding: 8px 9px;
+  border: 1px solid rgba(47, 82, 104, .12);
+  border-radius: 7px;
+  background: rgba(255, 253, 248, .78);
+  color: #273432;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.transcription-staff {
+  position: relative;
+  height: 70px;
+  margin: 8px 0;
+  overflow: hidden;
+  border: 1px solid rgba(47, 82, 104, .12);
+  border-radius: 7px;
+  background: rgba(255, 253, 248, .78);
+}
+
+.transcription-staff span {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  height: 1px;
+  margin: 0;
+  background: rgba(31, 41, 39, .38);
+}
+
+.transcription-staff span:nth-child(1) { top: 18px; }
+.transcription-staff span:nth-child(2) { top: 27px; }
+.transcription-staff span:nth-child(3) { top: 36px; }
+.transcription-staff span:nth-child(4) { top: 45px; }
+.transcription-staff span:nth-child(5) { top: 54px; }
+
+.transcription-staff i {
+  position: absolute;
+  width: 9px;
+  height: 7px;
+  transform: translate(-50%, -50%) rotate(-14deg);
+  border-radius: 50%;
+  background: #273432;
+}
+
+.transcription-staff i::after {
+  position: absolute;
+  bottom: 3px;
+  left: 7px;
+  width: 1px;
+  height: 23px;
+  background: #273432;
+  content: "";
+}
+
+.study-card small,
+.study-line {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 630;
+  line-height: 1.25;
+  text-transform: none;
+}
+
+.study-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.study-meta a,
+.study-meta em {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 9px;
+  border: 1px solid rgba(31, 41, 39, .11);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--blue);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 760;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.study-meta em {
+  max-width: 100%;
+  color: var(--green);
+  white-space: normal;
+}
+
+.score-image {
+  position: relative;
+  min-height: 220px;
+  overflow: hidden;
+  border: 1px solid rgba(31, 41, 39, .12);
+  border-radius: 7px;
+  background: #fff;
+}
+
+.score-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-height: 300px;
+  object-fit: contain;
+}
+
+.score-box {
+  position: absolute;
+  display: block;
+  border: 2px solid rgba(142, 79, 72, .88);
+  border-radius: 3px;
+  background: rgba(196, 143, 104, .13);
+  box-shadow: 0 0 0 999px rgba(255, 253, 248, .08);
+}
+
+.score-box b {
+  position: absolute;
+  top: -24px;
+  left: 0;
+  display: inline-flex;
+  min-height: 20px;
+  align-items: center;
+  padding: 3px 6px;
+  border-radius: 5px;
+  background: rgba(142, 79, 72, .96);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 760;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.score-placeholder {
+  display: grid;
+  min-height: 180px;
+  place-items: center;
+  border: 1px dashed rgba(31, 41, 39, .18);
+  border-radius: 7px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 650;
 }
 
 .day-list {
@@ -1156,6 +1350,7 @@ h2 {
   .paper-strip,
   .today-panel,
   .highlight-panel,
+  .study-panel,
   .piece-panel,
   .day-panel,
   .status-strip article {
@@ -1272,6 +1467,7 @@ h2 {
 
   .video-row,
   .skill-row,
+  .study-card,
   .piece-row,
   .day-row,
   .mini-days li {

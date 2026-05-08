@@ -1,6 +1,7 @@
 import unittest
 
 from backend.app.scanner import derive_review
+from backend.app.study_packets import build_practice_study
 from backend.app.transcription import (
     compare_fingerprints,
     event_fingerprint,
@@ -112,6 +113,87 @@ class TranscriptionTrainingTests(unittest.TestCase):
 
         self.assertIn("pitch/rhythm fingerprint", hint)
         self.assertIn("Wieniawski Scherzo-Tarantelle", hint)
+
+    def test_practice_study_packet_pairs_transcription_score_and_clip(self):
+        state = {
+            "transcriptions": {
+                "items": [
+                    {
+                        "transcriptionId": "title:5 3 26|local|*600-645|sample.mp4",
+                        "sampleId": "local",
+                        "sourceKey": "title:5 3 26",
+                        "sourceTitle": "5-3-26",
+                        "sourceUrl": "https://www.youtube.com/watch?v=Njh8_zq9_DM",
+                        "sourceWindow": "*600-645",
+                        "status": "transcribed",
+                        "noteCount": 12,
+                        "tempoBpm": 120.0,
+                        "acceptedTitle": "Wieniawski Scherzo-Tarantelle, Op. 16",
+                        "notes": [
+                            {
+                                "note": "E5",
+                                "durationSeconds": 0.25,
+                                "startSeconds": 0,
+                                "endSeconds": 0.25,
+                            },
+                            {
+                                "note": "F#5",
+                                "durationSeconds": 0.25,
+                                "startSeconds": 0.25,
+                                "endSeconds": 0.5,
+                            },
+                        ],
+                        "fingerprint": fingerprint_for([76, 78, 79, 81, 79, 78, 76, 74, 76, 78, 79, 81]),
+                    }
+                ]
+            }
+        }
+        inventory = {
+            "youtube": [
+                {
+                    "id": "Njh8_zq9_DM",
+                    "title": "5-3-26",
+                    "url": "https://www.youtube.com/watch?v=Njh8_zq9_DM",
+                    "practiceCandidate": True,
+                }
+            ]
+        }
+
+        study = build_practice_study(state, inventory, [], [])
+        packet = next(item for item in study["days"] if item["practiceDay"] == "2026-05-03")
+        snippet = packet["snippets"][0]
+
+        self.assertEqual(packet["pieceTitle"], "Wieniawski Scherzo-Tarantelle, Op. 16")
+        self.assertEqual(packet["transcription"]["status"], "transcribed")
+        self.assertIn("E5", packet["transcription"]["cleanText"])
+        self.assertEqual(snippet["score"]["assetId"], "wieniawski-scherzo-tarantelle-vln")
+        self.assertEqual(snippet["score"]["page"], 2)
+        self.assertTrue(snippet["score"]["imageUrl"].endswith("/wieniawski-scherzo-tarantelle-vln/2"))
+        self.assertEqual(snippet["audio"]["startSeconds"], 600)
+        self.assertIn("Pitch/rhythm extracted", snippet["readiness"])
+
+    def test_practice_study_packet_exists_before_transcription(self):
+        inventory = {
+            "youtube": [
+                {
+                    "id": "wDfVpTU4I_I",
+                    "title": "5-1-26",
+                    "url": "https://www.youtube.com/watch?v=wDfVpTU4I_I",
+                    "practiceCandidate": True,
+                }
+            ]
+        }
+
+        study = build_practice_study({}, inventory, [], [])
+        packet = next(item for item in study["days"] if item["practiceDay"] == "2026-05-01")
+        snippet = packet["snippets"][0]
+
+        self.assertEqual(packet["pieceTitle"], "Haydn Symphony No. 94, IV. Finale, Violin I part")
+        self.assertEqual(packet["transcription"]["status"], "pending")
+        self.assertEqual(snippet["score"]["assetId"], "haydn-94-finale-score")
+        self.assertEqual(snippet["score"]["page"], 45)
+        self.assertTrue(snippet["score"]["boxes"])
+        self.assertEqual(snippet["audio"]["url"], "https://www.youtube.com/watch?v=wDfVpTU4I_I")
 
 
 if __name__ == "__main__":

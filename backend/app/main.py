@@ -25,6 +25,7 @@ from .corrections import learn_acceptance, learn_rejection, scrub_rejected_sourc
 from .media import probe_youtube_media, record_uploaded_sample
 from .piece_id import identify_pieces_from_samples
 from .scanner import base_ops, run_scan
+from .score_assets import ensure_score_page
 from .settings import ROOT_DIR, SCAN_INTERVAL_SECONDS, SERVICE_NAME, allowed_origins, token_matches
 from .state import load_state, save_state
 from .transcription import transcribe_media_samples
@@ -126,6 +127,22 @@ async def media_status() -> dict[str, Any]:
         "blockers": ops["blockers"],
         "model": ops["model"],
     }
+
+
+@app.get("/api/curtis/study")
+async def study_packet() -> dict[str, Any]:
+    return base_ops(load_state())["review"]["practiceStudy"]
+
+
+@app.get("/api/curtis/score/page/{asset_id}/{page}")
+async def score_page(asset_id: str, page: int) -> FileResponse:
+    try:
+        target = ensure_score_page(asset_id, page)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"score page unavailable: {str(exc)[:180]}") from exc
+    return FileResponse(target, media_type="image/jpeg")
 
 
 @app.post("/api/curtis/sources")

@@ -15,7 +15,7 @@
   <meta name="twitter:title" content="Curtis Media Review">
   <meta name="twitter:description" content="YouTube-first Curtis practice media inventory and skill review.">
   <link rel="icon" href="/favicon.svg?v=20260508-curtis-japandi-spokes" type="image/svg+xml">
-  <link rel="stylesheet" href="/styles.css?v=20260507-correction2">
+  <link rel="stylesheet" href="/styles.css?v=20260508-study-packet">
 </head>
 <body>
   <header class="topbar" aria-label="Curtis navigation">
@@ -25,6 +25,7 @@
     </a>
     <nav>
       <a href="#today">Current</a>
+      <a href="#study">Study</a>
       <a href="/paper.html">Paper</a>
       <a href="#repertoire" aria-label="Repertoire">List</a>
       <a href="#days">Days</a>
@@ -104,6 +105,17 @@
       <article><span>Practice</span><strong id="practiceState">0 candidates</strong></article>
       <article><span>Review</span><strong id="reviewState">Unjudged</strong></article>
       <article><span>Training</span><strong id="trainingState">0 anchors</strong></article>
+    </section>
+
+    <section id="study" class="panel study-panel" aria-label="Study packet">
+      <div class="panel-head">
+        <div>
+          <p class="label">Study</p>
+          <h2>Score Packet</h2>
+        </div>
+        <span class="count-pill" id="studyCount">0 snippets</span>
+      </div>
+      <div id="studyList" class="study-list"></div>
     </section>
 
     <section id="repertoire" class="panel piece-panel" aria-label="Repertoire">
@@ -244,6 +256,6 @@
     </details>
   </main>
 
-  <script src="/app.js?v=20260507-correction2"></script>
+  <script src="/app.js?v=20260508-study-packet"></script>
 </body>
 </html>

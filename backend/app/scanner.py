@@ -30,6 +30,7 @@ from .settings import (
     SERVICE_NAME,
 )
 from .state import append_run, load_state, save_state, utc_now
+from .study_packets import build_practice_study
 
 DEFAULT_YOUTUBE_SOURCE = "https://www.youtube.com/@nalalan"
 MEDIA_REVIEW_PENDING_BLOCKERS = {"youtube_data_api_returns_metadata_not_video_media"}
@@ -1006,6 +1007,7 @@ def derive_review(
     today_pieces = [piece for piece in pieces if piece.get("isActiveToday")]
     piece_results = review_piece_results(state, existing)
     training = source_training_state(state, inventory, media_samples, piece_results)
+    practice_study = build_practice_study(state, inventory, media_samples, pieces)
     progress_plan = existing.get("progressPlan") if isinstance(existing.get("progressPlan"), dict) else None
     youtube_items = inventory.get("youtube", [])
     practice_candidates = [
@@ -1042,6 +1044,7 @@ def derive_review(
         "todayPiece": today_pieces[0] if today_pieces else None,
         "todayPieceCount": len(today_pieces),
         "training": training,
+        "practiceStudy": practice_study,
         "progressPlan": progress_plan,
         "currentWork": current_work,
         "strongestSignal": "Unjudged",

@@ -45,6 +45,8 @@ const elements = {
   highlightWindow: document.querySelector("#highlightWindow"),
   highlightLink: document.querySelector("#highlightLink"),
   rejectPieceButton: document.querySelector("#rejectPieceButton"),
+  studyCount: document.querySelector("#studyCount"),
+  studyList: document.querySelector("#studyList"),
   pieceCount: document.querySelector("#pieceCount"),
   pieceList: document.querySelector("#pieceList"),
   dayCount: document.querySelector("#dayCount"),
@@ -170,6 +172,13 @@ function timedUrl(url, startSeconds = 0) {
   } catch {
     return url || PUBLIC_YOUTUBE_SOURCE;
   }
+}
+
+function assetUrl(value) {
+  const path = String(value || "").trim();
+  if (!path) return "";
+  if (path.startsWith("http://") || path.startsWith("https://")) return path;
+  return `${apiBase()}${path}`;
 }
 
 function embedUrl(url, startSeconds = 0, endSeconds = 0) {
@@ -376,6 +385,37 @@ function trainingState(ops) {
     : null;
 }
 
+function practiceStudy(ops) {
+  return ops?.review?.practiceStudy && typeof ops.review.practiceStudy === "object"
+    ? ops.review.practiceStudy
+    : { days: [], snippetCount: 0, dayCount: 0, transcribedDayCount: 0 };
+}
+
+function studyDays(ops) {
+  const study = practiceStudy(ops);
+  return Array.isArray(study.days) ? study.days : [];
+}
+
+function packetMatchesVideo(packet, video, daySamples = []) {
+  if (!packet || !video) return false;
+  const sourceUrl = String(packet.sourceUrl || "");
+  if (sourceUrl && sourceUrl === video.url) return true;
+  const videoId = video.id || parseVideoId(video.url);
+  if (videoId && (sourceUrl.includes(videoId) || String(packet.id || "").includes(videoId))) return true;
+  const packetDay = String(packet.practiceDay || "");
+  const videoDay = String(video.title || "").match(/\b(\d{1,2})[-_/](\d{1,2})[-_/](\d{2,4})\b/);
+  if (packetDay && videoDay) {
+    const year = Number(videoDay[3]) < 100 ? 2000 + Number(videoDay[3]) : Number(videoDay[3]);
+    const normalized = `${year}-${String(videoDay[1]).padStart(2, "0")}-${String(videoDay[2]).padStart(2, "0")}`;
+    if (packetDay === normalized) return true;
+  }
+  return daySamples.some((sample) => sample.id && packet.id && String(packet.id).includes(sample.id));
+}
+
+function studyPacketForVideo(ops, video, daySamples = []) {
+  return studyDays(ops).find((packet) => packetMatchesVideo(packet, video, daySamples)) || null;
+}
+
 function trainingLabel(ops) {
   const training = trainingState(ops);
   if (!training) return "0 anchors";
@@ -385,6 +425,14 @@ function trainingLabel(ops) {
   if (!anchors) return "0 refs";
   if (pitchWindows && !matches) return `${anchors} refs / ${pitchWindows} pitch windows`;
   return `${anchors} refs / ${matches} score matches`;
+}
+
+function studyStatusLabel(value) {
+  if (value === "transcribed") return "transcribed";
+  if (value === "score_target_ready") return "score ready";
+  if (value === "identified") return "identified";
+  if (value === "identifying") return "identifying";
+  return value || "pending";
 }
 
 function sourceForSampleId(ops, sampleId) {
@@ -672,6 +720,7 @@ function practiceDays(ops) {
         return item?.sourceUrl === video.url || sample?.url === video.url || sampleIds.has(item?.sampleId);
       }) || null;
     };
+    const study = studyPacketForVideo(ops, video, daySamples);
     const dayPieceRows = repertoire.map((piece) => ({ piece, daily: pieceDailyEntry(piece) })).filter(({ piece, daily }) => {
       const source = sourceForSampleId(ops, piece.sampleId);
       return Boolean(daily || piece.sourceUrl === video.url || source?.url === video.url || sampleIds.has(piece.sampleId));
@@ -681,7 +730,7 @@ function practiceDays(ops) {
     const identified = dayResults.filter(resultIsIdentified);
     const identifiedPieceRows = dayPieceRows.filter(({ piece }) => isIdentifiedPiece(piece));
     const identifiedPieces = identifiedPieceRows.map((row) => row.piece);
-    const detected = [...identified.map(resultDetectedLabel), ...identifiedPieces.map(pieceLabel)]
+    const detected = [study?.pieceTitle, ...identified.map(resultDetectedLabel), ...identifiedPieces.map(pieceLabel)]
       .filter(Boolean);
     const highlight = identified[0]
       ? sourceFromResult(identified[0], ops)
@@ -699,7 +748,7 @@ function practiceDays(ops) {
         Number(piece.completionPercent) || 0
       ))
     ];
-    const tip = identified[0]?.immediateTip || identifiedPieceRows[0]?.daily?.tip || identifiedPieces[0]?.tip || "";
+    const tip = study?.tip || identified[0]?.immediateTip || identifiedPieceRows[0]?.daily?.tip || identifiedPieces[0]?.tip || "";
     const identifiedCount = identified.length + identifiedPieces.length;
     return {
       title: video.title || "Practice",
@@ -710,10 +759,11 @@ function practiceDays(ops) {
       samples: daySamples.length,
       sections: daySections.length,
       detected: [...new Set(detected)].slice(0, 3),
-      status: identifiedCount ? "identified" : daySamples.length ? "identifying" : "indexed",
-      completionPercent: Math.max(0, ...percentCandidates),
+      status: study?.status || (identifiedCount ? "identified" : daySamples.length ? "identifying" : "indexed"),
+      completionPercent: Math.max(Number(study?.completionPercent) || 0, ...percentCandidates),
       tip,
-      highlight
+      highlight,
+      study
     };
   });
 }
@@ -732,6 +782,7 @@ function renderStatus() {
   const model = ops?.model ? `${ops.model.id} / ${ops.model.reasoningEffort}` : "Not reported";
   const highlight = primaryHighlight(ops);
   const days = practiceDays(ops);
+  const study = practiceStudy(ops);
 
   elements.youtubeState.textContent = backend.online ? youtubeLabel(ops) : "Offline";
   elements.inventoryCount.textContent = `${inventory.length} videos`;
@@ -754,13 +805,16 @@ function renderStatus() {
   elements.pieceProgress.textContent = progressText(piece);
   elements.pieceTip.textContent = pieceTip(piece);
   elements.detectionState.textContent = detectionStatus(highlight);
+  if (elements.studyCount) {
+    elements.studyCount.textContent = `${Number(study.snippetCount) || 0} ${Number(study.snippetCount) === 1 ? "snippet" : "snippets"}`;
+  }
   elements.pieceCount.textContent = `${pieceList.length} ${pieceList.length === 1 ? "piece" : "pieces"}`;
   elements.dayCount.textContent = `${days.length} ${days.length === 1 ? "day" : "days"}`;
   const source = youtubeSource(ops);
   elements.sourceLink.href = youtubeSourceHref(source);
   elements.sourceLink.textContent = source.replace("https://www.", "").replace("https://", "");
   elements.currentState.textContent = currentStateText(ops);
-  elements.recordSummary.textContent = `${inventory.length} videos / ${sections.length} sections / ${findings.length} findings`;
+  elements.recordSummary.textContent = `${inventory.length} videos / ${sections.length} sections / ${Number(study.snippetCount) || 0} snippets`;
   elements.reviewedCount.textContent = `${reviewedVideos} reviewed`;
   elements.sectionCount.textContent = `${sections.length} sections`;
   elements.backendState.textContent = backend.online ? "Online" : "Offline";
@@ -769,6 +823,101 @@ function renderStatus() {
   elements.mediaState.textContent = backend.online ? mediaAccessLabel(ops) : "Offline";
   elements.instagramState.textContent = ops?.credentials?.instagramGraph ? "Configured" : "Not configured";
 
+}
+
+function snippetClipUrl(snippet, fallbackUrl = "") {
+  const audio = snippet?.audio || {};
+  return timedUrl(audio.url || fallbackUrl, Number(audio.startSeconds) || 0);
+}
+
+function renderScoreImage(snippet) {
+  const score = snippet?.score || {};
+  const imageUrl = assetUrl(score.imageUrl);
+  if (!imageUrl) {
+    return `<div class="score-placeholder">Score render pending.</div>`;
+  }
+  const boxes = Array.isArray(score.boxes) ? score.boxes : [];
+  return `
+    <div class="score-image" aria-label="Annotated score snippet">
+      <img src="${escapeHtml(imageUrl)}" alt="">
+      ${boxes.map((box) => `
+        <span class="score-box" style="left:${Number(box.x) || 0}%; top:${Number(box.y) || 0}%; width:${Number(box.width) || 1}%; height:${Number(box.height) || 1}%;">
+          <b>${escapeHtml(box.label || "practice area")}</b>
+        </span>
+      `).join("")}
+    </div>
+  `;
+}
+
+function noteY(note) {
+  const match = String(note || "").match(/^([A-G])(#|b)?(\d)$/);
+  if (!match) return 50;
+  const order = { C: 0, D: 1, E: 2, F: 3, G: 4, A: 5, B: 6 };
+  const value = (Number(match[3]) * 7) + (order[match[1]] || 0);
+  const violinLow = (3 * 7) + order.G;
+  const violinHigh = (7 * 7) + order.C;
+  const normalized = (value - violinLow) / Math.max(1, violinHigh - violinLow);
+  return Math.max(12, Math.min(84, 84 - (normalized * 72)));
+}
+
+function renderTranscriptionStaff(transcription) {
+  const notes = Array.isArray(transcription?.firstNotes) ? transcription.firstNotes.slice(0, 18) : [];
+  if (!notes.length) return "";
+  return `
+    <div class="transcription-staff" aria-label="Machine transcription staff">
+      <span></span><span></span><span></span><span></span><span></span>
+      ${notes.map((note, index) => `
+        <i style="left:${5 + (index * (90 / Math.max(1, notes.length - 1)))}%; top:${noteY(note)}%;" title="${escapeHtml(note)}"></i>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderStudySnippet(packet, snippet) {
+  const transcription = snippet?.transcription || {};
+  const notes = transcription.cleanText || (Array.isArray(transcription.firstNotes) ? transcription.firstNotes.join(" ") : "");
+  const score = snippet?.score || {};
+  const scoreHref = score.sourceUrl || score.pdfUrl || "";
+  const clipUrl = snippetClipUrl(snippet, packet.sourceUrl);
+  const timeLabel = snippet?.audio?.startSeconds
+    ? `${formatClock(snippet.audio.startSeconds)}-${formatClock(snippet.audio.endSeconds || snippet.audio.startSeconds + 45)}`
+    : "clip";
+  return `
+    <article class="study-card">
+      <div class="study-copy">
+        <span>${escapeHtml([packet.practiceDay, studyStatusLabel(snippet.status), transcription.noteCount ? `${transcription.noteCount} notes` : ""].filter(Boolean).join(" / "))}</span>
+        <strong>${escapeHtml(packet.pieceTitle || snippet.pieceTitle || "Piece being identified")}</strong>
+        <p>${escapeHtml(snippet.feedback || packet.tip || "")}</p>
+        <div class="study-meta">
+          <a href="${escapeHtml(clipUrl)}">${escapeHtml(timeLabel)}</a>
+          ${scoreHref ? `<a href="${escapeHtml(scoreHref)}">score</a>` : ""}
+          <em>${escapeHtml(snippet.readiness || "Score match pending.")}</em>
+        </div>
+        ${renderTranscriptionStaff(transcription)}
+        ${notes ? `<code>${escapeHtml(shortText(notes, 190))}</code>` : `<small>Transcription pending.</small>`}
+      </div>
+      ${renderScoreImage(snippet)}
+    </article>
+  `;
+}
+
+function renderStudy() {
+  if (!elements.studyList) return;
+  const study = practiceStudy(backend.ops);
+  const days = studyDays(backend.ops);
+  if (!backend.online) {
+    elements.studyList.innerHTML = `<p class="empty">Backend offline.</p>`;
+    return;
+  }
+  if (!days.length) {
+    elements.studyList.innerHTML = `<p class="empty">Study packet pending practice media.</p>`;
+    return;
+  }
+  const cards = days.slice(0, 3).map((packet) => {
+    const snippet = Array.isArray(packet.snippets) && packet.snippets.length ? packet.snippets[0] : null;
+    return snippet ? renderStudySnippet(packet, snippet) : "";
+  }).filter(Boolean);
+  elements.studyList.innerHTML = cards.join("") || `<p class="empty">Score snippets pending.</p>`;
 }
 
 function renderPieces() {
@@ -963,6 +1112,15 @@ function renderDays() {
     const end = Number(day.highlight?.endSeconds) || (start ? start + 45 : 0);
     const clip = timedUrl(day.highlight?.url || day.url, start);
     const windowText = start ? `${formatClock(start)}-${formatClock(end)}` : "clip pending";
+    const packet = day.study;
+    const transcription = packet?.transcription || {};
+    const packetText = packet
+      ? [
+          transcription.noteCount ? `${transcription.noteCount} notes` : "score ready",
+          packet.snippetCount ? `${packet.snippetCount} snippet` : "",
+          packet.tip || ""
+        ].filter(Boolean).join(" / ")
+      : "";
     return `
       <article class="day-row" data-status="${escapeHtml(day.status)}">
         <div>
@@ -970,6 +1128,7 @@ function renderDays() {
           <strong>${escapeHtml(day.title)}</strong>
           <p>${escapeHtml(detected)}</p>
           ${day.tip ? `<small>${escapeHtml(day.tip)}</small>` : ""}
+          ${packetText ? `<small class="study-line">${escapeHtml(packetText)}</small>` : ""}
         </div>
         <div class="day-actions">
           <em>${escapeHtml(percent)}</em>
@@ -983,6 +1142,7 @@ function renderDays() {
 function render() {
   renderStatus();
   renderHighlight();
+  renderStudy();
   renderPieces();
   renderDays();
   renderInventory();

@@ -13,6 +13,7 @@ from .state import load_state, save_state, utc_now
 
 
 MAX_TRANSCRIPTION_SECONDS = int(os.getenv("CURTIS_TRANSCRIPTION_MAX_SECONDS", "180"))
+TRANSCRIPTION_SAMPLE_LIMIT = int(os.getenv("CURTIS_TRANSCRIPTION_SAMPLE_LIMIT", "8"))
 MIN_NOTE_SECONDS = float(os.getenv("CURTIS_MIN_NOTE_SECONDS", "0.08"))
 MAX_STORED_NOTES = int(os.getenv("CURTIS_MAX_STORED_NOTES", "240"))
 PITCH_MATCH_THRESHOLD = float(os.getenv("CURTIS_PITCH_MATCH_THRESHOLD", "0.58"))
@@ -355,8 +356,9 @@ def transcription_prior_hint(state: dict[str, Any], sample: dict[str, Any]) -> s
     return ""
 
 
-def transcribe_media_samples(limit: int = 3) -> dict[str, Any]:
+def transcribe_media_samples(limit: int | None = None) -> dict[str, Any]:
     state = load_state()
+    sample_limit = TRANSCRIPTION_SAMPLE_LIMIT if limit is None else int(limit)
     samples = [sample for sample in state.get("mediaSamples", []) if isinstance(sample, dict)]
     existing_ids = {
         item.get("transcriptionId")
@@ -367,7 +369,7 @@ def transcribe_media_samples(limit: int = 3) -> dict[str, Any]:
         sample
         for sample in samples
         if sample.get("path") and transcription_key(sample) not in existing_ids
-    ][:limit]
+    ][:sample_limit]
     results = [build_transcription(sample, state) for sample in selected]
     existing = [
         item
