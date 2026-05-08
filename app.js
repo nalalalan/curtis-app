@@ -964,15 +964,31 @@ function snippetClipUrl(snippet, fallbackUrl = "") {
   return timedUrl(audio.url || fallbackUrl, Number(audio.startSeconds) || 0);
 }
 
-function renderScoreImage(snippet) {
+function scoreImageUrl(score) {
+  const direct = assetUrl(score?.imageUrl);
+  if (direct) return direct;
+  const assetId = score?.assetId || score?.scoreAssetId;
+  const page = score?.page || score?.scorePage;
+  if (assetId && page) return assetUrl(`/api/curtis/score/page/${assetId}/${page}`);
+  return "";
+}
+
+function scoreBoxes(score) {
+  if (Array.isArray(score?.boxes)) return score.boxes;
+  if (Array.isArray(score?.scoreBoxes)) return score.scoreBoxes;
+  return [];
+}
+
+function renderScoreImage(snippet, compact = false) {
   const score = snippet?.score || {};
-  const imageUrl = assetUrl(score.imageUrl);
+  const imageUrl = scoreImageUrl(score);
   if (!imageUrl) {
     return `<div class="score-placeholder">Score render pending.</div>`;
   }
-  const boxes = Array.isArray(score.boxes) ? score.boxes : [];
+  const boxes = scoreBoxes(score);
+  const compactClass = compact ? " score-image-compact" : "";
   return `
-    <div class="score-image" aria-label="Annotated score snippet">
+    <div class="score-image${compactClass}" aria-label="Annotated score snippet">
       <img src="${escapeHtml(imageUrl)}" alt="">
       ${boxes.map((box) => `
         <span class="score-box" style="left:${Number(box.x) || 0}%; top:${Number(box.y) || 0}%; width:${Number(box.width) || 1}%; height:${Number(box.height) || 1}%;">
@@ -1003,6 +1019,18 @@ function renderTranscriptionStaff(transcription) {
       ${notes.map((note, index) => `
         <i style="left:${5 + (index * (90 / Math.max(1, notes.length - 1)))}%; top:${noteY(note)}%;" title="${escapeHtml(note)}"></i>
       `).join("")}
+    </div>
+  `;
+}
+
+function renderEvidenceScore(item) {
+  if (!item?.score || typeof item.score !== "object") return "";
+  const imageUrl = scoreImageUrl(item.score);
+  if (!imageUrl) return "";
+  return `
+    <div class="evidence-score">
+      <span>Score snippet</span>
+      ${renderScoreImage({ score: item.score }, true)}
     </div>
   `;
 }
@@ -1389,7 +1417,7 @@ function renderPieces() {
           pieceTitle: piece.title
         }) : ""}
         <div class="evidence-list">
-          ${evidence.map((item) => {
+          ${evidence.map((item, itemIndex) => {
             const clip = item.clip || {};
             const clipUrl = timedUrl(clip.url || "", Number(clip.startSeconds) || 0);
             return `
@@ -1398,6 +1426,7 @@ function renderPieces() {
                 <span>${escapeHtml(item.confidence || "confirmed")}</span>
                 <small>${escapeHtml(shortText(item.reason || "Confirmed source evidence.", 130))}</small>
                 ${renderNotationSheet(item.transcriptionSnippet || [])}
+                ${itemIndex === 0 ? renderEvidenceScore(item) : ""}
               </div>
             `;
           }).join("")}
