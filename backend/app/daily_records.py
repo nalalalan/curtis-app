@@ -308,7 +308,7 @@ def transcription_quality(
     low_confidence = int(metrics.get("sanityLowConfidenceNoteCount") or 0)
     sparse = int(metrics.get("omittedSparseWindowCount") or 0)
     sparse_note = (
-        f" {sparse} sparse active-window hit{'s' if sparse != 1 else ''} were excluded from the staff."
+        f" {sparse} sparse active-window hit{' was' if sparse == 1 else 's were'} excluded from the staff."
         if sparse
         else ""
     )
