@@ -1493,6 +1493,58 @@ h2 {
   margin-top: 10px;
 }
 
+.repertoire-update-ledger,
+.piece-evidence-ledger {
+  display: grid;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.piece-evidence-ledger {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.repertoire-update-ledger article,
+.piece-evidence-ledger article {
+  min-width: 0;
+  padding: 8px 9px;
+  border: 1px solid rgba(31, 41, 39, .1);
+  border-radius: 7px;
+  background: rgba(255, 253, 248, .68);
+}
+
+.repertoire-update-ledger span,
+.piece-evidence-ledger span {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 760;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.repertoire-update-ledger strong,
+.piece-evidence-ledger strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 740;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.repertoire-update-ledger em {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 620;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
 .repeat-groups {
   display: grid;
   gap: 7px;
@@ -2148,7 +2200,8 @@ h2 {
   .paper-strip,
   .paper-hero,
   .paper-status,
-  .clip-evidence-grid {
+  .clip-evidence-grid,
+  .piece-evidence-ledger {
     grid-template-columns: 1fr;
   }
 

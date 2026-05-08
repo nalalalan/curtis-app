@@ -1201,6 +1201,22 @@ function renderObservations(observations) {
   `;
 }
 
+function renderRepertoireUpdates(updates) {
+  const rows = Array.isArray(updates) ? updates.slice(0, 2) : [];
+  if (!rows.length) return "";
+  return `
+    <div class="repertoire-update-ledger" aria-label="Automatic repertoire updates">
+      ${rows.map((item) => `
+        <article>
+          <span>${escapeHtml([item.action, item.status].filter(Boolean).join(" / ") || "repertoire update")}</span>
+          <strong>${escapeHtml(item.pieceTitle || "Piece")}</strong>
+          <em>${escapeHtml(shortText(item.reason || "Confirmed from practice evidence.", 120))}</em>
+        </article>
+      `).join("")}
+    </div>
+  `;
+}
+
 function clipWindowLabel(clip) {
   const start = Number(clip?.startSeconds) || 0;
   const end = Number(clip?.endSeconds) || 0;
@@ -1337,6 +1353,7 @@ function renderDailyRecord(record, index = 0) {
           <span>Main Curtis-level blocker today</span>
           <strong>${escapeHtml(record.mainCurtisBlocker || "Pending evidence.")}</strong>
         </div>
+        ${renderRepertoireUpdates(record.repertoireUpdates)}
         ${renderNotationSheet(events, { repeatGroup: record?.transcription?.repeatGroups?.[0] })}
         ${renderRepeatGroups(record?.transcription?.repeatGroups)}
         ${renderObservations(record.observations)}
@@ -1406,6 +1423,7 @@ function renderPieces() {
           <strong>${escapeHtml(piece.mainCurtisBlocker || "Specific blocker pending.")}</strong>
         </div>
         <small class="piece-meta-line">Progress: ${escapeHtml(piece.currentProgressLabel || piece.progressStatus || "not scored")}</small>
+        ${renderPieceEvidenceLedger(piece, evidence)}
         ${renderObservations(piece.observations)}
         ${renderHeatMap(piece)}
         ${index === 0 ? renderClipFrame(leadEvidence?.clip, "Repertoire evidence") : ""}
@@ -1437,6 +1455,31 @@ function renderPieces() {
     </details>
   `;
   }).join("");
+}
+
+function renderPieceEvidenceLedger(piece, evidence) {
+  const days = Array.isArray(piece?.recentPracticeDays) ? piece.recentPracticeDays.filter(Boolean).slice(0, 4) : [];
+  const evidenceCount = Array.isArray(evidence) ? evidence.length : 0;
+  return `
+    <div class="piece-evidence-ledger" aria-label="Repertoire evidence ledger">
+      <article>
+        <span>Active</span>
+        <strong>${escapeHtml(piece?.totalActiveViolinLabel || "pending")}</strong>
+      </article>
+      <article>
+        <span>Recent</span>
+        <strong>${escapeHtml(days.length ? days.join(" / ") : "pending")}</strong>
+      </article>
+      <article>
+        <span>Evidence</span>
+        <strong>${escapeHtml(evidenceCount ? `${evidenceCount} dated rows` : "pending")}</strong>
+      </article>
+      <article>
+        <span>Progress</span>
+        <strong>${escapeHtml(piece?.currentProgressLabel || piece?.progressStatus || "not scored")}</strong>
+      </article>
+    </div>
+  `;
 }
 
 function renderPieceDays(piece) {
