@@ -14,7 +14,7 @@ from .state import load_state, save_state, utc_now
 
 MAX_TRANSCRIPTION_SECONDS = int(os.getenv("CURTIS_TRANSCRIPTION_MAX_SECONDS", "180"))
 TRANSCRIPTION_SAMPLE_LIMIT = int(os.getenv("CURTIS_TRANSCRIPTION_SAMPLE_LIMIT", "8"))
-TRANSCRIPTION_PIPELINE_VERSION = "violin_active_section_pyin_v5"
+TRANSCRIPTION_PIPELINE_VERSION = "violin_pitch_sanity_pyin_v6"
 MIN_NOTE_SECONDS = float(os.getenv("CURTIS_MIN_NOTE_SECONDS", "0.08"))
 MIN_ONSET_NOTE_SECONDS = float(os.getenv("CURTIS_MIN_ONSET_NOTE_SECONDS", "0.04"))
 MAX_STORED_NOTES = int(os.getenv("CURTIS_MAX_STORED_NOTES", "240"))
@@ -27,6 +27,13 @@ NOTE_MERGE_GAP_SECONDS = float(os.getenv("CURTIS_NOTE_MERGE_GAP_SECONDS", "0.07"
 ONSET_EVENT_MULTIPLIER = float(os.getenv("CURTIS_ONSET_EVENT_MULTIPLIER", "1.12"))
 ONSET_MIN_VOICED_FRAMES = int(os.getenv("CURTIS_ONSET_MIN_VOICED_FRAMES", "1"))
 HARMONIC_MARGIN = float(os.getenv("CURTIS_HARMONIC_MARGIN", "8.0"))
+LOW_CONFIDENCE_GLITCH_SECONDS = float(os.getenv("CURTIS_LOW_CONFIDENCE_GLITCH_SECONDS", "0.07"))
+LOW_CONFIDENCE_GLITCH_THRESHOLD = float(os.getenv("CURTIS_LOW_CONFIDENCE_GLITCH_THRESHOLD", "0.68"))
+OCTAVE_FLIP_MIN_SEMITONES = int(os.getenv("CURTIS_OCTAVE_FLIP_MIN_SEMITONES", "10"))
+NEIGHBOR_AGREEMENT_SEMITONES = int(os.getenv("CURTIS_NEIGHBOR_AGREEMENT_SEMITONES", "3"))
+OCTAVE_ADJUSTMENT_MIN_GAIN = int(os.getenv("CURTIS_OCTAVE_ADJUSTMENT_MIN_GAIN", "8"))
+LARGE_LEAP_SEMITONES = int(os.getenv("CURTIS_LARGE_LEAP_SEMITONES", "17"))
+MIN_ACTIVE_WINDOW_NOTES = int(os.getenv("CURTIS_MIN_ACTIVE_WINDOW_NOTES", "4"))
 ACTIVE_SECTION_PADDING_SECONDS = float(os.getenv("CURTIS_ACTIVE_SECTION_PADDING_SECONDS", "0.35"))
 ACTIVE_SECTION_MERGE_GAP_SECONDS = float(os.getenv("CURTIS_ACTIVE_SECTION_MERGE_GAP_SECONDS", "0.55"))
 MAX_ACTIVE_TRANSCRIPTION_SECTIONS = int(os.getenv("CURTIS_MAX_ACTIVE_TRANSCRIPTION_SECTIONS", "12"))
@@ -240,6 +247,88 @@ def merge_adjacent_same_note_events(events: list[dict[str, Any]]) -> list[dict[s
         previous["durationSeconds"] = round(total_duration, 3)
         previous["confidence"] = round(confidence, 3)
     return merged
+
+
+def event_midi(event: dict[str, Any]) -> int | None:
+    try:
+        midi = int(event.get("midi"))
+    except (TypeError, ValueError):
+        return None
+    if midi < VIOLIN_MIN_MIDI or midi > VIOLIN_MAX_MIDI:
+        return None
+    return midi
+
+
+def pitch_sanity_filter(events: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Remove obvious tracker artifacts without pretending the remaining notes are final score truth."""
+    ordered = sorted(
+        (dict(event) for event in events if isinstance(event, dict)),
+        key=lambda event: float(event.get("startSeconds") or 0.0),
+    )
+    dropped_glitches = 0
+    kept: list[dict[str, Any]] = []
+    for event in ordered:
+        duration = float(event.get("durationSeconds") or 0.0)
+        confidence = float(event.get("confidence") or 0.0)
+        if duration <= LOW_CONFIDENCE_GLITCH_SECONDS and confidence < LOW_CONFIDENCE_GLITCH_THRESHOLD:
+            dropped_glitches += 1
+            continue
+        kept.append(event)
+
+    octave_adjusted = 0
+    for index in range(1, len(kept) - 1):
+        previous_midi = event_midi(kept[index - 1])
+        current_midi = event_midi(kept[index])
+        next_midi = event_midi(kept[index + 1])
+        if previous_midi is None or current_midi is None or next_midi is None:
+            continue
+        if abs(previous_midi - next_midi) > NEIGHBOR_AGREEMENT_SEMITONES:
+            continue
+        if (
+            abs(current_midi - previous_midi) < OCTAVE_FLIP_MIN_SEMITONES
+            or abs(current_midi - next_midi) < OCTAVE_FLIP_MIN_SEMITONES
+        ):
+            continue
+        candidates = [
+            shifted
+            for shifted in (current_midi - 24, current_midi - 12, current_midi, current_midi + 12, current_midi + 24)
+            if VIOLIN_MIN_MIDI <= shifted <= VIOLIN_MAX_MIDI
+        ]
+        current_score = abs(current_midi - previous_midi) + abs(current_midi - next_midi)
+        best_midi = min(candidates, key=lambda midi: abs(midi - previous_midi) + abs(midi - next_midi))
+        best_score = abs(best_midi - previous_midi) + abs(best_midi - next_midi)
+        if best_midi == current_midi or current_score - best_score < OCTAVE_ADJUSTMENT_MIN_GAIN:
+            continue
+        event = kept[index]
+        event["rawMidi"] = current_midi
+        event["rawNote"] = event.get("note") or note_name(current_midi)
+        event["midi"] = best_midi
+        event["note"] = note_name(best_midi)
+        event["confidence"] = round(min(float(event.get("confidence") or 0.0), 0.62), 3)
+        event["uncertain"] = True
+        reasons = event.get("uncertaintyReasons")
+        event["uncertaintyReasons"] = [*(reasons if isinstance(reasons, list) else []), "octave_flip_adjusted"]
+        octave_adjusted += 1
+
+    midi_values = [event_midi(event) for event in kept]
+    midi_values = [midi for midi in midi_values if midi is not None]
+    intervals = [abs(midi_values[index + 1] - midi_values[index]) for index in range(len(midi_values) - 1)]
+    confidence_values = sorted(float(event.get("confidence") or 0.0) for event in kept)
+    median_confidence = (
+        confidence_values[len(confidence_values) // 2]
+        if confidence_values
+        else 0.0
+    )
+    low_confidence_count = sum(1 for value in confidence_values if value < LOW_CONFIDENCE_GLITCH_THRESHOLD)
+    quality = {
+        "rawSelectedEventCount": len(ordered),
+        "sanityGlitchDroppedCount": dropped_glitches,
+        "sanityOctaveAdjustedCount": octave_adjusted,
+        "sanityLargeLeapCount": sum(1 for interval in intervals if interval >= LARGE_LEAP_SEMITONES),
+        "sanityLowConfidenceNoteCount": low_confidence_count,
+        "sanityMedianConfidence": round(median_confidence, 3),
+    }
+    return kept[:MAX_STORED_NOTES], quality
 
 
 def f0_to_events(f0: Any, voiced_flag: Any, voiced_prob: Any, sr: int, hop_length: int, numpy: Any) -> list[dict[str, Any]]:
@@ -478,7 +567,8 @@ def transcribe_audio_array(y: Any, sr: int, librosa: Any, numpy: Any) -> dict[st
         onset_frames = []
     pitch_events = f0_to_events(f0, voiced_flag, voiced_prob, sr, hop_length, numpy)
     onset_events = f0_to_onset_events(f0, voiced_flag, voiced_prob, onset_frames, sr, hop_length, numpy)
-    events, segmentation_source = choose_transcription_events(pitch_events, onset_events)
+    raw_events, segmentation_source = choose_transcription_events(pitch_events, onset_events)
+    events, sanity_quality = pitch_sanity_filter(raw_events)
     voiced_ratio = round(float(numpy.nanmean(voiced_flag)) if len(voiced_flag) else 0.0, 3)
     return {
         "events": events,
@@ -491,6 +581,7 @@ def transcribe_audio_array(y: Any, sr: int, librosa: Any, numpy: Any) -> dict[st
             "onsetEventCount": len(onset_events),
             "selectedEventCount": len(events),
             "detectedOnsetCount": len(onset_frames),
+            **sanity_quality,
         },
     }
 
@@ -527,6 +618,26 @@ def transcribe_active_windows(
         trim_offset = start + (float(trim_index[0]) / sr if len(trim_index) else 0.0)
         result = transcribe_audio_array(chunk, sr, librosa, numpy)
         chunk_events = result["events"]
+        quality = result.get("quality", {})
+        preprocessing.add(str(quality.get("preprocessing") or ""))
+        segmentation.add(str(quality.get("segmentationSource") or ""))
+        for key in (
+            "pitchEventCount",
+            "onsetEventCount",
+            "rawSelectedEventCount",
+            "selectedEventCount",
+            "detectedOnsetCount",
+            "sanityGlitchDroppedCount",
+            "sanityOctaveAdjustedCount",
+            "sanityLargeLeapCount",
+            "sanityLowConfidenceNoteCount",
+        ):
+            quality_totals[key] += int(quality.get(key) or 0)
+        if len(chunk_events) < MIN_ACTIVE_WINDOW_NOTES:
+            quality_totals["omittedSparseWindowCount"] += 1
+            total_seconds += end - start
+            used_windows.append({"start": round(start, 3), "end": round(end, 3), "notation": "omitted_sparse"})
+            continue
         for event in chunk_events:
             shifted = dict(event)
             shifted["startSeconds"] = round(trim_offset + float(event.get("startSeconds") or 0.0), 3)
@@ -535,13 +646,8 @@ def transcribe_active_windows(
         if result["tempoBpm"]:
             tempos.append(float(result["tempoBpm"]))
         voiced_ratios.append(float(result["voicedFrameRatio"] or 0.0))
-        quality = result.get("quality", {})
-        preprocessing.add(str(quality.get("preprocessing") or ""))
-        segmentation.add(str(quality.get("segmentationSource") or ""))
-        for key in ("pitchEventCount", "onsetEventCount", "selectedEventCount", "detectedOnsetCount"):
-            quality_totals[key] += int(quality.get(key) or 0)
         total_seconds += end - start
-        used_windows.append({"start": round(start, 3), "end": round(end, 3)})
+        used_windows.append({"start": round(start, 3), "end": round(end, 3), "notation": "included"})
     return {
         "events": events[:MAX_STORED_NOTES],
         "tempoBpm": round(float(numpy.median(numpy.array(tempos))), 1) if tempos else 0.0,
@@ -553,8 +659,14 @@ def transcribe_active_windows(
             "segmentationSource": "+".join(sorted(item for item in segmentation if item)) or "none",
             "pitchEventCount": int(quality_totals["pitchEventCount"]),
             "onsetEventCount": int(quality_totals["onsetEventCount"]),
+            "rawSelectedEventCount": int(quality_totals["rawSelectedEventCount"]),
             "selectedEventCount": int(quality_totals["selectedEventCount"]),
             "detectedOnsetCount": int(quality_totals["detectedOnsetCount"]),
+            "sanityGlitchDroppedCount": int(quality_totals["sanityGlitchDroppedCount"]),
+            "sanityOctaveAdjustedCount": int(quality_totals["sanityOctaveAdjustedCount"]),
+            "sanityLargeLeapCount": int(quality_totals["sanityLargeLeapCount"]),
+            "sanityLowConfidenceNoteCount": int(quality_totals["sanityLowConfidenceNoteCount"]),
+            "omittedSparseWindowCount": int(quality_totals["omittedSparseWindowCount"]),
         },
     }
 
@@ -595,7 +707,7 @@ def transcribe_path(path: Path, active_windows: list[dict[str, float]] | None = 
         return {
             "status": "transcribed" if events else "no_stable_notes",
             "pipelineVersion": TRANSCRIPTION_PIPELINE_VERSION,
-            "method": "librosa_active_section_harmonic_pyin_note_segmentation",
+            "method": "librosa_active_section_harmonic_pyin_with_pitch_sanity_filter",
             "durationSeconds": transcription["durationSeconds"],
             "tempoBpm": tempo,
             "voicedFrameRatio": transcription["voicedFrameRatio"],
@@ -609,6 +721,10 @@ def transcribe_path(path: Path, active_windows: list[dict[str, float]] | None = 
                 "minimumNoteSeconds": MIN_NOTE_SECONDS,
                 "minimumOnsetNoteSeconds": MIN_ONSET_NOTE_SECONDS,
                 "noteMergeGapSeconds": NOTE_MERGE_GAP_SECONDS,
+                "lowConfidenceGlitchSeconds": LOW_CONFIDENCE_GLITCH_SECONDS,
+                "lowConfidenceGlitchThreshold": LOW_CONFIDENCE_GLITCH_THRESHOLD,
+                "octaveFlipMinSemitones": OCTAVE_FLIP_MIN_SEMITONES,
+                "minimumActiveWindowNotes": MIN_ACTIVE_WINDOW_NOTES,
                 "windowMode": window_mode,
                 "activeWindowCount": len(transcription["activeWindows"]),
                 "activeWindows": transcription["activeWindows"],
@@ -617,7 +733,7 @@ def transcribe_path(path: Path, active_windows: list[dict[str, float]] | None = 
             "notation": {
                 "format": "note:beats",
                 "text": notation_text(events, tempo),
-                "limit": "Detected-active-section monophonic violin-range draft transcription; verify against score before treating as final notation.",
+                "limit": "Pitch-sanity-filtered monophonic draft from detected active sections; octave-adjusted or low-confidence notes remain uncertain until score alignment verifies them.",
             },
         }
     finally:
@@ -750,9 +866,9 @@ def transcribe_media_samples(limit: int | None = None) -> dict[str, Any]:
     state["transcriptions"] = {
         "items": items,
         "updatedAt": utc_now(),
-        "method": "librosa_active_section_harmonic_pyin_note_segmentation",
+        "method": "librosa_active_section_harmonic_pyin_with_pitch_sanity_filter",
         "pipelineVersion": TRANSCRIPTION_PIPELINE_VERSION,
-        "limit": "Detected-active-section monophonic violin-range note/rhythm extraction is draft evidence for matching; score-level claims require alignment verification.",
+        "limit": "Pitch-sanity-filtered monophonic note/rhythm extraction is draft evidence for matching; score-level claims require alignment verification.",
     }
     run = {
         "startedAt": utc_now(),

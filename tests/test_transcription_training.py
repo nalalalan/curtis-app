@@ -12,6 +12,7 @@ from backend.app.transcription import (
     event_fingerprint,
     f0_to_onset_events,
     f0_to_events,
+    pitch_sanity_filter,
     reference_matches_for,
     transcription_prior_hint,
 )
@@ -34,6 +35,19 @@ def fingerprint_for(midi_values):
         for index, midi in enumerate(midi_values)
     ]
     return event_fingerprint(events, 120.0)
+
+
+def note_event(midi, index, confidence=0.9, duration=0.2):
+    start = round(index * duration, 3)
+    end = round(start + duration, 3)
+    return {
+        "startSeconds": start,
+        "endSeconds": end,
+        "durationSeconds": duration,
+        "midi": midi,
+        "note": str(midi),
+        "confidence": confidence,
+    }
 
 
 class TranscriptionTrainingTests(unittest.TestCase):
@@ -140,6 +154,44 @@ class TranscriptionTrainingTests(unittest.TestCase):
 
         self.assertEqual(source, "onset_segmented_pyin")
         self.assertEqual(events, onset_events)
+
+    def test_pitch_sanity_filter_adjusts_isolated_octave_flip(self):
+        events = [
+            note_event(69, 0),
+            note_event(81, 1),
+            note_event(69, 2),
+        ]
+
+        cleaned, quality = pitch_sanity_filter(events)
+
+        self.assertEqual([event["midi"] for event in cleaned], [69, 69, 69])
+        self.assertTrue(cleaned[1]["uncertain"])
+        self.assertEqual(cleaned[1]["rawMidi"], 81)
+        self.assertEqual(quality["sanityOctaveAdjustedCount"], 1)
+
+    def test_pitch_sanity_filter_keeps_real_unresolved_leap(self):
+        events = [
+            note_event(69, 0),
+            note_event(81, 1),
+            note_event(84, 2),
+        ]
+
+        cleaned, quality = pitch_sanity_filter(events)
+
+        self.assertEqual([event["midi"] for event in cleaned], [69, 81, 84])
+        self.assertEqual(quality["sanityOctaveAdjustedCount"], 0)
+
+    def test_pitch_sanity_filter_drops_short_low_confidence_glitch(self):
+        events = [
+            note_event(69, 0, confidence=0.92, duration=0.2),
+            note_event(83, 1, confidence=0.4, duration=0.04),
+            note_event(71, 2, confidence=0.9, duration=0.2),
+        ]
+
+        cleaned, quality = pitch_sanity_filter(events)
+
+        self.assertEqual([event["midi"] for event in cleaned], [69, 71])
+        self.assertEqual(quality["sanityGlitchDroppedCount"], 1)
 
     def test_pitch_rhythm_fingerprint_matches_repeated_material(self):
         first = fingerprint_for([76, 78, 79, 81, 79, 78, 76, 74, 76, 78, 79, 81])

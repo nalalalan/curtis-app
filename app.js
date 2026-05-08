@@ -1126,7 +1126,8 @@ function renderNotationSheet(events, options = {}) {
     }
     const y = noteY(event.note) + 3;
     const uncertain = event.uncertain ? " notation-uncertain" : "";
-    const label = escapeHtml([event.note, event.uncertain ? "uncertain" : ""].filter(Boolean).join(" / "));
+    const raw = event.rawNote ? `raw ${event.rawNote}` : "";
+    const label = escapeHtml([event.note, raw, event.uncertain ? "uncertain" : ""].filter(Boolean).join(" / "));
     return `
       <g class="notation-note ${durationClass}${uncertain}" aria-label="${label}">
         <ellipse cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" rx="6.6" ry="4.4" transform="rotate(-16 ${x.toFixed(1)} ${y.toFixed(1)})"></ellipse>
@@ -1198,6 +1199,7 @@ function renderHeatMap(record) {
 
 function recordStatusLabel(record) {
   if (record?.transcription?.qualityStatus === "weak_fragment") return "weak notation";
+  if (record?.transcription?.qualityStatus === "sanity_corrected_draft") return "corrected draft";
   if (record?.transcription?.qualityStatus === "draft_fragment") return "draft notation";
   if (record?.status === "transcribed") return "transcribed";
   if (record?.status === "active_time_measured") return "active measured";

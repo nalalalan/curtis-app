@@ -6,7 +6,13 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from .settings import MEDIA_DIR, MEDIA_PROBE_LIMIT, MEDIA_SAMPLE_SECONDS, MEDIA_SAMPLE_START_SECONDS
+from .settings import (
+    MEDIA_DIR,
+    MEDIA_PROBE_LIMIT,
+    MEDIA_SAMPLE_SECONDS,
+    MEDIA_SAMPLE_START_SECONDS,
+    MEDIA_SAMPLE_WINDOWS_PER_VIDEO,
+)
 from .state import load_state, save_state, utc_now
 from .study_packets import practice_ledger_videos
 
@@ -31,13 +37,40 @@ def practice_candidates(state: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def sample_window(item: dict[str, Any]) -> str:
+    return sample_windows(item, max_windows=1)[0]
+
+
+def sample_windows(item: dict[str, Any], max_windows: int = MEDIA_SAMPLE_WINDOWS_PER_VIDEO) -> list[str]:
     duration = item.get("durationSeconds")
-    start = MEDIA_SAMPLE_START_SECONDS
-    if isinstance(duration, int) and duration > MEDIA_SAMPLE_SECONDS + 60:
-        start = min(start, max(0, duration - MEDIA_SAMPLE_SECONDS - 30))
-    else:
-        start = 0
-    return f"*{start}-{start + MEDIA_SAMPLE_SECONDS}"
+    if not isinstance(duration, int) or duration <= MEDIA_SAMPLE_SECONDS + 60:
+        return [f"*0-{MEDIA_SAMPLE_SECONDS}"]
+    latest_start = max(0, duration - MEDIA_SAMPLE_SECONDS - 30)
+    anchors = [
+        MEDIA_SAMPLE_START_SECONDS,
+        int(duration * 0.33),
+        int(duration * 0.66),
+        latest_start,
+    ]
+    starts: list[int] = []
+    for raw_start in anchors:
+        start = max(0, min(int(raw_start), latest_start))
+        if all(abs(start - existing) >= MEDIA_SAMPLE_SECONDS for existing in starts):
+            starts.append(start)
+        if len(starts) >= max(1, max_windows):
+            break
+    if not starts:
+        starts = [latest_start]
+    return [f"*{start}-{start + MEDIA_SAMPLE_SECONDS}" for start in starts]
+
+
+def sample_id(video_id: str, window: str) -> str:
+    start = "0"
+    if "*" in window:
+        try:
+            start = str(int(float(window.split("*", 1)[1].split("-", 1)[0])))
+        except (IndexError, TypeError, ValueError):
+            start = "0"
+    return f"{video_id}-{start}"
 
 
 def classify_media_error(output: str) -> str:
@@ -86,62 +119,67 @@ async def probe_youtube_media(limit: int = MEDIA_PROBE_LIMIT) -> dict[str, Any]:
         for sample in state.get("mediaSamples", [])
         if isinstance(sample, dict) and sample.get("id")
     }
-    selected = [item for item in candidates if item.get("id") not in existing_ids][:limit] or candidates[:limit]
+    selected = candidates[:limit]
     samples: list[dict[str, Any]] = []
     blockers: list[str] = []
+    attempted: list[dict[str, Any]] = []
 
     for item in selected:
         video_id = str(item["id"])
-        output_template = str(MEDIA_DIR / f"{video_id}.%(ext)s")
-        args = [
-            sys.executable,
-            "-m",
-            "yt_dlp",
-            "--no-playlist",
-            "--download-sections",
-            sample_window(item),
-            "--force-keyframes-at-cuts",
-            "-f",
-            "bv*[height<=360]+ba/b[height<=360]/worst",
-            "-o",
-            output_template,
-            str(item["url"]),
-        ]
-        code, output = await run_command(args)
-        files = sorted(MEDIA_DIR.glob(f"{video_id}.*"), key=lambda path: path.stat().st_mtime, reverse=True)
-        if code == 0 and files:
-            media_file = files[0]
-            sample = {
-                "id": video_id,
-                "url": item["url"],
-                "title": item.get("title"),
-                "createdAt": utc_now(),
-                "status": "media_sample_ready",
-                "path": str(media_file),
-                "sizeBytes": media_file.stat().st_size,
-                "window": sample_window(item),
-            }
-            samples.append(sample)
-            continue
-        blockers.append(classify_media_error(output))
+        for window in sample_windows(item):
+            current_id = sample_id(video_id, window)
+            attempted.append(
+                {
+                    "id": current_id,
+                    "title": item.get("title"),
+                    "url": item.get("url"),
+                    "window": window,
+                }
+            )
+            if current_id in existing_ids:
+                continue
+            output_template = str(MEDIA_DIR / f"{current_id}.%(ext)s")
+            args = [
+                sys.executable,
+                "-m",
+                "yt_dlp",
+                "--no-playlist",
+                "--download-sections",
+                window,
+                "--force-keyframes-at-cuts",
+                "-f",
+                "bv*[height<=360]+ba/b[height<=360]/worst",
+                "-o",
+                output_template,
+                str(item["url"]),
+            ]
+            code, output = await run_command(args)
+            files = sorted(MEDIA_DIR.glob(f"{current_id}.*"), key=lambda path: path.stat().st_mtime, reverse=True)
+            if code == 0 and files:
+                media_file = files[0]
+                sample = {
+                    "id": current_id,
+                    "url": item["url"],
+                    "title": item.get("title"),
+                    "createdAt": utc_now(),
+                    "status": "media_sample_ready",
+                    "path": str(media_file),
+                    "sizeBytes": media_file.stat().st_size,
+                    "window": window,
+                }
+                samples.append(sample)
+                continue
+            blockers.append(classify_media_error(output))
 
     media_samples = [*samples, *state.get("mediaSamples", [])]
-    state["mediaSamples"] = media_samples[:20]
+    state["mediaSamples"] = media_samples[:80]
     state.setdefault("review", {})["mediaAccess"] = "sample_ready" if samples else "blocked"
     run = {
         "startedAt": utc_now(),
         "status": "media_sample_ready" if samples else "blocked",
         "blockers": list(dict.fromkeys(blockers)),
         "samples": samples,
-        "attempted": [
-            {
-                "id": item.get("id"),
-                "title": item.get("title"),
-                "url": item.get("url"),
-                "window": sample_window(item),
-            }
-            for item in selected
-        ],
+        "attempted": attempted,
     }
     state["lastMediaRun"] = run
     save_state(state)
@@ -174,7 +212,7 @@ def record_uploaded_sample(
         "window": window,
         "source": "owner_upload",
     }
-    state["mediaSamples"] = [sample, *state.get("mediaSamples", [])][:20]
+    state["mediaSamples"] = [sample, *state.get("mediaSamples", [])][:80]
     state.setdefault("review", {})["mediaAccess"] = "sample_ready"
     state["lastMediaRun"] = {
         "startedAt": utc_now(),

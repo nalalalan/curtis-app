@@ -156,12 +156,15 @@ def notation_events(transcriptions: list[dict[str, Any]]) -> list[dict[str, Any]
                     "kind": "note",
                     "note": note_name,
                     "midi": note.get("midi"),
+                    "rawNote": note.get("rawNote") if note.get("rawNote") else "",
+                    "rawMidi": note.get("rawMidi") if note.get("rawMidi") else "",
                     "sourceStartSeconds": round(source_start + start, 3),
                     "sourceEndSeconds": round(source_start + end, 3),
                     "durationSeconds": round(duration, 3),
                     "durationKind": note_duration_kind(duration, tempo),
                     "confidence": round(confidence, 3),
-                    "uncertain": confidence < 0.62,
+                    "uncertain": bool(note.get("uncertain")) or confidence < 0.62,
+                    "uncertaintyReasons": note.get("uncertaintyReasons") if isinstance(note.get("uncertaintyReasons"), list) else [],
                 }
             )
             previous_end = max(previous_end, end)
@@ -261,7 +264,30 @@ def transcription_note_count(transcriptions: list[dict[str, Any]]) -> int:
     return count
 
 
-def transcription_quality(note_count: int, active_seconds: int, segment_count: int) -> dict[str, Any]:
+def transcription_quality_metrics(transcriptions: list[dict[str, Any]]) -> dict[str, int]:
+    totals: Counter[str] = Counter()
+    for transcription in transcriptions:
+        quality = transcription.get("quality") if isinstance(transcription.get("quality"), dict) else {}
+        for key in (
+            "rawSelectedEventCount",
+            "selectedEventCount",
+            "sanityGlitchDroppedCount",
+            "sanityOctaveAdjustedCount",
+            "sanityLargeLeapCount",
+            "sanityLowConfidenceNoteCount",
+            "omittedSparseWindowCount",
+        ):
+            totals[key] += int(quality.get(key) or 0)
+    return {key: int(value) for key, value in totals.items() if value}
+
+
+def transcription_quality(
+    note_count: int,
+    active_seconds: int,
+    segment_count: int,
+    metrics: dict[str, int] | None = None,
+) -> dict[str, Any]:
+    metrics = metrics or {}
     if note_count <= 0:
         return {
             "qualityStatus": "pending",
@@ -278,20 +304,46 @@ def transcription_quality(note_count: int, active_seconds: int, segment_count: i
             ),
             "segmentCount": segment_count,
         }
+    adjusted = int(metrics.get("sanityOctaveAdjustedCount") or 0)
+    low_confidence = int(metrics.get("sanityLowConfidenceNoteCount") or 0)
+    sparse = int(metrics.get("omittedSparseWindowCount") or 0)
+    sparse_note = (
+        f" {sparse} sparse active-window hit{'s' if sparse != 1 else ''} were excluded from the staff."
+        if sparse
+        else ""
+    )
+    if adjusted or low_confidence >= max(8, int(note_count * 0.18)):
+        parts = []
+        if adjusted:
+            parts.append(f"{adjusted} octave-flip correction{'s' if adjusted != 1 else ''}")
+        if low_confidence:
+            parts.append(f"{low_confidence} low-confidence note{'s' if low_confidence != 1 else ''}")
+        return {
+            "qualityStatus": "sanity_corrected_draft",
+            "qualityLabel": "sanity-corrected draft",
+            "qualityLimit": (
+                f"The notation still contains {', '.join(parts)}; read it as a corrected pitch trace, "
+                f"not finished sheet music.{sparse_note}"
+            ),
+            "qualityMetrics": metrics,
+            "segmentCount": segment_count,
+        }
     if active_seconds < DRAFT_TRANSCRIPTION_MIN_SECONDS or note_count < DRAFT_TRANSCRIPTION_MIN_NOTES:
         return {
             "qualityStatus": "draft_fragment",
             "qualityLabel": "draft fragment",
             "qualityLimit": (
                 f"{duration_seconds_label(active_seconds)} and {note_count} notes were detected; "
-                "use this as machine evidence, not finished sheet music."
+                f"use this as machine evidence, not finished sheet music.{sparse_note}"
             ),
+            "qualityMetrics": metrics,
             "segmentCount": segment_count,
         }
     return {
         "qualityStatus": "usable_fragment",
         "qualityLabel": "usable fragment",
-        "qualityLimit": "Machine transcription is long enough to inspect, but score alignment is still required.",
+        "qualityLimit": f"Machine transcription is long enough to inspect, but score alignment is still required.{sparse_note}",
+        "qualityMetrics": metrics,
         "segmentCount": segment_count,
     }
 
@@ -517,7 +569,7 @@ def transcription_quality_observations(
     clips: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     status = str(quality.get("qualityStatus") or "")
-    if status != "weak_fragment":
+    if status not in {"weak_fragment", "sanity_corrected_draft"}:
         return []
     primary_clip = clips[0] if clips else {}
     return [
@@ -530,7 +582,10 @@ def transcription_quality_observations(
             "evidence": primary_clip,
             "transcriptionSnippet": notation[:24],
             "confidence": "machine_quality_gate",
-            "curtisReadinessIssue": "This evidence can guide review, but it is not strong enough to judge Curtis readiness.",
+            "curtisReadinessIssue": (
+                "This evidence can guide review, but it is not strong enough to judge Curtis readiness "
+                "until the clip and score location agree."
+            ),
         }
     ]
 
@@ -794,7 +849,8 @@ def build_daily_records(
         day_repeat_groups = repeat_groups(heat_fragments, day_transcriptions)
         note_count = transcription_note_count(day_transcriptions)
         notation_segments = [item for item in day_transcriptions if has_stable_notation(item)]
-        quality = transcription_quality(note_count, active_seconds, len(notation_segments))
+        quality_metrics = transcription_quality_metrics(notation_segments)
+        quality = transcription_quality(note_count, active_seconds, len(notation_segments), quality_metrics)
         uploaded_seconds = sum(int(video.get("durationSeconds") or 0) for video in videos)
         processed_seconds = sum(sample_duration_seconds(sample) for sample in day_samples)
         transcribed_seconds = transcription_window_seconds(day_transcriptions)
