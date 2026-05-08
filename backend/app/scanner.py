@@ -24,6 +24,7 @@ from .settings import (
     OPENAI_PIECE_VERIFY_MODEL,
     OPENAI_REASONING_EFFORT,
     OPENAI_VISION_MODEL,
+    REQUIRE_SOURCE_CONFIRMED_PIECE_TITLES,
     SERVICE_NAME,
 )
 from .state import append_run, load_state, save_state, utc_now
@@ -578,15 +579,18 @@ def enriched_pieces(pieces: list[Any], today: str, media_samples: list[dict[str,
         )
         verified_piece_id = str(piece.get("evidenceQuality") or "") == "verified_piece_id"
         human_verified_source_label = str(piece.get("evidenceQuality") or "") == "human_verified_source_label"
+        source_confirmed = human_verified_source_label or (
+            verified_piece_id and not REQUIRE_SOURCE_CONFIRMED_PIECE_TITLES
+        )
         current_piece_id_version = str(piece.get("reviewVersion") or "") == CONFIRMED_PIECE_ID_VERSION
         if (
             str(piece.get("confidence") or "unknown").lower() != "clear"
             or rejected_repertoire_title(piece.get("title"), piece)
+            or not source_confirmed
             or (
                 not human_verified_source_label
                 and (
                     not has_source_window
-                    or not verified_piece_id
                     or not current_piece_id_version
                     or untrusted_long_session_source(piece, media_samples)
                 )

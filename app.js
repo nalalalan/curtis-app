@@ -246,7 +246,7 @@ async function runBackendScan() {
 function rejectableTitle(source) {
   const title = String(source?.detectedTitle || "").replace(/\s*\/\s*unverified$/i, "").trim();
   if (!title || title === "Piece being identified") return "";
-  if (source?.status !== "piece_identified" && !String(source?.detectedTitle || "").includes("/ unverified")) return "";
+  if (source?.status !== "piece_identified") return "";
   return title;
 }
 
@@ -380,6 +380,7 @@ function sourceFromResult(result, ops) {
   const window = parseWindow(result?.sourceWindow || sample?.window);
   const start = Number(result?.sourceStartSeconds ?? window.start) || 0;
   const end = Number(result?.sourceEndSeconds ?? window.end) || (start ? start + 45 : 0);
+  const identified = resultIsIdentified(result);
   return {
     sampleId: result?.sampleId || sample?.id || "",
     title: result?.sourceTitle || result?.sampleTitle || sample?.title || "",
@@ -387,10 +388,10 @@ function sourceFromResult(result, ops) {
     window: result?.sourceWindow || sample?.window || "",
     startSeconds: start,
     endSeconds: end,
-    detectedTitle: result?.title || result?.proposedTitle || "Piece being identified",
+    detectedTitle: identified ? result.title : "Piece being identified",
     confidence: result?.confidence || "unknown",
     confidenceScore: Number(result?.confidenceScore) || 0,
-    status: result?.status || "",
+    status: identified ? "piece_identified" : result?.status === "piece_identified" ? "piece_unconfirmed_title" : result?.status || "",
     tip: result?.immediateTip || "",
     completionPercent: Number(result?.completionPercent) || 0
   };
@@ -447,8 +448,13 @@ function currentPiece(ops) {
     : primaryPiece(ops);
 }
 
+function sourceConfirmedTitle(item) {
+  const quality = String(item?.evidenceQuality || "");
+  return quality === "human_verified_source_label" || item?.sourceConfirmed === true;
+}
+
 function isIdentifiedPiece(piece) {
-  return Boolean(piece?.title && piece.title !== "Piece being identified");
+  return Boolean(piece?.title && piece.title !== "Piece being identified" && sourceConfirmedTitle(piece));
 }
 
 function pieceLabel(piece) {
@@ -475,6 +481,7 @@ function pieceStatusLabel(piece) {
 
 function pieceTip(piece) {
   if (!piece) return "Capture one clear excerpt.";
+  if (!isIdentifiedPiece(piece)) return "Source confirmation pending.";
   const tip = String(
     piece.isActiveToday
       ? piece.todayTip || piece.tip || "Capture one clearer excerpt."
@@ -519,9 +526,10 @@ function completionLabel(piece) {
 
 function pieceEvidence(piece) {
   if (!piece) return "";
+  if (!isIdentifiedPiece(piece)) return "Source confirmation pending.";
   const evidence = String(piece.candidateEvidence || piece.evidence || "").trim();
   if (!evidence) return "";
-  return isIdentifiedPiece(piece) ? evidence : `Signal: ${evidence}`;
+  return evidence;
 }
 
 function workingText(ops) {
@@ -565,8 +573,7 @@ function resultIsIdentified(result) {
 
 function resultDetectedLabel(result) {
   if (!result) return "Piece being identified";
-  if (result.status === "piece_identified" && result.title) return result.title;
-  if (result.proposedTitle) return `${result.proposedTitle} / unverified`;
+  if (resultIsIdentified(result)) return result.title;
   return "Piece being identified";
 }
 
@@ -617,14 +624,12 @@ function detectionLabel(source) {
   if (source.status === "piece_identified" && title !== "Piece being identified") {
     return `${sourceTitle} / ${title}`;
   }
-  if (String(title).includes("/ unverified")) return `${sourceTitle} / unverified`;
   return `${sourceTitle} / identifying`;
 }
 
 function detectionStatus(source) {
   if (!source?.url) return "No clip";
   if (source.status === "piece_identified" && source.detectedTitle !== "Piece being identified") return "Check clip";
-  if (String(source.detectedTitle || "").includes("/ unverified")) return "Unverified";
   return "Identifying";
 }
 
@@ -655,19 +660,16 @@ function practiceDays(ops) {
     });
     const dayPieces = dayPieceRows.map((row) => row.piece);
     const daySections = sections.filter((section) => section.url === video.url || sampleIds.has(section.sampleId));
-    const identified = dayResults.filter((result) => result.status === "piece_identified");
+    const identified = dayResults.filter(resultIsIdentified);
     const identifiedPieceRows = dayPieceRows.filter(({ piece }) => isIdentifiedPiece(piece));
     const identifiedPieces = identifiedPieceRows.map((row) => row.piece);
-    const unverified = dayResults.filter((result) => result.status === "piece_candidate_unverified");
-    const detected = [...identified.map(resultDetectedLabel), ...identifiedPieces.map(pieceLabel), ...unverified.map(resultDetectedLabel)]
+    const detected = [...identified.map(resultDetectedLabel), ...identifiedPieces.map(pieceLabel)]
       .filter(Boolean);
     const highlight = identified[0]
       ? sourceFromResult(identified[0], ops)
       : identifiedPieces[0]
         ? sourceFromPiece(identifiedPieces[0], ops)
-        : unverified[0]
-          ? sourceFromResult(unverified[0], ops)
-          : daySections[0]
+        : daySections[0]
             ? sourceFromSection(daySections[0])
             : daySamples[0]
               ? sourceFromResult({ sampleId: daySamples[0].id }, ops)
@@ -679,7 +681,7 @@ function practiceDays(ops) {
         Number(piece.completionPercent) || 0
       ))
     ];
-    const tip = identified[0]?.immediateTip || identifiedPieceRows[0]?.daily?.tip || identifiedPieces[0]?.tip || unverified[0]?.immediateTip || "";
+    const tip = identified[0]?.immediateTip || identifiedPieceRows[0]?.daily?.tip || identifiedPieces[0]?.tip || "";
     const identifiedCount = identified.length + identifiedPieces.length;
     return {
       title: video.title || "Practice",
@@ -690,7 +692,7 @@ function practiceDays(ops) {
       samples: daySamples.length,
       sections: daySections.length,
       detected: [...new Set(detected)].slice(0, 3),
-      status: identifiedCount ? "identified" : unverified.length ? "unverified" : daySamples.length ? "identifying" : "indexed",
+      status: identifiedCount ? "identified" : daySamples.length ? "identifying" : "indexed",
       completionPercent: Math.max(0, ...percentCandidates),
       tip,
       highlight
@@ -774,6 +776,7 @@ function renderPieces() {
 }
 
 function renderPieceDays(piece) {
+  if (!isIdentifiedPiece(piece)) return "";
   const daily = piece?.daily && typeof piece.daily === "object" ? piece.daily : {};
   const rows = Object.entries(daily).slice(-4).reverse();
   if (!rows.length) return "";

@@ -25,6 +25,10 @@ MEDIA_SAMPLE_START_SECONDS = int(os.getenv("CURTIS_MEDIA_SAMPLE_START_SECONDS", 
 MODEL_REVIEW_SAMPLE_SECONDS = int(os.getenv("CURTIS_MODEL_REVIEW_SAMPLE_SECONDS", "14"))
 MODEL_REVIEW_FRAME_COUNT = int(os.getenv("CURTIS_MODEL_REVIEW_FRAME_COUNT", "4"))
 UPLOAD_TOKEN = os.getenv("CURTIS_UPLOAD_TOKEN", "")
+REQUIRE_SOURCE_CONFIRMED_PIECE_TITLES = os.getenv(
+    "CURTIS_REQUIRE_SOURCE_CONFIRMED_PIECE_TITLES",
+    "1",
+).strip().lower() not in {"0", "false", "no", "off"}
 
 
 def env_present(name: str) -> bool:

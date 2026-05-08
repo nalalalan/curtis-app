@@ -21,7 +21,7 @@ from .corrections import (
     source_requires_confirmed_acceptance,
     title_rejected_for_item,
 )
-from .settings import OPENAI_AUDIO_MODEL, OPENAI_PIECE_VERIFY_MODEL
+from .settings import OPENAI_AUDIO_MODEL, OPENAI_PIECE_VERIFY_MODEL, REQUIRE_SOURCE_CONFIRMED_PIECE_TITLES
 from .state import load_state, save_state, utc_now
 
 
@@ -889,6 +889,39 @@ def piece_review_from_identification(result: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def withhold_model_title(result: dict[str, Any]) -> dict[str, Any]:
+    proposed_title = str(
+        result.get("title")
+        or result.get("proposedTitle")
+        or result.get("candidateTitle")
+        or result.get("verificationTitle")
+        or ""
+    ).strip()
+    withheld = dict(result)
+    if proposed_title and proposed_title != "Piece being identified":
+        withheld["withheldTitle"] = proposed_title[:140]
+    withheld.update(
+        {
+            "status": "piece_unconfirmed_title",
+            "title": "Piece being identified",
+            "proposedTitle": "",
+            "candidateTitle": "",
+            "verificationTitle": "",
+            "confidence": "unknown",
+            "confidenceScore": 0,
+            "completionPercent": 0,
+            "todayCompletionPercent": 0,
+            "readinessStatus": "source_label_required",
+            "evidenceQuality": "unconfirmed_model_title",
+            "candidateEvidence": "Model-only title withheld. Needs source label before it can appear as repertoire.",
+            "evidence": "Model-only title withheld. Needs source label before it can appear as repertoire.",
+            "topCandidates": [],
+            "musicalClues": [],
+        }
+    )
+    return withheld
+
+
 def apply_source_correction_gate(state: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
     if result.get("status") == "blocked":
         return result
@@ -939,8 +972,15 @@ def apply_source_correction_gate(state: dict[str, Any], result: dict[str, Any]) 
         for title in titles
     )
     requires_acceptance = source_requires_confirmed_acceptance(state, result)
-    if not rejected_candidate and not (result.get("status") == "piece_identified" and requires_acceptance):
+    source_label_required = (
+        REQUIRE_SOURCE_CONFIRMED_PIECE_TITLES
+        and result.get("status") == "piece_identified"
+        and str(result.get("evidenceQuality") or "") != "human_verified_source_label"
+    )
+    if not rejected_candidate and not requires_acceptance and not source_label_required:
         return result
+    if source_label_required and not rejected_candidate:
+        return withhold_model_title(result)
     candidate_title = str(result.get("title") or result.get("proposedTitle") or "").strip()
     gated = scrubbed_piece_item(result)
     gated["status"] = "source_correction_unresolved" if requires_acceptance else "piece_rejected_guess"
