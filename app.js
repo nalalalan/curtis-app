@@ -1369,8 +1369,6 @@ function recordPieceText(record) {
 function renderDailyRecord(record, index = 0) {
   const events = record?.transcription?.events || [];
   const scoreSnippet = scoreSnippetForRecord(record);
-  const hasEvidence = Boolean(events.length || (Array.isArray(record?.clips) && record.clips.length) || (Array.isArray(record?.heatMap?.fragments) && record.heatMap.fragments.length));
-  const open = hasEvidence && index === 0 ? " open" : "";
   const meta = [
     record.practiceDay,
     record.uploadedVideoLabel ? `${record.uploadedVideoLabel} uploaded` : "",
@@ -1378,7 +1376,7 @@ function renderDailyRecord(record, index = 0) {
     record.transcription?.noteCount ? `${record.transcription.noteCount} notes` : "notation pending"
   ].filter(Boolean).join(" / ");
   return `
-    <details class="record-card" data-status="${escapeHtml(record.status || "pending")}"${open}>
+    <details class="record-card" data-status="${escapeHtml(record.status || "pending")}">
       <summary class="record-summary">
         <span>${escapeHtml(meta)}</span>
         <strong>${escapeHtml(recordPieceText(record))}</strong>
@@ -1446,9 +1444,8 @@ function renderPieces() {
     const evidence = Array.isArray(piece.evidence) ? piece.evidence.slice(0, 2) : [];
     const leadEvidence = evidence[0] || {};
     const leadObservation = Array.isArray(piece.observations) ? piece.observations[0] : null;
-    const open = index === 0 ? " open" : "";
     return `
-    <details class="piece-row evidence-piece"${open}>
+    <details class="piece-row evidence-piece">
       <summary class="piece-summary">
         <span>${escapeHtml(piece.status || "confirmed")}</span>
         <strong>${escapeHtml(piece.title || "Piece")}</strong>

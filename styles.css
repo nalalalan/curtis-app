@@ -1367,6 +1367,7 @@ h2 {
 }
 
 .record-summary {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px 12px;
@@ -1396,6 +1397,7 @@ h2 {
   min-height: 30px;
   align-items: center;
   justify-content: center;
+  margin-right: 32px;
   padding: 0 9px;
   border: 1px solid rgba(31, 41, 39, .11);
   border-radius: 999px;
@@ -1407,6 +1409,32 @@ h2 {
   line-height: 1;
   text-transform: uppercase;
   white-space: nowrap;
+}
+
+.record-summary::after,
+.piece-summary::after {
+  content: "+";
+  position: absolute;
+  right: 0;
+  top: 50%;
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(31, 41, 39, .12);
+  border-radius: 999px;
+  background: rgba(255, 253, 248, .82);
+  color: var(--green);
+  font-size: 15px;
+  font-weight: 760;
+  line-height: 1;
+  transform: translateY(-50%);
+}
+
+.record-card[open] .record-summary::after,
+.piece-row[open] .piece-summary::after {
+  content: "-";
 }
 
 .record-card[open] .record-summary {
@@ -1989,6 +2017,7 @@ h2 {
 }
 
 .piece-summary {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px 12px;
@@ -2012,6 +2041,7 @@ h2 {
 
 .piece-summary em {
   justify-self: end;
+  margin-right: 32px;
 }
 
 .piece-row[open] .piece-summary {
