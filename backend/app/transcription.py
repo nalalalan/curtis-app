@@ -14,7 +14,7 @@ from .state import load_state, save_state, utc_now
 
 MAX_TRANSCRIPTION_SECONDS = int(os.getenv("CURTIS_TRANSCRIPTION_MAX_SECONDS", "180"))
 TRANSCRIPTION_SAMPLE_LIMIT = int(os.getenv("CURTIS_TRANSCRIPTION_SAMPLE_LIMIT", "8"))
-TRANSCRIPTION_PIPELINE_VERSION = "violin_pyin_onset_v3"
+TRANSCRIPTION_PIPELINE_VERSION = "violin_harmonic_pyin_onset_v4"
 MIN_NOTE_SECONDS = float(os.getenv("CURTIS_MIN_NOTE_SECONDS", "0.08"))
 MIN_ONSET_NOTE_SECONDS = float(os.getenv("CURTIS_MIN_ONSET_NOTE_SECONDS", "0.04"))
 MAX_STORED_NOTES = int(os.getenv("CURTIS_MAX_STORED_NOTES", "240"))
@@ -26,6 +26,7 @@ NOTE_CHANGE_CONFIRM_FRAMES = int(os.getenv("CURTIS_NOTE_CHANGE_CONFIRM_FRAMES", 
 NOTE_MERGE_GAP_SECONDS = float(os.getenv("CURTIS_NOTE_MERGE_GAP_SECONDS", "0.07"))
 ONSET_EVENT_MULTIPLIER = float(os.getenv("CURTIS_ONSET_EVENT_MULTIPLIER", "1.12"))
 ONSET_MIN_VOICED_FRAMES = int(os.getenv("CURTIS_ONSET_MIN_VOICED_FRAMES", "1"))
+HARMONIC_MARGIN = float(os.getenv("CURTIS_HARMONIC_MARGIN", "8.0"))
 NOTE_NAMES = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
 
 
@@ -391,6 +392,22 @@ def notation_text(events: list[dict[str, Any]], tempo_bpm: float) -> str:
     return " ".join(tokens)
 
 
+def pitch_tracking_signal(y: Any, librosa: Any, numpy: Any) -> tuple[Any, str]:
+    try:
+        normalized = librosa.util.normalize(y)
+    except Exception:
+        normalized = y
+    try:
+        harmonic = librosa.effects.harmonic(normalized, margin=HARMONIC_MARGIN)
+        harmonic_rms = float(numpy.sqrt(numpy.mean(numpy.square(harmonic)))) if harmonic.size else 0.0
+        source_rms = float(numpy.sqrt(numpy.mean(numpy.square(normalized)))) if normalized.size else 0.0
+        if harmonic.size == normalized.size and harmonic_rms >= max(0.01, source_rms * 0.08):
+            return librosa.util.normalize(harmonic), "trimmed_normalized_harmonic"
+    except Exception:
+        pass
+    return normalized, "trimmed_normalized"
+
+
 def transcribe_path(path: Path) -> dict[str, Any]:
     try:
         import librosa  # type: ignore
@@ -413,9 +430,10 @@ def transcribe_path(path: Path) -> dict[str, Any]:
         y, _ = librosa.effects.trim(y, top_db=35)
         if y.size == 0:
             return {"status": "blocked", "blocker": "no_audible_audio"}
+        pitch_y, preprocessing = pitch_tracking_signal(y, librosa, numpy)
         hop_length = 512
         f0, voiced_flag, voiced_prob = librosa.pyin(
-            y,
+            pitch_y,
             fmin=librosa.midi_to_hz(VIOLIN_MIN_MIDI),
             fmax=librosa.midi_to_hz(VIOLIN_MAX_MIDI),
             sr=sr,
@@ -424,7 +442,7 @@ def transcribe_path(path: Path) -> dict[str, Any]:
         )
         tempo = estimate_tempo(y, sr, librosa)
         try:
-            onset_frames = librosa.onset.onset_detect(y=y, sr=sr, hop_length=hop_length, units="frames")
+            onset_frames = librosa.onset.onset_detect(y=pitch_y, sr=sr, hop_length=hop_length, units="frames")
         except Exception:
             onset_frames = []
         pitch_events = f0_to_events(f0, voiced_flag, voiced_prob, sr, hop_length, numpy)
@@ -434,7 +452,7 @@ def transcribe_path(path: Path) -> dict[str, Any]:
         return {
             "status": "transcribed" if events else "no_stable_notes",
             "pipelineVersion": TRANSCRIPTION_PIPELINE_VERSION,
-            "method": "librosa_pyin_violin_range_onset_aware_note_segmentation",
+            "method": "librosa_harmonic_pyin_violin_range_onset_aware_note_segmentation",
             "durationSeconds": round(float(len(y) / sr), 2),
             "tempoBpm": tempo,
             "voicedFrameRatio": voiced_ratio,
@@ -453,11 +471,12 @@ def transcribe_path(path: Path) -> dict[str, Any]:
                 "onsetEventCount": len(onset_events),
                 "selectedEventCount": len(events),
                 "detectedOnsetCount": len(onset_frames),
+                "preprocessing": preprocessing,
             },
             "notation": {
                 "format": "note:beats",
                 "text": notation_text(events, tempo),
-                "limit": "Onset-aware monophonic violin-range draft transcription; verify against score before treating as final notation.",
+                "limit": "Harmonic-isolated monophonic violin-range draft transcription; verify against score before treating as final notation.",
             },
         }
     finally:
@@ -589,9 +608,9 @@ def transcribe_media_samples(limit: int | None = None) -> dict[str, Any]:
     state["transcriptions"] = {
         "items": items,
         "updatedAt": utc_now(),
-        "method": "librosa_pyin_violin_range_onset_aware_note_segmentation",
+        "method": "librosa_harmonic_pyin_violin_range_onset_aware_note_segmentation",
         "pipelineVersion": TRANSCRIPTION_PIPELINE_VERSION,
-        "limit": "Onset-aware monophonic violin-range note/rhythm extraction is draft evidence for matching; score-level claims require alignment verification.",
+        "limit": "Harmonic-isolated monophonic violin-range note/rhythm extraction is draft evidence for matching; score-level claims require alignment verification.",
     }
     run = {
         "startedAt": utc_now(),

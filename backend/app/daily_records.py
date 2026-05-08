@@ -180,6 +180,57 @@ def active_seconds_from_transcriptions(transcriptions: list[dict[str, Any]]) -> 
     return int(round(total))
 
 
+def transcription_window_seconds(transcriptions: list[dict[str, Any]]) -> int:
+    total = 0
+    seen: set[tuple[str, int, int]] = set()
+    for transcription in transcriptions:
+        start, end = window_bounds(transcription)
+        if end <= start:
+            continue
+        key = (
+            str(transcription.get("sampleId") or transcription.get("id") or transcription.get("sourceUrl") or ""),
+            start,
+            end,
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        total += end - start
+    return total
+
+
+def transcription_coverage(
+    transcribed_seconds: int,
+    uploaded_seconds: int,
+    segment_count: int,
+) -> dict[str, Any]:
+    if transcribed_seconds <= 0:
+        return {
+            "windowSeconds": 0,
+            "windowLabel": "",
+            "coveragePercent": 0,
+            "coverageLabel": "No notation window yet.",
+            "coverageLimit": "No playable transcription window is available for this day yet.",
+            "coverageStatus": "pending_transcription",
+        }
+    percent = round((transcribed_seconds / max(1, uploaded_seconds)) * 100, 2) if uploaded_seconds else 0
+    return {
+        "windowSeconds": transcribed_seconds,
+        "windowLabel": duration_seconds_label(transcribed_seconds),
+        "coveragePercent": percent,
+        "coverageLabel": (
+            f"{duration_seconds_label(transcribed_seconds)} transcribed"
+            + (f" from {duration_seconds_label(uploaded_seconds)} uploaded" if uploaded_seconds else "")
+        ),
+        "coverageLimit": (
+            "The notation is only for the sampled playable window shown here, not the full practice day."
+            if segment_count <= 1
+            else "The notation combines sampled playable windows, not the full practice day."
+        ),
+        "coverageStatus": "sample_window_only",
+    }
+
+
 def transcription_note_count(transcriptions: list[dict[str, Any]]) -> int:
     count = 0
     for transcription in transcriptions:
@@ -514,6 +565,32 @@ def clips_for_day(
 ) -> list[dict[str, Any]]:
     clips: list[dict[str, Any]] = []
     samples = sample_by_id(media_samples)
+    transcription_sort = sorted(
+        transcriptions,
+        key=lambda item: (int(item.get("noteCount") or 0), sample_duration_seconds(item)),
+        reverse=True,
+    )
+    for transcription in transcription_sort:
+        start, end = window_bounds(transcription)
+        if end <= start:
+            continue
+        note_count = int(transcription.get("noteCount") or 0)
+        clips.append(
+            {
+                "type": "transcribed_window",
+                "label": "transcribed playing window",
+                "url": transcription.get("sourceUrl") or "",
+                "sourceTitle": transcription.get("sourceTitle") or "",
+                "startSeconds": start,
+                "endSeconds": end,
+                "durationSeconds": end - start,
+                "noteCount": note_count,
+                "transcriptionId": transcription.get("transcriptionId") or "",
+                "pipelineVersion": transcription.get("pipelineVersion") or "",
+                "reason": f"{note_count} detected notes in the displayed notation window.",
+                **clip_media_fields(transcription, samples),
+            }
+        )
     for section in sorted(sections, key=lambda item: float(item.get("meanRms") or 0.0), reverse=True):
         start, end = window_bounds(section)
         if end <= start:
@@ -529,23 +606,6 @@ def clips_for_day(
                 "durationSeconds": end - start,
                 "reason": section.get("note") or "Audio-active practice section.",
                 **clip_media_fields(section, samples),
-            }
-        )
-    for transcription in transcriptions:
-        start, end = window_bounds(transcription)
-        if end <= start:
-            continue
-        clips.append(
-            {
-                "type": "transcribed_window",
-                "label": "transcribed playing window",
-                "url": transcription.get("sourceUrl") or "",
-                "sourceTitle": transcription.get("sourceTitle") or "",
-                "startSeconds": start,
-                "endSeconds": end,
-                "durationSeconds": end - start,
-                "reason": f"{int(transcription.get('noteCount') or 0)} detected notes.",
-                **clip_media_fields(transcription, samples),
             }
         )
     if not clips:
@@ -698,6 +758,8 @@ def build_daily_records(
         quality = transcription_quality(note_count, active_seconds, len(day_transcriptions))
         uploaded_seconds = sum(int(video.get("durationSeconds") or 0) for video in videos)
         processed_seconds = sum(sample_duration_seconds(sample) for sample in day_samples)
+        transcribed_seconds = transcription_window_seconds(day_transcriptions)
+        coverage = transcription_coverage(transcribed_seconds, uploaded_seconds, len(day_transcriptions))
         clips = clips_for_day(videos, day_sections, day_transcriptions, day_samples)
         observations = [
             *transcription_quality_observations(quality, notation, clips),
@@ -723,6 +785,7 @@ def build_daily_records(
                     "status": "ready" if notation else "pending",
                     "noteCount": note_count,
                     "segmentCount": len(day_transcriptions),
+                    **coverage,
                     **quality,
                     "events": notation,
                     "repeatGroups": day_repeat_groups,

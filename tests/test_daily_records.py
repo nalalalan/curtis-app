@@ -82,7 +82,15 @@ class DailyRecordTests(unittest.TestCase):
             state={},
             media_samples=[{"id": "K38CgZhvF3Q", "path": "sample.mp4", "window": "*10-30"}],
             transcriptions=transcriptions,
-            sections=[],
+            sections=[
+                {
+                    "sampleId": "K38CgZhvF3Q",
+                    "url": "https://www.youtube.com/watch?v=K38CgZhvF3Q",
+                    "window": "*12-14",
+                    "meanRms": 0.8,
+                    "note": "Audio-active section inside the transcribed window.",
+                }
+            ],
         )
         record = next(item for item in daily["records"] if item["practiceDay"] == "2026-05-02")
 
@@ -92,6 +100,8 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(record["activeTimeStatus"], "measured_from_pitch")
         self.assertEqual(record["transcription"]["status"], "ready")
         self.assertEqual(record["transcription"]["qualityStatus"], "weak_fragment")
+        self.assertEqual(record["transcription"]["windowSeconds"], 20)
+        self.assertEqual(record["transcription"]["coverageStatus"], "sample_window_only")
         self.assertTrue(record["transcription"]["repeatGroups"])
         self.assertIn("x2", record["transcription"]["repeatGroups"][0]["notationLabel"])
         self.assertTrue(any(event["kind"] == "rest" for event in record["transcription"]["events"]))
@@ -99,8 +109,10 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(record["pieces"][0]["title"], "Wieniawski Scherzo-Tarantelle, Op. 16")
         self.assertIn("not enough", record["mainCurtisBlocker"])
         self.assertTrue(record["heatMap"]["layers"])
+        self.assertEqual(record["clips"][0]["type"], "transcribed_window")
         self.assertEqual(record["clips"][0]["mediaUrl"], "/api/curtis/media/sample/K38CgZhvF3Q")
         self.assertEqual(record["clips"][0]["localStartSeconds"], 0)
+        self.assertEqual(record["clips"][0]["localEndSeconds"], 20)
         self.assertNotIn("reading decoration", " ".join(video["title"] for video in record["videos"]))
 
     def test_repertoire_promotes_only_confirmed_daily_evidence(self):

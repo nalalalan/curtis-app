@@ -1335,11 +1335,44 @@ function mediaFragmentUrl(clip) {
 
 function primaryPlayableClip(record) {
   const clips = Array.isArray(record?.clips) ? record.clips : [];
-  return clips.find((clip) => clip?.mediaUrl) || clips[0] || null;
+  return clips.find((clip) => clip?.mediaUrl && clip.type === "transcribed_window" && Number(clip.noteCount || record?.transcription?.noteCount || 0) > 0)
+    || clips.find((clip) => clip?.mediaUrl && clip.type === "transcribed_window")
+    || clips.find((clip) => clip?.mediaUrl)
+    || clips[0]
+    || null;
 }
 
-function renderEmbeddedMedia(record) {
-  const clip = primaryPlayableClip(record);
+function eventInsideClip(event, clip) {
+  if (!clip || clip.type !== "transcribed_window") return true;
+  if (event?.kind !== "note") return false;
+  const start = Number(clip.startSeconds) || 0;
+  const end = Number(clip.endSeconds) || 0;
+  const eventStart = Number(event.sourceStartSeconds);
+  return end > start && Number.isFinite(eventStart) && eventStart >= start - 0.2 && eventStart <= end + 0.2;
+}
+
+function transcriptionEventsForClip(record, clip) {
+  const events = Array.isArray(record?.transcription?.events) ? record.transcription.events : [];
+  if (!clip || clip.type !== "transcribed_window") return events;
+  const filtered = [];
+  for (const event of events) {
+    if (eventInsideClip(event, clip)) {
+      filtered.push(event);
+      continue;
+    }
+    if (event?.kind === "rest" && filtered.length) filtered.push(event);
+  }
+  const noteCount = filtered.filter((event) => event?.kind === "note").length;
+  return noteCount >= 3 ? filtered : events;
+}
+
+function transcriptionCoverageText(record) {
+  const transcription = record?.transcription || {};
+  return transcription.coverageLabel || record?.processedSampleLabel || "sample window pending";
+}
+
+function renderEmbeddedMedia(record, preferredClip = null) {
+  const clip = preferredClip || primaryPlayableClip(record);
   const src = mediaFragmentUrl(clip);
   if (!src) {
     return `
@@ -1350,10 +1383,11 @@ function renderEmbeddedMedia(record) {
       </div>
     `;
   }
+  const label = clip?.type === "transcribed_window" ? "Transcribed clip" : "Local clip";
   return `
     <div class="embedded-media" aria-label="Playable local practice clip">
       <div class="embedded-media-header">
-        <span>Local clip</span>
+        <span>${escapeHtml(label)}</span>
         <strong>${escapeHtml(clipWindowLabel(clip))}</strong>
       </div>
       <video controls preload="metadata" src="${escapeHtml(src)}"></video>
@@ -1469,7 +1503,8 @@ function recordEvidenceLine(record, scoreSnippet) {
 }
 
 function renderDailyRecord(record, index = 0) {
-  const events = record?.transcription?.events || [];
+  const playableClip = primaryPlayableClip(record);
+  const events = transcriptionEventsForClip(record, playableClip);
   const scoreSnippet = scoreSnippetForRecord(record);
   const meta = [
     record.practiceDay,
@@ -1487,7 +1522,7 @@ function renderDailyRecord(record, index = 0) {
       </summary>
       <div class="record-card-body record-essentials-body">
         <div class="practice-essentials">
-          ${renderEmbeddedMedia(record)}
+          ${renderEmbeddedMedia(record, playableClip)}
           <section class="essential-panel">
             <span>Transcription</span>
             ${renderNotationSheet(events, {
@@ -1500,9 +1535,9 @@ function renderDailyRecord(record, index = 0) {
             ${renderScoreHeatMap(record, scoreSnippet)}
           </section>
           <section class="essential-panel essential-state">
-            <span>Essential state</span>
+            <span>Limit</span>
             <strong>${escapeHtml(record?.transcription?.qualityLimit || record.mainCurtisBlocker || "Evidence pending.")}</strong>
-            <small>${escapeHtml("Sample windows only; whole-session transcription pending.")}</small>
+            <small>${escapeHtml(record?.transcription?.coverageLimit || transcriptionCoverageText(record))}</small>
           </section>
         </div>
       </div>
