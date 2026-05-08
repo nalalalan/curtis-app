@@ -114,13 +114,16 @@ button {
 }
 
 .topbar nav a.ao-home {
-  width: 36px;
+  width: 40px;
   padding: 0;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
 }
 
 .ao-home img {
-  width: 22px;
-  height: 22px;
+  width: 31px;
+  height: 31px;
   display: block;
 }
 
