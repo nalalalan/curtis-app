@@ -1411,6 +1411,16 @@ h2 {
   white-space: nowrap;
 }
 
+.row-evidence-line {
+  grid-column: 1 / -1;
+  padding-right: 36px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
 .record-summary::after,
 .piece-summary::after {
   content: "+";

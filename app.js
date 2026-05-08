@@ -1366,6 +1366,29 @@ function recordPieceText(record) {
   return "Piece evidence pending";
 }
 
+function recordEvidenceLine(record, scoreSnippet) {
+  const confirmed = Array.isArray(record?.pieces) && record.pieces.length;
+  const uncertain = Array.isArray(record?.uncertainPieces) && record.uncertainPieces.length;
+  const parts = [
+    confirmed ? "source confirmed" : uncertain ? "piece uncertain" : "piece pending",
+  ];
+  if (record?.transcription?.status === "ready") {
+    const count = Number(record?.transcription?.noteCount) || 0;
+    parts.push(count ? `${count} notes rendered` : "notation rendered");
+  } else if (record?.activeTimeStatus && record.activeTimeStatus !== "pending_media") {
+    parts.push("active time measured");
+  } else {
+    parts.push("media pending");
+  }
+  if (scoreSnippet?.score?.imageUrl || scoreSnippet?.score?.assetId) {
+    const readiness = String(scoreSnippet?.readiness || "").toLowerCase();
+    parts.push(readiness.includes("exact measure") ? "score boxed, measure pending" : "score snippet ready");
+  } else {
+    parts.push("score pending");
+  }
+  return parts.join(" / ");
+}
+
 function renderDailyRecord(record, index = 0) {
   const events = record?.transcription?.events || [];
   const scoreSnippet = scoreSnippetForRecord(record);
@@ -1381,6 +1404,7 @@ function renderDailyRecord(record, index = 0) {
         <span>${escapeHtml(meta)}</span>
         <strong>${escapeHtml(recordPieceText(record))}</strong>
         <em>${escapeHtml(recordStatusLabel(record))}</em>
+        <small class="row-evidence-line">${escapeHtml(recordEvidenceLine(record, scoreSnippet))}</small>
       </summary>
       <div class="record-card-body">
         <div class="record-main">
@@ -1450,6 +1474,7 @@ function renderPieces() {
         <span>${escapeHtml(piece.status || "confirmed")}</span>
         <strong>${escapeHtml(piece.title || "Piece")}</strong>
         <em>${escapeHtml(piece.totalActiveViolinLabel || "active pending")}</em>
+        <small class="row-evidence-line">${escapeHtml(pieceEvidenceLine(piece, evidence))}</small>
       </summary>
       <div class="piece-card-body">
         <div class="piece-evidence-copy">
@@ -1491,6 +1516,19 @@ function renderPieces() {
     </details>
   `;
   }).join("");
+}
+
+function pieceEvidenceLine(piece, evidence) {
+  const evidenceCount = Array.isArray(evidence) ? evidence.length : 0;
+  const days = Array.isArray(piece?.recentPracticeDays) ? piece.recentPracticeDays.filter(Boolean).length : 0;
+  const progress = piece?.currentProgressLabel || piece?.progressStatus || "not scored";
+  const heat = piece?.heatMap?.status === "ready" ? "heat map ready" : "heat map pending";
+  return [
+    evidenceCount ? `${evidenceCount} dated row${evidenceCount === 1 ? "" : "s"}` : "evidence pending",
+    days ? `${days} recent day${days === 1 ? "" : "s"}` : "recent days pending",
+    heat,
+    `progress ${progress}`,
+  ].join(" / ");
 }
 
 function renderPieceEvidenceLedger(piece, evidence) {
