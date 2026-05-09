@@ -8,5 +8,6 @@
 node_modules/
 *.png
 .runtime/
+verification/
 __pycache__/
 .venv/
