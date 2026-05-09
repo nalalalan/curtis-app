@@ -116,9 +116,12 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(record["transcription"]["kind"], "score_audio_evidence")
         self.assertEqual(record["transcription"]["reliability"], "score_audio_only")
         self.assertEqual(record["transcription"]["failureMode"], "unverified_machine_pitch")
+        self.assertEqual(record["materialStatus"], "confirmed_piece")
+        self.assertEqual(record["materialLabel"], "piece confirmed")
         self.assertFalse(record["transcription"]["displayNotation"])
         self.assertFalse(record["transcription"]["transcriptionReady"])
         self.assertFalse(record["transcription"]["scoreLinked"])
+        self.assertEqual(record["transcription"]["scoreAlignmentStatus"], "pending_score_alignment")
         self.assertEqual(record["transcription"]["clef"], "treble")
         self.assertEqual(record["transcription"]["keySignature"]["label"], "G minor / 2 flats")
         self.assertEqual(record["transcription"]["windowSeconds"], 20)
@@ -140,6 +143,46 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(record["clips"][0]["localStartSeconds"], 0)
         self.assertEqual(record["clips"][0]["localEndSeconds"], 20)
         self.assertNotIn("reading decoration", " ".join(video["title"] for video in record["videos"]))
+
+    def test_score_free_exercise_days_are_not_forced_into_score_matching(self):
+        inventory = {
+            "youtube": [
+                {
+                    "id": "exercise520",
+                    "title": "5-20-26",
+                    "url": "https://www.youtube.com/watch?v=exercise520",
+                    "publishedAt": "2026-05-20T09:10:00Z",
+                    "durationSeconds": 600,
+                    "practiceCandidate": True,
+                }
+            ]
+        }
+
+        daily = build_daily_records(
+            inventory=inventory,
+            state={},
+            media_samples=[{"id": "exercise520", "path": "sample.mp4", "window": "*100-190", "containsViolin": True}],
+            transcriptions=[],
+            sections=[
+                {
+                    "sampleId": "exercise520",
+                    "url": "https://www.youtube.com/watch?v=exercise520",
+                    "window": "*112-132",
+                    "title": "5-20-26",
+                    "meanRms": 0.8,
+                    "note": "Audio-active section inside the sampled window.",
+                }
+            ],
+        )
+        record = next(item for item in daily["records"] if item["practiceDay"] == "2026-05-20")
+
+        self.assertEqual(record["materialStatus"], "piece_or_exercise_pending")
+        self.assertEqual(record["materialLabel"], "piece or exercise pending")
+        self.assertEqual(record["evidenceStatus"], "piece_or_exercise_pending")
+        self.assertEqual(record["transcription"]["scoreAlignmentStatus"], "pending_piece_or_exercise_alignment")
+        self.assertIn("score-free technique exercise", record["transcription"]["reliabilityLimit"])
+        self.assertEqual(record["heatMap"]["status"], "pending_piece_or_exercise_alignment")
+        self.assertIn("score-free exercises", record["heatMap"]["limit"])
 
     def test_stale_pipeline_transcriptions_do_not_surface_as_current_clips(self):
         inventory = {

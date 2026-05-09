@@ -1753,14 +1753,14 @@ function recordPieceText(record) {
   if (confirmed.length) return confirmed.join(" / ");
   const uncertain = Array.isArray(record?.uncertainPieces) ? record.uncertainPieces.map((piece) => `${piece.title} uncertain`).filter(Boolean) : [];
   if (uncertain.length) return uncertain.join(" / ");
-  return "Piece evidence pending";
+  return record?.materialLabel || "Piece or exercise pending";
 }
 
 function recordEvidenceLine(record, scoreSnippet) {
   const confirmed = Array.isArray(record?.pieces) && record.pieces.length;
   const uncertain = Array.isArray(record?.uncertainPieces) && record.uncertainPieces.length;
   const parts = [
-    confirmed ? "source confirmed" : uncertain ? "piece uncertain" : "piece pending",
+    confirmed ? "source confirmed" : uncertain ? "piece uncertain" : record?.materialStatus === "piece_or_exercise_pending" ? "piece or exercise pending" : "piece pending",
   ];
   if (record?.transcription?.status === "ready") {
     parts.push(transcriptionEvidenceLabel(record.transcription));
@@ -1772,6 +1772,8 @@ function recordEvidenceLine(record, scoreSnippet) {
   if (scoreSnippet?.score?.imageUrl || scoreSnippet?.score?.assetId) {
     const readiness = String(scoreSnippet?.readiness || "").toLowerCase();
     parts.push(readiness.includes("exact measure") ? "score boxed, measure pending" : "score snippet ready");
+  } else if (record?.materialStatus === "piece_or_exercise_pending") {
+    parts.push("score or pattern pending");
   } else {
     parts.push("score pending");
   }
@@ -1789,13 +1791,13 @@ function renderDailyRecord(record, index = 0) {
     : "Transcription";
   const reliabilityText = displayNotation
     ? transcriptionDisplayText(transcription?.reliabilityLimit || "Verified note/rhythm transcription.")
-    : "Audio is paired. Notation is pending.";
+    : transcriptionDisplayText(transcription?.reliabilityLimit || "Audio is paired. Notation is pending.");
   const sessionText = displayNotation
     ? transcriptionDisplayText(transcription?.fullSessionLimit || transcription?.coverageLimit || "Full-session transcription status recorded.")
     : "Full-session transcription is pending.";
   const ruleText = displayNotation
     ? transcriptionDisplayText(transcription?.qualityLimit || record.mainCurtisBlocker || "Evidence recorded.")
-    : "Notation pending.";
+    : record?.materialStatus === "piece_or_exercise_pending" ? "Notation / pattern pending." : "Notation pending.";
   const coverageText = displayNotation
     ? transcriptionDisplayText(transcription?.coverageLimit || transcriptionCoverageText(record))
     : "Audio evidence is visible now.";

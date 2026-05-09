@@ -16,7 +16,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from backend.app.analyzer import VIOLIN_PRESENCE_VERSION, classify_violin_presence
+from backend.app.analyzer import VIOLIN_PRESENCE_VERSION, classify_violin_presence, sample_is_violin_positive
 
 
 ROOT = REPO_ROOT
@@ -29,6 +29,11 @@ SAMPLE_SECONDS = int(os.getenv("CURTIS_OWNER_SAMPLE_SECONDS", "90"))
 SAMPLE_START_SECONDS = int(os.getenv("CURTIS_OWNER_SAMPLE_START_SECONDS", str(10 * 60)))
 WINDOWS_PER_VIDEO = int(os.getenv("CURTIS_OWNER_WINDOWS_PER_VIDEO", "8"))
 BATCH_SIZE = int(os.getenv("CURTIS_OWNER_BATCH_SIZE", "4"))
+EXPAND_OFFSETS = tuple(
+    int(value.strip())
+    for value in os.getenv("CURTIS_OWNER_EXPAND_OFFSETS", "90,180,360,720").split(",")
+    if value.strip()
+)
 WINDOW_RE = re.compile(r"\*(\d+)-(\d+)")
 CACHED_BROWSER_RE = re.compile(r"(?P<video_id>.+)-(?P<start>\d+)(?:-[^-]+)?-browser$")
 BUNDLED_NODE = (
@@ -110,9 +115,14 @@ def sample_video_id(sample: dict[str, Any]) -> str:
     return raw_id
 
 
-def live_sample_keys(ops: dict[str, Any]) -> tuple[set[str], set[tuple[str, int]]]:
+def live_samples(ops: dict[str, Any]) -> list[dict[str, Any]]:
     media = ops.get("media", {}) if isinstance(ops.get("media"), dict) else {}
     samples = media.get("sampleIndex") or media.get("samples") or []
+    return [sample for sample in samples if isinstance(sample, dict)]
+
+
+def live_sample_keys(ops: dict[str, Any]) -> tuple[set[str], set[tuple[str, int]]]:
+    samples = live_samples(ops)
     sampled_ids = {
         str(sample.get("id"))
         for sample in samples
@@ -128,6 +138,41 @@ def live_sample_keys(ops: dict[str, Any]) -> tuple[set[str], set[tuple[str, int]
             sampled_ids.add(f"{video_id}-{start}")
             sampled_windows.add((str(sample.get("url") or ""), start))
     return sampled_ids, sampled_windows
+
+
+def positive_sample_starts(ops: dict[str, Any]) -> dict[str, list[int]]:
+    starts_by_video: dict[str, list[int]] = {}
+    for sample in live_samples(ops):
+        if not sample_is_violin_positive(sample):
+            continue
+        start = parse_window_start(str(sample.get("window") or ""))
+        if start is None:
+            continue
+        video_id = sample_video_id(sample)
+        starts_by_video.setdefault(video_id, []).append(start)
+    return {
+        video_id: sorted(set(starts))
+        for video_id, starts in starts_by_video.items()
+        if starts
+    }
+
+
+def expanded_starts(item: dict[str, Any], anchors: list[int]) -> list[int]:
+    duration = item.get("durationSeconds")
+    if not isinstance(duration, int) or duration <= SAMPLE_SECONDS + 60:
+        latest = 0
+    else:
+        latest = max(0, duration - SAMPLE_SECONDS - 30)
+    starts: list[int] = []
+    for anchor in anchors:
+        for offset in EXPAND_OFFSETS:
+            for raw_start in (anchor - offset, anchor + offset):
+                start = min(max(0, raw_start), latest)
+                if start == anchor:
+                    continue
+                if all(abs(start - existing) >= SAMPLE_SECONDS for existing in starts):
+                    starts.append(start)
+    return starts
 
 
 def with_sample_window(item: dict[str, Any], start: int) -> dict[str, Any]:
@@ -253,6 +298,22 @@ def media_candidates(ops: dict[str, Any]) -> list[dict[str, Any]]:
     sampled_ids, sampled_windows = live_sample_keys(ops)
     cached = cached_media_candidates(ops)
     cached_ids = {str(item.get("sampleId")) for item in cached if item.get("sampleId")}
+    positive_starts = positive_sample_starts(ops)
+
+    expansion: list[dict[str, Any]] = []
+    for item in sorted(inventory, key=inventory_sort_key, reverse=True):
+        if not (
+            isinstance(item, dict)
+            and item.get("practiceCandidate")
+            and item.get("id")
+            and item.get("url")
+        ):
+            continue
+        for start in expanded_starts(item, positive_starts.get(str(item["id"]), [])):
+            candidate = with_sample_window(item, start)
+            key = (str(item.get("url") or ""), start)
+            if str(candidate["sampleId"]) not in sampled_ids and str(candidate["sampleId"]) not in cached_ids and key not in sampled_windows:
+                expansion.append(candidate)
 
     by_video: list[list[dict[str, Any]]] = []
     for item in sorted(inventory, key=inventory_sort_key, reverse=True):
@@ -278,7 +339,7 @@ def media_candidates(ops: dict[str, Any]) -> list[dict[str, Any]]:
         for windows in by_video:
             if index < len(windows):
                 candidates.append(windows[index])
-    return [*cached, *candidates]
+    return [*cached, *expansion, *candidates]
 
 
 def inventory_sort_key(item: dict[str, Any]) -> tuple[int, str, int]:

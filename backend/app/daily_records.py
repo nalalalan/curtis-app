@@ -1108,7 +1108,7 @@ def day_next_step(active_status: str, pieces: list[dict[str, Any]], transcribed:
     if not transcribed:
         return "Run transcription on the active windows before adding repertoire claims."
     if not pieces:
-        return "Keep the transcription as uncertain evidence until it aligns to a known piece or score."
+        return "Keep the transcription as uncertain evidence until it aligns to a piece, score-free exercise, or repeated technique pattern."
     return "Use the repeated fragments and clips to choose one small passage for the next take."
 
 
@@ -1230,6 +1230,38 @@ def build_daily_records(
         )
         key_signature = key_signature_from_pieces(confirmed)
         clips = clips_for_day(videos, day_sections, day_transcriptions, day_samples)
+        material_status = (
+            "confirmed_piece"
+            if confirmed
+            else "uncertain_piece"
+            if uncertain
+            else "piece_or_exercise_pending"
+            if active_seconds
+            else "pending_media"
+        )
+        material_label = {
+            "confirmed_piece": "piece confirmed",
+            "uncertain_piece": "piece uncertain",
+            "piece_or_exercise_pending": "piece or exercise pending",
+            "pending_media": "media pending",
+        }[material_status]
+        score_alignment_status = (
+            "pending_score_alignment"
+            if confirmed
+            else "pending_piece_or_exercise_alignment"
+            if active_seconds
+            else "pending_media"
+        )
+        pending_transcription_limit = (
+            "Audio evidence is paired. This may be repertoire or a score-free technique exercise; notation waits for reliable note/rhythm extraction."
+            if active_seconds and not confirmed
+            else "No full-session score-linked transcription has been generated."
+        )
+        score_or_pattern_limit = (
+            "Heat map waits for score alignment when this is repertoire; score-free exercises should map repeated audio and transcription patterns instead."
+            if active_seconds and not confirmed
+            else "Heat map waits for practice locations to align to actual score sections."
+        )
         observations = (
             problem_observations(notation, heat_fragments, clips, day_transcriptions, active_status)[:6]
             if has_verified_transcription
@@ -1251,6 +1283,8 @@ def build_daily_records(
                 "activeTimeStatus": active_status,
                 "pieces": confirmed,
                 "uncertainPieces": uncertain,
+                "materialStatus": material_status,
+                "materialLabel": material_label,
                 "transcription": {
                     "status": "score_audio_only" if failure_summary or has_machine_pitch_events else "pending",
                     "displayTitle": (
@@ -1260,13 +1294,13 @@ def build_daily_records(
                     ),
                     "kind": "score_audio_evidence" if has_machine_pitch_events else "pending",
                     "scoreLinked": False,
-                    "scoreAlignmentStatus": "not_aligned",
+                    "scoreAlignmentStatus": score_alignment_status,
                     "fullSessionStatus": "incomplete",
                     "reliability": "score_audio_only" if failure_summary or has_machine_pitch_events else "pending",
                     "reliabilityLimit": (
                         quality.get("qualityLimit")
                         if failure_summary or has_machine_pitch_events
-                        else "No full-session score-linked transcription has been generated."
+                        else pending_transcription_limit
                     ),
                     "noteCount": note_count,
                     "segmentCount": len(notation_segments),
@@ -1278,14 +1312,18 @@ def build_daily_records(
                     "fullSessionLimit": transcription_session_limit(transcribed_seconds, uploaded_seconds),
                     "events": notation,
                     "repeatGroups": day_repeat_groups,
-                    "limit": "Audio evidence is available. Only full-session notation that matches the audio is rendered as transcription.",
+                    "limit": (
+                        "Audio evidence is available. Only verified notation that matches the audio renders as transcription; score-free technique exercises do not require score alignment."
+                        if active_seconds and not confirmed
+                        else "Audio evidence is available. Only full-session notation that matches the audio is rendered as transcription."
+                    ),
                 },
                 "clips": clips,
                 "heatMap": {
-                    "status": "pending_score_alignment",
+                    "status": score_alignment_status,
                     "fragments": heat_fragments,
                     "layers": heat_map_layers(heat_fragments, []),
-                    "limit": "Heat map waits for practice locations to align to actual score sections.",
+                    "limit": score_or_pattern_limit,
                 },
                 "observations": observations,
                 "mainCurtisBlocker": blocker,
@@ -1298,7 +1336,7 @@ def build_daily_records(
                     }
                     for item in confirmed
                 ],
-                "evidenceStatus": "confirmed_piece" if confirmed else "uncertain_piece" if uncertain else active_status,
+                "evidenceStatus": material_status,
                 "summary": day_summary(active_status, confirmed, uncertain),
                 "nextStep": day_next_step(active_status, confirmed, has_verified_transcription),
             }

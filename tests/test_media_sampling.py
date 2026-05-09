@@ -40,6 +40,44 @@ class MediaSamplingTests(unittest.TestCase):
         self.assertEqual(starts[:5], [600, 10725, 21450, 26812, 32175])
         self.assertLess(starts.index(10725), starts.index(300))
 
+    def test_owner_sync_expands_around_existing_violin_positive_windows(self):
+        with TemporaryDirectory() as directory:
+            media_dir = Path(directory)
+            ops = {
+                "inventory": {
+                    "youtube": [
+                        {
+                            "id": "video123",
+                            "url": "https://youtube.test/watch?v=video123",
+                            "title": "5-5-26",
+                            "durationSeconds": 18000,
+                            "practiceCandidate": True,
+                            "publishedAt": "2026-05-05T00:00:00Z",
+                        }
+                    ]
+                },
+                "media": {
+                    "sampleIndex": [
+                        {
+                            "id": "video123-9000",
+                            "url": "https://youtube.test/watch?v=video123",
+                            "window": "*9000-9090",
+                            "containsViolin": True,
+                            "violinPresence": "violin_positive",
+                        }
+                    ]
+                },
+            }
+            with mock.patch.object(owner_sync, "MEDIA_DIR", media_dir):
+                candidates = owner_sync.media_candidates(ops)
+
+            self.assertEqual(candidates[0]["sampleId"], "video123-8910")
+            self.assertEqual(candidates[1]["sampleId"], "video123-9090")
+            self.assertLess(
+                [item["sampleId"] for item in candidates].index("video123-8910"),
+                [item["sampleId"] for item in candidates].index("video123-600"),
+            )
+
     def test_sample_id_includes_window_start(self):
         self.assertEqual(sample_id("abc", "*5940-6030"), "abc-5940")
 
