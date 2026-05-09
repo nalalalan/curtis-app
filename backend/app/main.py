@@ -90,11 +90,11 @@ async def worker_loop() -> None:
         await run_scan()
         if os.getenv("CURTIS_MEDIA_AUTORUN", "1").strip().lower() not in {"0", "false", "no"}:
             await probe_youtube_media()
-            analyze_media_samples()
-            transcribe_media_samples()
-            identify_pieces_from_samples()
+            await asyncio.to_thread(analyze_media_samples)
+            await asyncio.to_thread(transcribe_media_samples)
+            await asyncio.to_thread(identify_pieces_from_samples)
             if os.getenv("CURTIS_MODEL_REVIEW_AUTORUN", "1").strip().lower() not in {"0", "false", "no"}:
-                review_media_sections()
+                await asyncio.to_thread(review_media_sections)
         await asyncio.sleep(max(SCAN_INTERVAL_SECONDS, 300))
 
 
@@ -265,29 +265,29 @@ async def scan_run(config: SourceConfig | None = None) -> dict[str, Any]:
 @app.post("/api/curtis/media/probe")
 async def media_probe() -> dict[str, Any]:
     await probe_youtube_media()
-    analyze_media_samples()
-    transcribe_media_samples()
+    await asyncio.to_thread(analyze_media_samples)
+    await asyncio.to_thread(transcribe_media_samples)
     return base_ops(load_state())
 
 
 @app.post("/api/curtis/analyze/run")
 async def analyze_run() -> dict[str, Any]:
-    analyze_media_samples()
-    transcribe_media_samples()
-    identify_pieces_from_samples()
-    review_media_sections()
+    await asyncio.to_thread(analyze_media_samples)
+    await asyncio.to_thread(transcribe_media_samples)
+    await asyncio.to_thread(identify_pieces_from_samples)
+    await asyncio.to_thread(review_media_sections)
     return base_ops(load_state())
 
 
 @app.post("/api/curtis/transcribe/run")
 async def transcribe_run() -> dict[str, Any]:
-    transcribe_media_samples()
+    await asyncio.to_thread(transcribe_media_samples)
     return base_ops(load_state())
 
 
 @app.post("/api/curtis/coach/run")
 async def coach_run() -> dict[str, Any]:
-    review_media_sections()
+    await asyncio.to_thread(review_media_sections)
     return base_ops(load_state())
 
 
