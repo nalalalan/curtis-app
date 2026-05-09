@@ -31,6 +31,13 @@ MICRO_TRANSCRIPTION_MAX_DOMINANT_RATIO = 0.50
 MICRO_TRANSCRIPTION_MAX_SAME_NOTE_RUN = 3
 MICRO_TRANSCRIPTION_MIN_PITCH_CLASSES = 4
 MICRO_TRANSCRIPTION_MAX_NOTE_GAP_SECONDS = 0.75
+# Listening review showed the current micro extractor can still produce notation
+# that does not audibly match the paired clip.
+MICRO_TRANSCRIPTION_DISPLAY_ENABLED = False
+MICRO_TRANSCRIPTION_DISPLAY_LIMIT = (
+    "Candidate note/rhythm extraction is withheld because current paired-audio "
+    "review did not match reliably enough to display as transcription."
+)
 VIOLIN_POSITIVE_VALUES = {
     "violin",
     "violin_playing",
@@ -644,7 +651,7 @@ def transcription_coverage(
             "windowSeconds": 0,
             "windowLabel": "",
             "coveragePercent": 0,
-            "coverageLabel": "No verified transcription window yet.",
+            "coverageLabel": "No matched transcription window yet.",
             "coverageLimit": "No playable score-linked transcription window is available for this day yet.",
             "coverageStatus": "pending_transcription",
         }
@@ -740,10 +747,10 @@ def transcription_failure_summary(transcriptions: list[dict[str, Any]]) -> dict[
     if mode == "repeated_pitch_collapse":
         limit = (
             "The detected pitch trace did not match the audio closely enough to become notation. "
-            "Only verified note/rhythm evidence renders as sheet music."
+            "Only audio-matched note/rhythm evidence renders as sheet music."
         )
     else:
-        limit = "Only verified note/rhythm evidence renders as sheet music."
+        limit = "Only audio-matched note/rhythm evidence renders as sheet music."
     return {
         "qualityStatus": "score_audio_only",
         "qualityLabel": "audio paired",
@@ -798,7 +805,7 @@ def transcription_quality(
             "qualityLabel": "audio paired",
             "qualityLimit": (
                 f"The machine pitch events contain {', '.join(parts)} and stay out of the music view. "
-                f"Only verified note/rhythm evidence renders as sheet music.{sparse_note}"
+                f"Only audio-matched note/rhythm evidence renders as sheet music.{sparse_note}"
             ),
             "qualityMetrics": metrics,
             "segmentCount": segment_count,
@@ -817,7 +824,7 @@ def transcription_quality(
     return {
         "qualityStatus": "usable_fragment",
         "qualityLabel": "audio paired",
-        "qualityLimit": f"Machine pitch events exist, but only verified transcription renders as notation.{sparse_note}",
+        "qualityLimit": f"Machine pitch events exist, but only audio-matched transcription renders as notation.{sparse_note}",
         "qualityMetrics": metrics,
         "segmentCount": segment_count,
     }
@@ -1053,7 +1060,7 @@ def transcription_quality_observations(
             "category": "transcription quality",
             "frequency": quality.get("qualityLabel") or status,
             "trend": "requires more aligned active audio",
-            "problem": quality.get("qualityLimit") or "Only score-verified notation should be treated as transcription.",
+            "problem": quality.get("qualityLimit") or "Only score-matched notation should be treated as transcription.",
             "evidence": primary_clip,
             "transcriptionSnippet": notation[:24],
             "confidence": "machine_quality_gate",
@@ -1367,14 +1374,14 @@ def musician_read(
         score_mode = "source_confirmed_score_target"
         reference_target = piece.get("score") if isinstance(piece.get("score"), dict) else reference_target
         target_label = score_target_label(reference_target)
-        confidence = "audio-agreement micro-transcription plus source label" if notes else "source label"
+        confidence = "audio-matched transcription plus source label" if notes else "source label"
     elif calibration:
         source = "explicit title label"
         title = str(calibration.get("title") or "").strip()
         material_type = str(calibration.get("materialType") or material_type or "calibration").strip()
         score_mode = str(calibration.get("referenceKind") or "title_labeled_calibration").strip()
         target_label = score_target_label(reference_target)
-        confidence = "audio-agreement micro-transcription plus title label" if notes else "title label"
+        confidence = "audio-matched transcription plus title label" if notes else "title label"
     elif uncertain:
         source = "fingerprint candidate"
         title = str(uncertain[0].get("title") or "").strip()
@@ -1383,7 +1390,7 @@ def musician_read(
     elif material_status == "piece_or_exercise_pending":
         source = "score-free or unidentified material"
         material_type = material_type or "unknown_or_exercise"
-        confidence = "audio-agreement micro-transcription only" if notes else "audio evidence only"
+        confidence = "audio-matched transcription only" if notes else "audio evidence only"
 
     match = top_reference_match(display_transcriptions)
     match_title = str(match.get("title") or "").strip()
@@ -1567,44 +1574,44 @@ def build_daily_records(
         quality = transcription_quality(full_note_count, active_seconds, len(notation_segments), quality_metrics)
         failure_summary = transcription_failure_summary(day_transcriptions)
         micro = best_micro_transcription(day_transcriptions)
-        display_transcriptions = [micro["transcription"]] if micro else []
+        has_verified_transcription = bool(micro and MICRO_TRANSCRIPTION_DISPLAY_ENABLED)
+        display_transcriptions = [micro["transcription"]] if has_verified_transcription else []
+        read_transcriptions = display_transcriptions if has_verified_transcription else day_transcriptions
         notation = notation_events(display_transcriptions)
         day_notation_systems = notation_systems(notation)
         note_count = int(micro.get("quality", {}).get("noteCount") or full_note_count)
+        public_note_count = note_count if has_verified_transcription else full_note_count
         display_state = notation_display_state(notation, day_notation_systems, note_count)
         has_machine_pitch_events = bool(raw_notation)
-        has_verified_transcription = bool(micro)
         if micro:
             micro_quality = micro.get("quality", {})
-            rejected_count = max(0, int(micro.get("fullDetectedNoteCount") or 0) - note_count)
+            full_detected = int(micro.get("fullDetectedNoteCount") or full_note_count or note_count)
+            rejected_count = max(0, full_detected - note_count)
             quality = {
                 **quality,
-                "qualityStatus": "audio_verified_micro",
-                "qualityLabel": "micro transcription",
-                "qualityLimit": (
-                    "A short note/rhythm run passed spectral-pitch audio-agreement checks. "
-                    "This is not a full-session transcription or a score match yet."
-                ),
-                "microVerifiedNoteCount": note_count,
-                "microVerifiedSeconds": micro_quality.get("durationSeconds") or 0,
-                "microMedianConfidence": micro_quality.get("medianConfidence") or 0,
-                "microUniquePitchClasses": micro_quality.get("uniquePitchClasses") or 0,
-                "rejectedMachinePitchEventCount": rejected_count,
+                "qualityStatus": "candidate_micro_transcription",
+                "qualityLabel": "candidate withheld",
+                "qualityLimit": MICRO_TRANSCRIPTION_DISPLAY_LIMIT,
+                "candidateMicroNoteCount": note_count,
+                "candidateMicroSeconds": micro_quality.get("durationSeconds") or 0,
+                "candidateMicroMedianConfidence": micro_quality.get("medianConfidence") or 0,
+                "candidateMicroUniquePitchClasses": micro_quality.get("uniquePitchClasses") or 0,
+                "rejectedMachinePitchEventCount": full_detected,
             }
             display_state = {
                 **display_state,
-                "displayNotation": bool(day_notation_systems),
-                "transcriptionReady": bool(day_notation_systems),
-                "hiddenPitchEventCount": rejected_count,
-                "rejectedMachinePitchEventCount": rejected_count,
-                "detectedPitchEventCount": note_count,
+                "displayNotation": False,
+                "transcriptionReady": False,
+                "hiddenPitchEventCount": full_detected,
+                "rejectedMachinePitchEventCount": full_detected,
+                "detectedPitchEventCount": full_detected,
                 "displayLimit": (
-                    f"{note_count} notes passed strict audio-agreement checks; "
-                    f"{rejected_count} machine pitch events remain hidden."
+                    f"{note_count} candidate notes are withheld after audio-match review; "
+                    f"{rejected_count} additional machine pitch events remain hidden."
                 ),
             }
-            heat_fragments = transcription_fragments(display_transcriptions)
-            day_repeat_groups = repeat_groups(heat_fragments, display_transcriptions)
+            heat_fragments = []
+            day_repeat_groups = []
         elif failure_summary:
             quality = {
                 **quality,
@@ -1648,7 +1655,7 @@ def build_daily_records(
         )
         key_signature = key_signature_from_pieces(confirmed)
         if key_signature.get("label") == "key pending":
-            key_signature = key_signature_from_transcriptions(display_transcriptions) or key_signature
+            key_signature = key_signature_from_transcriptions(read_transcriptions) or key_signature
         clips = clips_for_day(videos, day_sections, day_transcriptions, day_samples)
         material_status = (
             "confirmed_piece"
@@ -1714,9 +1721,9 @@ def build_daily_records(
                         else "pending"
                     ),
                     "displayTitle": (
-                        "Audio-verified micro-transcription"
+                        "Audio-matched transcription"
                         if has_verified_transcription
-                        else "Verified transcription"
+                        else "Audio evidence"
                     ),
                     "kind": (
                         "audio_verified_micro_transcription"
@@ -1740,7 +1747,7 @@ def build_daily_records(
                         if has_verified_transcription or failure_summary or has_machine_pitch_events
                         else pending_transcription_limit
                     ),
-                    "noteCount": note_count,
+                    "noteCount": public_note_count,
                     "segmentCount": len(notation_segments),
                     **coverage,
                     **quality,
@@ -1751,14 +1758,14 @@ def build_daily_records(
                     "events": notation,
                     "repeatGroups": day_repeat_groups,
                     "limit": (
-                        "Audio evidence is available. Only verified notation that matches the audio renders as transcription; score-free technique exercises do not require score alignment."
+                        "Audio evidence is available. Only notation that demonstrably matches the paired audio renders as transcription; score-free technique exercises do not require score alignment."
                         if active_seconds and not confirmed
-                        else "Audio evidence is available. Only full-session notation that matches the audio is rendered as transcription."
+                        else "Audio evidence is available. Only notation that demonstrably matches the paired audio is rendered as transcription."
                     ),
                     "musicianRead": musician_read(
                         confirmed,
                         uncertain,
-                        display_transcriptions,
+                        read_transcriptions,
                         notation,
                         day_repeat_groups,
                         material_status,

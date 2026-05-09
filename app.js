@@ -128,21 +128,21 @@ function transcriptionDisplayText(value) {
   let text = String(value || "").replace(/\s+/g, " ").trim();
   if (!text) return "";
   text = text
-    .replace(/Machine transcription failed:?/gi, "Verified notation only:")
-    .replace(/Machine pitch extraction needs score\/audio verification:/gi, "Verified notation only:")
+    .replace(/Machine transcription failed:?/gi, "Matched notation only:")
+    .replace(/Machine pitch extraction needs score\/audio verification:/gi, "Matched notation only:")
     .replace(/Machine pitch extraction was rejected:[^.;]*(?:[.;]\s*)?/gi, "")
     .replace(/the tracker collapsed into repeated [A-G][#b]?\d? events;?\s*/gi, "")
     .replace(/transcription failed quality gate/gi, "score-linked transcription")
     .replace(/transcription failed/gi, "audio-paired evidence")
     .replace(/failed transcription/gi, "audio-paired evidence")
-    .replace(/failed quality gates?/gi, "are kept out of notation until verified")
-    .replace(/fail the transcription gate/gi, "stay out of notation until verified")
-    .replace(/fails the transcription gate/gi, "stays out of notation until verified")
+    .replace(/failed quality gates?/gi, "are kept out of notation until matched")
+    .replace(/fail the transcription gate/gi, "stay out of notation until matched")
+    .replace(/fails the transcription gate/gi, "stays out of notation until matched")
     .replace(/notation is withheld because it would not match the audio/gi, "notes render only when they match the audio")
     .replace(/The transcription section stays visible, but /gi, "")
     .replace(/The transcription section stays visible with score\/audio evidence; ?/gi, "")
     .replace(/not shown as sheet music/gi, "not rendered as sheet music")
-    .replace(/staff output hidden until verified/gi, "notation renders only after note-for-note verification")
+    .replace(/staff output hidden until verified/gi, "notation renders only after audible note match")
     .replace(/hidden machine evidence/gi, "audio-paired evidence")
     .replace(/hidden machine notes/gi, "unverified machine notes")
     .replace(/hidden from/gi, "not used in")
@@ -480,7 +480,7 @@ function currentStateText(ops) {
   const strictCount = Number(records.scoreAudioOnlyRecordCount || records.failedTranscriptionRecordCount || 0);
   const withheld = Number(records.withheldNonViolinSampleCount) || 0;
   if (recordCount && withheld && !audioEvidenceCount) return `${withheld} sampled media windows withheld / no violin-positive audio yet / ${recordCount} indexed practice days.`;
-  if (recordCount) return `${transcribedCount} verified transcription / ${strictCount} audio-paired windows / ${audioEvidenceCount} playable audio / ${processedCount} processed / ${recordCount} indexed practice days.`;
+  if (recordCount) return `${transcribedCount} matched transcription / ${strictCount} audio-paired windows / ${audioEvidenceCount} playable audio / ${processedCount} processed / ${recordCount} indexed practice days.`;
   if (findingCount) return `${findingCount} Curtis-focused findings. ${progressPlan(ops)?.oneFocus || "Review active."}`;
   const sectionCount = reviewSections(ops).length;
   if (sectionCount) return `${sectionCount} audio/video sections scanned. Musicianship judgment pending.`;
@@ -1070,7 +1070,7 @@ function renderStatus() {
     const withheld = Number(records.withheldNonViolinSampleCount) || 0;
     elements.studyCount.textContent = withheld && !audioEvidenceCount
       ? `0 violin audio / ${withheld} withheld`
-      : `${transcribedCount} verified / ${strictCount} audio-paired / ${audioEvidenceCount} audio / ${analyzedCount} processed`;
+      : `${transcribedCount} matched / ${strictCount} audio-paired / ${audioEvidenceCount} audio / ${analyzedCount} processed`;
   }
   const activeSeconds = Number(records.totalActiveViolinSeconds) || 0;
   const archiveSeconds = archiveVideoSeconds(records, totals);
@@ -1397,8 +1397,8 @@ function renderNotationSheet(events, options = {}) {
 }
 
 function renderVerifiedNotationGate(
-  title = "Verified transcription",
-  detail = "Only notes that match the audio render here. Paired audio is attached below.",
+  title = "Matched transcription",
+  detail = "Only notes that audibly match the paired audio render here.",
   keySignature = {}
 ) {
   const staffLines = [30, 40, 50, 60, 70].map((y) => `<line x1="22" x2="698" y1="${y}" y2="${y}" />`).join("");
@@ -1426,7 +1426,7 @@ function renderTranscriptionStats(transcription, record = {}) {
     ? [
         ["Clef", transcription?.clef === "treble" ? "treble" : "pending"],
         ["Key", signature.label || "key pending"],
-        ["Status", transcription?.reliability === "audio_verified_micro" ? "micro" : "verified"],
+        ["Status", transcription?.reliability === "audio_verified_micro" ? "audio-matched" : "matched"],
       ]
     : [
         ["Notation", "pending"],
@@ -1486,8 +1486,8 @@ function renderNotationSystems(transcription, fallbackEvents = [], record = {}) 
   const displayNotation = transcription?.displayNotation !== false && transcription?.transcriptionReady === true;
   if (!displayNotation) {
     const withheldText = record?.materialStatus === "piece_or_exercise_pending"
-      ? "Notation withheld until audio-verified note/rhythm extraction."
-      : "Notation withheld until score verification.";
+      ? "Notation withheld until notes/rhythms audibly match the paired audio."
+      : "Notation withheld until audio match and score match.";
     return `
       <div class="notation-systems" aria-label="Audio evidence windows">
         ${systems.map((system) => {
@@ -1516,7 +1516,7 @@ function renderNotationSystems(transcription, fallbackEvents = [], record = {}) 
           <div class="notation-system">
             <div class="notation-system-head">
               <span>${escapeHtml(displayNotation ? system?.label || "Line" : "Audio evidence")}${escapeHtml(window)}</span>
-              <strong>${escapeHtml(displayNotation ? (transcription?.reliability === "audio_verified_micro" ? "audio-verified" : "verified notation") : clipLabel || "sample window")}</strong>
+              <strong>${escapeHtml(displayNotation ? (transcription?.reliability === "audio_verified_micro" ? "audio-matched" : "matched notation") : clipLabel || "sample window")}</strong>
             </div>
             ${renderSnippetAudio(system?.clip || {}, "Window audio")}
             ${displayNotation ? renderNotationSheet(system?.events || [], {
@@ -1576,7 +1576,8 @@ function renderHeatMap(record) {
 }
 
 function recordStatusLabel(record) {
-  if (record?.transcription?.reliability === "audio_verified_micro") return "micro transcription";
+  if (record?.transcription?.reliability === "audio_verified_micro") return "matched transcription";
+  if (record?.transcription?.qualityStatus === "candidate_micro_transcription") return "audio paired";
   if (record?.transcription?.reliability === "transcription_failed") return "audio paired";
   if (record?.transcription?.qualityStatus === "transcription_failed") return "audio paired";
   if (record?.transcription?.reliability === "score_audio_only") return "audio paired";
@@ -1586,7 +1587,7 @@ function recordStatusLabel(record) {
   if (record?.transcription?.qualityStatus === "weak_fragment") return "audio evidence";
   if (record?.transcription?.qualityStatus === "sanity_corrected_draft") return "audio evidence";
   if (record?.transcription?.qualityStatus === "draft_fragment") return "audio evidence";
-  if (record?.status === "transcribed") return "verified transcription";
+  if (record?.status === "transcribed") return "matched transcription";
   if (record?.status === "active_time_measured") return "active measured";
   return "pending media";
 }
@@ -1597,8 +1598,9 @@ function recordStatusTone(record) {
 }
 
 function transcriptionEvidenceLabel(transcription) {
-  if (transcription?.reliability === "audio_verified_micro") return "micro transcription";
-  if (transcription?.displayNotation === true && transcription?.transcriptionReady === true) return "verified transcription";
+  if (transcription?.reliability === "audio_verified_micro") return "matched transcription";
+  if (transcription?.displayNotation === true && transcription?.transcriptionReady === true) return "matched transcription";
+  if (transcription?.qualityStatus === "candidate_micro_transcription") return "audio paired";
   if (
     transcription?.reliability === "transcription_failed"
     || transcription?.qualityStatus === "transcription_failed"
@@ -1610,7 +1612,7 @@ function transcriptionEvidenceLabel(transcription) {
   if (transcription?.reliability === "machine_pitch_hidden" || transcription?.status === "not_ready") {
     return "audio paired";
   }
-  return transcription?.qualityLabel || (transcription?.status === "ready" ? "verified transcription" : "notation not ready");
+  return transcription?.qualityLabel || (transcription?.status === "ready" ? "matched transcription" : "notation not ready");
 }
 
 function transcriptionReasonLine(record) {
@@ -1873,8 +1875,8 @@ function renderClipEvidencePair({ clip, observation, repeatGroup, notationEvents
       </div>
       ${notationReady && events.length ? renderNotationSheet(events, {
         keySignature,
-        systemLabel: "Verified snippet",
-        qualityLimit: "Score-verified notation paired with this clip.",
+        systemLabel: "Matched snippet",
+        qualityLimit: "Score-matched notation paired with this clip.",
         maxNotes: 24
       }) : `<p class="empty">Notation withheld until score verification.</p>`}
     </div>
@@ -1998,15 +2000,15 @@ function renderLeadTranscription(record) {
   const confidence = Number(transcription.microMedianConfidence || 0);
   const meta = [
     record.practiceDay || "",
-    noteCount ? `${noteCount} audio-verified notes` : "",
+    noteCount ? `${noteCount} audio-matched notes` : "",
     seconds ? `${seconds.toFixed(1)}s` : "",
     confidence ? `${Math.round(confidence * 100)}% median confidence` : "",
   ].filter(Boolean).join(" / ");
   return `
-    <article class="lead-transcription-card" aria-label="Current verified transcription">
+    <article class="lead-transcription-card" aria-label="Current matched transcription">
       <div class="lead-transcription-head">
         <div>
-          <span>Verified transcription</span>
+          <span>Matched transcription</span>
           <strong>${escapeHtml(shortText(recordPieceText(record), 112))}</strong>
           <small>${escapeHtml(meta)}</small>
         </div>
@@ -2015,7 +2017,7 @@ function renderLeadTranscription(record) {
       ${renderMusicianRead(transcription.musicianRead)}
       ${renderNotationSheet(events, {
         keySignature: transcription.keySignature,
-        systemLabel: "Audio-verified line",
+        systemLabel: "Audio-matched line",
         qualityLimit: transcription.displayLimit || transcription.reliabilityLimit || "",
         maxNotes: 24
       })}
@@ -2031,10 +2033,10 @@ function renderDailyRecord(record, index = 0) {
   const transcription = record?.transcription || {};
   const displayNotation = transcription?.displayNotation !== false && transcription?.transcriptionReady === true;
   const transcriptionTitle = displayNotation
-    ? transcriptionDisplayText(transcription?.displayTitle || "Verified transcription")
+    ? transcriptionDisplayText(transcription?.displayTitle || "Matched transcription")
     : "Transcription";
   const reliabilityText = displayNotation
-    ? transcriptionDisplayText(transcription?.reliabilityLimit || "Verified note/rhythm transcription.")
+    ? transcriptionDisplayText(transcription?.reliabilityLimit || "Matched note/rhythm transcription.")
     : transcriptionDisplayText(transcription?.reliabilityLimit || "Audio is paired. Notation is pending.");
   const sessionText = displayNotation
     ? transcriptionDisplayText(transcription?.fullSessionLimit || transcription?.coverageLimit || "Full-session transcription status recorded.")
@@ -2169,8 +2171,8 @@ function renderPieces() {
                 ${(item.displayNotation === true || item.transcriptionReady === true) && Array.isArray(item.transcriptionSnippet) && item.transcriptionSnippet.length
                   ? renderNotationSheet(item.transcriptionSnippet, {
                     keySignature: item?.score?.keySignature || {},
-                    systemLabel: "Verified snippet",
-                    qualityLimit: "Audio-verified notation paired with this evidence.",
+                    systemLabel: "Matched snippet",
+                    qualityLimit: "Audio-matched notation paired with this evidence.",
                     maxNotes: 24
                   })
                   : ""}

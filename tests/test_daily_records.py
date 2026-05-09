@@ -210,7 +210,7 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(record["heatMap"]["status"], "pending_piece_or_exercise_alignment")
         self.assertIn("score-free exercises", record["heatMap"]["limit"])
 
-    def test_audio_verified_micro_transcription_renders_only_strict_agreed_run(self):
+    def test_candidate_micro_transcription_is_withheld_until_audio_match(self):
         inventory = {
             "youtube": [
                 {
@@ -265,24 +265,27 @@ class DailyRecordTests(unittest.TestCase):
         record = next(item for item in daily["records"] if item["practiceDay"] == "2026-05-21")
         transcription = record["transcription"]
 
-        self.assertEqual(daily["transcribedRecordCount"], 1)
-        self.assertEqual(transcription["status"], "audio_verified_micro")
-        self.assertEqual(transcription["kind"], "audio_verified_micro_transcription")
-        self.assertEqual(transcription["reliability"], "audio_verified_micro")
-        self.assertTrue(transcription["displayNotation"])
-        self.assertTrue(transcription["transcriptionReady"])
+        self.assertEqual(daily["transcribedRecordCount"], 0)
+        self.assertEqual(daily["scoreAudioOnlyRecordCount"], 1)
+        self.assertEqual(transcription["status"], "score_audio_only")
+        self.assertEqual(transcription["kind"], "score_audio_evidence")
+        self.assertEqual(transcription["reliability"], "score_audio_only")
+        self.assertFalse(transcription["displayNotation"])
+        self.assertFalse(transcription["transcriptionReady"])
         self.assertEqual(transcription["clef"], "treble")
         self.assertEqual(transcription["keySignature"]["label"], "key pending")
         self.assertEqual(transcription["noteCount"], len(notes))
-        self.assertTrue(transcription["events"])
-        self.assertTrue(transcription["notationSystems"])
-        self.assertIn("short note/rhythm run", transcription["reliabilityLimit"])
+        self.assertEqual(transcription["events"], [])
+        self.assertEqual(transcription["notationSystems"], [])
+        self.assertEqual(transcription["qualityStatus"], "candidate_micro_transcription")
+        self.assertEqual(transcription["candidateMicroNoteCount"], len(notes))
+        self.assertIn("withheld", transcription["reliabilityLimit"])
         self.assertEqual(record["materialStatus"], "piece_or_exercise_pending")
         self.assertEqual(record["transcription"]["scoreAlignmentStatus"], "pending_piece_or_exercise_alignment")
         self.assertIn("full-session transcription", record["transcription"]["fullSessionLimit"])
         self.assertEqual(transcription["musicianRead"]["source"], "score-free or unidentified material")
         self.assertEqual(transcription["musicianRead"]["scoreMode"], "piece_or_exercise_pending")
-        self.assertIn("rising", transcription["musicianRead"]["pattern"])
+        self.assertEqual(transcription["musicianRead"]["pattern"], "notation pending")
 
     def test_title_labeled_scale_becomes_calibration_anchor_not_repertoire(self):
         inventory = {
@@ -449,13 +452,13 @@ class DailyRecordTests(unittest.TestCase):
             sections=[],
         )
 
-        self.assertEqual(daily["leadTranscriptionPracticeDay"], "2026-05-03")
-        self.assertEqual(daily["transcribedRecordCount"], 2)
-        self.assertEqual(daily["scoreAudioOnlyRecordCount"], 1)
+        self.assertEqual(daily["leadTranscriptionPracticeDay"], "")
+        self.assertEqual(daily["transcribedRecordCount"], 0)
+        self.assertEqual(daily["scoreAudioOnlyRecordCount"], 3)
         scherzo = next(item for item in daily["records"] if item["practiceDay"] == "2026-05-03")
         self.assertEqual(scherzo["transcription"]["musicianRead"]["source"], "Alan-confirmed source label")
         self.assertEqual(scherzo["transcription"]["musicianRead"]["scoreMode"], "source_confirmed_score_target")
-        self.assertIn("rising", scherzo["transcription"]["musicianRead"]["pattern"])
+        self.assertEqual(scherzo["transcription"]["musicianRead"]["pattern"], "notation pending")
 
     def test_micro_transcription_rejects_repeated_unagreed_note_stream(self):
         inventory = {
@@ -619,7 +622,7 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(record["transcription"]["failureMode"], "repeated_pitch_collapse")
         self.assertFalse(record["transcription"]["displayNotation"])
         self.assertEqual(record["transcription"]["qualityLabel"], "audio paired")
-        self.assertIn("Only verified note/rhythm evidence", record["transcription"]["reliabilityLimit"])
+        self.assertIn("Only audio-matched note/rhythm evidence", record["transcription"]["reliabilityLimit"])
         self.assertIn("score", record["mainCurtisBlocker"])
         self.assertIn("Only note/rhythm evidence", record["clips"][0]["reason"])
 
