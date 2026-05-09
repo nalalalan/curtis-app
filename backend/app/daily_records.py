@@ -1370,7 +1370,7 @@ def build_daily_records(
         quality = transcription_quality(full_note_count, active_seconds, len(notation_segments), quality_metrics)
         failure_summary = transcription_failure_summary(day_transcriptions)
         micro = best_micro_transcription(day_transcriptions)
-        display_transcriptions = [micro["transcription"]] if micro else day_transcriptions
+        display_transcriptions = [micro["transcription"]] if micro else []
         notation = notation_events(display_transcriptions)
         day_notation_systems = notation_systems(notation)
         note_count = int(micro.get("quality", {}).get("noteCount") or full_note_count)
@@ -1425,6 +1425,16 @@ def build_daily_records(
                 "failureMode": "unverified_machine_pitch",
                 "failureWindowCount": len(day_transcriptions),
                 "failurePitchEventCount": full_note_count,
+            }
+            display_state = {
+                **display_state,
+                "detectedPitchEventCount": full_note_count,
+                "hiddenPitchEventCount": full_note_count,
+                "rejectedMachinePitchEventCount": full_note_count,
+                "displayLimit": (
+                    f"{full_note_count} machine pitch events are hidden from notation until a short "
+                    "note/rhythm run passes audio-agreement checks."
+                ),
             }
         uploaded_seconds = sum(int(video.get("durationSeconds") or 0) for video in videos)
         processed_seconds = sum(sample_duration_seconds(sample) for sample in day_samples)
