@@ -16,7 +16,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from backend.app.analyzer import classify_violin_presence
+from backend.app.analyzer import VIOLIN_PRESENCE_VERSION, classify_violin_presence
 
 
 ROOT = REPO_ROOT
@@ -89,11 +89,11 @@ def sample_starts(item: dict[str, Any]) -> list[int]:
         return [0]
     latest = max(0, duration - SAMPLE_SECONDS - 30)
     window_count = max(1, WINDOWS_PER_VIDEO)
-    anchors = [SAMPLE_START_SECONDS, 5 * 60, 15 * 60]
-    if window_count > 1:
-        step = duration / window_count
-        anchors.extend(int(step * index) for index in range(1, window_count))
+    anchors = [SAMPLE_START_SECONDS]
+    anchors.extend(int(duration * fraction) for fraction in (0.25, 0.5, 0.625, 0.75))
     anchors.append(latest)
+    if window_count >= 6:
+        anchors.extend([5 * 60, 15 * 60, int(duration * 0.125)])
     starts = [min(max(0, anchor), latest) for anchor in anchors]
     return list(dict.fromkeys(starts))[:window_count]
 
@@ -146,6 +146,61 @@ def cached_sample_info(path: Path) -> tuple[str, int] | None:
     return match.group("video_id"), int(match.group("start"))
 
 
+def presence_cache_path() -> Path:
+    return MEDIA_DIR / ".violin-presence-cache.json"
+
+
+def fresh_presence_cache() -> dict[str, Any]:
+    return {"version": VIOLIN_PRESENCE_VERSION, "items": {}}
+
+
+def load_presence_cache() -> dict[str, Any]:
+    path = presence_cache_path()
+    if not path.exists():
+        return fresh_presence_cache()
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return fresh_presence_cache()
+    if not isinstance(data, dict) or data.get("version") != VIOLIN_PRESENCE_VERSION:
+        return fresh_presence_cache()
+    if not isinstance(data.get("items"), dict):
+        data["items"] = {}
+    return data
+
+
+def save_presence_cache(cache: dict[str, Any]) -> None:
+    MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+    path = presence_cache_path()
+    temp_path = path.with_suffix(".tmp")
+    temp_path.write_text(json.dumps(cache, indent=2, sort_keys=True), encoding="utf-8")
+    temp_path.replace(path)
+
+
+def file_signature(path: Path) -> dict[str, Any]:
+    stat = path.stat()
+    return {
+        "path": str(path.resolve()),
+        "sizeBytes": int(stat.st_size),
+        "mtimeNs": int(stat.st_mtime_ns),
+        "violinSamplerVersion": VIOLIN_PRESENCE_VERSION,
+    }
+
+
+def cached_local_violin_presence(path: Path, cache: dict[str, Any]) -> tuple[dict[str, Any], bool]:
+    signature = file_signature(path)
+    items = cache.setdefault("items", {})
+    if not isinstance(items, dict):
+        cache["items"] = items = {}
+    key = str(signature["path"])
+    entry = items.get(key)
+    if isinstance(entry, dict) and entry.get("signature") == signature and isinstance(entry.get("presence"), dict):
+        return entry["presence"], False
+    presence = local_violin_presence(path)
+    items[key] = {"signature": signature, "presence": presence}
+    return presence, True
+
+
 def cached_media_candidates(ops: dict[str, Any]) -> list[dict[str, Any]]:
     inventory = ops.get("inventory", {}).get("youtube", [])
     sampled_ids, sampled_windows = live_sample_keys(ops)
@@ -158,6 +213,8 @@ def cached_media_candidates(ops: dict[str, Any]) -> list[dict[str, Any]]:
     if not MEDIA_DIR.exists():
         return candidates
     include_negative = os.getenv("CURTIS_OWNER_UPLOAD_CACHED_NEGATIVES", "").strip().lower() in {"1", "true", "yes", "on"}
+    presence_cache = load_presence_cache()
+    presence_cache_changed = False
     for path in sorted(MEDIA_DIR.glob("*-browser.webm")):
         info = cached_sample_info(path)
         if not info:
@@ -170,13 +227,16 @@ def cached_media_candidates(ops: dict[str, Any]) -> list[dict[str, Any]]:
         key = (str(item.get("url") or ""), start)
         if sample_id_value in sampled_ids or key in sampled_windows:
             continue
-        presence = local_violin_presence(path)
+        presence, changed = cached_local_violin_presence(path, presence_cache)
+        presence_cache_changed = presence_cache_changed or changed
         if not include_negative and not presence.get("containsViolin"):
             continue
         candidate = with_sample_window(item, start)
         candidate["cachedPath"] = str(path)
         candidate["localPresence"] = presence
         candidates.append(candidate)
+    if presence_cache_changed:
+        save_presence_cache(presence_cache)
     return sorted(
         candidates,
         key=lambda item: (
@@ -332,7 +392,7 @@ def local_violin_presence(path: Path) -> dict[str, Any]:
             "containsViolin": False,
             "violinPresence": "unverified",
             "practiceEvidenceStatus": "needs_violin_verification",
-            "violinSamplerVersion": "violin_presence_v1",
+            "violinSamplerVersion": VIOLIN_PRESENCE_VERSION,
             "violinSamplerScore": 0,
             "violinSamplerBlocker": "local_violin_presence_scan_failed",
             "violinSamplerDetail": str(exc)[:180],

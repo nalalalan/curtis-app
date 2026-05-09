@@ -1,3 +1,4 @@
+import json
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -19,16 +20,25 @@ class MediaSamplingTests(unittest.TestCase):
 
         windows = sample_windows(item, max_windows=4)
 
-        self.assertEqual(windows, ["*600-690", "*5940-6030", "*11880-11970", "*17880-17970"])
+        self.assertEqual(windows, ["*600-690", "*4500-4590", "*9000-9090", "*11250-11340"])
 
-    def test_dense_sample_windows_include_early_practice_probes(self):
+    def test_dense_sample_windows_prioritize_deep_practice_before_early_probes(self):
         item = {"id": "video", "durationSeconds": 18000}
 
         windows = sample_windows(item, max_windows=8)
 
         self.assertIn("*300-390", windows)
         self.assertIn("*900-990", windows)
-        self.assertLess(windows.index("*300-390"), windows.index("*5940-6030"))
+        self.assertIn("*11250-11340", windows)
+        self.assertLess(windows.index("*11250-11340"), windows.index("*300-390"))
+
+    def test_owner_sync_prioritizes_deep_long_video_windows(self):
+        item = {"id": "video", "durationSeconds": 42900}
+
+        starts = owner_sync.sample_starts(item)
+
+        self.assertEqual(starts[:5], [600, 10725, 21450, 26812, 32175])
+        self.assertLess(starts.index(10725), starts.index(300))
 
     def test_sample_id_includes_window_start(self):
         self.assertEqual(sample_id("abc", "*5940-6030"), "abc-5940")
@@ -74,6 +84,54 @@ class MediaSamplingTests(unittest.TestCase):
             self.assertEqual(candidates[0]["sampleId"], "video123-11400")
             self.assertEqual(candidates[0]["sampleWindow"], "*11400-11490")
             self.assertEqual(candidates[0]["cachedPath"], str(cached))
+            self.assertEqual(candidates[0]["localPresence"], presence)
+
+    def test_owner_sync_reuses_matching_presence_cache(self):
+        with TemporaryDirectory() as directory:
+            media_dir = Path(directory)
+            cached = media_dir / "video123-11400-browser.webm"
+            cached.write_bytes(b"cached media")
+            ops = {
+                "inventory": {
+                    "youtube": [
+                        {
+                            "id": "video123",
+                            "url": "https://youtube.test/watch?v=video123",
+                            "title": "5-1-26",
+                            "durationSeconds": 18000,
+                            "practiceCandidate": True,
+                            "publishedAt": "2026-05-01T00:00:00Z",
+                        }
+                    ]
+                },
+                "media": {"sampleIndex": []},
+            }
+            presence = {
+                "containsViolin": True,
+                "violinPresence": "violin_positive",
+                "violinSamplerScore": 77.0,
+                "violinSamplerVersion": owner_sync.VIOLIN_PRESENCE_VERSION,
+            }
+            with mock.patch.object(owner_sync, "MEDIA_DIR", media_dir):
+                signature = owner_sync.file_signature(cached)
+                cache = {
+                    "version": owner_sync.VIOLIN_PRESENCE_VERSION,
+                    "items": {
+                        signature["path"]: {
+                            "signature": signature,
+                            "presence": presence,
+                        }
+                    },
+                }
+                (media_dir / ".violin-presence-cache.json").write_text(json.dumps(cache), encoding="utf-8")
+                with mock.patch.object(
+                    owner_sync,
+                    "local_violin_presence",
+                    side_effect=AssertionError("cache miss"),
+                ):
+                    candidates = owner_sync.media_candidates(ops)
+
+            self.assertEqual(candidates[0]["sampleId"], "video123-11400")
             self.assertEqual(candidates[0]["localPresence"], presence)
 
 

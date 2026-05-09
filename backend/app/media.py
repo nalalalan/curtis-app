@@ -47,15 +47,10 @@ def sample_windows(item: dict[str, Any], max_windows: int = MEDIA_SAMPLE_WINDOWS
         return [f"*0-{MEDIA_SAMPLE_SECONDS}"]
     latest_start = max(0, duration - MEDIA_SAMPLE_SECONDS - 30)
     anchors = [MEDIA_SAMPLE_START_SECONDS]
+    anchors.extend([int(duration * fraction) for fraction in (0.25, 0.5, 0.625, 0.75)])
+    anchors.append(latest_start)
     if max_windows >= 6:
-        anchors.extend([5 * 60, 15 * 60])
-    anchors.extend(
-        [
-            int(duration * 0.33),
-            int(duration * 0.66),
-            latest_start,
-        ]
-    )
+        anchors.extend([5 * 60, 15 * 60, int(duration * 0.125)])
     starts: list[int] = []
     for raw_start in anchors:
         start = max(0, min(int(raw_start), latest_start))
