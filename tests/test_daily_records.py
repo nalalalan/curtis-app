@@ -446,6 +446,8 @@ class DailyRecordTests(unittest.TestCase):
             media_samples=[
                 {"id": "wDfVpTU4I_I-13800", "path": "haydn.mp4", "window": "*13800-13830", "containsViolin": True},
                 {"id": "Njh8_zq9_DM-26813", "path": "scherzo.mp4", "window": "*26813-26843", "containsViolin": True},
+                {"id": "Njh8_zq9_DM-10545", "path": "scherzo-d4.webm", "window": "*10545-10635", "containsViolin": True},
+                {"id": "Njh8_zq9_DM-10815", "path": "scherzo-a4.webm", "window": "*10815-10905", "containsViolin": True},
                 {"id": "newer_unverified", "path": "newer.mp4", "window": "*100-130", "containsViolin": True},
             ],
             transcriptions=transcriptions,
@@ -457,8 +459,11 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(daily["scoreAudioOnlyRecordCount"], 2)
         scherzo = next(item for item in daily["records"] if item["practiceDay"] == "2026-05-03")
         self.assertEqual(scherzo["transcription"]["status"], "audio_matched_fragment")
+        self.assertEqual(scherzo["transcription"]["renderedNoteCount"], 2)
         self.assertEqual(scherzo["transcription"]["events"][0]["note"], "D4")
+        self.assertEqual(scherzo["transcription"]["events"][1]["note"], "A4")
         self.assertEqual(scherzo["clips"][0]["sampleId"], "Njh8_zq9_DM-10545")
+        self.assertEqual(scherzo["clips"][1]["sampleId"], "Njh8_zq9_DM-10815")
         self.assertEqual(scherzo["transcription"]["musicianRead"]["source"], "Alan-confirmed source label")
         self.assertEqual(scherzo["transcription"]["musicianRead"]["scoreMode"], "source_confirmed_score_target")
 
@@ -534,6 +539,7 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(transcription["renderedNoteCount"], 1)
         self.assertEqual(transcription["events"][0]["note"], "D4")
         self.assertTrue(transcription["events"][0]["strictAudioWindow"])
+        self.assertEqual(len(transcription["notationSystems"]), 1)
         self.assertEqual(transcription["notationSystems"][0]["clip"]["localStartSeconds"], 3.866)
         self.assertEqual(transcription["notationSystems"][0]["clip"]["localEndSeconds"], 4.458)
         self.assertIn("/clip?start=3.866&end=4.458", transcription["notationSystems"][0]["clip"]["audioUrl"])

@@ -39,7 +39,7 @@ MICRO_TRANSCRIPTION_DISPLAY_LIMIT = (
     "review did not match reliably enough to display as transcription."
 )
 MATCHED_FRAGMENT_DISPLAY_LIMIT = (
-    "One strict audio-matched fragment is displayed. Full-session transcription remains withheld "
+    "Strict audio-matched fragments are displayed. Full-session transcription remains withheld "
     "until the same note/rhythm match standard works across longer playing."
 )
 ACCEPTED_AUDIO_MATCHED_FRAGMENTS: tuple[dict[str, Any], ...] = (
@@ -60,6 +60,24 @@ ACCEPTED_AUDIO_MATCHED_FRAGMENTS: tuple[dict[str, Any], ...] = (
         "voicedFrameCount": 48,
         "detectors": ["pyin", "yin"],
         "verification": "human_accepted_audio_matched_fragment",
+    },
+    {
+        "sourceVideoId": "Njh8_zq9_DM",
+        "sourceTitle": "5-3-26",
+        "sourceUrl": "https://www.youtube.com/watch?v=Njh8_zq9_DM",
+        "sourceWindow": "*10815-10905",
+        "sampleId": "Njh8_zq9_DM-10815",
+        "note": "A4",
+        "midi": 69,
+        "startSeconds": 0.060,
+        "endSeconds": 1.126,
+        "durationSeconds": 1.067,
+        "confidence": 0.983,
+        "pitchStdCents": 1.79,
+        "medianPitchOffsetCents": 0.0,
+        "voicedFrameCount": 184,
+        "detectors": ["pyin", "yin"],
+        "verification": "strict_pyin_yin_audio_matched_fragment",
     },
 )
 VIOLIN_POSITIVE_VALUES = {
@@ -693,6 +711,24 @@ def accepted_fragment_fallback(transcriptions: list[dict[str, Any]]) -> tuple[di
     return None, None
 
 
+def accepted_fragment_source(
+    transcriptions: list[dict[str, Any]],
+    accepted: dict[str, Any],
+) -> dict[str, Any]:
+    for transcription in transcriptions:
+        if transcription_matches_accepted_fragment_source(transcription, accepted):
+            return {
+                **transcription,
+                "transcriptionId": f"{transcription.get('transcriptionId') or accepted.get('sampleId') or ''}#accepted-audio-matched-fragment",
+                "sampleId": accepted.get("sampleId") or transcription.get("sampleId") or "",
+                "sourceUrl": accepted.get("sourceUrl") or transcription.get("sourceUrl") or "",
+                "sourceTitle": accepted.get("sourceTitle") or transcription.get("sourceTitle") or "",
+                "sourceWindow": accepted.get("sourceWindow") or transcription.get("sourceWindow") or "",
+                "pipelineVersion": transcription.get("pipelineVersion") or TRANSCRIPTION_PIPELINE_VERSION,
+            }
+    return {}
+
+
 def matched_fragment_candidate(
     transcription: dict[str, Any],
     fragment: dict[str, Any],
@@ -734,7 +770,60 @@ def matched_fragment_candidate(
     }
 
 
+def matched_fragment_transcriptions(
+    transcriptions: list[dict[str, Any]],
+    available_sample_ids: set[str] | None = None,
+) -> list[dict[str, Any]]:
+    full_note_count = transcription_note_count(transcriptions)
+    matches: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for accepted in ACCEPTED_AUDIO_MATCHED_FRAGMENTS:
+        accepted_sample = str(accepted.get("sampleId") or "").strip()
+        if available_sample_ids is not None and accepted_sample and accepted_sample not in available_sample_ids:
+            continue
+        accepted_key = "|".join(
+            [
+                accepted_sample,
+                str(accepted.get("startSeconds") or ""),
+                str(accepted.get("endSeconds") or ""),
+                str(accepted.get("note") or ""),
+            ]
+        )
+        best: dict[str, Any] = {}
+        for transcription in transcriptions:
+            if not transcription_matches_accepted_fragment_source(transcription, accepted):
+                continue
+            fragments = transcription.get("matchedFragments") if isinstance(transcription.get("matchedFragments"), list) else []
+            for fragment in fragments:
+                if not fragment_passes_display_gate(fragment):
+                    continue
+                if not fragment_matches_accepted(fragment, transcription, accepted):
+                    continue
+                source = {
+                    **transcription,
+                    "sampleId": accepted_sample or transcription.get("sampleId") or "",
+                    "sourceUrl": accepted.get("sourceUrl") or transcription.get("sourceUrl") or "",
+                    "sourceTitle": accepted.get("sourceTitle") or transcription.get("sourceTitle") or "",
+                    "sourceWindow": accepted.get("sourceWindow") or transcription.get("sourceWindow") or "",
+                }
+                candidate = matched_fragment_candidate(source, fragment, full_note_count, len(fragments))
+                if best and safe_float(candidate.get("quality", {}).get("score")) <= safe_float(best.get("quality", {}).get("score")):
+                    continue
+                best = candidate
+        if not best:
+            source = accepted_fragment_source(transcriptions, accepted)
+            if source:
+                best = matched_fragment_candidate(source, dict(accepted), full_note_count, 1)
+        if best and accepted_key not in seen:
+            seen.add(accepted_key)
+            matches.append(best)
+    return matches
+
+
 def best_matched_fragment_transcription(transcriptions: list[dict[str, Any]]) -> dict[str, Any]:
+    matches = matched_fragment_transcriptions(transcriptions)
+    if matches:
+        return matches[0]
     best: dict[str, Any] = {}
     full_note_count = transcription_note_count(transcriptions)
     for transcription in transcriptions:
@@ -1800,31 +1889,47 @@ def build_daily_records(
         quality = transcription_quality(full_note_count, active_seconds, len(notation_segments), quality_metrics)
         failure_summary = transcription_failure_summary(day_transcriptions)
         micro = best_micro_transcription(day_transcriptions)
-        matched_fragment = best_matched_fragment_transcription(day_transcriptions)
-        has_verified_transcription = bool(matched_fragment)
-        display_transcriptions = [matched_fragment["transcription"]] if has_verified_transcription else []
+        available_sample_ids = day_sample_ids or all_violin_sample_ids or set()
+        matched_fragments = matched_fragment_transcriptions(day_transcriptions, available_sample_ids)
+        matched_fragment = matched_fragments[0] if matched_fragments else {}
+        has_verified_transcription = bool(matched_fragments)
+        display_transcriptions = [item["transcription"] for item in matched_fragments] if has_verified_transcription else []
         read_transcriptions = display_transcriptions if has_verified_transcription else day_transcriptions
         notation = notation_events(display_transcriptions)
         day_notation_systems = notation_systems(notation)
         visible_quality = matched_fragment.get("quality", {}) if matched_fragment else micro.get("quality", {})
         note_count = int(visible_quality.get("noteCount") or full_note_count)
+        if matched_fragments:
+            note_count = sum(int(item.get("quality", {}).get("noteCount") or 0) for item in matched_fragments)
         public_note_count = note_count if has_verified_transcription else full_note_count
         display_state = notation_display_state(notation, day_notation_systems, note_count)
         has_machine_pitch_events = bool(raw_notation)
-        if matched_fragment:
-            fragment_quality = matched_fragment.get("quality", {})
-            full_detected = int(matched_fragment.get("fullDetectedNoteCount") or full_note_count or note_count)
+        if matched_fragments:
+            fragment_qualities = [item.get("quality", {}) for item in matched_fragments]
+            full_detected = int(max([item.get("fullDetectedNoteCount") or 0 for item in matched_fragments] + [full_note_count, note_count]))
             rejected_count = max(0, full_detected - note_count)
+            matched_seconds = sum(float(item.get("durationSeconds") or 0.0) for item in fragment_qualities)
+            matched_confidences = [float(item.get("medianConfidence") or 0.0) for item in fragment_qualities if item.get("medianConfidence")]
+            matched_pitch_std = max([float(item.get("pitchStdCents") or 0.0) for item in fragment_qualities] + [0.0])
+            matched_detectors = sorted(
+                {
+                    str(detector)
+                    for item in fragment_qualities
+                    for detector in (item.get("detectors") if isinstance(item.get("detectors"), list) else [])
+                    if detector
+                }
+            )
             quality = {
                 **quality,
                 "qualityStatus": "audio_matched_fragment",
                 "qualityLabel": "matched fragment",
                 "qualityLimit": MATCHED_FRAGMENT_DISPLAY_LIMIT,
+                "matchedFragmentCount": len(matched_fragments),
                 "matchedFragmentNoteCount": note_count,
-                "matchedFragmentSeconds": fragment_quality.get("durationSeconds") or 0,
-                "matchedFragmentConfidence": fragment_quality.get("medianConfidence") or 0,
-                "matchedFragmentPitchStdCents": fragment_quality.get("pitchStdCents") or 0,
-                "matchedFragmentDetectors": fragment_quality.get("detectors") or [],
+                "matchedFragmentSeconds": round(matched_seconds, 3),
+                "matchedFragmentConfidence": round(sum(matched_confidences) / len(matched_confidences), 3) if matched_confidences else 0,
+                "matchedFragmentPitchStdCents": round(matched_pitch_std, 2),
+                "matchedFragmentDetectors": matched_detectors,
                 "rejectedMachinePitchEventCount": rejected_count,
             }
             display_state = {
@@ -1835,15 +1940,15 @@ def build_daily_records(
                 "rejectedMachinePitchEventCount": rejected_count,
                 "detectedPitchEventCount": full_detected,
                 "displayLimit": (
-                    f"{note_count} audio-matched note is displayed; "
+                    f"{note_count} audio-matched notes are displayed across {len(matched_fragments)} exact clips; "
                     f"{rejected_count} machine pitch events remain hidden."
                 ),
             }
             heat_fragments = [
                 {
-                    "label": "audio-matched single-note fragment",
-                    "count": 1,
-                    "seconds": fragment_quality.get("durationSeconds") or 0,
+                    "label": "audio-matched single-note fragments",
+                    "count": len(matched_fragments),
+                    "seconds": round(matched_seconds, 3),
                     "density": 1,
                     "status": "audio_matched",
                 }
@@ -1923,8 +2028,9 @@ def build_daily_records(
         if key_signature.get("label") == "key pending":
             key_signature = key_signature_from_transcriptions(read_transcriptions) or key_signature
         clips = clips_for_day(videos, day_sections, day_transcriptions, day_samples)
-        if matched_fragment:
-            clips = [matched_fragment_clip(matched_fragment), *clips[: max(0, MAX_CLIPS_PER_DAY - 1)]]
+        if matched_fragments:
+            fragment_clips = [matched_fragment_clip(item) for item in matched_fragments]
+            clips = [*fragment_clips, *clips[: max(0, MAX_CLIPS_PER_DAY - len(fragment_clips))]]
         material_status = (
             "confirmed_piece"
             if confirmed

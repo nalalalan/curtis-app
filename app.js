@@ -1612,9 +1612,12 @@ function transcriptionReasonLine(record) {
   }
   if (label === "matched fragment") {
     const events = Array.isArray(transcription.events) ? transcription.events : [];
-    const note = events.find((event) => event?.kind === "note" && event.note)?.note || "";
-    const seconds = Number(transcription.microVerifiedSeconds || transcription.durationSeconds || 0);
-    const evidence = [note, seconds ? `${seconds.toFixed(seconds < 1 ? 3 : 1)}s` : ""].filter(Boolean).join(" / ");
+    const notes = events.filter((event) => event?.kind === "note" && event.note).map((event) => event.note);
+    const seconds = Number(transcription.matchedFragmentSeconds || transcription.microVerifiedSeconds || transcription.durationSeconds || 0);
+    const evidence = [
+      notes.length ? notes.slice(0, 3).join(" / ") : "",
+      seconds ? `${seconds.toFixed(seconds < 1 ? 3 : 1)}s` : ""
+    ].filter(Boolean).join(" / ");
     return `Transcription: ${evidence || "matched audio pair"}.`;
   }
   const limit = transcription.reliabilityLimit || transcription.qualityLimit || transcription.fullSessionLimit || transcription.coverageLimit || "No score-linked transcription has been generated.";
@@ -1850,15 +1853,14 @@ function matchedNotationSystem(transcription) {
   return systems.find((item) => Array.isArray(item?.events) && item.events.length) || systems[0] || {};
 }
 
-function renderMatchedPracticePair(record, clip, transcription) {
-  const system = matchedNotationSystem(transcription);
-  const notationClip = system.clip || clip || primaryNotationClip(record) || primaryPlayableClip(record);
+function renderSingleMatchedPracticePair(record, clip, transcription, system) {
+  const notationClip = system?.clip || clip || primaryNotationClip(record) || primaryPlayableClip(record);
   const mediaClip = notationClip ? { ...notationClip, type: "audio_matched_fragment", label: "audio-matched fragment" } : notationClip;
-  const events = Array.isArray(system.events) && system.events.length
+  const events = Array.isArray(system?.events) && system.events.length
     ? system.events
     : Array.isArray(transcription?.events) ? transcription.events : [];
   const notes = events.filter((event) => event?.kind === "note").map((event) => event.note).filter(Boolean);
-  const seconds = Number(notationClip?.durationSeconds || transcription?.microVerifiedSeconds || 0);
+  const seconds = Number(notationClip?.durationSeconds || events[0]?.durationSeconds || transcription?.microVerifiedSeconds || 0);
   const label = [
     notes.length ? notes.slice(0, 4).join(" ") : "matched note",
     seconds ? `${seconds.toFixed(seconds < 1 ? 3 : 1)}s` : ""
@@ -1876,6 +1878,18 @@ function renderMatchedPracticePair(record, clip, transcription) {
           maxNotes: 24
         })}
       </section>
+    </div>
+  `;
+}
+
+function renderMatchedPracticePair(record, clip, transcription) {
+  const systems = Array.isArray(transcription?.notationSystems)
+    ? transcription.notationSystems.filter((system) => Array.isArray(system?.events) && system.events.length)
+    : [];
+  const visibleSystems = systems.length ? systems.slice(0, 3) : [matchedNotationSystem(transcription)];
+  return `
+    <div class="matched-pair-stack" aria-label="Matched video audio transcription pairs">
+      ${visibleSystems.map((system) => renderSingleMatchedPracticePair(record, clip, transcription, system)).join("")}
     </div>
   `;
 }

@@ -1663,6 +1663,11 @@ h2 {
   border-style: dashed;
 }
 
+.matched-pair-stack {
+  display: grid;
+  gap: 8px;
+}
+
 .matched-practice-pair {
   display: grid;
   grid-template-columns: minmax(170px, 220px) minmax(0, 1fr);
