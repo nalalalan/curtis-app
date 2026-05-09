@@ -1287,7 +1287,7 @@ function renderKeySignatureMarks(signature) {
 }
 
 function renderTrebleClef() {
-  return `<text class="treble-clef" x="16" y="76">&#119070;</text>`;
+  return `<text class="treble-clef" x="16" y="74">&#119070;</text>`;
 }
 
 function renderNotationSheet(events, options = {}) {
@@ -1609,6 +1609,13 @@ function transcriptionReasonLine(record) {
   const label = transcriptionEvidenceLabel(transcription);
   if (label === "audio paired") {
     return "Transcription: audio paired; notation pending.";
+  }
+  if (label === "matched fragment") {
+    const events = Array.isArray(transcription.events) ? transcription.events : [];
+    const note = events.find((event) => event?.kind === "note" && event.note)?.note || "";
+    const seconds = Number(transcription.microVerifiedSeconds || transcription.durationSeconds || 0);
+    const evidence = [note, seconds ? `${seconds.toFixed(seconds < 1 ? 3 : 1)}s` : ""].filter(Boolean).join(" / ");
+    return `Transcription: ${evidence || "matched audio pair"}.`;
   }
   const limit = transcription.reliabilityLimit || transcription.qualityLimit || transcription.fullSessionLimit || transcription.coverageLimit || "No score-linked transcription has been generated.";
   return `Transcription: ${label}. ${shortTranscriptionText(limit, 180)}`;

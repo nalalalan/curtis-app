@@ -1673,6 +1673,7 @@ h2 {
 
 .matched-practice-pair .embedded-media {
   gap: 5px;
+  max-width: 240px;
   padding: 7px;
 }
 
