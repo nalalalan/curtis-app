@@ -281,6 +281,114 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(record["transcription"]["scoreAlignmentStatus"], "pending_piece_or_exercise_alignment")
         self.assertIn("full-session transcription", record["transcription"]["fullSessionLimit"])
 
+    def test_lead_transcription_points_to_strongest_verified_micro_record(self):
+        inventory = {
+            "youtube": [
+                {
+                    "id": "wDfVpTU4I_I",
+                    "title": "5-1-26",
+                    "url": "https://www.youtube.com/watch?v=wDfVpTU4I_I",
+                    "publishedAt": "2026-05-02T09:10:00Z",
+                    "durationSeconds": 900,
+                    "practiceCandidate": True,
+                },
+                {
+                    "id": "Njh8_zq9_DM",
+                    "title": "5-3-26",
+                    "url": "https://www.youtube.com/watch?v=Njh8_zq9_DM",
+                    "publishedAt": "2026-05-04T09:10:00Z",
+                    "durationSeconds": 900,
+                    "practiceCandidate": True,
+                },
+                {
+                    "id": "newer_unverified",
+                    "title": "5-6-26",
+                    "url": "https://www.youtube.com/watch?v=newer_unverified",
+                    "publishedAt": "2026-05-07T09:10:00Z",
+                    "durationSeconds": 900,
+                    "practiceCandidate": True,
+                },
+            ]
+        }
+        haydn_names = ["G4", "A4", "B4", "C5", "D5", "E5", "F#5", "G5"]
+        scherzo_names = ["E5", "F#5", "G5", "A5", "B5", "C6", "D6", "E6", "F#6", "G6", "A6", "B6"]
+        transcriptions = [
+            {
+                "transcriptionId": "haydn",
+                "sampleId": "wDfVpTU4I_I-13800",
+                "sourceUrl": "https://www.youtube.com/watch?v=wDfVpTU4I_I",
+                "sourceTitle": "5-1-26",
+                "sourceWindow": "*13800-13830",
+                "status": "transcribed",
+                "pipelineVersion": TRANSCRIPTION_PIPELINE_VERSION,
+                "tempoBpm": 120,
+                "quality": {"audioAgreementEventCount": len(haydn_names), "spectralAgreedEventCount": len(haydn_names)},
+                "notes": [
+                    note(
+                        name,
+                        index * 0.16,
+                        index * 0.16 + 0.12,
+                        0.91,
+                        audioAgreement=True,
+                        agreementSources=["spectral_onset"],
+                        detectorSource="onset_segmented_pyin",
+                    )
+                    for index, name in enumerate(haydn_names)
+                ],
+            },
+            {
+                "transcriptionId": "scherzo",
+                "sampleId": "Njh8_zq9_DM-26813",
+                "sourceUrl": "https://www.youtube.com/watch?v=Njh8_zq9_DM",
+                "sourceTitle": "5-3-26",
+                "sourceWindow": "*26813-26843",
+                "status": "transcribed",
+                "pipelineVersion": TRANSCRIPTION_PIPELINE_VERSION,
+                "tempoBpm": 132,
+                "quality": {"audioAgreementEventCount": len(scherzo_names), "spectralAgreedEventCount": len(scherzo_names)},
+                "notes": [
+                    note(
+                        name,
+                        index * 0.13,
+                        index * 0.13 + 0.1,
+                        0.93,
+                        audioAgreement=True,
+                        agreementSources=["spectral_onset"],
+                        detectorSource="onset_segmented_pyin",
+                    )
+                    for index, name in enumerate(scherzo_names)
+                ],
+            },
+            {
+                "transcriptionId": "unverified",
+                "sampleId": "newer_unverified",
+                "sourceUrl": "https://www.youtube.com/watch?v=newer_unverified",
+                "sourceTitle": "5-6-26",
+                "sourceWindow": "*100-130",
+                "status": "transcribed",
+                "pipelineVersion": TRANSCRIPTION_PIPELINE_VERSION,
+                "tempoBpm": 120,
+                "quality": {"audioAgreementEventCount": 0, "spectralAgreedEventCount": 0},
+                "notes": [note("D4", index * 0.1, index * 0.1 + 0.08, 0.92, audioAgreement=False) for index in range(24)],
+            },
+        ]
+
+        daily = build_daily_records(
+            inventory=inventory,
+            state={},
+            media_samples=[
+                {"id": "wDfVpTU4I_I-13800", "path": "haydn.mp4", "window": "*13800-13830", "containsViolin": True},
+                {"id": "Njh8_zq9_DM-26813", "path": "scherzo.mp4", "window": "*26813-26843", "containsViolin": True},
+                {"id": "newer_unverified", "path": "newer.mp4", "window": "*100-130", "containsViolin": True},
+            ],
+            transcriptions=transcriptions,
+            sections=[],
+        )
+
+        self.assertEqual(daily["leadTranscriptionPracticeDay"], "2026-05-03")
+        self.assertEqual(daily["transcribedRecordCount"], 2)
+        self.assertEqual(daily["scoreAudioOnlyRecordCount"], 1)
+
     def test_micro_transcription_rejects_repeated_unagreed_note_stream(self):
         inventory = {
             "youtube": [

@@ -1385,6 +1385,51 @@ h2 {
   background: rgba(245, 247, 242, .82);
 }
 
+.lead-transcription-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid rgba(95, 118, 104, .22);
+  border-radius: 8px;
+  background: rgba(255, 253, 248, .9);
+}
+
+.lead-transcription-head {
+  display: grid;
+  grid-template-columns: minmax(0, .9fr) minmax(230px, .7fr);
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+}
+
+.lead-transcription-head span {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 780;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.lead-transcription-head strong {
+  display: block;
+  margin-top: 5px;
+  color: var(--ink);
+  font-size: clamp(17px, 2.1vw, 22px);
+  font-weight: 760;
+  line-height: 1.12;
+  overflow-wrap: anywhere;
+}
+
+.lead-transcription-head small {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
 .record-summary {
   position: relative;
   display: grid;
@@ -2622,6 +2667,7 @@ h2 {
   .paper-hero,
   .paper-status,
   .clip-evidence-grid,
+  .lead-transcription-head,
   .piece-evidence-ledger,
   .transcription-proof-ledger,
   .transcription-stats {

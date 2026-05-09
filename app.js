@@ -498,6 +498,51 @@ function latestDailyRecord(ops) {
   return analyzedRecordList(ops)[0] || dailyRecordList(ops)[0] || null;
 }
 
+function isVerifiedTranscriptionRecord(record) {
+  const transcription = record?.transcription || {};
+  const noteCount = Number(transcription.microVerifiedNoteCount || transcription.renderedNoteCount || transcription.noteCount || 0);
+  return transcription.transcriptionReady === true && transcription.displayNotation !== false && noteCount > 0;
+}
+
+function verifiedTranscriptionScore(record) {
+  if (!isVerifiedTranscriptionRecord(record)) return -1;
+  const transcription = record?.transcription || {};
+  const confirmedPiece = Array.isArray(record?.pieces) && record.pieces.length ? 1 : 0;
+  const noteCount = Number(transcription.microVerifiedNoteCount || transcription.renderedNoteCount || transcription.noteCount || 0);
+  const confidence = Number(transcription.microMedianConfidence || 0);
+  const activeSeconds = Number(record?.activeViolinSeconds || 0);
+  const dayScore = Date.parse(`${record?.practiceDay || ""}T00:00:00Z`) || 0;
+  return (confirmedPiece * 1000000000) + (noteCount * 1000000) + (confidence * 100000) + activeSeconds + (dayScore / 100000000000);
+}
+
+function bestVerifiedTranscriptionRecord(records) {
+  const candidates = Array.isArray(records) ? records.filter(isVerifiedTranscriptionRecord) : [];
+  if (!candidates.length) return null;
+  return candidates.reduce((best, record) => (
+    verifiedTranscriptionScore(record) > verifiedTranscriptionScore(best) ? record : best
+  ), candidates[0]);
+}
+
+function leadTranscriptionRecord(ops) {
+  const records = analyzedRecordList(ops);
+  const preferredDay = dailyRecords(ops).leadTranscriptionPracticeDay || "";
+  if (preferredDay) {
+    const preferred = records.find((record) => record?.practiceDay === preferredDay);
+    if (isVerifiedTranscriptionRecord(preferred)) return preferred;
+  }
+  return bestVerifiedTranscriptionRecord(records);
+}
+
+function orderedAnalyzedRecords(ops) {
+  const records = analyzedRecordList(ops);
+  const lead = leadTranscriptionRecord(ops);
+  if (!lead) return records;
+  return [
+    lead,
+    ...records.filter((record) => record !== lead && record?.practiceDay !== lead.practiceDay)
+  ];
+}
+
 function repertoireEvidence(ops) {
   return ops?.review?.repertoireEvidence && typeof ops.review.repertoireEvidence === "object"
     ? ops.review.repertoireEvidence
@@ -1791,6 +1836,42 @@ function recordEvidenceLine(record, scoreSnippet) {
   return parts.join(" / ");
 }
 
+function renderLeadTranscription(record) {
+  if (!isVerifiedTranscriptionRecord(record)) return "";
+  const transcription = record?.transcription || {};
+  const systems = Array.isArray(transcription.notationSystems) ? transcription.notationSystems : [];
+  const system = systems.find((item) => Array.isArray(item?.events) && item.events.length) || systems[0] || {};
+  const clip = system.clip || primaryNotationClip(record) || primaryPlayableClip(record);
+  const events = Array.isArray(system.events) && system.events.length ? system.events : transcription.events || [];
+  const noteCount = Number(transcription.microVerifiedNoteCount || system.noteCount || transcription.noteCount || 0);
+  const seconds = Number(transcription.microVerifiedSeconds || clip?.durationSeconds || 0);
+  const confidence = Number(transcription.microMedianConfidence || 0);
+  const meta = [
+    record.practiceDay || "",
+    noteCount ? `${noteCount} audio-verified notes` : "",
+    seconds ? `${seconds.toFixed(1)}s` : "",
+    confidence ? `${Math.round(confidence * 100)}% median confidence` : "",
+  ].filter(Boolean).join(" / ");
+  return `
+    <article class="lead-transcription-card" aria-label="Current verified transcription">
+      <div class="lead-transcription-head">
+        <div>
+          <span>Verified transcription</span>
+          <strong>${escapeHtml(shortText(recordPieceText(record), 112))}</strong>
+          <small>${escapeHtml(meta)}</small>
+        </div>
+        ${renderSnippetAudio(clip || {}, "Matched audio")}
+      </div>
+      ${renderNotationSheet(events, {
+        keySignature: transcription.keySignature,
+        systemLabel: "Audio-verified line",
+        qualityLimit: transcription.displayLimit || transcription.reliabilityLimit || "",
+        maxNotes: 24
+      })}
+    </article>
+  `;
+}
+
 function renderDailyRecord(record, index = 0) {
   const playableClip = primaryNotationClip(record) || primaryPlayableClip(record);
   const events = transcriptionEventsForClip(record, playableClip);
@@ -1858,7 +1939,8 @@ function renderDailyRecord(record, index = 0) {
 function renderStudy() {
   if (!elements.studyList) return;
   const records = dailyRecordList(backend.ops);
-  const analyzed = analyzedRecordList(backend.ops);
+  const analyzed = orderedAnalyzedRecords(backend.ops);
+  const lead = leadTranscriptionRecord(backend.ops);
   const pendingCount = Math.max(0, records.length - analyzed.length);
   if (!backend.online) {
     elements.studyList.innerHTML = `<p class="empty">Backend offline.</p>`;
@@ -1871,6 +1953,7 @@ function renderStudy() {
     return;
   }
   elements.studyList.innerHTML = [
+    renderLeadTranscription(lead),
     analyzed.map((record, index) => renderDailyRecord(record, index)).join(""),
     pendingCount
       ? `<p class="empty pending-index">${pendingCount} indexed practice days are waiting for active-playing detection. Uploaded video is still stored separately and is not counted as active practice.</p>`

@@ -1298,6 +1298,42 @@ def day_summary(active_status: str, pieces: list[dict[str, Any]], uncertain: lis
     return "Practice evidence processed; piece confirmation pending."
 
 
+def verified_transcription_rank(record: dict[str, Any]) -> tuple[int, int, float, int, str]:
+    transcription = record.get("transcription") if isinstance(record.get("transcription"), dict) else {}
+    if not transcription.get("transcriptionReady") or transcription.get("displayNotation") is False:
+        return (0, 0, 0.0, 0, "")
+    try:
+        note_count = int(
+            transcription.get("microVerifiedNoteCount")
+            or transcription.get("renderedNoteCount")
+            or transcription.get("noteCount")
+            or 0
+        )
+    except (TypeError, ValueError):
+        note_count = 0
+    try:
+        confidence = float(transcription.get("microMedianConfidence") or 0.0)
+    except (TypeError, ValueError):
+        confidence = 0.0
+    try:
+        active_seconds = int(record.get("activeViolinSeconds") or 0)
+    except (TypeError, ValueError):
+        active_seconds = 0
+    confirmed_piece = 1 if record.get("pieces") else 0
+    return (confirmed_piece, note_count, confidence, active_seconds, str(record.get("practiceDay") or ""))
+
+
+def lead_verified_transcription_record(records: list[dict[str, Any]]) -> dict[str, Any]:
+    candidates = [
+        record
+        for record in records
+        if isinstance(record, dict) and verified_transcription_rank(record)[1] > 0
+    ]
+    if not candidates:
+        return {}
+    return max(candidates, key=verified_transcription_rank)
+
+
 def build_daily_records(
     state: dict[str, Any],
     inventory: dict[str, list[dict[str, Any]]],
@@ -1582,6 +1618,7 @@ def build_daily_records(
         )
 
     records.sort(key=lambda item: str(item.get("practiceDay") or ""), reverse=True)
+    lead_transcription = lead_verified_transcription_record(records)
     total_uploaded = sum(int(record.get("uploadedVideoSeconds") or 0) for record in records)
     total_active = sum(int(record.get("activeViolinSeconds") or 0) for record in records)
     unmeasured_uploaded = max(0, total_uploaded - total_active)
@@ -1603,6 +1640,7 @@ def build_daily_records(
         "scoreAudioOnlyRecordCount": sum(1 for record in records if record.get("transcription", {}).get("reliability") == "score_audio_only"),
         "hiddenPitchTraceRecordCount": sum(1 for record in records if record.get("transcription", {}).get("reliability") == "machine_pitch_hidden"),
         "failedTranscriptionRecordCount": sum(1 for record in records if record.get("transcription", {}).get("reliability") == "transcription_failed"),
+        "leadTranscriptionPracticeDay": lead_transcription.get("practiceDay") if lead_transcription else "",
         "records": records[:MAX_RECORDS],
         "method": "Groups title-confirmed practice videos by practice day, then attaches uploaded duration, active-time evidence, playable audio/video windows, score targets, and repertoire evidence.",
         "limit": (
