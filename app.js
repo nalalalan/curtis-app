@@ -2103,7 +2103,6 @@ function renderStudy() {
   if (!elements.studyList) return;
   const records = dailyRecordList(backend.ops);
   const analyzed = orderedAnalyzedRecords(backend.ops);
-  const lead = leadTranscriptionRecord(backend.ops);
   const pendingCount = Math.max(0, records.length - analyzed.length);
   if (!backend.online) {
     elements.studyList.innerHTML = `<p class="empty">Backend offline.</p>`;
@@ -2116,7 +2115,6 @@ function renderStudy() {
     return;
   }
   elements.studyList.innerHTML = [
-    renderLeadTranscription(lead),
     analyzed.map((record, index) => renderDailyRecord(record, index)).join(""),
     pendingCount
       ? `<p class="empty pending-index">${pendingCount} indexed practice days are waiting for active-playing detection. Uploaded video is still stored separately and is not counted as active practice.</p>`

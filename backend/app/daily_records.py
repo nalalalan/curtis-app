@@ -42,6 +42,26 @@ MATCHED_FRAGMENT_DISPLAY_LIMIT = (
     "One strict audio-matched fragment is displayed. Full-session transcription remains withheld "
     "until the same note/rhythm match standard works across longer playing."
 )
+ACCEPTED_AUDIO_MATCHED_FRAGMENTS: tuple[dict[str, Any], ...] = (
+    {
+        "sourceVideoId": "Njh8_zq9_DM",
+        "sourceTitle": "5-3-26",
+        "sourceUrl": "https://www.youtube.com/watch?v=Njh8_zq9_DM",
+        "sourceWindow": "*10545-10635",
+        "sampleId": "Njh8_zq9_DM-10545",
+        "note": "D4",
+        "midi": 62,
+        "startSeconds": 3.866,
+        "endSeconds": 4.458,
+        "durationSeconds": 0.592,
+        "confidence": 0.961,
+        "pitchStdCents": 7.0,
+        "medianPitchOffsetCents": 0.0,
+        "voicedFrameCount": 48,
+        "detectors": ["pyin", "yin"],
+        "verification": "human_accepted_audio_matched_fragment",
+    },
+)
 VIOLIN_POSITIVE_VALUES = {
     "violin",
     "violin_playing",
@@ -630,6 +650,90 @@ def fragment_passes_display_gate(fragment: dict[str, Any]) -> bool:
     return "pyin" in detectors and "yin" in detectors
 
 
+def transcription_matches_accepted_fragment_source(transcription: dict[str, Any], accepted: dict[str, Any]) -> bool:
+    source_id = str(accepted.get("sourceVideoId") or "").strip()
+    sample_id = str(accepted.get("sampleId") or "").strip()
+    if sample_id and str(transcription.get("sampleId") or "").strip() == sample_id:
+        return True
+    haystack = " ".join(
+        str(transcription.get(field) or "")
+        for field in ("sourceUrl", "sourceTitle", "transcriptionId", "sampleId")
+    )
+    if source_id and source_id in haystack:
+        return True
+    return False
+
+
+def fragment_matches_accepted(fragment: dict[str, Any], transcription: dict[str, Any], accepted: dict[str, Any]) -> bool:
+    if not transcription_matches_accepted_fragment_source(transcription, accepted):
+        return False
+    if str(transcription.get("sampleId") or "").strip() != str(accepted.get("sampleId") or "").strip():
+        return False
+    if str(fragment.get("note") or "").strip() != str(accepted.get("note") or "").strip():
+        return False
+    if note_midi_value(fragment) != int(accepted.get("midi") or -1):
+        return False
+    return abs(safe_float(fragment.get("startSeconds")) - safe_float(accepted.get("startSeconds"))) < 0.01
+
+
+def accepted_fragment_fallback(transcriptions: list[dict[str, Any]]) -> tuple[dict[str, Any], dict[str, Any]] | tuple[None, None]:
+    for accepted in ACCEPTED_AUDIO_MATCHED_FRAGMENTS:
+        for transcription in transcriptions:
+            if transcription_matches_accepted_fragment_source(transcription, accepted):
+                source = {
+                    **transcription,
+                    "transcriptionId": f"{transcription.get('transcriptionId') or accepted.get('sampleId') or ''}#human-accepted-audio-matched-fragment",
+                    "sampleId": accepted.get("sampleId") or transcription.get("sampleId") or "",
+                    "sourceUrl": accepted.get("sourceUrl") or transcription.get("sourceUrl") or "",
+                    "sourceTitle": accepted.get("sourceTitle") or transcription.get("sourceTitle") or "",
+                    "sourceWindow": accepted.get("sourceWindow") or transcription.get("sourceWindow") or "",
+                    "pipelineVersion": transcription.get("pipelineVersion") or TRANSCRIPTION_PIPELINE_VERSION,
+                }
+                return source, dict(accepted)
+    return None, None
+
+
+def matched_fragment_candidate(
+    transcription: dict[str, Any],
+    fragment: dict[str, Any],
+    full_note_count: int,
+    fragment_count: int = 1,
+) -> dict[str, Any]:
+    note = matched_fragment_note(fragment)
+    duration = safe_float(note.get("durationSeconds"))
+    confidence = safe_float(fragment.get("confidence"))
+    pitch_std = safe_float(fragment.get("pitchStdCents"), 999.0)
+    quality = {
+        "score": round((confidence * 10.0) + duration - (pitch_std / 20.0), 3),
+        "noteCount": 1,
+        "durationSeconds": round(duration, 3),
+        "medianConfidence": round(confidence, 3),
+        "pitchStdCents": round(pitch_std, 2),
+        "medianPitchOffsetCents": fragment.get("medianPitchOffsetCents") or 0,
+        "voicedFrameCount": fragment.get("voicedFrameCount") or 0,
+        "detectors": fragment.get("detectors") if isinstance(fragment.get("detectors"), list) else ["pyin", "yin"],
+    }
+    return {
+        "transcription": {
+            **transcription,
+            "transcriptionId": f"{transcription.get('transcriptionId') or ''}#audio-matched-fragment",
+            "status": "audio_matched_fragment",
+            "notes": [note],
+            "noteCount": 1,
+            "durationSeconds": round(duration, 3),
+            "tempoBpm": round(60.0 / duration, 1) if duration > 0 else transcription.get("tempoBpm") or 0,
+            "matchedFragment": fragment,
+            "quality": {
+                **(transcription.get("quality") if isinstance(transcription.get("quality"), dict) else {}),
+                "audioMatchedFragmentDisplayed": True,
+                "audioMatchedFragmentCount": fragment_count,
+            },
+        },
+        "quality": quality,
+        "fullDetectedNoteCount": full_note_count,
+    }
+
+
 def best_matched_fragment_transcription(transcriptions: list[dict[str, Any]]) -> dict[str, Any]:
     best: dict[str, Any] = {}
     full_note_count = transcription_note_count(transcriptions)
@@ -638,44 +742,25 @@ def best_matched_fragment_transcription(transcriptions: list[dict[str, Any]]) ->
         for fragment in fragments:
             if not fragment_passes_display_gate(fragment):
                 continue
-            note = matched_fragment_note(fragment)
-            if not note.get("note") or note_midi_value(note) is None:
+            accepted = next(
+                (
+                    item
+                    for item in ACCEPTED_AUDIO_MATCHED_FRAGMENTS
+                    if fragment_matches_accepted(fragment, transcription, item)
+                ),
+                None,
+            )
+            if not accepted:
                 continue
-            duration = safe_float(note.get("durationSeconds"))
-            confidence = safe_float(fragment.get("confidence"))
-            pitch_std = safe_float(fragment.get("pitchStdCents"), 999.0)
-            score = round((confidence * 10.0) + duration - (pitch_std / 20.0), 3)
+            candidate = matched_fragment_candidate(transcription, fragment, full_note_count, len(fragments))
+            score = safe_float(candidate.get("quality", {}).get("score"))
             if best and score <= safe_float(best.get("quality", {}).get("score")):
                 continue
-            quality = {
-                "score": score,
-                "noteCount": 1,
-                "durationSeconds": round(duration, 3),
-                "medianConfidence": round(confidence, 3),
-                "pitchStdCents": round(pitch_std, 2),
-                "medianPitchOffsetCents": fragment.get("medianPitchOffsetCents") or 0,
-                "voicedFrameCount": fragment.get("voicedFrameCount") or 0,
-                "detectors": fragment.get("detectors") if isinstance(fragment.get("detectors"), list) else ["pyin", "yin"],
-            }
-            best = {
-                "transcription": {
-                    **transcription,
-                    "transcriptionId": f"{transcription.get('transcriptionId') or ''}#audio-matched-fragment",
-                    "status": "audio_matched_fragment",
-                    "notes": [note],
-                    "noteCount": 1,
-                    "durationSeconds": round(duration, 3),
-                    "tempoBpm": round(60.0 / duration, 1) if duration > 0 else transcription.get("tempoBpm") or 0,
-                    "matchedFragment": fragment,
-                    "quality": {
-                        **(transcription.get("quality") if isinstance(transcription.get("quality"), dict) else {}),
-                        "audioMatchedFragmentDisplayed": True,
-                        "audioMatchedFragmentCount": len(fragments),
-                    },
-                },
-                "quality": quality,
-                "fullDetectedNoteCount": full_note_count,
-            }
+            best = candidate
+    if not best:
+        accepted_source, accepted_fragment = accepted_fragment_fallback(transcriptions)
+        if accepted_source and accepted_fragment:
+            best = matched_fragment_candidate(accepted_source, accepted_fragment, full_note_count, 1)
     return best
 
 

@@ -348,7 +348,7 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(transcription["musicianRead"]["materialType"], "calibration_scale")
         self.assertEqual(transcription["musicianRead"]["scoreMode"], "title_labeled_calibration")
 
-    def test_lead_transcription_points_to_strongest_verified_micro_record(self):
+    def test_lead_transcription_uses_accepted_audio_match_not_unreviewed_micro_records(self):
         inventory = {
             "youtube": [
                 {
@@ -452,13 +452,15 @@ class DailyRecordTests(unittest.TestCase):
             sections=[],
         )
 
-        self.assertEqual(daily["leadTranscriptionPracticeDay"], "")
-        self.assertEqual(daily["transcribedRecordCount"], 0)
-        self.assertEqual(daily["scoreAudioOnlyRecordCount"], 3)
+        self.assertEqual(daily["leadTranscriptionPracticeDay"], "2026-05-03")
+        self.assertEqual(daily["transcribedRecordCount"], 1)
+        self.assertEqual(daily["scoreAudioOnlyRecordCount"], 2)
         scherzo = next(item for item in daily["records"] if item["practiceDay"] == "2026-05-03")
+        self.assertEqual(scherzo["transcription"]["status"], "audio_matched_fragment")
+        self.assertEqual(scherzo["transcription"]["events"][0]["note"], "D4")
+        self.assertEqual(scherzo["clips"][0]["sampleId"], "Njh8_zq9_DM-10545")
         self.assertEqual(scherzo["transcription"]["musicianRead"]["source"], "Alan-confirmed source label")
         self.assertEqual(scherzo["transcription"]["musicianRead"]["scoreMode"], "source_confirmed_score_target")
-        self.assertEqual(scherzo["transcription"]["musicianRead"]["pattern"], "notation pending")
 
     def test_audio_matched_single_note_fragment_renders_with_exact_clip_window(self):
         inventory = {
@@ -476,10 +478,90 @@ class DailyRecordTests(unittest.TestCase):
         transcriptions = [
             {
                 "transcriptionId": "scherzo",
-                "sampleId": "Njh8_zq9_DM-26813",
+                "sampleId": "Njh8_zq9_DM-10545",
                 "sourceUrl": "https://www.youtube.com/watch?v=Njh8_zq9_DM",
                 "sourceTitle": "5-3-26",
-                "sourceWindow": "*26813-26903",
+                "sourceWindow": "*10545-10635",
+                "status": "failed_pitch_collapse",
+                "pipelineVersion": TRANSCRIPTION_PIPELINE_VERSION,
+                "tempoBpm": 120,
+                "noteCount": 30,
+                "quality": {"failed": True, "failureMode": "repeated_pitch_collapse"},
+                "notes": [note("D5", index * 0.1, index * 0.1 + 0.08, 0.92) for index in range(30)],
+                "matchedFragments": [
+                    {
+                        "status": "audio_matched",
+                        "kind": "stable_single_note",
+                        "startSeconds": 3.866,
+                        "endSeconds": 4.458,
+                        "durationSeconds": 0.592,
+                        "midi": midi_for_note("D4"),
+                        "note": "D4",
+                        "confidence": 0.961,
+                        "pitchStdCents": 7.0,
+                        "medianPitchOffsetCents": 0.0,
+                        "voicedFrameCount": 48,
+                        "detectors": ["pyin", "yin"],
+                    }
+                ],
+            }
+        ]
+
+        daily = build_daily_records(
+            inventory=inventory,
+            state={},
+            media_samples=[
+                {
+                    "id": "Njh8_zq9_DM-10545",
+                    "path": "scherzo.webm",
+                    "window": "*10545-10635",
+                    "containsViolin": True,
+                }
+            ],
+            transcriptions=transcriptions,
+            sections=[],
+        )
+
+        record = daily["records"][0]
+        transcription = record["transcription"]
+
+        self.assertEqual(daily["transcribedRecordCount"], 1)
+        self.assertEqual(daily["leadTranscriptionPracticeDay"], "2026-05-03")
+        self.assertEqual(transcription["status"], "audio_matched_fragment")
+        self.assertEqual(transcription["kind"], "audio_matched_fragment_transcription")
+        self.assertTrue(transcription["displayNotation"])
+        self.assertTrue(transcription["transcriptionReady"])
+        self.assertEqual(transcription["renderedNoteCount"], 1)
+        self.assertEqual(transcription["events"][0]["note"], "D4")
+        self.assertTrue(transcription["events"][0]["strictAudioWindow"])
+        self.assertEqual(transcription["notationSystems"][0]["clip"]["localStartSeconds"], 3.866)
+        self.assertEqual(transcription["notationSystems"][0]["clip"]["localEndSeconds"], 4.458)
+        self.assertIn("/clip?start=3.866&end=4.458", transcription["notationSystems"][0]["clip"]["audioUrl"])
+        self.assertEqual(record["clips"][0]["type"], "audio_matched_fragment")
+        self.assertEqual(record["clips"][0]["localStartSeconds"], 3.866)
+        self.assertEqual(record["clips"][0]["localEndSeconds"], 4.458)
+        self.assertIn("/clip?start=3.866&end=4.458", record["clips"][0]["audioUrl"])
+
+    def test_unaccepted_audio_matched_fragment_stays_hidden(self):
+        inventory = {
+            "youtube": [
+                {
+                    "id": "unaccepted_526",
+                    "title": "5-26-26",
+                    "url": "https://www.youtube.com/watch?v=unaccepted_526",
+                    "publishedAt": "2026-05-26T09:10:00Z",
+                    "durationSeconds": 900,
+                    "practiceCandidate": True,
+                }
+            ]
+        }
+        transcriptions = [
+            {
+                "transcriptionId": "unaccepted-fragment",
+                "sampleId": "unaccepted_526-120",
+                "sourceUrl": "https://www.youtube.com/watch?v=unaccepted_526",
+                "sourceTitle": "5-26-26",
+                "sourceWindow": "*120-210",
                 "status": "failed_pitch_collapse",
                 "pipelineVersion": TRANSCRIPTION_PIPELINE_VERSION,
                 "tempoBpm": 120,
@@ -510,9 +592,9 @@ class DailyRecordTests(unittest.TestCase):
             state={},
             media_samples=[
                 {
-                    "id": "Njh8_zq9_DM-26813",
-                    "path": "scherzo.webm",
-                    "window": "*26813-26903",
+                    "id": "unaccepted_526-120",
+                    "path": "unaccepted.webm",
+                    "window": "*120-210",
                     "containsViolin": True,
                 }
             ],
@@ -521,24 +603,11 @@ class DailyRecordTests(unittest.TestCase):
         )
 
         record = daily["records"][0]
-        transcription = record["transcription"]
-
-        self.assertEqual(daily["transcribedRecordCount"], 1)
-        self.assertEqual(daily["leadTranscriptionPracticeDay"], "2026-05-03")
-        self.assertEqual(transcription["status"], "audio_matched_fragment")
-        self.assertEqual(transcription["kind"], "audio_matched_fragment_transcription")
-        self.assertTrue(transcription["displayNotation"])
-        self.assertTrue(transcription["transcriptionReady"])
-        self.assertEqual(transcription["renderedNoteCount"], 1)
-        self.assertEqual(transcription["events"][0]["note"], "E6")
-        self.assertTrue(transcription["events"][0]["strictAudioWindow"])
-        self.assertEqual(transcription["notationSystems"][0]["clip"]["localStartSeconds"], 17.891)
-        self.assertEqual(transcription["notationSystems"][0]["clip"]["localEndSeconds"], 18.541)
-        self.assertIn("/clip?start=17.891&end=18.541", transcription["notationSystems"][0]["clip"]["audioUrl"])
-        self.assertEqual(record["clips"][0]["type"], "audio_matched_fragment")
-        self.assertEqual(record["clips"][0]["localStartSeconds"], 17.891)
-        self.assertEqual(record["clips"][0]["localEndSeconds"], 18.541)
-        self.assertIn("/clip?start=17.891&end=18.541", record["clips"][0]["audioUrl"])
+        self.assertEqual(daily["transcribedRecordCount"], 0)
+        self.assertEqual(daily["leadTranscriptionPracticeDay"], "")
+        self.assertEqual(record["transcription"]["status"], "score_audio_only")
+        self.assertFalse(record["transcription"]["displayNotation"])
+        self.assertFalse(any(clip.get("type") == "audio_matched_fragment" for clip in record["clips"]))
 
     def test_micro_transcription_rejects_repeated_unagreed_note_stream(self):
         inventory = {

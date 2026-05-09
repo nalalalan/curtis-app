@@ -1665,23 +1665,23 @@ h2 {
 
 .matched-practice-pair {
   display: grid;
-  grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
-  gap: 10px;
+  grid-template-columns: minmax(170px, 220px) minmax(0, 1fr);
+  gap: 8px;
   align-items: start;
   min-width: 0;
 }
 
 .matched-practice-pair .embedded-media {
-  gap: 6px;
-  padding: 8px;
+  gap: 5px;
+  padding: 7px;
 }
 
 .matched-practice-pair .embedded-media video {
-  max-height: 150px;
+  max-height: 112px;
 }
 
 .matched-practice-pair .embedded-media audio {
-  height: 30px;
+  height: 28px;
 }
 
 .matched-notation-panel {
@@ -1718,7 +1718,7 @@ h2 {
 
 .matched-notation-panel .notation-sheet svg {
   min-width: 520px;
-  height: 96px;
+  height: 90px;
 }
 
 .pending-practice-pair {
@@ -3089,7 +3089,7 @@ h2 {
   }
 
   .matched-practice-pair .embedded-media video {
-    max-height: 140px;
+    max-height: 120px;
   }
 
   .matched-notation-panel .notation-sheet svg {
