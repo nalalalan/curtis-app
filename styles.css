@@ -1996,7 +1996,8 @@ h2 {
 
 .notation-sheet {
   position: relative;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
   border: 1px solid rgba(31, 41, 39, .13);
   border-radius: 7px;
   background: #fffdf8;
@@ -2010,6 +2011,7 @@ h2 {
 .notation-sheet svg {
   display: block;
   width: 100%;
+  min-width: 720px;
   height: 112px;
 }
 
