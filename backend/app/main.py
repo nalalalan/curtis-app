@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -12,6 +13,7 @@ from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from .analyzer import analyze_media_samples
+from .analyzer import run_process
 from .auth import (
     build_youtube_authorization_url,
     exchange_youtube_code,
@@ -64,6 +66,7 @@ PAPER_DIR = ROOT_DIR / "paper"
 PAPER_PDF = PAPER_DIR / "curtis-aolabs-paper.pdf"
 PAPER_TEX = PAPER_DIR / "curtis-aolabs-paper.tex"
 PAPER_BIB = PAPER_DIR / "references.bib"
+CLIP_CACHE_DIR = RUNTIME_DIR / "clips"
 STATIC_ALLOWLIST = {"index.html", "paper.html", "app.js", "styles.css", "favicon.svg", "CNAME", ".nojekyll"}
 app.add_middleware(
     CORSMiddleware,
@@ -140,6 +143,31 @@ def resolved_runtime_media_path(raw_path: str) -> Path:
     return path
 
 
+def media_sample_from_state(sample_id: str) -> dict[str, Any]:
+    target = str(sample_id or "").strip()
+    samples = load_state().get("mediaSamples", [])
+    for sample in samples if isinstance(samples, list) else []:
+        if isinstance(sample, dict) and str(sample.get("id") or "").strip() == target:
+            return sample
+    raise HTTPException(status_code=404, detail="media sample not found")
+
+
+def clip_cache_path(sample_id: str, start: float, end: float) -> Path:
+    safe_id = re.sub(r"[^A-Za-z0-9_.-]+", "-", sample_id).strip("-") or "sample"
+    return CLIP_CACHE_DIR / f"{safe_id}-{int(round(start * 1000))}-{int(round(end * 1000))}.wav"
+
+
+def validate_clip_window(start: float, end: float) -> tuple[float, float]:
+    start = max(0.0, float(start or 0.0))
+    end = max(0.0, float(end or 0.0))
+    duration = end - start
+    if duration <= 0.05:
+        raise HTTPException(status_code=400, detail="clip end must be after start")
+    if duration > 15.0:
+        raise HTTPException(status_code=400, detail="clip window too long")
+    return round(start, 3), round(end, 3)
+
+
 @app.get("/api/curtis/ops-check")
 async def ops_check() -> dict[str, Any]:
     return base_ops(load_state())
@@ -181,13 +209,43 @@ async def score_page(asset_id: str, page: int) -> FileResponse:
 
 @app.get("/api/curtis/media/sample/{sample_id}")
 async def media_sample_file(sample_id: str) -> FileResponse:
-    state = load_state()
-    samples = [sample for sample in state.get("mediaSamples", []) if isinstance(sample, dict)]
-    sample = next((item for item in samples if str(item.get("id") or "") == sample_id), None)
-    if not sample:
-        raise HTTPException(status_code=404, detail="media sample not found")
+    sample = media_sample_from_state(sample_id)
     path = resolved_runtime_media_path(str(sample.get("path") or ""))
     return FileResponse(path, media_type=sample_media_type(path))
+
+
+@app.get("/api/curtis/media/sample/{sample_id}/clip")
+async def media_sample_clip(sample_id: str, start: float, end: float) -> FileResponse:
+    start, end = validate_clip_window(start, end)
+    sample = media_sample_from_state(sample_id)
+    source = resolved_runtime_media_path(str(sample.get("path") or ""))
+    CLIP_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    target = clip_cache_path(sample_id, start, end)
+    if not target.exists() or target.stat().st_size <= 44:
+        code, output = run_process(
+            [
+                "ffmpeg",
+                "-y",
+                "-ss",
+                f"{start:.3f}",
+                "-to",
+                f"{end:.3f}",
+                "-i",
+                str(source),
+                "-vn",
+                "-ac",
+                "1",
+                "-ar",
+                "22050",
+                "-f",
+                "wav",
+                str(target),
+            ],
+            timeout=60,
+        )
+        if code != 0 or not target.exists() or target.stat().st_size <= 44:
+            raise HTTPException(status_code=503, detail=f"clip extraction failed: {output[-180:]}")
+    return FileResponse(target, media_type="audio/wav")
 
 
 @app.post("/api/curtis/sources")

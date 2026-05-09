@@ -534,9 +534,11 @@ class DailyRecordTests(unittest.TestCase):
         self.assertTrue(transcription["events"][0]["strictAudioWindow"])
         self.assertEqual(transcription["notationSystems"][0]["clip"]["localStartSeconds"], 17.891)
         self.assertEqual(transcription["notationSystems"][0]["clip"]["localEndSeconds"], 18.541)
+        self.assertIn("/clip?start=17.891&end=18.541", transcription["notationSystems"][0]["clip"]["audioUrl"])
         self.assertEqual(record["clips"][0]["type"], "audio_matched_fragment")
         self.assertEqual(record["clips"][0]["localStartSeconds"], 17.891)
         self.assertEqual(record["clips"][0]["localEndSeconds"], 18.541)
+        self.assertIn("/clip?start=17.891&end=18.541", record["clips"][0]["audioUrl"])
 
     def test_micro_transcription_rejects_repeated_unagreed_note_stream(self):
         inventory = {

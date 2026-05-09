@@ -320,6 +320,7 @@ def notation_system_payload(events: list[dict[str, Any]], index: int) -> dict[st
                 "type": "audio_evidence_window",
                 "sampleId": sample_id,
                 "mediaUrl": media_url,
+                "audioUrl": f"{media_url}/clip?start={local_start:.3f}&end={local_end:.3f}" if strict_window else "",
                 "sourceTitle": source_title,
                 "localStartSeconds": round(local_start, 3),
                 "localEndSeconds": round(local_end, 3),
@@ -704,6 +705,11 @@ def matched_fragment_clip(match: dict[str, Any]) -> dict[str, Any]:
         "reason": "Displayed notation is limited to this exact stable note window.",
         "sampleId": sample_id,
         "mediaUrl": f"/api/curtis/media/sample/{sample_id}" if sample_id else "",
+        "audioUrl": (
+            f"/api/curtis/media/sample/{sample_id}/clip?start={local_start:.3f}&end={local_end:.3f}"
+            if sample_id
+            else ""
+        ),
         "localStartSeconds": round(local_start, 3),
         "localEndSeconds": round(local_end, 3),
     }

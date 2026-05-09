@@ -1749,8 +1749,13 @@ function mediaFragmentUrl(clip) {
   return `${url}#t=${start.toFixed(2)}${end > start ? `,${end.toFixed(2)}` : ""}`;
 }
 
+function audioClipUrl(clip) {
+  const exact = assetUrl(clip?.audioUrl || clip?.clipUrl || "");
+  return exact || mediaFragmentUrl(clip);
+}
+
 function renderSnippetAudio(clip, label = "Snippet audio") {
-  const src = mediaFragmentUrl(clip);
+  const src = audioClipUrl(clip);
   if (!src) {
     return `
       <div class="snippet-audio snippet-audio-pending">
