@@ -382,6 +382,43 @@ async function rejectActiveTitle() {
   render();
 }
 
+async function submitPieceLabel(form) {
+  const input = form.querySelector("input[name='acceptedTitle']");
+  const acceptedTitle = String(input?.value || "").trim();
+  const status = form.querySelector("[data-piece-label-status]");
+  if (!acceptedTitle) {
+    if (status) status.textContent = "Piece name required.";
+    return;
+  }
+  const button = form.querySelector("button");
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Saving";
+  }
+  if (status) status.textContent = "Saving label.";
+  try {
+    const ops = await apiFetch("/api/curtis/piece-corrections", {
+      method: "POST",
+      body: JSON.stringify({
+        sourceUrl: form.dataset.sourceUrl || "",
+        sourceTitle: form.dataset.sourceTitle || "",
+        videoId: form.dataset.videoId || "",
+        acceptedTitle,
+        note: "Manual source label from Curtis daily record."
+      })
+    });
+    backend = { online: true, ops, lastError: "" };
+    render();
+  } catch (error) {
+    backend.lastError = String(error?.message || error || "label save failed");
+    if (status) status.textContent = "Save failed.";
+    if (button) {
+      button.disabled = false;
+      button.textContent = "Save";
+    }
+  }
+}
+
 async function runMediaProbe() {
   elements.probeMediaButton.disabled = true;
   elements.probeMediaButton.textContent = "Fetching";
@@ -1095,6 +1132,49 @@ function scoreBoxes(score) {
   return [];
 }
 
+function explicitScoreMatchValue(value) {
+  const clean = compactText(value);
+  if (!clean) return false;
+  if (
+    clean.includes("pending") ||
+    clean.includes("target") ||
+    clean.includes("source label") ||
+    clean.includes("unverified") ||
+    clean.includes("not configured")
+  ) return false;
+  return [
+    "score matched",
+    "matched score",
+    "score aligned",
+    "score alignment verified",
+    "score match verified",
+    "exact measure match",
+    "exact measure verified",
+    "exact score match",
+    "score location verified",
+    "played score match",
+  ].some((token) => clean.includes(token));
+}
+
+function scoreSnippetIsMatched(snippet, record = {}) {
+  if (!snippet || typeof snippet !== "object") return false;
+  const score = snippet.score && typeof snippet.score === "object" ? snippet.score : {};
+  if (snippet.scoreMatched === true || score.scoreMatched === true || score.matched === true) return true;
+  const values = [
+    snippet.scoreMatchStatus,
+    snippet.matchStatus,
+    snippet.alignmentStatus,
+    snippet.status,
+    snippet.readiness,
+    score.matchStatus,
+    score.alignmentStatus,
+    score.status,
+    record?.transcription?.scoreAlignmentStatus,
+    record?.heatMap?.status,
+  ];
+  return values.some(explicitScoreMatchValue);
+}
+
 function renderScoreImage(snippet, compact = false) {
   const score = snippet?.score || {};
   const imageUrl = scoreImageUrl(score);
@@ -1140,6 +1220,7 @@ function renderTranscriptionStaff(transcription) {
 }
 
 function renderScoreHeatMap(record, scoreSnippet) {
+  if (!scoreSnippetIsMatched(scoreSnippet, record)) return "";
   const score = scoreSnippet?.score || {};
   const imageUrl = scoreImageUrl(score);
   if (!imageUrl) {
@@ -1173,6 +1254,7 @@ function renderScoreHeatMap(record, scoreSnippet) {
 
 function renderEvidenceScore(item) {
   if (!item?.score || typeof item.score !== "object") return "";
+  if (!scoreSnippetIsMatched(item)) return "";
   const imageUrl = scoreImageUrl(item.score);
   if (!imageUrl) return "";
   return `
@@ -1255,7 +1337,7 @@ function renderNotationSheet(events, options = {}) {
       <div class="notation-sheet notation-empty${repeatClass}${draftClass}" aria-label="Sheet-music-style transcription pending">
         <svg viewBox="0 0 720 104" role="img">
         <g class="staff-lines">${staffLines}</g>
-          <text class="treble-clef" x="29" y="70">&#119070;</text>
+          <text class="treble-clef" x="20" y="80">&#119070;</text>
           ${keySignature.svg}
           ${repeatMarks}
         </svg>
@@ -1299,7 +1381,7 @@ function renderNotationSheet(events, options = {}) {
     <div class="notation-sheet${repeatClass}${draftClass}" aria-label="Sheet-music-style machine transcription">
       <svg viewBox="0 0 720 104" role="img">
         <g class="staff-lines">${staffLines}</g>
-        <text class="treble-clef" x="29" y="70">&#119070;</text>
+        <text class="treble-clef" x="20" y="80">&#119070;</text>
         ${keySignature.svg}
         ${repeatMarks}
         ${marks}
@@ -1325,7 +1407,7 @@ function renderVerifiedNotationGate(
     <div class="notation-gate" aria-label="${escapeHtml(title)}">
       <svg viewBox="0 0 720 118" role="img">
         <g class="staff-lines">${staffLines}</g>
-        <text class="treble-clef" x="29" y="70">&#119070;</text>
+        <text class="treble-clef" x="20" y="80">&#119070;</text>
         ${signature.svg}
         <text class="notation-gate-title" x="154" y="48">${escapeHtml(shortText(title, 44))}</text>
         <text class="notation-gate-detail" x="154" y="67">${escapeHtml(shortTranscriptionText(detail, 74))}</text>
@@ -1351,7 +1433,7 @@ function renderTranscriptionStats(transcription, record = {}) {
         ["Audio", systems ? `${systems} paired windows` : "paired"],
         pendingMaterial
           ? ["Match", "score or pattern"]
-          : ["Score", transcription?.scoreLinked ? "linked" : "matching"],
+          : ["Score", transcription?.scoreLinked ? "linked" : "match pending"],
       ];
   return `
     <div class="transcription-stats" aria-label="Transcription state">
@@ -1839,6 +1921,40 @@ function scoreSnippetForRecord(record) {
   return packet.snippets[0] || null;
 }
 
+function sourceForRecordCorrection(record) {
+  const videos = Array.isArray(record?.videos) ? record.videos : [];
+  const video = videos[0] || {};
+  const clip = primaryNotationClip(record) || primaryPlayableClip(record) || {};
+  const sourceUrl = clip.url || clip.sourceUrl || video.url || video.sourceUrl || "";
+  const sourceTitle = clip.sourceTitle || clip.title || video.title || record?.practiceDay || "";
+  return {
+    sourceUrl,
+    sourceTitle,
+    videoId: video.id || parseVideoId(sourceUrl),
+  };
+}
+
+function renderPieceLabelForm(record) {
+  const source = sourceForRecordCorrection(record);
+  const current = recordPieceText(record);
+  const hasConfirmed = Array.isArray(record?.pieces) && record.pieces.length > 0;
+  const disabled = !backend.online || (!source.sourceUrl && !source.sourceTitle);
+  const placeholder = hasConfirmed ? current : "Piece name";
+  return `
+    <form class="piece-label-form" data-piece-label-form
+      data-source-url="${escapeHtml(source.sourceUrl)}"
+      data-source-title="${escapeHtml(source.sourceTitle)}"
+      data-video-id="${escapeHtml(source.videoId)}">
+      <label>
+        <span>Piece label</span>
+        <input name="acceptedTitle" type="text" autocomplete="off" placeholder="${escapeHtml(placeholder)}"${disabled ? " disabled" : ""}>
+      </label>
+      <button type="submit"${disabled ? " disabled" : ""}>Save</button>
+      <small data-piece-label-status>Source label only. Score snippets still require audio/score agreement.</small>
+    </form>
+  `;
+}
+
 function recordPieceText(record) {
   const confirmed = Array.isArray(record?.pieces) ? record.pieces.map((piece) => piece.title).filter(Boolean) : [];
   if (confirmed.length) return confirmed.join(" / ");
@@ -1861,8 +1977,7 @@ function recordEvidenceLine(record, scoreSnippet) {
     parts.push("media pending");
   }
   if (scoreSnippet?.score?.imageUrl || scoreSnippet?.score?.assetId) {
-    const readiness = String(scoreSnippet?.readiness || "").toLowerCase();
-    parts.push(readiness.includes("exact measure") ? "score boxed, measure pending" : "score snippet ready");
+    parts.push(scoreSnippetIsMatched(scoreSnippet, record) ? "score match ready" : "score match pending");
   } else if (record?.materialStatus === "piece_or_exercise_pending") {
     parts.push("score or pattern pending");
   } else {
@@ -1912,6 +2027,7 @@ function renderDailyRecord(record, index = 0) {
   const playableClip = primaryNotationClip(record) || primaryPlayableClip(record);
   const events = transcriptionEventsForClip(record, playableClip);
   const scoreSnippet = scoreSnippetForRecord(record);
+  const scoreHeatMap = renderScoreHeatMap(record, scoreSnippet);
   const transcription = record?.transcription || {};
   const displayNotation = transcription?.displayNotation !== false && transcription?.transcriptionReady === true;
   const transcriptionTitle = displayNotation
@@ -1959,13 +2075,12 @@ function renderDailyRecord(record, index = 0) {
             ${renderNotationSystems(transcription, events, record)}
             <small class="transcription-limit">${escapeHtml(sessionText)}</small>
           </section>
-          <section class="essential-panel">
-            ${renderScoreHeatMap(record, scoreSnippet)}
-          </section>
+          ${scoreHeatMap ? `<section class="essential-panel">${scoreHeatMap}</section>` : ""}
           <section class="essential-panel essential-state">
             <span>Rule</span>
             <strong>${escapeHtml(ruleText)}</strong>
             <small>${escapeHtml(coverageText)}</small>
+            ${renderPieceLabelForm(record)}
           </section>
         </div>
       </div>
@@ -2055,7 +2170,7 @@ function renderPieces() {
                   ? renderNotationSheet(item.transcriptionSnippet, {
                     keySignature: item?.score?.keySignature || {},
                     systemLabel: "Verified snippet",
-                    qualityLimit: "Score-verified notation paired with this evidence.",
+                    qualityLimit: "Audio-verified notation paired with this evidence.",
                     maxNotes: 24
                   })
                   : ""}
@@ -2321,6 +2436,12 @@ function render() {
 if (elements.runScanButton) elements.runScanButton.addEventListener("click", runBackendScan);
 if (elements.probeMediaButton) elements.probeMediaButton.addEventListener("click", runMediaProbe);
 if (elements.rejectPieceButton) elements.rejectPieceButton.addEventListener("click", rejectActiveTitle);
+document.addEventListener("submit", (event) => {
+  const form = event.target.closest("[data-piece-label-form]");
+  if (!form) return;
+  event.preventDefault();
+  submitPieceLabel(form);
+});
 
 render();
 loadBackendState();

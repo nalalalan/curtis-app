@@ -467,6 +467,8 @@ class TranscriptionTrainingTests(unittest.TestCase):
         self.assertEqual(snippet["score"]["assetId"], "wieniawski-scherzo-tarantelle-vln")
         self.assertEqual(snippet["score"]["page"], 2)
         self.assertTrue(snippet["score"]["imageUrl"].endswith("/wieniawski-scherzo-tarantelle-vln/2"))
+        self.assertEqual(snippet["scoreMatchStatus"], "pending_exact_alignment")
+        self.assertEqual(snippet["score"]["matchStatus"], "pending_exact_alignment")
         self.assertEqual(snippet["audio"]["startSeconds"], 600)
         self.assertIn("Pitch/rhythm extracted", snippet["readiness"])
 
@@ -491,6 +493,8 @@ class TranscriptionTrainingTests(unittest.TestCase):
         self.assertEqual(snippet["score"]["assetId"], "haydn-94-finale-score")
         self.assertEqual(snippet["score"]["page"], 45)
         self.assertTrue(snippet["score"]["boxes"])
+        self.assertEqual(snippet["scoreMatchStatus"], "pending_exact_alignment")
+        self.assertEqual(snippet["score"]["matchStatus"], "pending_exact_alignment")
         self.assertEqual(snippet["audio"]["url"], "https://www.youtube.com/watch?v=wDfVpTU4I_I")
 
     def test_practice_totals_start_at_violin_one_and_exclude_unrelated_long_videos(self):

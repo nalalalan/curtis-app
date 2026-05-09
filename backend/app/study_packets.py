@@ -354,12 +354,15 @@ def build_snippet(
     if vocabulary:
         passage = str(vocabulary[min(index, len(vocabulary) - 1)] or "").strip()
     packet = transcription_packet(transcription)
+    score_match_status = "pending_exact_alignment"
     return {
         "id": f"{correction.get('sourceKey') or 'source'}:{index}",
         "title": passage or "practice passage",
         "pieceTitle": correction.get("acceptedTitle") or "",
         "practiceDay": source.get("practiceDay") or "",
         "status": "transcribed" if packet["status"] == "transcribed" else "score_target_ready",
+        "scoreMatchStatus": score_match_status,
+        "scoreMatchLabel": "source label only; exact played-to-score location pending",
         "score": {
             "source": target.get("scoreSource") or "",
             "sourceUrl": target.get("scoreUrl") or "",
@@ -370,6 +373,7 @@ def build_snippet(
             "boxes": score_boxes(target),
             "part": target.get("part") or "",
             "movement": target.get("movement") or "",
+            "matchStatus": score_match_status,
         },
         "audio": {
             "url": source.get("sourceUrl") or "",
