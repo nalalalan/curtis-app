@@ -1283,24 +1283,11 @@ function normalizedKeySignature(signature) {
 }
 
 function renderKeySignatureMarks(signature) {
-  const key = normalizedKeySignature(signature);
-  if (!key.accidentals.length || key.accidentalType === "none") {
-    return { svg: "", width: 0, label: key.label };
-  }
-  const glyph = key.accidentalType === "flat" ? "&#9837;" : "&#9839;";
-  const sharpY = [30, 45, 24, 40, 55, 70, 63];
-  const flatY = [50, 35, 58, 42, 65, 48, 72];
-  const yPositions = key.accidentalType === "flat" ? flatY : sharpY;
-  const marks = key.accidentals.map((_, index) => {
-    const x = 74 + (index * 12);
-    const y = yPositions[index] || 50;
-    return `<text class="key-signature-mark" x="${x}" y="${y}">${glyph}</text>`;
-  }).join("");
-  return {
-    svg: `<g class="key-signature" aria-label="${escapeHtml(key.label)}">${marks}</g>`,
-    width: key.accidentals.length * 12 + 16,
-    label: key.label,
-  };
+  return { svg: "", width: 0, label: "" };
+}
+
+function renderTrebleClef() {
+  return `<text class="treble-clef" x="16" y="76">&#119070;</text>`;
 }
 
 function renderNotationSheet(events, options = {}) {
@@ -1337,7 +1324,7 @@ function renderNotationSheet(events, options = {}) {
       <div class="notation-sheet notation-empty${repeatClass}${draftClass}" aria-label="Sheet-music-style transcription pending">
         <svg viewBox="0 0 720 104" role="img">
         <g class="staff-lines">${staffLines}</g>
-          <text class="treble-clef" x="20" y="80">&#119070;</text>
+          ${renderTrebleClef()}
           ${keySignature.svg}
           ${repeatMarks}
         </svg>
@@ -1381,7 +1368,7 @@ function renderNotationSheet(events, options = {}) {
     <div class="notation-sheet${repeatClass}${draftClass}" aria-label="Sheet-music-style machine transcription">
       <svg viewBox="0 0 720 104" role="img">
         <g class="staff-lines">${staffLines}</g>
-        <text class="treble-clef" x="20" y="80">&#119070;</text>
+        ${renderTrebleClef()}
         ${keySignature.svg}
         ${repeatMarks}
         ${marks}
@@ -1407,7 +1394,7 @@ function renderVerifiedNotationGate(
     <div class="notation-gate" aria-label="${escapeHtml(title)}">
       <svg viewBox="0 0 720 118" role="img">
         <g class="staff-lines">${staffLines}</g>
-        <text class="treble-clef" x="20" y="80">&#119070;</text>
+        ${renderTrebleClef()}
         ${signature.svg}
         <text class="notation-gate-title" x="154" y="48">${escapeHtml(shortText(title, 44))}</text>
         <text class="notation-gate-detail" x="154" y="67">${escapeHtml(shortTranscriptionText(detail, 74))}</text>
@@ -1824,6 +1811,7 @@ function transcriptionCoverageText(record) {
 function renderEmbeddedMedia(record, preferredClip = null) {
   const clip = preferredClip || primaryPlayableClip(record);
   const src = mediaFragmentUrl(clip);
+  const audioSrc = audioClipUrl(clip) || src;
   if (!src) {
     return `
       <div class="embedded-media embedded-media-pending">
@@ -1845,7 +1833,59 @@ function renderEmbeddedMedia(record, preferredClip = null) {
         <strong>${escapeHtml(clipWindowLabel(clip))}</strong>
       </div>
       <video controls preload="metadata" src="${escapeHtml(src)}"></video>
-      <audio controls preload="metadata" src="${escapeHtml(src)}"></audio>
+      <audio controls preload="metadata" src="${escapeHtml(audioSrc)}"></audio>
+    </div>
+  `;
+}
+
+function matchedNotationSystem(transcription) {
+  const systems = Array.isArray(transcription?.notationSystems) ? transcription.notationSystems : [];
+  return systems.find((item) => Array.isArray(item?.events) && item.events.length) || systems[0] || {};
+}
+
+function renderMatchedPracticePair(record, clip, transcription) {
+  const system = matchedNotationSystem(transcription);
+  const notationClip = system.clip || clip || primaryNotationClip(record) || primaryPlayableClip(record);
+  const mediaClip = notationClip ? { ...notationClip, type: "audio_matched_fragment", label: "audio-matched fragment" } : notationClip;
+  const events = Array.isArray(system.events) && system.events.length
+    ? system.events
+    : Array.isArray(transcription?.events) ? transcription.events : [];
+  const notes = events.filter((event) => event?.kind === "note").map((event) => event.note).filter(Boolean);
+  const seconds = Number(notationClip?.durationSeconds || transcription?.microVerifiedSeconds || 0);
+  const label = [
+    notes.length ? notes.slice(0, 4).join(" ") : "matched note",
+    seconds ? `${seconds.toFixed(seconds < 1 ? 3 : 1)}s` : ""
+  ].filter(Boolean).join(" / ");
+  return `
+    <div class="matched-practice-pair" aria-label="Matched video audio transcription pair">
+      ${renderEmbeddedMedia(record, mediaClip)}
+      <section class="matched-notation-panel">
+        <div class="matched-notation-head">
+          <span>Transcription</span>
+          <strong>${escapeHtml(label || "audio-matched")}</strong>
+        </div>
+        ${renderNotationSheet(events, {
+          keySignature: {},
+          maxNotes: 24
+        })}
+      </section>
+    </div>
+  `;
+}
+
+function renderPendingPracticePair(record) {
+  const transcription = record?.transcription || {};
+  const line = transcription?.fullSessionLimit || transcription?.qualityLimit || transcription?.coverageLimit || "No matched audio-transcription pair yet.";
+  return `
+    <div class="matched-practice-pair pending-practice-pair" aria-label="Matched pair pending">
+      <section class="matched-notation-panel">
+        <div class="matched-notation-head">
+          <span>Audio-transcription pair</span>
+          <strong>pending</strong>
+        </div>
+        <p class="empty">${escapeHtml(shortTranscriptionText(line, 150))}</p>
+        ${renderPieceLabelForm(record)}
+      </section>
     </div>
   `;
 }
@@ -2001,10 +2041,8 @@ function recordEvidenceLine(record, scoreSnippet) {
 function renderLeadTranscription(record) {
   if (!isVerifiedTranscriptionRecord(record)) return "";
   const transcription = record?.transcription || {};
-  const systems = Array.isArray(transcription.notationSystems) ? transcription.notationSystems : [];
-  const system = systems.find((item) => Array.isArray(item?.events) && item.events.length) || systems[0] || {};
+  const system = matchedNotationSystem(transcription);
   const clip = system.clip || primaryNotationClip(record) || primaryPlayableClip(record);
-  const events = Array.isArray(system.events) && system.events.length ? system.events : transcription.events || [];
   const noteCount = Number(transcription.microVerifiedNoteCount || system.noteCount || transcription.noteCount || 0);
   const seconds = Number(transcription.microVerifiedSeconds || clip?.durationSeconds || 0);
   const confidence = Number(transcription.microMedianConfidence || 0);
@@ -2022,41 +2060,17 @@ function renderLeadTranscription(record) {
           <strong>${escapeHtml(shortText(recordPieceText(record), 112))}</strong>
           <small>${escapeHtml(meta)}</small>
         </div>
-        ${renderSnippetAudio(clip || {}, "Matched audio")}
       </div>
-      ${renderMusicianRead(transcription.musicianRead)}
-      ${renderNotationSheet(events, {
-        keySignature: transcription.keySignature,
-        systemLabel: "Audio-matched line",
-        qualityLimit: transcription.displayLimit || transcription.reliabilityLimit || "",
-        maxNotes: 24
-      })}
+      ${renderMatchedPracticePair(record, clip, transcription)}
     </article>
   `;
 }
 
 function renderDailyRecord(record, index = 0) {
   const playableClip = primaryNotationClip(record) || primaryPlayableClip(record);
-  const events = transcriptionEventsForClip(record, playableClip);
   const scoreSnippet = scoreSnippetForRecord(record);
-  const scoreHeatMap = renderScoreHeatMap(record, scoreSnippet);
   const transcription = record?.transcription || {};
   const displayNotation = transcription?.displayNotation !== false && transcription?.transcriptionReady === true;
-  const transcriptionTitle = displayNotation
-    ? transcriptionDisplayText(transcription?.displayTitle || "Matched transcription")
-    : "Transcription";
-  const reliabilityText = displayNotation
-    ? transcriptionDisplayText(transcription?.reliabilityLimit || "Matched note/rhythm transcription.")
-    : transcriptionDisplayText(transcription?.reliabilityLimit || "Audio is paired. Notation is pending.");
-  const sessionText = displayNotation
-    ? transcriptionDisplayText(transcription?.fullSessionLimit || transcription?.coverageLimit || "Full-session transcription status recorded.")
-    : "Full-session transcription is pending.";
-  const ruleText = displayNotation
-    ? transcriptionDisplayText(transcription?.qualityLimit || record.mainCurtisBlocker || "Evidence recorded.")
-    : record?.materialStatus === "piece_or_exercise_pending" ? "Notation / pattern pending." : "Notation pending.";
-  const coverageText = displayNotation
-    ? transcriptionDisplayText(transcription?.coverageLimit || transcriptionCoverageText(record))
-    : "Audio evidence is visible now.";
   const openTarget = new URLSearchParams(window.location.search).get("open") || "";
   const openForReview = openTarget
     ? (openTarget === "first" && index === 0) || openTarget === record.practiceDay
@@ -2077,24 +2091,9 @@ function renderDailyRecord(record, index = 0) {
         <small class="row-transcription-line">${escapeHtml(transcriptionReasonLine(record))}</small>
       </summary>
       <div class="record-card-body record-essentials-body">
-        <div class="practice-essentials">
-          ${renderEmbeddedMedia(record, playableClip)}
-          <section class="essential-panel">
-            <span>${escapeHtml(transcriptionTitle)}</span>
-            ${renderTranscriptionStats(transcription, record)}
-            ${renderMusicianRead(transcription.musicianRead)}
-            <small class="transcription-limit">${escapeHtml(reliabilityText)}</small>
-            ${renderNotationSystems(transcription, events, record)}
-            <small class="transcription-limit">${escapeHtml(sessionText)}</small>
-          </section>
-          ${scoreHeatMap ? `<section class="essential-panel">${scoreHeatMap}</section>` : ""}
-          <section class="essential-panel essential-state">
-            <span>Rule</span>
-            <strong>${escapeHtml(ruleText)}</strong>
-            <small>${escapeHtml(coverageText)}</small>
-            ${renderPieceLabelForm(record)}
-          </section>
-        </div>
+        ${displayNotation
+          ? renderMatchedPracticePair(record, playableClip, transcription)
+          : renderPendingPracticePair(record)}
       </div>
     </details>
   `;

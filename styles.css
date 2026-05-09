@@ -1379,7 +1379,7 @@ h2 {
 
 .record-card {
   display: block;
-  padding: 14px;
+  padding: 10px;
   border: 1px solid rgba(31, 41, 39, .11);
   border-radius: 8px;
   background: rgba(245, 247, 242, .82);
@@ -1387,8 +1387,8 @@ h2 {
 
 .lead-transcription-card {
   display: grid;
-  gap: 10px;
-  padding: 14px;
+  gap: 8px;
+  padding: 10px;
   border: 1px solid rgba(95, 118, 104, .22);
   border-radius: 8px;
   background: rgba(255, 253, 248, .9);
@@ -1396,8 +1396,8 @@ h2 {
 
 .lead-transcription-head {
   display: grid;
-  grid-template-columns: minmax(0, .9fr) minmax(230px, .7fr);
-  gap: 12px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
   align-items: center;
   min-width: 0;
 }
@@ -1529,7 +1529,7 @@ h2 {
 }
 
 .record-card[open] .record-summary {
-  padding-bottom: 12px;
+  padding-bottom: 8px;
   border-bottom: 1px solid rgba(31, 41, 39, .1);
 }
 
@@ -1543,6 +1543,7 @@ h2 {
 
 .record-essentials-body {
   display: block;
+  padding-top: 10px;
 }
 
 .practice-essentials {
@@ -1610,7 +1611,7 @@ h2 {
 }
 
 .embedded-media video {
-  max-height: 360px;
+  max-height: 220px;
   border-radius: 7px;
   background: #111715;
   aspect-ratio: 16 / 9;
@@ -1660,6 +1661,68 @@ h2 {
 .snippet-audio-pending {
   grid-template-columns: minmax(0, 1fr);
   border-style: dashed;
+}
+
+.matched-practice-pair {
+  display: grid;
+  grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  min-width: 0;
+}
+
+.matched-practice-pair .embedded-media {
+  gap: 6px;
+  padding: 8px;
+}
+
+.matched-practice-pair .embedded-media video {
+  max-height: 150px;
+}
+
+.matched-practice-pair .embedded-media audio {
+  height: 30px;
+}
+
+.matched-notation-panel {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.matched-notation-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.matched-notation-head span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 780;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.matched-notation-head strong {
+  margin: 0;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 760;
+  line-height: 1.15;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.matched-notation-panel .notation-sheet svg {
+  min-width: 520px;
+  height: 96px;
+}
+
+.pending-practice-pair {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .embedded-media-pending {
@@ -2024,8 +2087,8 @@ h2 {
 
 .notation-sheet .treble-clef {
   fill: var(--ink);
-  font-family: "Segoe UI Symbol", "Noto Music", Georgia, "Times New Roman", serif;
-  font-size: 68px;
+  font-family: "Bravura", "November2", "Leland", "Noto Music", "Segoe UI Symbol", Georgia, "Times New Roman", serif;
+  font-size: 76px;
   font-weight: 500;
 }
 
@@ -2995,6 +3058,7 @@ h2 {
   .skill-row,
   .study-card,
   .record-card-body,
+  .matched-practice-pair,
   .embedded-media-header,
   .score-heat-header,
   .piece-row,
@@ -3021,7 +3085,15 @@ h2 {
   }
 
   .embedded-media video {
-    max-height: 240px;
+    max-height: 180px;
+  }
+
+  .matched-practice-pair .embedded-media video {
+    max-height: 140px;
+  }
+
+  .matched-notation-panel .notation-sheet svg {
+    min-width: 480px;
   }
 
   .score-heat-box b {
