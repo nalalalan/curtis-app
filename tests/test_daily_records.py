@@ -5,14 +5,42 @@ from backend.app.media import practice_candidates
 from backend.app.transcription import TRANSCRIPTION_PIPELINE_VERSION
 
 
-def note(name, start, end, confidence=0.9):
+NOTE_CLASS = {
+    "C": 0,
+    "C#": 1,
+    "Db": 1,
+    "D": 2,
+    "D#": 3,
+    "Eb": 3,
+    "E": 4,
+    "F": 5,
+    "F#": 6,
+    "Gb": 6,
+    "G": 7,
+    "G#": 8,
+    "Ab": 8,
+    "A": 9,
+    "A#": 10,
+    "Bb": 10,
+    "B": 11,
+}
+
+
+def midi_for_note(name):
+    pitch = name[:-1]
+    octave = int(name[-1])
+    return (octave + 1) * 12 + NOTE_CLASS[pitch]
+
+
+def note(name, start, end, confidence=0.9, **extra):
     return {
         "note": name,
-        "midi": 72,
+        "midi": midi_for_note(name),
         "startSeconds": start,
         "endSeconds": end,
         "durationSeconds": end - start,
         "confidence": confidence,
+        **extra,
     }
 
 
@@ -183,6 +211,132 @@ class DailyRecordTests(unittest.TestCase):
         self.assertIn("score-free technique exercise", record["transcription"]["reliabilityLimit"])
         self.assertEqual(record["heatMap"]["status"], "pending_piece_or_exercise_alignment")
         self.assertIn("score-free exercises", record["heatMap"]["limit"])
+
+    def test_audio_verified_micro_transcription_renders_only_strict_agreed_run(self):
+        inventory = {
+            "youtube": [
+                {
+                    "id": "exercise521",
+                    "title": "5-21-26",
+                    "url": "https://www.youtube.com/watch?v=exercise521",
+                    "publishedAt": "2026-05-21T09:10:00Z",
+                    "durationSeconds": 900,
+                    "practiceCandidate": True,
+                }
+            ]
+        }
+        names = ["E5", "F#5", "G5", "A5", "B5", "C6", "D6", "B5"]
+        notes = [
+            note(
+                name,
+                index * 0.16,
+                index * 0.16 + 0.12,
+                0.91,
+                audioAgreement=True,
+                agreementSources=["spectral_onset"],
+                detectorSource="onset_segmented_pyin",
+            )
+            for index, name in enumerate(names)
+        ]
+        transcriptions = [
+            {
+                "transcriptionId": "micro",
+                "sampleId": "exercise521",
+                "sourceUrl": "https://www.youtube.com/watch?v=exercise521",
+                "sourceTitle": "5-21-26",
+                "sourceWindow": "*100-130",
+                "status": "transcribed",
+                "pipelineVersion": TRANSCRIPTION_PIPELINE_VERSION,
+                "tempoBpm": 120,
+                "noteCount": len(notes),
+                "quality": {
+                    "audioAgreementEventCount": len(notes),
+                    "spectralAgreedEventCount": len(notes),
+                },
+                "notes": notes,
+            }
+        ]
+
+        daily = build_daily_records(
+            inventory=inventory,
+            state={},
+            media_samples=[{"id": "exercise521", "path": "sample.mp4", "window": "*100-130", "containsViolin": True}],
+            transcriptions=transcriptions,
+            sections=[],
+        )
+        record = next(item for item in daily["records"] if item["practiceDay"] == "2026-05-21")
+        transcription = record["transcription"]
+
+        self.assertEqual(daily["transcribedRecordCount"], 1)
+        self.assertEqual(transcription["status"], "audio_verified_micro")
+        self.assertEqual(transcription["kind"], "audio_verified_micro_transcription")
+        self.assertEqual(transcription["reliability"], "audio_verified_micro")
+        self.assertTrue(transcription["displayNotation"])
+        self.assertTrue(transcription["transcriptionReady"])
+        self.assertEqual(transcription["clef"], "treble")
+        self.assertEqual(transcription["keySignature"]["label"], "key pending")
+        self.assertEqual(transcription["noteCount"], len(notes))
+        self.assertTrue(transcription["events"])
+        self.assertTrue(transcription["notationSystems"])
+        self.assertIn("short note/rhythm run", transcription["reliabilityLimit"])
+        self.assertEqual(record["materialStatus"], "piece_or_exercise_pending")
+        self.assertEqual(record["transcription"]["scoreAlignmentStatus"], "pending_piece_or_exercise_alignment")
+        self.assertIn("full-session transcription", record["transcription"]["fullSessionLimit"])
+
+    def test_micro_transcription_rejects_repeated_unagreed_note_stream(self):
+        inventory = {
+            "youtube": [
+                {
+                    "id": "repeat521",
+                    "title": "5-21-26",
+                    "url": "https://www.youtube.com/watch?v=repeat521",
+                    "publishedAt": "2026-05-21T10:10:00Z",
+                    "durationSeconds": 900,
+                    "practiceCandidate": True,
+                }
+            ]
+        }
+        notes = [
+            note(
+                "D4",
+                index * 0.08,
+                index * 0.08 + 0.06,
+                0.92,
+                audioAgreement=False,
+                agreementSources=[],
+                detectorSource="pitch_hysteresis",
+            )
+            for index in range(20)
+        ]
+        transcriptions = [
+            {
+                "transcriptionId": "repeat",
+                "sampleId": "repeat521",
+                "sourceUrl": "https://www.youtube.com/watch?v=repeat521",
+                "sourceTitle": "5-21-26",
+                "sourceWindow": "*200-230",
+                "status": "transcribed",
+                "pipelineVersion": TRANSCRIPTION_PIPELINE_VERSION,
+                "tempoBpm": 120,
+                "noteCount": len(notes),
+                "quality": {"audioAgreementEventCount": 0, "spectralAgreedEventCount": 0},
+                "notes": notes,
+            }
+        ]
+
+        daily = build_daily_records(
+            inventory=inventory,
+            state={},
+            media_samples=[{"id": "repeat521", "path": "sample.mp4", "window": "*200-230", "containsViolin": True}],
+            transcriptions=transcriptions,
+            sections=[],
+        )
+        record = next(item for item in daily["records"] if item["practiceDay"] == "2026-05-21")
+
+        self.assertEqual(daily["transcribedRecordCount"], 0)
+        self.assertEqual(record["transcription"]["status"], "score_audio_only")
+        self.assertFalse(record["transcription"]["displayNotation"])
+        self.assertEqual(record["transcription"]["failureMode"], "unverified_machine_pitch")
 
     def test_stale_pipeline_transcriptions_do_not_surface_as_current_clips(self):
         inventory = {

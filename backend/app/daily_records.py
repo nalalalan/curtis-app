@@ -22,6 +22,14 @@ WEAK_TRANSCRIPTION_MIN_SECONDS = 8
 DRAFT_TRANSCRIPTION_MIN_SECONDS = 30
 WEAK_TRANSCRIPTION_MIN_NOTES = 12
 DRAFT_TRANSCRIPTION_MIN_NOTES = 48
+MICRO_TRANSCRIPTION_MIN_NOTES = 6
+MICRO_TRANSCRIPTION_MAX_NOTES = 18
+MICRO_TRANSCRIPTION_MIN_CONFIDENCE = 0.78
+MICRO_TRANSCRIPTION_MIN_MEDIAN_CONFIDENCE = 0.84
+MICRO_TRANSCRIPTION_MAX_DOMINANT_RATIO = 0.50
+MICRO_TRANSCRIPTION_MAX_SAME_NOTE_RUN = 3
+MICRO_TRANSCRIPTION_MIN_PITCH_CLASSES = 4
+MICRO_TRANSCRIPTION_MAX_NOTE_GAP_SECONDS = 0.75
 VIOLIN_POSITIVE_VALUES = {
     "violin",
     "violin_playing",
@@ -316,7 +324,7 @@ def notation_system_payload(events: list[dict[str, Any]], index: int) -> dict[st
         "sourceWindow": source_window_label(int(start), int(end)) if end > start else "",
         "clip": clip,
         "events": events,
-        "limit": "Audio evidence from the same sample. Only score-linked notation that matches the audio renders as transcription.",
+        "limit": "Audio evidence from the same sample. This line renders only after a short note/rhythm run passes strict audio-agreement checks.",
     }
 
 
@@ -391,6 +399,172 @@ def notation_display_state(
             + "."
         ),
     }
+
+
+NOTE_CLASS_BY_NAME = {
+    "C": 0,
+    "C#": 1,
+    "DB": 1,
+    "D": 2,
+    "D#": 3,
+    "EB": 3,
+    "E": 4,
+    "F": 5,
+    "F#": 6,
+    "GB": 6,
+    "G": 7,
+    "G#": 8,
+    "AB": 8,
+    "A": 9,
+    "A#": 10,
+    "BB": 10,
+    "B": 11,
+}
+
+
+def safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def note_midi_value(note: dict[str, Any]) -> int | None:
+    try:
+        midi = int(note.get("midi"))
+        return midi if 0 <= midi <= 127 else None
+    except (TypeError, ValueError):
+        pass
+    raw = str(note.get("note") or "").strip().upper().replace("♭", "B").replace("♯", "#")
+    if len(raw) < 2:
+        return None
+    octave_raw = raw[-1]
+    if not octave_raw.isdigit():
+        return None
+    pitch = raw[:-1]
+    pitch_class = NOTE_CLASS_BY_NAME.get(pitch)
+    if pitch_class is None:
+        return None
+    octave = int(octave_raw)
+    return (octave + 1) * 12 + pitch_class
+
+
+def longest_note_run(values: list[int]) -> int:
+    longest = 0
+    current = 0
+    previous: int | None = None
+    for value in values:
+        if previous is None or previous != value:
+            current = 1
+            previous = value
+        else:
+            current += 1
+        longest = max(longest, current)
+    return longest
+
+
+def has_spectral_audio_agreement(note: dict[str, Any]) -> bool:
+    sources = note.get("agreementSources") if isinstance(note.get("agreementSources"), list) else []
+    detector = str(note.get("detectorSource") or "")
+    return detector.startswith("spectral_onset") or "spectral_onset" in sources
+
+
+def note_passes_micro_gate(note: dict[str, Any]) -> bool:
+    if not isinstance(note, dict) or not str(note.get("note") or "").strip():
+        return False
+    if note.get("uncertain"):
+        return False
+    if safe_float(note.get("confidence")) < MICRO_TRANSCRIPTION_MIN_CONFIDENCE:
+        return False
+    if not note.get("audioAgreement") or not has_spectral_audio_agreement(note):
+        return False
+    return note_midi_value(note) is not None
+
+
+def micro_window_quality(notes: list[dict[str, Any]]) -> dict[str, Any]:
+    midi_values = [note_midi_value(note) for note in notes]
+    midi_values = [midi for midi in midi_values if midi is not None]
+    if len(midi_values) != len(notes):
+        return {"ready": False}
+    confidences = sorted(safe_float(note.get("confidence")) for note in notes)
+    median_confidence = confidences[len(confidences) // 2] if confidences else 0.0
+    counts = Counter(midi_values)
+    dominant_ratio = counts.most_common(1)[0][1] / max(1, len(midi_values)) if counts else 1.0
+    pitch_classes = {midi % 12 for midi in midi_values}
+    gaps = [
+        max(0.0, safe_float(notes[index + 1].get("startSeconds")) - safe_float(notes[index].get("endSeconds")))
+        for index in range(len(notes) - 1)
+    ]
+    start = safe_float(notes[0].get("startSeconds")) if notes else 0.0
+    end = safe_float(notes[-1].get("endSeconds")) if notes else 0.0
+    ready = (
+        len(notes) >= MICRO_TRANSCRIPTION_MIN_NOTES
+        and len(pitch_classes) >= MICRO_TRANSCRIPTION_MIN_PITCH_CLASSES
+        and dominant_ratio <= MICRO_TRANSCRIPTION_MAX_DOMINANT_RATIO
+        and longest_note_run(midi_values) <= MICRO_TRANSCRIPTION_MAX_SAME_NOTE_RUN
+        and median_confidence >= MICRO_TRANSCRIPTION_MIN_MEDIAN_CONFIDENCE
+        and (not gaps or max(gaps) <= MICRO_TRANSCRIPTION_MAX_NOTE_GAP_SECONDS)
+        and end > start
+    )
+    return {
+        "ready": ready,
+        "noteCount": len(notes),
+        "uniquePitchClasses": len(pitch_classes),
+        "dominantRatio": round(dominant_ratio, 3),
+        "longestRun": longest_note_run(midi_values),
+        "medianConfidence": round(median_confidence, 3),
+        "durationSeconds": round(max(0.0, end - start), 3),
+        "score": round((len(notes) * 1.5) + (len(pitch_classes) * 2.0) + (median_confidence * 4.0) - (dominant_ratio * 3.0), 3),
+    }
+
+
+def best_micro_transcription(transcriptions: list[dict[str, Any]]) -> dict[str, Any]:
+    best: dict[str, Any] = {}
+    full_note_count = transcription_note_count(transcriptions)
+    for transcription in transcriptions:
+        if transcription.get("status") != "transcribed":
+            continue
+        quality = transcription.get("quality") if isinstance(transcription.get("quality"), dict) else {}
+        if quality.get("failed") or quality.get("failureMode") or quality.get("pitchCollapseDetected"):
+            continue
+        source_notes = transcription.get("notes") if isinstance(transcription.get("notes"), list) else []
+        notes = [note for note in source_notes if isinstance(note, dict) and str(note.get("note") or "").strip()]
+        if len(notes) < MICRO_TRANSCRIPTION_MIN_NOTES:
+            continue
+        max_size = min(MICRO_TRANSCRIPTION_MAX_NOTES, len(notes))
+        for size in range(max_size, MICRO_TRANSCRIPTION_MIN_NOTES - 1, -1):
+            found_for_size = False
+            for start_index in range(0, len(notes) - size + 1):
+                window = notes[start_index : start_index + size]
+                if not all(note_passes_micro_gate(note) for note in window):
+                    continue
+                quality_state = micro_window_quality(window)
+                if not quality_state.get("ready"):
+                    continue
+                found_for_size = True
+                if not best or float(quality_state["score"]) > float(best.get("quality", {}).get("score") or 0.0):
+                    selected = []
+                    for note in window:
+                        selected.append(
+                            {
+                                **note,
+                                "microVerified": True,
+                                "verification": "spectral_pitch_audio_agreement",
+                                "uncertain": False,
+                            }
+                        )
+                    best = {
+                        "transcription": {
+                            **transcription,
+                            "notes": selected,
+                            "noteCount": len(selected),
+                        },
+                        "quality": quality_state,
+                        "fullDetectedNoteCount": full_note_count,
+                    }
+            if found_for_size:
+                break
+    return best
 
 
 def active_seconds_from_transcriptions(transcriptions: list[dict[str, Any]]) -> int:
@@ -520,6 +694,8 @@ def transcription_quality_metrics(transcriptions: list[dict[str, Any]]) -> dict[
         for key in (
             "rawSelectedEventCount",
             "selectedEventCount",
+            "audioAgreementEventCount",
+            "spectralAgreedEventCount",
             "sanityGlitchDroppedCount",
             "sanityOctaveAdjustedCount",
             "sanityLargeLeapCount",
@@ -1173,8 +1349,7 @@ def build_daily_records(
                 )
             )
         ]
-        notation = notation_events(day_transcriptions)
-        day_notation_systems = notation_systems(notation)
+        raw_notation = notation_events(day_transcriptions)
         note_active = active_seconds_from_transcriptions(day_transcriptions)
         section_active = active_seconds_from_sections(day_sections)
         active_seconds = note_active or section_active
@@ -1189,15 +1364,51 @@ def build_daily_records(
         uncertain = uncertain_pieces_for_day(day_transcriptions)
         heat_fragments: list[dict[str, Any]] = []
         day_repeat_groups: list[dict[str, Any]] = []
-        note_count = transcription_note_count(day_transcriptions)
+        full_note_count = transcription_note_count(day_transcriptions)
         notation_segments = [item for item in day_transcriptions if has_stable_notation(item)]
         quality_metrics = transcription_quality_metrics(day_transcriptions)
-        quality = transcription_quality(note_count, active_seconds, len(notation_segments), quality_metrics)
+        quality = transcription_quality(full_note_count, active_seconds, len(notation_segments), quality_metrics)
         failure_summary = transcription_failure_summary(day_transcriptions)
+        micro = best_micro_transcription(day_transcriptions)
+        display_transcriptions = [micro["transcription"]] if micro else day_transcriptions
+        notation = notation_events(display_transcriptions)
+        day_notation_systems = notation_systems(notation)
+        note_count = int(micro.get("quality", {}).get("noteCount") or full_note_count)
         display_state = notation_display_state(notation, day_notation_systems, note_count)
-        has_machine_pitch_events = bool(notation)
-        has_verified_transcription = False
-        if failure_summary:
+        has_machine_pitch_events = bool(raw_notation)
+        has_verified_transcription = bool(micro)
+        if micro:
+            micro_quality = micro.get("quality", {})
+            rejected_count = max(0, int(micro.get("fullDetectedNoteCount") or 0) - note_count)
+            quality = {
+                **quality,
+                "qualityStatus": "audio_verified_micro",
+                "qualityLabel": "micro transcription",
+                "qualityLimit": (
+                    "A short note/rhythm run passed spectral-pitch audio-agreement checks. "
+                    "This is not a full-session transcription or a score match yet."
+                ),
+                "microVerifiedNoteCount": note_count,
+                "microVerifiedSeconds": micro_quality.get("durationSeconds") or 0,
+                "microMedianConfidence": micro_quality.get("medianConfidence") or 0,
+                "microUniquePitchClasses": micro_quality.get("uniquePitchClasses") or 0,
+                "rejectedMachinePitchEventCount": rejected_count,
+            }
+            display_state = {
+                **display_state,
+                "displayNotation": bool(day_notation_systems),
+                "transcriptionReady": bool(day_notation_systems),
+                "hiddenPitchEventCount": rejected_count,
+                "rejectedMachinePitchEventCount": rejected_count,
+                "detectedPitchEventCount": note_count,
+                "displayLimit": (
+                    f"{note_count} notes passed strict audio-agreement checks; "
+                    f"{rejected_count} machine pitch events remain hidden."
+                ),
+            }
+            heat_fragments = transcription_fragments(display_transcriptions)
+            day_repeat_groups = repeat_groups(heat_fragments, display_transcriptions)
+        elif failure_summary:
             quality = {
                 **quality,
                 **failure_summary,
@@ -1213,7 +1424,7 @@ def build_daily_records(
                 ),
                 "failureMode": "unverified_machine_pitch",
                 "failureWindowCount": len(day_transcriptions),
-                "failurePitchEventCount": note_count,
+                "failurePitchEventCount": full_note_count,
             }
         uploaded_seconds = sum(int(video.get("durationSeconds") or 0) for video in videos)
         processed_seconds = sum(sample_duration_seconds(sample) for sample in day_samples)
@@ -1286,20 +1497,38 @@ def build_daily_records(
                 "materialStatus": material_status,
                 "materialLabel": material_label,
                 "transcription": {
-                    "status": "score_audio_only" if failure_summary or has_machine_pitch_events else "pending",
-                    "displayTitle": (
-                        "Verified transcription"
+                    "status": (
+                        "audio_verified_micro"
+                        if has_verified_transcription
+                        else "score_audio_only"
                         if failure_summary or has_machine_pitch_events
+                        else "pending"
+                    ),
+                    "displayTitle": (
+                        "Audio-verified micro-transcription"
+                        if has_verified_transcription
                         else "Verified transcription"
                     ),
-                    "kind": "score_audio_evidence" if has_machine_pitch_events else "pending",
+                    "kind": (
+                        "audio_verified_micro_transcription"
+                        if has_verified_transcription
+                        else "score_audio_evidence"
+                        if has_machine_pitch_events
+                        else "pending"
+                    ),
                     "scoreLinked": False,
                     "scoreAlignmentStatus": score_alignment_status,
                     "fullSessionStatus": "incomplete",
-                    "reliability": "score_audio_only" if failure_summary or has_machine_pitch_events else "pending",
+                    "reliability": (
+                        "audio_verified_micro"
+                        if has_verified_transcription
+                        else "score_audio_only"
+                        if failure_summary or has_machine_pitch_events
+                        else "pending"
+                    ),
                     "reliabilityLimit": (
                         quality.get("qualityLimit")
-                        if failure_summary or has_machine_pitch_events
+                        if has_verified_transcription or failure_summary or has_machine_pitch_events
                         else pending_transcription_limit
                     ),
                     "noteCount": note_count,
@@ -1360,7 +1589,7 @@ def build_daily_records(
         "violinPositiveSampleCount": len(all_violin_sample_ids),
         "withheldNonViolinSampleCount": withheld_sample_count,
         "transcribedRecordCount": sum(1 for record in records if record.get("transcription", {}).get("transcriptionReady")),
-        "audioEvidenceRecordCount": sum(1 for record in records if record.get("transcription", {}).get("kind") in {"audio_evidence_only", "score_audio_evidence"}),
+        "audioEvidenceRecordCount": sum(1 for record in records if record.get("transcription", {}).get("kind") in {"audio_evidence_only", "score_audio_evidence", "audio_verified_micro_transcription"}),
         "scoreAudioOnlyRecordCount": sum(1 for record in records if record.get("transcription", {}).get("reliability") == "score_audio_only"),
         "hiddenPitchTraceRecordCount": sum(1 for record in records if record.get("transcription", {}).get("reliability") == "machine_pitch_hidden"),
         "failedTranscriptionRecordCount": sum(1 for record in records if record.get("transcription", {}).get("reliability") == "transcription_failed"),

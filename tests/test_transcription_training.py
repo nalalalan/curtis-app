@@ -12,6 +12,7 @@ from backend.app.transcription import (
     event_fingerprint,
     f0_to_onset_events,
     f0_to_events,
+    mark_audio_agreement,
     pitch_sanity_filter,
     spectral_onset_events,
     transcription_failure_state,
@@ -255,6 +256,26 @@ class TranscriptionTrainingTests(unittest.TestCase):
         self.assertGreaterEqual(len(events), 8)
         self.assertGreaterEqual(len({event["midi"] % 12 for event in events}), 4)
         self.assertFalse(failure["pitchCollapseDetected"])
+
+    def test_audio_agreement_marks_matching_independent_detector_events(self):
+        selected = [
+            note_event(76, 0, confidence=0.9, duration=0.12),
+            note_event(78, 1, confidence=0.9, duration=0.12),
+        ]
+        spectral = [
+            {**note_event(76, 0, confidence=0.82, duration=0.1), "startSeconds": 0.01, "endSeconds": 0.11},
+            {**note_event(78, 1, confidence=0.82, duration=0.1), "startSeconds": 0.21, "endSeconds": 0.31},
+        ]
+
+        marked = mark_audio_agreement(
+            selected,
+            "onset_segmented_pyin",
+            [("onset_segmented_pyin", selected), ("spectral_onset", spectral)],
+        )
+
+        self.assertTrue(all(event["audioAgreement"] for event in marked))
+        self.assertEqual(marked[0]["agreementSources"], ["spectral_onset"])
+        self.assertEqual(marked[0]["detectorSource"], "onset_segmented_pyin")
 
     def test_pitch_rhythm_fingerprint_matches_repeated_material(self):
         first = fingerprint_for([76, 78, 79, 81, 79, 78, 76, 74, 76, 78, 79, 81])

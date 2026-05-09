@@ -14,7 +14,7 @@ from .state import load_state, save_state, utc_now
 
 MAX_TRANSCRIPTION_SECONDS = int(os.getenv("CURTIS_TRANSCRIPTION_MAX_SECONDS", "180"))
 TRANSCRIPTION_SAMPLE_LIMIT = int(os.getenv("CURTIS_TRANSCRIPTION_SAMPLE_LIMIT", "8"))
-TRANSCRIPTION_PIPELINE_VERSION = "violin_pitch_sanity_spectral_v8"
+TRANSCRIPTION_PIPELINE_VERSION = "violin_pitch_agreement_micro_v9"
 MIN_NOTE_SECONDS = float(os.getenv("CURTIS_MIN_NOTE_SECONDS", "0.055"))
 MIN_ONSET_NOTE_SECONDS = float(os.getenv("CURTIS_MIN_ONSET_NOTE_SECONDS", "0.04"))
 MAX_STORED_NOTES = int(os.getenv("CURTIS_MAX_STORED_NOTES", "240"))
@@ -46,6 +46,8 @@ PITCH_COLLAPSE_MAX_PITCH_CLASSES = int(os.getenv("CURTIS_PITCH_COLLAPSE_MAX_PITC
 SPECTRAL_MIN_CONFIDENCE = float(os.getenv("CURTIS_SPECTRAL_MIN_CONFIDENCE", "0.18"))
 SPECTRAL_MIN_SEGMENT_SECONDS = float(os.getenv("CURTIS_SPECTRAL_MIN_SEGMENT_SECONDS", "0.035"))
 SPECTRAL_HARMONIC_COUNT = int(os.getenv("CURTIS_SPECTRAL_HARMONIC_COUNT", "5"))
+AUDIO_AGREEMENT_SECONDS = float(os.getenv("CURTIS_AUDIO_AGREEMENT_SECONDS", "0.11"))
+AUDIO_AGREEMENT_MIDI_TOLERANCE = int(os.getenv("CURTIS_AUDIO_AGREEMENT_MIDI_TOLERANCE", "1"))
 NOTE_NAMES = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
 
 
@@ -427,6 +429,71 @@ def pitch_diversity(events: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def event_start_seconds(event: dict[str, Any]) -> float:
+    try:
+        return float(event.get("startSeconds") or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def event_end_seconds(event: dict[str, Any]) -> float:
+    try:
+        return float(event.get("endSeconds") or event.get("startSeconds") or 0.0)
+    except (TypeError, ValueError):
+        return event_start_seconds(event)
+
+
+def event_midpoint_seconds(event: dict[str, Any]) -> float:
+    return (event_start_seconds(event) + event_end_seconds(event)) / 2.0
+
+
+def events_match_for_audio_agreement(left: dict[str, Any], right: dict[str, Any]) -> bool:
+    left_midi = event_midi(left)
+    right_midi = event_midi(right)
+    if left_midi is None or right_midi is None:
+        return False
+    if abs(left_midi - right_midi) > AUDIO_AGREEMENT_MIDI_TOLERANCE:
+        return False
+    left_start = event_start_seconds(left)
+    left_end = event_end_seconds(left)
+    right_start = event_start_seconds(right)
+    right_end = event_end_seconds(right)
+    overlap = min(left_end, right_end) - max(left_start, right_start)
+    if overlap > 0:
+        return True
+    return abs(left_start - right_start) <= AUDIO_AGREEMENT_SECONDS or abs(event_midpoint_seconds(left) - event_midpoint_seconds(right)) <= AUDIO_AGREEMENT_SECONDS
+
+
+def mark_audio_agreement(
+    events: list[dict[str, Any]],
+    selected_source: str,
+    peer_groups: list[tuple[str, list[dict[str, Any]]]],
+) -> list[dict[str, Any]]:
+    selected_family = "spectral_onset" if selected_source.startswith("spectral_onset") else selected_source
+    marked: list[dict[str, Any]] = []
+    for event in events:
+        item = dict(event)
+        item["detectorSource"] = selected_source
+        sources: set[str] = set()
+        for source, peers in peer_groups:
+            if source == selected_family:
+                continue
+            for peer in peers:
+                if events_match_for_audio_agreement(item, peer):
+                    sources.add(source)
+                    break
+        if sources:
+            item["audioAgreement"] = True
+            item["agreementSources"] = sorted(sources)
+            item["agreementSourceCount"] = len(sources)
+        else:
+            item["audioAgreement"] = False
+            item["agreementSources"] = []
+            item["agreementSourceCount"] = 0
+        marked.append(item)
+    return marked
+
+
 def spectral_candidate_score(
     magnitudes: Any,
     frequencies: Any,
@@ -805,8 +872,20 @@ def transcribe_audio_array(y: Any, sr: int, librosa: Any, numpy: Any) -> dict[st
     onset_events = f0_to_onset_events(f0, voiced_flag, voiced_prob, onset_frames, sr, hop_length, numpy)
     spectral_events = spectral_onset_events(pitch_y, onset_frames, sr, hop_length, librosa, numpy)
     raw_events, segmentation_source = choose_transcription_events(pitch_events, onset_events, spectral_events)
+    peer_groups = [
+        ("pitch_hysteresis", pitch_events),
+        ("onset_segmented_pyin", onset_events),
+        ("spectral_onset", spectral_events),
+    ]
+    raw_events = mark_audio_agreement(raw_events, segmentation_source, peer_groups)
     events, sanity_quality = pitch_sanity_filter(raw_events)
     voiced_ratio = round(float(numpy.nanmean(voiced_flag)) if len(voiced_flag) else 0.0, 3)
+    spectral_agreed_count = sum(
+        1
+        for event in events
+        if event.get("detectorSource") in {"spectral_onset", "spectral_onset_rescue"}
+        or "spectral_onset" in (event.get("agreementSources") if isinstance(event.get("agreementSources"), list) else [])
+    )
     quality = {
         "preprocessing": preprocessing,
         "segmentationSource": segmentation_source,
@@ -815,6 +894,8 @@ def transcribe_audio_array(y: Any, sr: int, librosa: Any, numpy: Any) -> dict[st
         "spectralEventCount": len(spectral_events),
         "rawSelectedEventCount": len(raw_events),
         "selectedEventCount": len(events),
+        "audioAgreementEventCount": sum(1 for event in events if event.get("audioAgreement")),
+        "spectralAgreedEventCount": spectral_agreed_count,
         "detectedOnsetCount": len(onset_frames),
         "pitchDiversity": pitch_diversity(pitch_events),
         "onsetDiversity": pitch_diversity(onset_events),
@@ -874,6 +955,8 @@ def transcribe_active_windows(
             "spectralEventCount",
             "rawSelectedEventCount",
             "selectedEventCount",
+            "audioAgreementEventCount",
+            "spectralAgreedEventCount",
             "detectedOnsetCount",
             "sanityGlitchDroppedCount",
             "sanityOctaveAdjustedCount",
@@ -918,6 +1001,8 @@ def transcribe_active_windows(
             "spectralEventCount": int(quality_totals["spectralEventCount"]),
             "rawSelectedEventCount": int(quality_totals["rawSelectedEventCount"]),
             "selectedEventCount": int(quality_totals["selectedEventCount"]),
+            "audioAgreementEventCount": int(quality_totals["audioAgreementEventCount"]),
+            "spectralAgreedEventCount": int(quality_totals["spectralAgreedEventCount"]),
             "detectedOnsetCount": int(quality_totals["detectedOnsetCount"]),
             "sanityGlitchDroppedCount": int(quality_totals["sanityGlitchDroppedCount"]),
             "sanityOctaveAdjustedCount": int(quality_totals["sanityOctaveAdjustedCount"]),
@@ -987,7 +1072,7 @@ def transcribe_path(path: Path, active_windows: list[dict[str, float]] | None = 
         return {
             "status": status,
             "pipelineVersion": TRANSCRIPTION_PIPELINE_VERSION,
-            "method": "librosa_active_section_onset_pyin_spectral_pitch_with_collapse_gate",
+            "method": "librosa_active_section_onset_pyin_spectral_pitch_with_audio_agreement_gate",
             "durationSeconds": transcription["durationSeconds"],
             "tempoBpm": tempo,
             "voicedFrameRatio": transcription["voicedFrameRatio"],
@@ -1156,7 +1241,7 @@ def transcribe_media_samples(limit: int | None = None) -> dict[str, Any]:
     state["transcriptions"] = {
         "items": items,
         "updatedAt": utc_now(),
-        "method": "librosa_active_section_onset_pyin_spectral_pitch_with_collapse_gate",
+        "method": "librosa_active_section_onset_pyin_spectral_pitch_with_audio_agreement_gate",
         "pipelineVersion": TRANSCRIPTION_PIPELINE_VERSION,
         "limit": "Machine pitch/rhythm extraction is stored only as hidden evidence. Repeated-pitch collapse is rejected and cannot train piece matching; score-level claims require alignment verification.",
     }

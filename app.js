@@ -1295,7 +1295,7 @@ function renderTranscriptionStats(transcription, record = {}) {
     ? [
         ["Clef", transcription?.clef === "treble" ? "treble" : "pending"],
         ["Key", signature.label || "key pending"],
-        ["Status", "verified"],
+        ["Status", transcription?.reliability === "audio_verified_micro" ? "micro" : "verified"],
       ]
     : [
         ["Notation", "pending"],
@@ -1354,7 +1354,7 @@ function renderNotationSystems(transcription, fallbackEvents = [], record = {}) 
           <div class="notation-system">
             <div class="notation-system-head">
               <span>${escapeHtml(displayNotation ? system?.label || "Line" : "Audio evidence")}${escapeHtml(window)}</span>
-              <strong>${escapeHtml(displayNotation ? "verified notation" : clipLabel || "sample window")}</strong>
+              <strong>${escapeHtml(displayNotation ? (transcription?.reliability === "audio_verified_micro" ? "audio-verified" : "verified notation") : clipLabel || "sample window")}</strong>
             </div>
             ${renderSnippetAudio(system?.clip || {}, "Window audio")}
             ${displayNotation ? renderNotationSheet(system?.events || [], {
@@ -1414,6 +1414,7 @@ function renderHeatMap(record) {
 }
 
 function recordStatusLabel(record) {
+  if (record?.transcription?.reliability === "audio_verified_micro") return "micro transcription";
   if (record?.transcription?.reliability === "transcription_failed") return "audio paired";
   if (record?.transcription?.qualityStatus === "transcription_failed") return "audio paired";
   if (record?.transcription?.reliability === "score_audio_only") return "audio paired";
@@ -1434,6 +1435,7 @@ function recordStatusTone(record) {
 }
 
 function transcriptionEvidenceLabel(transcription) {
+  if (transcription?.reliability === "audio_verified_micro") return "micro transcription";
   if (transcription?.displayNotation === true && transcription?.transcriptionReady === true) return "verified transcription";
   if (
     transcription?.reliability === "transcription_failed"
