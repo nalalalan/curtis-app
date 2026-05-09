@@ -12,6 +12,7 @@ from .auth import youtube_oauth_config
 from .settings import (
     INSTAGRAM_GRAPH_VERSION,
     INSTAGRAM_MAX_RESULTS,
+    PUBLIC_REFERENCE_MAX_RESULTS,
     YOUTUBE_MAX_RESULTS,
     env_present,
 )
@@ -234,6 +235,31 @@ def youtube_item_from_video(item: dict[str, Any]) -> dict[str, Any]:
     return mapped
 
 
+def youtube_public_reference_item(seed: dict[str, Any], item: dict[str, Any]) -> dict[str, Any] | None:
+    snippet = item.get("snippet") or {}
+    identity = item.get("id") or {}
+    video_id = identity.get("videoId")
+    if not video_id:
+        return None
+    return {
+        "platform": "youtube",
+        "id": video_id,
+        "url": f"https://www.youtube.com/watch?v={video_id}",
+        "title": snippet.get("title") or "Untitled YouTube reference",
+        "publishedAt": snippet.get("publishedAt"),
+        "channelTitle": snippet.get("channelTitle"),
+        "seedId": seed.get("id") or "",
+        "seedTitle": seed.get("title") or "",
+        "seedQuery": seed.get("query") or "",
+        "materialType": seed.get("materialType") or "public_labeled_reference",
+        "referenceKind": "public_labeled_youtube_seed",
+        "sourceConfidence": "public_title_query_label",
+        "sourceType": "youtube_search",
+        "analysisState": "metadata_ready_media_blocked",
+        "blockers": ["youtube_data_api_returns_metadata_not_video_media"],
+    }
+
+
 async def hydrate_youtube_video_details(
     client: httpx.AsyncClient,
     items: list[dict[str, Any]],
@@ -354,6 +380,59 @@ async def fetch_youtube_inventory(source: str, limit: int = YOUTUBE_MAX_RESULTS)
             blockers.append("youtube_video_details_unavailable")
         blockers.append("youtube_data_api_returns_metadata_not_video_media")
         return InventoryResult(hydrated, blockers, parsed["type"])
+
+
+async def fetch_youtube_public_references(
+    seeds: list[dict[str, Any]],
+    per_seed: int = PUBLIC_REFERENCE_MAX_RESULTS,
+) -> InventoryResult:
+    if not seeds:
+        return InventoryResult([], [], "public_reference")
+
+    credentials = credential_state()
+    if not credentials["youtubeApiKey"] and not credentials["youtubeOAuth"]:
+        return InventoryResult([], ["missing_youtube_api_key_or_oauth"], "public_reference")
+
+    access_token = None
+    if not credentials["youtubeApiKey"] and credentials["youtubeOAuth"]:
+        access_token = await google_oauth_token()
+        if not access_token:
+            return InventoryResult([], ["youtube_oauth_token_refresh_failed"], "public_reference")
+
+    items: list[dict[str, Any]] = []
+    blockers: list[str] = []
+    seen: set[str] = set()
+    async with httpx.AsyncClient(timeout=30) as client:
+        for seed in seeds:
+            query = str(seed.get("query") or "").strip()
+            if not query:
+                continue
+            payload = await youtube_get(
+                client,
+                "search",
+                {
+                    "part": "snippet",
+                    "q": query,
+                    "type": "video",
+                    "videoCategoryId": "10",
+                    "maxResults": max(1, min(per_seed, 10)),
+                    "safeSearch": "none",
+                },
+                access_token,
+            )
+            for raw in payload.get("items", []):
+                mapped = youtube_public_reference_item(seed, raw)
+                if not mapped or mapped["id"] in seen:
+                    continue
+                seen.add(mapped["id"])
+                items.append(mapped)
+        try:
+            items = await hydrate_youtube_video_details(client, items, access_token)
+        except httpx.HTTPStatusError:
+            blockers.append("youtube_public_reference_details_unavailable")
+
+    blockers.append("youtube_data_api_returns_metadata_not_video_media")
+    return InventoryResult(items, blockers, "public_reference")
 
 
 async def fetch_instagram_inventory(source: str, limit: int = INSTAGRAM_MAX_RESULTS) -> InventoryResult:

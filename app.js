@@ -608,11 +608,15 @@ function trainingLabel(ops) {
   const training = trainingState(ops);
   if (!training) return "0 anchors";
   const anchors = Number(training.referenceTargetCount ?? training.confirmedSourceCount) || 0;
+  const calibration = Number(training.calibrationAnchorCount) || 0;
+  const publicSeeds = Number(training.publicReferenceSeedCount) || 0;
+  const publicItems = Number(training.publicReferenceItemCount ?? training.publicReference?.storedItemCount) || 0;
+  const publicLabel = publicItems || publicSeeds;
   const matches = Number(training.scoreAlignedWindowCount) || 0;
   const pitchWindows = Number(training.pitchRhythmWindowCount) || 0;
-  if (!anchors) return "0 refs";
-  if (pitchWindows && !matches) return `${anchors} refs / ${pitchWindows} pitch windows`;
-  return `${anchors} refs / ${matches} score matches`;
+  if (!anchors && !calibration && !publicLabel) return "0 refs";
+  if (pitchWindows && !matches) return `${anchors} refs / ${calibration} cal / ${pitchWindows} pitch / ${publicLabel} public`;
+  return `${anchors} refs / ${calibration} cal / ${matches} score / ${publicLabel} public`;
 }
 
 function studyStatusLabel(value) {
@@ -1361,6 +1365,37 @@ function renderTranscriptionStats(transcription, record = {}) {
   `;
 }
 
+function renderMusicianRead(read) {
+  if (!read || typeof read !== "object") return "";
+  if (read.status && read.status !== "ready") return "";
+  const rows = [
+    ["Source", read.source || ""],
+    ["Target", read.scoreTarget || read.pieceTitle || read.materialType || ""],
+    ["Pattern", read.pattern || ""],
+    ["Contour", read.contour || ""],
+    ["Notes", read.notes || ""],
+  ].filter(([, value]) => String(value || "").trim());
+  const nearest = read.nearestReference
+    ? `${read.nearestReference}${Number(read.nearestReferenceScore || 0) ? ` / ${Math.round(Number(read.nearestReferenceScore) * 100)}%` : ""}`
+    : "";
+  if (nearest) rows.splice(2, 0, ["Nearest", nearest]);
+  if (!rows.length) return "";
+  return `
+    <div class="musician-read" aria-label="Score-aware read">
+      <span>Score-aware read</span>
+      <div>
+        ${rows.slice(0, 6).map(([label, value]) => `
+          <article>
+            <span>${escapeHtml(label)}</span>
+            <strong>${escapeHtml(shortTranscriptionText(value, 92))}</strong>
+          </article>
+        `).join("")}
+      </div>
+      ${read.limit ? `<small>${escapeHtml(shortTranscriptionText(read.limit, 130))}</small>` : ""}
+    </div>
+  `;
+}
+
 function renderNotationSystems(transcription, fallbackEvents = [], record = {}) {
   const systems = Array.isArray(transcription?.notationSystems) && transcription.notationSystems.length
     ? transcription.notationSystems.slice(0, 4)
@@ -1862,6 +1897,7 @@ function renderLeadTranscription(record) {
         </div>
         ${renderSnippetAudio(clip || {}, "Matched audio")}
       </div>
+      ${renderMusicianRead(transcription.musicianRead)}
       ${renderNotationSheet(events, {
         keySignature: transcription.keySignature,
         systemLabel: "Audio-verified line",
@@ -1918,6 +1954,7 @@ function renderDailyRecord(record, index = 0) {
           <section class="essential-panel">
             <span>${escapeHtml(transcriptionTitle)}</span>
             ${renderTranscriptionStats(transcription, record)}
+            ${renderMusicianRead(transcription.musicianRead)}
             <small class="transcription-limit">${escapeHtml(reliabilityText)}</small>
             ${renderNotationSystems(transcription, events, record)}
             <small class="transcription-limit">${escapeHtml(sessionText)}</small>

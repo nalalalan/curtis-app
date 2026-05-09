@@ -9,6 +9,7 @@ from typing import Any
 
 from .analyzer import parse_window_start, run_process, sample_is_violin_positive
 from .corrections import correction_for_item, source_key_from_item
+from .reference_corpus import calibration_anchor_for_item, symbolic_reference_items
 from .state import load_state, save_state, utc_now
 
 
@@ -1117,17 +1118,32 @@ def transcribe_path(path: Path, active_windows: list[dict[str, float]] | None = 
 def learned_reference_items(state: dict[str, Any]) -> list[dict[str, Any]]:
     transcriptions = state.get("transcriptions", {}).get("items", [])
     if not isinstance(transcriptions, list):
-        return []
-    return [
-        item
-        for item in transcriptions
-        if isinstance(item, dict)
-        and item.get("acceptedTitle")
-        and item.get("status") == "transcribed"
-        and item.get("pipelineVersion") == TRANSCRIPTION_PIPELINE_VERSION
-        and isinstance(item.get("fingerprint"), dict)
-        and int(item.get("noteCount") or 0) >= 8
-    ]
+        transcriptions = []
+    learned: list[dict[str, Any]] = []
+    for item in transcriptions:
+        if not isinstance(item, dict):
+            continue
+        if item.get("status") != "transcribed":
+            continue
+        if item.get("pipelineVersion") != TRANSCRIPTION_PIPELINE_VERSION:
+            continue
+        if not isinstance(item.get("fingerprint"), dict):
+            continue
+        if int(item.get("noteCount") or 0) < 8:
+            continue
+        calibration = calibration_anchor_for_item(item)
+        accepted_title = str(item.get("acceptedTitle") or calibration.get("title") or "").strip()
+        if not accepted_title:
+            continue
+        learned.append(
+            {
+                **item,
+                "acceptedTitle": accepted_title,
+                "referenceKind": item.get("referenceKind") or calibration.get("referenceKind") or "source_confirmed_reference",
+                "materialType": item.get("materialType") or calibration.get("materialType") or "repertoire",
+            }
+        )
+    return [*learned, *symbolic_reference_items()]
 
 
 def reference_matches_for(transcription: dict[str, Any], state: dict[str, Any]) -> list[dict[str, Any]]:
@@ -1147,6 +1163,8 @@ def reference_matches_for(transcription: dict[str, Any], state: dict[str, Any]) 
                     "sourceTitle": learned.get("sourceTitle"),
                     "score": score,
                     "basis": "pitch_rhythm_fingerprint",
+                    "referenceKind": learned.get("referenceKind") or "",
+                    "materialType": learned.get("materialType") or "",
                 }
             )
     return sorted(matches, key=lambda item: float(item.get("score") or 0.0), reverse=True)[:5]
@@ -1173,9 +1191,21 @@ def build_transcription(sample: dict[str, Any], state: dict[str, Any]) -> dict[s
         "sourceUrl": sample.get("url") or sample.get("sourceUrl") or "",
         "sourceWindow": sample.get("window") or "",
         "createdAt": utc_now(),
-        "acceptedTitle": correction.get("acceptedTitle") or "",
-        "referenceTarget": correction.get("referenceTarget") if isinstance(correction.get("referenceTarget"), dict) else {},
     }
+    calibration = calibration_anchor_for_item(sample)
+    accepted_title = str(correction.get("acceptedTitle") or calibration.get("title") or "").strip()
+    reference_target = correction.get("referenceTarget") if isinstance(correction.get("referenceTarget"), dict) else {}
+    if not reference_target and isinstance(calibration.get("referenceTarget"), dict):
+        reference_target = calibration.get("referenceTarget") or {}
+    item.update(
+        {
+            "acceptedTitle": accepted_title,
+            "referenceKind": "source_confirmed_reference" if correction.get("acceptedTitle") else calibration.get("referenceKind") or "",
+            "materialType": "repertoire" if correction.get("acceptedTitle") else calibration.get("materialType") or "",
+            "calibrationAnchor": calibration,
+            "referenceTarget": reference_target,
+        }
+    )
     item["referenceMatches"] = reference_matches_for(item, state)
     return item
 

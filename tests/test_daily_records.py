@@ -280,6 +280,70 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(record["materialStatus"], "piece_or_exercise_pending")
         self.assertEqual(record["transcription"]["scoreAlignmentStatus"], "pending_piece_or_exercise_alignment")
         self.assertIn("full-session transcription", record["transcription"]["fullSessionLimit"])
+        self.assertEqual(transcription["musicianRead"]["source"], "score-free or unidentified material")
+        self.assertEqual(transcription["musicianRead"]["scoreMode"], "piece_or_exercise_pending")
+        self.assertIn("rising", transcription["musicianRead"]["pattern"])
+
+    def test_title_labeled_scale_becomes_calibration_anchor_not_repertoire(self):
+        inventory = {
+            "youtube": [
+                {
+                    "id": "gscale521",
+                    "title": "5-21-26",
+                    "url": "https://www.youtube.com/watch?v=gscale521",
+                    "publishedAt": "2026-05-21T09:10:00Z",
+                    "durationSeconds": 420,
+                    "practiceCandidate": True,
+                }
+            ]
+        }
+        names = ["G4", "A4", "B4", "C5", "D5", "E5", "F#5", "G5"]
+        notes = [
+            note(
+                name,
+                index * 0.2,
+                index * 0.2 + 0.16,
+                0.92,
+                audioAgreement=True,
+                agreementSources=["spectral_onset"],
+                detectorSource="onset_segmented_pyin",
+            )
+            for index, name in enumerate(names)
+        ]
+        transcriptions = [
+            {
+                "transcriptionId": "gscale",
+                "sampleId": "gscale521",
+                "sourceUrl": "https://www.youtube.com/watch?v=gscale521",
+                "sourceTitle": "G major scale violin calibration",
+                "sourceWindow": "*60-90",
+                "status": "transcribed",
+                "pipelineVersion": TRANSCRIPTION_PIPELINE_VERSION,
+                "tempoBpm": 92,
+                "quality": {
+                    "audioAgreementEventCount": len(notes),
+                    "spectralAgreedEventCount": len(notes),
+                },
+                "notes": notes,
+            }
+        ]
+
+        daily = build_daily_records(
+            inventory=inventory,
+            state={},
+            media_samples=[{"id": "gscale521", "path": "gscale.mp4", "window": "*60-90", "containsViolin": True}],
+            transcriptions=transcriptions,
+            sections=[],
+        )
+        record = daily["records"][0]
+        transcription = record["transcription"]
+
+        self.assertEqual(record["pieces"], [])
+        self.assertEqual(transcription["keySignature"]["label"], "G major / 1 sharp")
+        self.assertEqual(transcription["musicianRead"]["source"], "explicit title label")
+        self.assertEqual(transcription["musicianRead"]["pieceTitle"], "G major scale")
+        self.assertEqual(transcription["musicianRead"]["materialType"], "calibration_scale")
+        self.assertEqual(transcription["musicianRead"]["scoreMode"], "title_labeled_calibration")
 
     def test_lead_transcription_points_to_strongest_verified_micro_record(self):
         inventory = {
@@ -388,6 +452,10 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(daily["leadTranscriptionPracticeDay"], "2026-05-03")
         self.assertEqual(daily["transcribedRecordCount"], 2)
         self.assertEqual(daily["scoreAudioOnlyRecordCount"], 1)
+        scherzo = next(item for item in daily["records"] if item["practiceDay"] == "2026-05-03")
+        self.assertEqual(scherzo["transcription"]["musicianRead"]["source"], "Alan-confirmed source label")
+        self.assertEqual(scherzo["transcription"]["musicianRead"]["scoreMode"], "source_confirmed_score_target")
+        self.assertIn("rising", scherzo["transcription"]["musicianRead"]["pattern"])
 
     def test_micro_transcription_rejects_repeated_unagreed_note_stream(self):
         inventory = {

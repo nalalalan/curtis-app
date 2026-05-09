@@ -5,6 +5,7 @@ from typing import Any
 
 from .analyzer import parse_window_start
 from .corrections import accepted_source_corrections, compact_text, source_key_from_item, youtube_video_id
+from .reference_corpus import calibration_anchor_for_item
 from .study_packets import (
     duration_seconds_label,
     practice_ledger_videos,
@@ -1250,6 +1251,166 @@ def key_signature_from_pieces(pieces: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def key_signature_from_transcriptions(transcriptions: list[dict[str, Any]]) -> dict[str, Any]:
+    for transcription in transcriptions:
+        target = transcription.get("referenceTarget") if isinstance(transcription.get("referenceTarget"), dict) else {}
+        signature = target.get("keySignature") if isinstance(target.get("keySignature"), dict) else {}
+        if signature:
+            return signature
+        calibration = transcription.get("calibrationAnchor") if isinstance(transcription.get("calibrationAnchor"), dict) else {}
+        if not calibration:
+            calibration = calibration_anchor_for_item(transcription)
+        target = calibration.get("referenceTarget") if isinstance(calibration.get("referenceTarget"), dict) else {}
+        signature = target.get("keySignature") if isinstance(target.get("keySignature"), dict) else {}
+        if signature:
+            return signature
+    return {}
+
+
+def score_target_label(target: dict[str, Any]) -> str:
+    parts = [
+        str(target.get("composer") or "").strip(),
+        str(target.get("work") or "").strip(),
+        str(target.get("movement") or "").strip(),
+        str(target.get("part") or "").strip(),
+    ]
+    return " / ".join(part for part in parts if part)
+
+
+def note_events_for_read(notation: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [event for event in notation if isinstance(event, dict) and event.get("kind") == "note"]
+
+
+def note_sequence_label(notes: list[dict[str, Any]], limit: int = 18) -> str:
+    values = [str(note.get("note") or "").strip() for note in notes if str(note.get("note") or "").strip()]
+    return " ".join(values[:limit])
+
+
+def phrase_pattern_label(notes: list[dict[str, Any]], repeat_groups: list[dict[str, Any]]) -> str:
+    if repeat_groups:
+        first = repeat_groups[0]
+        label = str(first.get("notationLabel") or first.get("label") or "repeated fragment").strip()
+        return f"{label}; grouped repeat evidence"
+    midi_values = [note_midi_value(note) for note in notes]
+    midi_values = [value for value in midi_values if value is not None]
+    if len(midi_values) < 3:
+        return "short pitch evidence"
+    intervals = [midi_values[index + 1] - midi_values[index] for index in range(len(midi_values) - 1)]
+    up = sum(1 for value in intervals if value > 1)
+    down = sum(1 for value in intervals if value < -1)
+    same = sum(1 for value in intervals if abs(value) <= 1)
+    leaps = sum(1 for value in intervals if abs(value) >= 5)
+    largest_drop = min(intervals) if intervals else 0
+    if same >= max(up + down, 1):
+        return "repeated-note figure with pitch changes"
+    if up >= down * 2 and largest_drop <= -7:
+        return "rising figure with restart/drop"
+    if up >= down * 2:
+        return "rising scalar or sequence figure"
+    if down >= up * 2:
+        return "falling scalar or sequence figure"
+    if leaps >= 2:
+        return "leap-and-step pattern"
+    return "mixed stepwise phrase contour"
+
+
+def phrase_contour_label(notes: list[dict[str, Any]]) -> str:
+    midi_values = [note_midi_value(note) for note in notes]
+    midi_values = [value for value in midi_values if value is not None]
+    if len(midi_values) < 2:
+        return "contour pending"
+    intervals = [midi_values[index + 1] - midi_values[index] for index in range(len(midi_values) - 1)]
+    up = sum(1 for value in intervals if value > 1)
+    down = sum(1 for value in intervals if value < -1)
+    same = sum(1 for value in intervals if abs(value) <= 1)
+    leaps = sum(1 for value in intervals if abs(value) >= 5)
+    return f"{up} up / {same} same / {down} down / {leaps} leaps"
+
+
+def top_reference_match(transcriptions: list[dict[str, Any]]) -> dict[str, Any]:
+    matches: list[dict[str, Any]] = []
+    for transcription in transcriptions:
+        source_matches = transcription.get("referenceMatches") if isinstance(transcription.get("referenceMatches"), list) else []
+        for match in source_matches:
+            if isinstance(match, dict):
+                matches.append(match)
+    if not matches:
+        return {}
+    return max(matches, key=lambda item: safe_float(item.get("score")))
+
+
+def musician_read(
+    confirmed: list[dict[str, Any]],
+    uncertain: list[dict[str, Any]],
+    display_transcriptions: list[dict[str, Any]],
+    notation: list[dict[str, Any]],
+    repeat_groups: list[dict[str, Any]],
+    material_status: str,
+) -> dict[str, Any]:
+    notes = note_events_for_read(notation)
+    transcription = display_transcriptions[0] if display_transcriptions else {}
+    calibration = transcription.get("calibrationAnchor") if isinstance(transcription.get("calibrationAnchor"), dict) else {}
+    if not calibration:
+        calibration = calibration_anchor_for_item(transcription)
+    reference_target = transcription.get("referenceTarget") if isinstance(transcription.get("referenceTarget"), dict) else {}
+    source = "piece or exercise pending"
+    title = ""
+    material_type = str(transcription.get("materialType") or "").strip()
+    score_mode = "piece_or_exercise_pending"
+    target_label = ""
+    confidence = "audio evidence pending"
+    if confirmed:
+        piece = confirmed[0]
+        source = "Alan-confirmed source label"
+        title = str(piece.get("title") or "").strip()
+        material_type = "repertoire"
+        score_mode = "source_confirmed_score_target"
+        reference_target = piece.get("score") if isinstance(piece.get("score"), dict) else reference_target
+        target_label = score_target_label(reference_target)
+        confidence = "audio-agreement micro-transcription plus source label" if notes else "source label"
+    elif calibration:
+        source = "explicit title label"
+        title = str(calibration.get("title") or "").strip()
+        material_type = str(calibration.get("materialType") or material_type or "calibration").strip()
+        score_mode = str(calibration.get("referenceKind") or "title_labeled_calibration").strip()
+        target_label = score_target_label(reference_target)
+        confidence = "audio-agreement micro-transcription plus title label" if notes else "title label"
+    elif uncertain:
+        source = "fingerprint candidate"
+        title = str(uncertain[0].get("title") or "").strip()
+        score_mode = "uncertain_reference_match"
+        confidence = "uncertain pitch/rhythm fingerprint"
+    elif material_status == "piece_or_exercise_pending":
+        source = "score-free or unidentified material"
+        material_type = material_type or "unknown_or_exercise"
+        confidence = "audio-agreement micro-transcription only" if notes else "audio evidence only"
+
+    match = top_reference_match(display_transcriptions)
+    match_title = str(match.get("title") or "").strip()
+    limit = (
+        "measure alignment pending"
+        if title and notes
+        else "calibration audio needed"
+        if score_mode == "title_labeled_calibration"
+        else "piece or pattern alignment pending"
+    )
+    return {
+        "status": "ready" if notes else "pending",
+        "source": source,
+        "pieceTitle": title,
+        "materialType": material_type,
+        "scoreMode": score_mode,
+        "scoreTarget": target_label,
+        "pattern": phrase_pattern_label(notes, repeat_groups) if notes else "notation pending",
+        "contour": phrase_contour_label(notes) if notes else "contour pending",
+        "notes": note_sequence_label(notes),
+        "confidence": confidence,
+        "nearestReference": match_title,
+        "nearestReferenceScore": match.get("score") or 0,
+        "limit": limit,
+    }
+
+
 def uncertain_pieces_for_day(transcriptions: list[dict[str, Any]]) -> list[dict[str, Any]]:
     uncertain: list[dict[str, Any]] = []
     for transcription in transcriptions:
@@ -1486,6 +1647,8 @@ def build_daily_records(
             active_section_mode=active_section_mode,
         )
         key_signature = key_signature_from_pieces(confirmed)
+        if key_signature.get("label") == "key pending":
+            key_signature = key_signature_from_transcriptions(display_transcriptions) or key_signature
         clips = clips_for_day(videos, day_sections, day_transcriptions, day_samples)
         material_status = (
             "confirmed_piece"
@@ -1591,6 +1754,14 @@ def build_daily_records(
                         "Audio evidence is available. Only verified notation that matches the audio renders as transcription; score-free technique exercises do not require score alignment."
                         if active_seconds and not confirmed
                         else "Audio evidence is available. Only full-session notation that matches the audio is rendered as transcription."
+                    ),
+                    "musicianRead": musician_read(
+                        confirmed,
+                        uncertain,
+                        display_transcriptions,
+                        notation,
+                        day_repeat_groups,
+                        material_status,
                     ),
                 },
                 "clips": clips,

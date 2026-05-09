@@ -19,13 +19,24 @@ from .corrections import (
     title_rejected_for_item,
     youtube_video_id,
 )
-from .platforms import credential_state, fetch_instagram_inventory, fetch_youtube_inventory
+from .platforms import (
+    credential_state,
+    fetch_instagram_inventory,
+    fetch_youtube_inventory,
+    fetch_youtube_public_references,
+)
+from .reference_corpus import (
+    PUBLIC_REFERENCE_SEEDS,
+    calibration_anchor_for_item,
+    public_reference_training_state,
+)
 from .settings import (
     OPENAI_AUDIO_MODEL,
     OPENAI_MODEL,
     OPENAI_PIECE_VERIFY_MODEL,
     OPENAI_REASONING_EFFORT,
     OPENAI_VISION_MODEL,
+    PUBLIC_REFERENCE_REFRESH_SECONDS,
     REQUIRE_SOURCE_CONFIRMED_PIECE_TITLES,
     SERVICE_NAME,
 )
@@ -676,37 +687,73 @@ def source_training_state(
                 ),
             }
         )
+    calibration_anchors: list[dict[str, Any]] = []
+    for item in transcriptions:
+        if not isinstance(item, dict) or not transcription_ready(item):
+            continue
+        calibration = calibration_anchor_for_item(item)
+        if not calibration:
+            continue
+        calibration_anchors.append(
+            {
+                "sourceKey": item.get("sourceKey") or "",
+                "title": calibration.get("title") or "",
+                "sourceTitle": calibration.get("sourceTitle") or item.get("sourceTitle") or "",
+                "sourceUrl": calibration.get("sourceUrl") or item.get("sourceUrl") or "",
+                "sourceConfirmed": False,
+                "sourceConfidence": calibration.get("sourceConfidence") or "explicit_title_label",
+                "materialType": calibration.get("materialType") or "calibration",
+                "referenceKind": calibration.get("referenceKind") or "title_labeled_calibration",
+                "pitchRhythmWindowCount": 1,
+                "status": "calibration_pitch_rhythm_extracted",
+                "note": "title-labeled calibration anchor; not promoted to repertoire",
+            }
+        )
     confirmed_count = len(anchors)
+    calibration_count = len(calibration_anchors)
     captured_count = sum(int(anchor.get("sampleCount") or 0) for anchor in anchors)
     blind_count = sum(int(anchor.get("blindAudioMatchCount") or 0) for anchor in anchors)
     score_count = sum(int(anchor.get("scoreAlignedWindowCount") or 0) for anchor in anchors)
     pitch_rhythm_count = sum(int(anchor.get("pitchRhythmWindowCount") or 0) for anchor in anchors)
+    calibration_pitch_count = sum(int(anchor.get("pitchRhythmWindowCount") or 0) for anchor in calibration_anchors)
     reference_count = sum(1 for anchor in anchors if anchor.get("referenceTargetStatus") == "reference_target_ready")
+    public_reference = public_reference_training_state(state)
     status = "no_anchors"
     if confirmed_count and score_count:
         status = "score_alignment_started"
-    elif confirmed_count and pitch_rhythm_count:
+    elif confirmed_count and (pitch_rhythm_count or calibration_pitch_count):
         status = "pitch_rhythm_extracted"
     elif confirmed_count and blind_count >= confirmed_count:
         status = "audio_title_match_ready"
+    elif calibration_count:
+        status = "calibration_anchored"
     elif confirmed_count:
         status = "source_anchored"
+    public_seed_count = int(public_reference.get("seedQueryCount") or 0)
+    public_item_count = int(public_reference.get("storedItemCount") or 0)
     return {
         "status": status,
         "label": (
-            f"{reference_count} refs / {score_count} score matches"
-            if not pitch_rhythm_count
-            else f"{reference_count} refs / {pitch_rhythm_count} pitch windows"
+            f"{calibration_count} cal / {calibration_pitch_count} pitch windows"
+            if calibration_count and not confirmed_count
+            else f"{reference_count} refs / {score_count} score matches"
+            if not pitch_rhythm_count and not calibration_pitch_count
+            else f"{reference_count} refs / {pitch_rhythm_count + calibration_pitch_count} pitch windows"
         ),
         "confirmedSourceCount": confirmed_count,
+        "calibrationAnchorCount": calibration_count,
         "referenceTargetCount": reference_count,
+        "publicReferenceSeedCount": public_seed_count,
+        "publicReferenceItemCount": public_item_count,
         "capturedAnchorWindowCount": captured_count,
         "blindAudioMatchCount": blind_count,
-        "pitchRhythmWindowCount": pitch_rhythm_count,
+        "pitchRhythmWindowCount": pitch_rhythm_count + calibration_pitch_count,
         "scoreAlignedWindowCount": score_count,
         "anchors": anchors,
-        "method": "source-confirmed labels, pitch/rhythm extraction, score alignment, and reference-audio comparison",
-        "limit": "Alan-confirmed labels train the source memory; score proof requires extracted notes/rhythm aligned to a score or reference recording.",
+        "calibrationAnchors": calibration_anchors,
+        "publicReference": public_reference,
+        "method": "source-confirmed labels, title-labeled calibration videos, public labeled reference seeds, pitch/rhythm extraction, score alignment, and reference-audio comparison",
+        "limit": "Confirmed labels and explicit calibration titles train source memory. Public YouTube labels seed reference targets; audio proof still requires permitted media and score or pattern alignment.",
     }
 
 
@@ -990,6 +1037,38 @@ def effective_sources(state: dict[str, Any]) -> dict[str, Any]:
     return sources
 
 
+def public_reference_corpus_is_stale(state: dict[str, Any]) -> bool:
+    corpus = state.get("referenceCorpus") if isinstance(state.get("referenceCorpus"), dict) else {}
+    stored = corpus.get("publicYouTubeItems") if isinstance(corpus.get("publicYouTubeItems"), list) else []
+    indexed_at = str(corpus.get("publicYouTubeIndexedAt") or "")
+    if not stored or not indexed_at:
+        return True
+    try:
+        parsed = datetime.fromisoformat(indexed_at.replace("Z", "+00:00"))
+    except ValueError:
+        return True
+    return (datetime.now(timezone.utc) - parsed).total_seconds() >= PUBLIC_REFERENCE_REFRESH_SECONDS
+
+
+async def refresh_public_reference_corpus(state: dict[str, Any]) -> None:
+    corpus = state.setdefault("referenceCorpus", {})
+    if not public_reference_corpus_is_stale(state):
+        return
+    try:
+        result = await fetch_youtube_public_references(PUBLIC_REFERENCE_SEEDS)
+        if result.items:
+            corpus["publicYouTubeItems"] = result.items
+            corpus["publicYouTubeIndexedAt"] = utc_now()
+        corpus["sourceType"] = result.source_type
+        corpus["blockers"] = result.blockers
+    except httpx.HTTPStatusError as exc:
+        corpus["blockers"] = ["youtube_public_reference_search_error"]
+        corpus["lastError"] = exc.response.text[:500]
+    except Exception as exc:  # pragma: no cover - defensive service boundary
+        corpus["blockers"] = ["youtube_public_reference_search_failed"]
+        corpus["lastError"] = str(exc)[:500]
+
+
 def derive_review(
     inventory: dict[str, list[dict[str, Any]]],
     existing: dict[str, Any] | None = None,
@@ -1199,6 +1278,7 @@ async def run_scan(incoming_sources: dict[str, Any] | None = None) -> dict[str, 
     if not has_any_source:
         blockers.extend(["missing_youtube_source", "missing_instagram_source"])
 
+    await refresh_public_reference_corpus(state)
     state["inventory"] = inventory
     media_samples = [sample for sample in state.get("mediaSamples", []) if isinstance(sample, dict)]
     state["review"] = derive_review(inventory, state.get("review"), media_samples, state)
