@@ -1094,7 +1094,10 @@ function renderScoreHeatMap(record, scoreSnippet) {
   const score = scoreSnippet?.score || {};
   const imageUrl = scoreImageUrl(score);
   if (!imageUrl) {
-    return `<div class="score-placeholder score-heat-placeholder">Score heat map pending.</div>`;
+    const pendingText = record?.materialStatus === "piece_or_exercise_pending"
+      ? "Score or pattern heat map pending."
+      : "Score heat map pending.";
+    return `<div class="score-placeholder score-heat-placeholder">${escapeHtml(pendingText)}</div>`;
   }
   const boxes = scoreBoxes(score);
   const fragments = Array.isArray(record?.heatMap?.fragments) ? record.heatMap.fragments : [];
@@ -1283,10 +1286,11 @@ function renderVerifiedNotationGate(
   `;
 }
 
-function renderTranscriptionStats(transcription) {
+function renderTranscriptionStats(transcription, record = {}) {
   const signature = normalizedKeySignature(transcription?.keySignature || {});
   const displayNotation = transcription?.displayNotation !== false && transcription?.transcriptionReady === true;
   const systems = Array.isArray(transcription?.notationSystems) ? transcription.notationSystems.length : 0;
+  const pendingMaterial = record?.materialStatus === "piece_or_exercise_pending";
   const rows = displayNotation
     ? [
         ["Clef", transcription?.clef === "treble" ? "treble" : "pending"],
@@ -1296,7 +1300,9 @@ function renderTranscriptionStats(transcription) {
     : [
         ["Notation", "pending"],
         ["Audio", systems ? `${systems} paired windows` : "paired"],
-        ["Score", transcription?.scoreLinked ? "linked" : "matching"],
+        pendingMaterial
+          ? ["Match", "score or pattern"]
+          : ["Score", transcription?.scoreLinked ? "linked" : "matching"],
       ];
   return `
     <div class="transcription-stats" aria-label="Transcription state">
@@ -1310,13 +1316,16 @@ function renderTranscriptionStats(transcription) {
   `;
 }
 
-function renderNotationSystems(transcription, fallbackEvents = []) {
+function renderNotationSystems(transcription, fallbackEvents = [], record = {}) {
   const systems = Array.isArray(transcription?.notationSystems) && transcription.notationSystems.length
     ? transcription.notationSystems.slice(0, 4)
     : [{ label: "Line 1", events: Array.isArray(fallbackEvents) ? fallbackEvents : [], noteCount: 0, uncertainNoteCount: 0 }];
   const signature = transcription?.keySignature || {};
   const displayNotation = transcription?.displayNotation !== false && transcription?.transcriptionReady === true;
   if (!displayNotation) {
+    const withheldText = record?.materialStatus === "piece_or_exercise_pending"
+      ? "Notation withheld until audio-verified note/rhythm extraction."
+      : "Notation withheld until score verification.";
     return `
       <div class="notation-systems" aria-label="Audio evidence windows">
         ${systems.map((system) => {
@@ -1332,7 +1341,7 @@ function renderNotationSystems(transcription, fallbackEvents = []) {
             </div>
           `;
         }).join("")}
-        <p class="empty">Notation withheld until score verification.</p>
+        <p class="empty">${escapeHtml(withheldText)}</p>
       </div>
     `;
   }
@@ -1825,9 +1834,9 @@ function renderDailyRecord(record, index = 0) {
           ${renderEmbeddedMedia(record, playableClip)}
           <section class="essential-panel">
             <span>${escapeHtml(transcriptionTitle)}</span>
-            ${renderTranscriptionStats(transcription)}
+            ${renderTranscriptionStats(transcription, record)}
             <small class="transcription-limit">${escapeHtml(reliabilityText)}</small>
-            ${renderNotationSystems(transcription, events)}
+            ${renderNotationSystems(transcription, events, record)}
             <small class="transcription-limit">${escapeHtml(sessionText)}</small>
           </section>
           <section class="essential-panel">
