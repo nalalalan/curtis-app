@@ -14,6 +14,7 @@ from backend.app.transcription import (
     f0_to_events,
     mark_audio_agreement,
     pitch_sanity_filter,
+    stable_single_note_fragments,
     spectral_onset_events,
     transcription_failure_state,
     reference_matches_for,
@@ -54,6 +55,23 @@ def note_event(midi, index, confidence=0.9, duration=0.2):
 
 
 class TranscriptionTrainingTests(unittest.TestCase):
+    def test_stable_single_note_fragment_requires_pyin_yin_pitch_match(self):
+        import numpy
+        import librosa
+
+        sr = 22050
+        duration = 0.75
+        midi = 88
+        times = numpy.linspace(0, duration, int(sr * duration), endpoint=False)
+        y = 0.2 * numpy.sin(2 * numpy.pi * hz_for_midi(midi) * times)
+
+        fragments = stable_single_note_fragments(y, sr, librosa, numpy)
+
+        self.assertTrue(fragments)
+        self.assertEqual(fragments[0]["note"], "E6")
+        self.assertEqual(fragments[0]["detectors"], ["pyin", "yin"])
+        self.assertLessEqual(fragments[0]["pitchStdCents"], 18.0)
+
     def test_active_windows_for_sample_uses_detected_playing_sections(self):
         sample = {"id": "sample-1", "window": "*100-190"}
         state = {

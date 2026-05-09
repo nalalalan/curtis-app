@@ -15,7 +15,7 @@ from .state import load_state, save_state, utc_now
 
 MAX_TRANSCRIPTION_SECONDS = int(os.getenv("CURTIS_TRANSCRIPTION_MAX_SECONDS", "180"))
 TRANSCRIPTION_SAMPLE_LIMIT = int(os.getenv("CURTIS_TRANSCRIPTION_SAMPLE_LIMIT", "8"))
-TRANSCRIPTION_PIPELINE_VERSION = "violin_pitch_agreement_micro_v9"
+TRANSCRIPTION_PIPELINE_VERSION = "violin_audio_matched_fragment_v10"
 MIN_NOTE_SECONDS = float(os.getenv("CURTIS_MIN_NOTE_SECONDS", "0.055"))
 MIN_ONSET_NOTE_SECONDS = float(os.getenv("CURTIS_MIN_ONSET_NOTE_SECONDS", "0.04"))
 MAX_STORED_NOTES = int(os.getenv("CURTIS_MAX_STORED_NOTES", "240"))
@@ -49,6 +49,14 @@ SPECTRAL_MIN_SEGMENT_SECONDS = float(os.getenv("CURTIS_SPECTRAL_MIN_SEGMENT_SECO
 SPECTRAL_HARMONIC_COUNT = int(os.getenv("CURTIS_SPECTRAL_HARMONIC_COUNT", "5"))
 AUDIO_AGREEMENT_SECONDS = float(os.getenv("CURTIS_AUDIO_AGREEMENT_SECONDS", "0.11"))
 AUDIO_AGREEMENT_MIDI_TOLERANCE = int(os.getenv("CURTIS_AUDIO_AGREEMENT_MIDI_TOLERANCE", "1"))
+MATCHED_FRAGMENT_MIN_SECONDS = float(os.getenv("CURTIS_MATCHED_FRAGMENT_MIN_SECONDS", "0.52"))
+MATCHED_FRAGMENT_MAX_SECONDS = float(os.getenv("CURTIS_MATCHED_FRAGMENT_MAX_SECONDS", "1.35"))
+MATCHED_FRAGMENT_MIN_PROBABILITY = float(os.getenv("CURTIS_MATCHED_FRAGMENT_MIN_PROBABILITY", "0.88"))
+MATCHED_FRAGMENT_MAX_PITCH_STD_CENTS = float(os.getenv("CURTIS_MATCHED_FRAGMENT_MAX_PITCH_STD_CENTS", "18.0"))
+MATCHED_FRAGMENT_MAX_MEDIAN_ABS_CENTS = float(os.getenv("CURTIS_MATCHED_FRAGMENT_MAX_MEDIAN_ABS_CENTS", "25.0"))
+MATCHED_FRAGMENT_FRAME_LENGTH = int(os.getenv("CURTIS_MATCHED_FRAGMENT_FRAME_LENGTH", "2048"))
+MATCHED_FRAGMENT_HOP_LENGTH = int(os.getenv("CURTIS_MATCHED_FRAGMENT_HOP_LENGTH", "256"))
+MATCHED_FRAGMENT_LIMIT = int(os.getenv("CURTIS_MATCHED_FRAGMENT_LIMIT", "3"))
 NOTE_NAMES = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
 
 
@@ -853,6 +861,138 @@ def pitch_tracking_signal(y: Any, librosa: Any, numpy: Any) -> tuple[Any, str]:
     return normalized, "trimmed_normalized"
 
 
+def stable_single_note_fragments(y: Any, sr: int, librosa: Any, numpy: Any) -> list[dict[str, Any]]:
+    if y.size <= 0:
+        return []
+    frame_length = MATCHED_FRAGMENT_FRAME_LENGTH
+    hop_length = MATCHED_FRAGMENT_HOP_LENGTH
+    try:
+        f0, voiced_flag, voiced_prob = librosa.pyin(
+            y,
+            fmin=librosa.midi_to_hz(VIOLIN_MIN_MIDI),
+            fmax=librosa.midi_to_hz(VIOLIN_MAX_MIDI),
+            sr=sr,
+            frame_length=frame_length,
+            hop_length=hop_length,
+        )
+        yin = librosa.yin(
+            y,
+            fmin=librosa.midi_to_hz(VIOLIN_MIN_MIDI),
+            fmax=librosa.midi_to_hz(VIOLIN_MAX_MIDI),
+            sr=sr,
+            frame_length=frame_length,
+            hop_length=hop_length,
+        )
+        rms = librosa.feature.rms(y=y, frame_length=frame_length, hop_length=hop_length, center=True)[0]
+    except Exception:
+        return []
+    if len(f0) == 0:
+        return []
+    try:
+        rms_floor = max(0.003, float(numpy.percentile(rms, 55)) * 0.60) if len(rms) else 0.003
+    except Exception:
+        rms_floor = 0.003
+    frame_seconds = hop_length / sr
+    accepted: list[dict[str, Any]] = []
+    for index, frequency in enumerate(f0):
+        probability = (
+            float(voiced_prob[index])
+            if index < len(voiced_prob) and not math.isnan(float(voiced_prob[index]))
+            else 0.0
+        )
+        voiced = bool(voiced_flag[index]) if index < len(voiced_flag) else False
+        rms_value = float(rms[index]) if index < len(rms) else 0.0
+        midi = valid_frame_midi(frequency, voiced, probability)
+        if midi is None or probability < MATCHED_FRAGMENT_MIN_PROBABILITY or rms_value < rms_floor:
+            accepted.append({"ok": False})
+            continue
+        try:
+            yin_value = float(yin[index])
+            yin_midi = midi_from_hz(yin_value)
+        except (TypeError, ValueError):
+            accepted.append({"ok": False})
+            continue
+        if abs(midi - yin_midi) > 0:
+            accepted.append({"ok": False})
+            continue
+        accepted.append(
+            {
+                "ok": True,
+                "midi": midi,
+                "frequency": float(frequency),
+                "probability": probability,
+                "rms": rms_value,
+            }
+        )
+
+    fragments: list[dict[str, Any]] = []
+    index = 0
+    while index < len(accepted):
+        frame = accepted[index]
+        if not frame.get("ok"):
+            index += 1
+            continue
+        midi = int(frame["midi"])
+        end_index = index + 1
+        while (
+            end_index < len(accepted)
+            and accepted[end_index].get("ok")
+            and int(accepted[end_index].get("midi") or -1) == midi
+        ):
+            end_index += 1
+        duration = (end_index - index) * frame_seconds
+        if MATCHED_FRAGMENT_MIN_SECONDS <= duration <= MATCHED_FRAGMENT_MAX_SECONDS:
+            run = accepted[index:end_index]
+            frequencies = numpy.array([float(item.get("frequency") or 0.0) for item in run if item.get("frequency")])
+            probabilities = [float(item.get("probability") or 0.0) for item in run]
+            rms_values = [float(item.get("rms") or 0.0) for item in run]
+            if frequencies.size:
+                cents = 1200 * numpy.log2(frequencies / float(librosa.midi_to_hz(midi)))
+                pitch_std = float(numpy.std(cents))
+                median_cents = float(numpy.median(cents))
+            else:
+                pitch_std = 999.0
+                median_cents = 999.0
+            median_probability = sum(probabilities) / max(1, len(probabilities))
+            if (
+                pitch_std <= MATCHED_FRAGMENT_MAX_PITCH_STD_CENTS
+                and abs(median_cents) <= MATCHED_FRAGMENT_MAX_MEDIAN_ABS_CENTS
+                and median_probability >= MATCHED_FRAGMENT_MIN_PROBABILITY
+            ):
+                start = index * frame_seconds
+                end = end_index * frame_seconds
+                fragments.append(
+                    {
+                        "status": "audio_matched",
+                        "kind": "stable_single_note",
+                        "startSeconds": round(start, 3),
+                        "endSeconds": round(end, 3),
+                        "durationSeconds": round(end - start, 3),
+                        "midi": midi,
+                        "note": note_name(midi),
+                        "confidence": round(min(0.999, median_probability), 3),
+                        "pitchStdCents": round(pitch_std, 2),
+                        "medianPitchOffsetCents": round(median_cents, 2),
+                        "voicedFrameCount": len(run),
+                        "medianRms": round(sum(rms_values) / max(1, len(rms_values)), 5),
+                        "detectors": ["pyin", "yin"],
+                        "verification": "pyin_yin_same_semitone_stable_pitch_window",
+                        "displayLimit": "Single-note fragment only. Full-session transcription remains withheld.",
+                    }
+                )
+        index = max(end_index, index + 1)
+    fragments.sort(
+        key=lambda item: (
+            float(item.get("confidence") or 0.0),
+            -abs(float(item.get("medianPitchOffsetCents") or 0.0)),
+            -float(item.get("pitchStdCents") or 0.0),
+            float(item.get("durationSeconds") or 0.0),
+        ),
+        reverse=True,
+    )
+    return fragments[:MATCHED_FRAGMENT_LIMIT]
+
+
 def transcribe_audio_array(y: Any, sr: int, librosa: Any, numpy: Any) -> dict[str, Any]:
     pitch_y, preprocessing = pitch_tracking_signal(y, librosa, numpy)
     hop_length = PITCH_HOP_LENGTH
@@ -1042,6 +1182,7 @@ def transcribe_path(path: Path, active_windows: list[dict[str, float]] | None = 
         y, sr = librosa.load(str(wav_path), sr=22050, mono=True, duration=MAX_TRANSCRIPTION_SECONDS)
         if y.size == 0:
             return {"status": "blocked", "blocker": "empty_audio"}
+        matched_fragments = stable_single_note_fragments(y, sr, librosa, numpy)
         if active_windows:
             transcription = transcribe_active_windows(y, sr, active_windows, librosa, numpy)
             window_mode = "detected_active_sections"
@@ -1098,9 +1239,11 @@ def transcribe_path(path: Path, active_windows: list[dict[str, float]] | None = 
                 "windowMode": window_mode,
                 "activeWindowCount": len(transcription["activeWindows"]),
                 "activeWindows": transcription["activeWindows"],
+                "audioMatchedFragmentCount": len(matched_fragments),
                 **quality,
                 **failure,
             },
+            "matchedFragments": matched_fragments,
             "notation": {
                 "format": "note:beats",
                 "text": notation_text(events, tempo),
@@ -1181,6 +1324,11 @@ def build_transcription(sample: dict[str, Any], state: dict[str, Any]) -> dict[s
             continue
         event["sourceStartSeconds"] = base_start + float(event.get("startSeconds") or 0.0)
         event["sourceEndSeconds"] = base_start + float(event.get("endSeconds") or 0.0)
+    for fragment in result.get("matchedFragments", []) if isinstance(result.get("matchedFragments"), list) else []:
+        if not isinstance(fragment, dict):
+            continue
+        fragment["sourceStartSeconds"] = base_start + float(fragment.get("startSeconds") or 0.0)
+        fragment["sourceEndSeconds"] = base_start + float(fragment.get("endSeconds") or 0.0)
     item = {
         **result,
         "transcriptionId": transcription_key(sample),

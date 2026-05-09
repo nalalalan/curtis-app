@@ -460,6 +460,84 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(scherzo["transcription"]["musicianRead"]["scoreMode"], "source_confirmed_score_target")
         self.assertEqual(scherzo["transcription"]["musicianRead"]["pattern"], "notation pending")
 
+    def test_audio_matched_single_note_fragment_renders_with_exact_clip_window(self):
+        inventory = {
+            "youtube": [
+                {
+                    "id": "Njh8_zq9_DM",
+                    "title": "5-3-26",
+                    "url": "https://www.youtube.com/watch?v=Njh8_zq9_DM",
+                    "publishedAt": "2026-05-04T09:10:00Z",
+                    "durationSeconds": 900,
+                    "practiceCandidate": True,
+                }
+            ]
+        }
+        transcriptions = [
+            {
+                "transcriptionId": "scherzo",
+                "sampleId": "Njh8_zq9_DM-26813",
+                "sourceUrl": "https://www.youtube.com/watch?v=Njh8_zq9_DM",
+                "sourceTitle": "5-3-26",
+                "sourceWindow": "*26813-26903",
+                "status": "failed_pitch_collapse",
+                "pipelineVersion": TRANSCRIPTION_PIPELINE_VERSION,
+                "tempoBpm": 120,
+                "noteCount": 30,
+                "quality": {"failed": True, "failureMode": "repeated_pitch_collapse"},
+                "notes": [note("D5", index * 0.1, index * 0.1 + 0.08, 0.92) for index in range(30)],
+                "matchedFragments": [
+                    {
+                        "status": "audio_matched",
+                        "kind": "stable_single_note",
+                        "startSeconds": 17.891,
+                        "endSeconds": 18.541,
+                        "durationSeconds": 0.65,
+                        "midi": midi_for_note("E6"),
+                        "note": "E6",
+                        "confidence": 0.985,
+                        "pitchStdCents": 6.0,
+                        "medianPitchOffsetCents": 0.0,
+                        "voicedFrameCount": 55,
+                        "detectors": ["pyin", "yin"],
+                    }
+                ],
+            }
+        ]
+
+        daily = build_daily_records(
+            inventory=inventory,
+            state={},
+            media_samples=[
+                {
+                    "id": "Njh8_zq9_DM-26813",
+                    "path": "scherzo.webm",
+                    "window": "*26813-26903",
+                    "containsViolin": True,
+                }
+            ],
+            transcriptions=transcriptions,
+            sections=[],
+        )
+
+        record = daily["records"][0]
+        transcription = record["transcription"]
+
+        self.assertEqual(daily["transcribedRecordCount"], 1)
+        self.assertEqual(daily["leadTranscriptionPracticeDay"], "2026-05-03")
+        self.assertEqual(transcription["status"], "audio_matched_fragment")
+        self.assertEqual(transcription["kind"], "audio_matched_fragment_transcription")
+        self.assertTrue(transcription["displayNotation"])
+        self.assertTrue(transcription["transcriptionReady"])
+        self.assertEqual(transcription["renderedNoteCount"], 1)
+        self.assertEqual(transcription["events"][0]["note"], "E6")
+        self.assertTrue(transcription["events"][0]["strictAudioWindow"])
+        self.assertEqual(transcription["notationSystems"][0]["clip"]["localStartSeconds"], 17.891)
+        self.assertEqual(transcription["notationSystems"][0]["clip"]["localEndSeconds"], 18.541)
+        self.assertEqual(record["clips"][0]["type"], "audio_matched_fragment")
+        self.assertEqual(record["clips"][0]["localStartSeconds"], 17.891)
+        self.assertEqual(record["clips"][0]["localEndSeconds"], 18.541)
+
     def test_micro_transcription_rejects_repeated_unagreed_note_stream(self):
         inventory = {
             "youtube": [

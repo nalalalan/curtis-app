@@ -1426,7 +1426,7 @@ function renderTranscriptionStats(transcription, record = {}) {
     ? [
         ["Clef", transcription?.clef === "treble" ? "treble" : "pending"],
         ["Key", signature.label || "key pending"],
-        ["Status", transcription?.reliability === "audio_verified_micro" ? "audio-matched" : "matched"],
+        ["Status", ["audio_verified_micro", "audio_matched_fragment"].includes(transcription?.reliability) ? "audio-matched" : "matched"],
       ]
     : [
         ["Notation", "pending"],
@@ -1516,7 +1516,7 @@ function renderNotationSystems(transcription, fallbackEvents = [], record = {}) 
           <div class="notation-system">
             <div class="notation-system-head">
               <span>${escapeHtml(displayNotation ? system?.label || "Line" : "Audio evidence")}${escapeHtml(window)}</span>
-              <strong>${escapeHtml(displayNotation ? (transcription?.reliability === "audio_verified_micro" ? "audio-matched" : "matched notation") : clipLabel || "sample window")}</strong>
+              <strong>${escapeHtml(displayNotation ? (["audio_verified_micro", "audio_matched_fragment"].includes(transcription?.reliability) ? "audio-matched" : "matched notation") : clipLabel || "sample window")}</strong>
             </div>
             ${renderSnippetAudio(system?.clip || {}, "Window audio")}
             ${displayNotation ? renderNotationSheet(system?.events || [], {
@@ -1576,6 +1576,7 @@ function renderHeatMap(record) {
 }
 
 function recordStatusLabel(record) {
+  if (record?.transcription?.reliability === "audio_matched_fragment") return "matched fragment";
   if (record?.transcription?.reliability === "audio_verified_micro") return "matched transcription";
   if (record?.transcription?.qualityStatus === "candidate_micro_transcription") return "audio paired";
   if (record?.transcription?.reliability === "transcription_failed") return "audio paired";
@@ -1598,6 +1599,7 @@ function recordStatusTone(record) {
 }
 
 function transcriptionEvidenceLabel(transcription) {
+  if (transcription?.reliability === "audio_matched_fragment") return "matched fragment";
   if (transcription?.reliability === "audio_verified_micro") return "matched transcription";
   if (transcription?.displayNotation === true && transcription?.transcriptionReady === true) return "matched transcription";
   if (transcription?.qualityStatus === "candidate_micro_transcription") return "audio paired";
@@ -1771,7 +1773,8 @@ function renderSnippetAudio(clip, label = "Snippet audio") {
 
 function primaryPlayableClip(record) {
   const clips = Array.isArray(record?.clips) ? record.clips : [];
-  return clips.find((clip) => clip?.mediaUrl && clip.type === "transcribed_window" && Number(clip.noteCount || record?.transcription?.noteCount || 0) > 0)
+  return clips.find((clip) => clip?.mediaUrl && clip.type === "audio_matched_fragment")
+    || clips.find((clip) => clip?.mediaUrl && clip.type === "transcribed_window" && Number(clip.noteCount || record?.transcription?.noteCount || 0) > 0)
     || clips.find((clip) => clip?.mediaUrl && clip.type === "transcribed_window")
     || clips.find((clip) => clip?.mediaUrl)
     || clips[0]
@@ -1785,7 +1788,7 @@ function primaryNotationClip(record) {
 }
 
 function eventInsideClip(event, clip) {
-  if (!clip || clip.type !== "transcribed_window") return true;
+  if (!clip || !["transcribed_window", "audio_matched_fragment"].includes(clip.type)) return true;
   if (event?.kind !== "note") return false;
   const start = Number(clip.startSeconds) || 0;
   const end = Number(clip.endSeconds) || 0;
@@ -1795,7 +1798,7 @@ function eventInsideClip(event, clip) {
 
 function transcriptionEventsForClip(record, clip) {
   const events = Array.isArray(record?.transcription?.events) ? record.transcription.events : [];
-  if (!clip || clip.type !== "transcribed_window") return events;
+  if (!clip || !["transcribed_window", "audio_matched_fragment"].includes(clip.type)) return events;
   const filtered = [];
   for (const event of events) {
     if (eventInsideClip(event, clip)) {
@@ -1805,7 +1808,7 @@ function transcriptionEventsForClip(record, clip) {
     if (event?.kind === "rest" && filtered.length) filtered.push(event);
   }
   const noteCount = filtered.filter((event) => event?.kind === "note").length;
-  return noteCount >= 3 ? filtered : events;
+  return clip?.type === "audio_matched_fragment" && noteCount ? filtered : noteCount >= 3 ? filtered : events;
 }
 
 function transcriptionCoverageText(record) {
@@ -1825,7 +1828,9 @@ function renderEmbeddedMedia(record, preferredClip = null) {
       </div>
     `;
   }
-  const label = clip?.type === "audio_evidence_window" || clip?.type === "pitch_trace_snippet" || clip?.type === "transcribed_window"
+  const label = clip?.type === "audio_matched_fragment"
+    ? "Audio-matched fragment"
+    : clip?.type === "audio_evidence_window" || clip?.type === "pitch_trace_snippet" || clip?.type === "transcribed_window"
     ? "Audio evidence sample"
     : "Local clip";
   return `

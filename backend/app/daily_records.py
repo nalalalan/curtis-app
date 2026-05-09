@@ -38,6 +38,10 @@ MICRO_TRANSCRIPTION_DISPLAY_LIMIT = (
     "Candidate note/rhythm extraction is withheld because current paired-audio "
     "review did not match reliably enough to display as transcription."
 )
+MATCHED_FRAGMENT_DISPLAY_LIMIT = (
+    "One strict audio-matched fragment is displayed. Full-session transcription remains withheld "
+    "until the same note/rhythm match standard works across longer playing."
+)
 VIOLIN_POSITIVE_VALUES = {
     "violin",
     "violin_playing",
@@ -208,7 +212,7 @@ def notation_events(transcriptions: list[dict[str, Any]]) -> list[dict[str, Any]
             start = float(note.get("startSeconds") or 0.0)
             end = float(note.get("endSeconds") or start)
             duration = max(0.0, float(note.get("durationSeconds") or (end - start)))
-            if start - previous_end > 0.35:
+            if start - previous_end > 0.35 and not note.get("strictAudioWindow"):
                 rest_seconds = start - previous_end
                 events.append(
                     {
@@ -244,10 +248,12 @@ def notation_events(transcriptions: list[dict[str, Any]]) -> list[dict[str, Any]
                     "mediaUrl": media_url,
                     "sourceTitle": source_title,
                     "durationSeconds": round(duration, 3),
-                    "durationKind": note_duration_kind(duration, tempo),
+                    "durationKind": str(note.get("durationKind") or note_duration_kind(duration, tempo)),
                     "confidence": round(confidence, 3),
                     "uncertain": bool(note.get("uncertain")) or confidence < 0.62,
                     "uncertaintyReasons": note.get("uncertaintyReasons") if isinstance(note.get("uncertaintyReasons"), list) else [],
+                    "audioMatchedFragment": bool(note.get("audioMatchedFragment")),
+                    "strictAudioWindow": bool(note.get("strictAudioWindow")),
                 }
             )
             previous_end = max(previous_end, end)
@@ -303,8 +309,11 @@ def notation_system_payload(events: list[dict[str, Any]], index: int) -> dict[st
             if event.get("sampleId") == sample_id and event.get("sourceEndSeconds") is not None
         ]
         if local_starts and local_ends:
-            local_start = max(0.0, min(local_starts) - 0.35)
-            local_end = max(local_start + 0.75, max(local_ends) + 0.35)
+            strict_window = any(bool(event.get("strictAudioWindow")) for event in playable_events)
+            padding = 0.0 if strict_window else 0.35
+            minimum_clip_seconds = 0.0 if strict_window else 0.75
+            local_start = max(0.0, min(local_starts) - padding)
+            local_end = max(local_start + minimum_clip_seconds, max(local_ends) + padding)
             source_clip_start = min(source_starts) if source_starts else 0.0
             source_clip_end = max(source_ends) if source_ends else 0.0
             clip = {
@@ -568,11 +577,136 @@ def best_micro_transcription(transcriptions: list[dict[str, Any]]) -> dict[str, 
                             "noteCount": len(selected),
                         },
                         "quality": quality_state,
-                        "fullDetectedNoteCount": full_note_count,
-                    }
+                            "fullDetectedNoteCount": full_note_count,
+                        }
             if found_for_size:
                 break
     return best
+
+
+def matched_fragment_note(fragment: dict[str, Any]) -> dict[str, Any]:
+    start = safe_float(fragment.get("startSeconds"))
+    end = safe_float(fragment.get("endSeconds"))
+    duration = max(0.0, safe_float(fragment.get("durationSeconds")) or (end - start))
+    return {
+        "note": str(fragment.get("note") or "").strip(),
+        "midi": fragment.get("midi"),
+        "startSeconds": round(start, 3),
+        "endSeconds": round(end, 3),
+        "durationSeconds": round(duration, 3),
+        "durationKind": "quarter" if duration <= 0.85 else "half" if duration <= 1.35 else "whole",
+        "confidence": safe_float(fragment.get("confidence")),
+        "audioAgreement": True,
+        "agreementSources": fragment.get("detectors") if isinstance(fragment.get("detectors"), list) else ["pyin", "yin"],
+        "detectorSource": "pyin_yin_stable_pitch",
+        "audioMatchedFragment": True,
+        "strictAudioWindow": True,
+        "microVerified": True,
+        "verification": fragment.get("verification") or "stable_single_note_audio_match",
+        "uncertain": False,
+    }
+
+
+def fragment_passes_display_gate(fragment: dict[str, Any]) -> bool:
+    if not isinstance(fragment, dict) or fragment.get("status") != "audio_matched":
+        return False
+    if str(fragment.get("kind") or "") != "stable_single_note":
+        return False
+    if not str(fragment.get("note") or "").strip():
+        return False
+    if note_midi_value(fragment) is None:
+        return False
+    duration = safe_float(fragment.get("durationSeconds"))
+    if duration < 0.5 or duration > 1.5:
+        return False
+    if safe_float(fragment.get("confidence")) < 0.88:
+        return False
+    if safe_float(fragment.get("pitchStdCents"), 999.0) > 18.0:
+        return False
+    if abs(safe_float(fragment.get("medianPitchOffsetCents"))) > 25.0:
+        return False
+    detectors = fragment.get("detectors") if isinstance(fragment.get("detectors"), list) else []
+    return "pyin" in detectors and "yin" in detectors
+
+
+def best_matched_fragment_transcription(transcriptions: list[dict[str, Any]]) -> dict[str, Any]:
+    best: dict[str, Any] = {}
+    full_note_count = transcription_note_count(transcriptions)
+    for transcription in transcriptions:
+        fragments = transcription.get("matchedFragments") if isinstance(transcription.get("matchedFragments"), list) else []
+        for fragment in fragments:
+            if not fragment_passes_display_gate(fragment):
+                continue
+            note = matched_fragment_note(fragment)
+            if not note.get("note") or note_midi_value(note) is None:
+                continue
+            duration = safe_float(note.get("durationSeconds"))
+            confidence = safe_float(fragment.get("confidence"))
+            pitch_std = safe_float(fragment.get("pitchStdCents"), 999.0)
+            score = round((confidence * 10.0) + duration - (pitch_std / 20.0), 3)
+            if best and score <= safe_float(best.get("quality", {}).get("score")):
+                continue
+            quality = {
+                "score": score,
+                "noteCount": 1,
+                "durationSeconds": round(duration, 3),
+                "medianConfidence": round(confidence, 3),
+                "pitchStdCents": round(pitch_std, 2),
+                "medianPitchOffsetCents": fragment.get("medianPitchOffsetCents") or 0,
+                "voicedFrameCount": fragment.get("voicedFrameCount") or 0,
+                "detectors": fragment.get("detectors") if isinstance(fragment.get("detectors"), list) else ["pyin", "yin"],
+            }
+            best = {
+                "transcription": {
+                    **transcription,
+                    "transcriptionId": f"{transcription.get('transcriptionId') or ''}#audio-matched-fragment",
+                    "status": "audio_matched_fragment",
+                    "notes": [note],
+                    "noteCount": 1,
+                    "durationSeconds": round(duration, 3),
+                    "tempoBpm": round(60.0 / duration, 1) if duration > 0 else transcription.get("tempoBpm") or 0,
+                    "matchedFragment": fragment,
+                    "quality": {
+                        **(transcription.get("quality") if isinstance(transcription.get("quality"), dict) else {}),
+                        "audioMatchedFragmentDisplayed": True,
+                        "audioMatchedFragmentCount": len(fragments),
+                    },
+                },
+                "quality": quality,
+                "fullDetectedNoteCount": full_note_count,
+            }
+    return best
+
+
+def matched_fragment_clip(match: dict[str, Any]) -> dict[str, Any]:
+    transcription = match.get("transcription") if isinstance(match.get("transcription"), dict) else {}
+    notes = transcription.get("notes") if isinstance(transcription.get("notes"), list) else []
+    note = notes[0] if notes and isinstance(notes[0], dict) else {}
+    sample_id = str(transcription.get("sampleId") or "").strip()
+    source_start = parse_window_start(str(transcription.get("sourceWindow") or ""))
+    local_start = safe_float(note.get("startSeconds"))
+    local_end = safe_float(note.get("endSeconds"))
+    start = source_start + local_start
+    end = source_start + local_end
+    return {
+        "type": "audio_matched_fragment",
+        "label": "audio-matched fragment",
+        "url": transcription.get("sourceUrl") or "",
+        "sourceTitle": transcription.get("sourceTitle") or "",
+        "startSeconds": round(start, 3),
+        "endSeconds": round(end, 3),
+        "durationSeconds": round(max(0.0, local_end - local_start), 3),
+        "activeTranscribedSeconds": round(max(0.0, local_end - local_start), 3),
+        "noteCount": 1,
+        "transcriptionStatus": "audio_matched_fragment",
+        "transcriptionId": transcription.get("transcriptionId") or "",
+        "pipelineVersion": transcription.get("pipelineVersion") or "",
+        "reason": "Displayed notation is limited to this exact stable note window.",
+        "sampleId": sample_id,
+        "mediaUrl": f"/api/curtis/media/sample/{sample_id}" if sample_id else "",
+        "localStartSeconds": round(local_start, 3),
+        "localEndSeconds": round(local_end, 3),
+    }
 
 
 def active_seconds_from_transcriptions(transcriptions: list[dict[str, Any]]) -> int:
@@ -1473,6 +1607,7 @@ def verified_transcription_rank(record: dict[str, Any]) -> tuple[int, int, float
     try:
         note_count = int(
             transcription.get("microVerifiedNoteCount")
+            or transcription.get("matchedFragmentNoteCount")
             or transcription.get("renderedNoteCount")
             or transcription.get("noteCount")
             or 0
@@ -1480,7 +1615,7 @@ def verified_transcription_rank(record: dict[str, Any]) -> tuple[int, int, float
     except (TypeError, ValueError):
         note_count = 0
     try:
-        confidence = float(transcription.get("microMedianConfidence") or 0.0)
+        confidence = float(transcription.get("microMedianConfidence") or transcription.get("matchedFragmentConfidence") or 0.0)
     except (TypeError, ValueError):
         confidence = 0.0
     try:
@@ -1574,16 +1709,56 @@ def build_daily_records(
         quality = transcription_quality(full_note_count, active_seconds, len(notation_segments), quality_metrics)
         failure_summary = transcription_failure_summary(day_transcriptions)
         micro = best_micro_transcription(day_transcriptions)
-        has_verified_transcription = bool(micro and MICRO_TRANSCRIPTION_DISPLAY_ENABLED)
-        display_transcriptions = [micro["transcription"]] if has_verified_transcription else []
+        matched_fragment = best_matched_fragment_transcription(day_transcriptions)
+        has_verified_transcription = bool(matched_fragment)
+        display_transcriptions = [matched_fragment["transcription"]] if has_verified_transcription else []
         read_transcriptions = display_transcriptions if has_verified_transcription else day_transcriptions
         notation = notation_events(display_transcriptions)
         day_notation_systems = notation_systems(notation)
-        note_count = int(micro.get("quality", {}).get("noteCount") or full_note_count)
+        visible_quality = matched_fragment.get("quality", {}) if matched_fragment else micro.get("quality", {})
+        note_count = int(visible_quality.get("noteCount") or full_note_count)
         public_note_count = note_count if has_verified_transcription else full_note_count
         display_state = notation_display_state(notation, day_notation_systems, note_count)
         has_machine_pitch_events = bool(raw_notation)
-        if micro:
+        if matched_fragment:
+            fragment_quality = matched_fragment.get("quality", {})
+            full_detected = int(matched_fragment.get("fullDetectedNoteCount") or full_note_count or note_count)
+            rejected_count = max(0, full_detected - note_count)
+            quality = {
+                **quality,
+                "qualityStatus": "audio_matched_fragment",
+                "qualityLabel": "matched fragment",
+                "qualityLimit": MATCHED_FRAGMENT_DISPLAY_LIMIT,
+                "matchedFragmentNoteCount": note_count,
+                "matchedFragmentSeconds": fragment_quality.get("durationSeconds") or 0,
+                "matchedFragmentConfidence": fragment_quality.get("medianConfidence") or 0,
+                "matchedFragmentPitchStdCents": fragment_quality.get("pitchStdCents") or 0,
+                "matchedFragmentDetectors": fragment_quality.get("detectors") or [],
+                "rejectedMachinePitchEventCount": rejected_count,
+            }
+            display_state = {
+                **display_state,
+                "displayNotation": True,
+                "transcriptionReady": True,
+                "hiddenPitchEventCount": rejected_count,
+                "rejectedMachinePitchEventCount": rejected_count,
+                "detectedPitchEventCount": full_detected,
+                "displayLimit": (
+                    f"{note_count} audio-matched note is displayed; "
+                    f"{rejected_count} machine pitch events remain hidden."
+                ),
+            }
+            heat_fragments = [
+                {
+                    "label": "audio-matched single-note fragment",
+                    "count": 1,
+                    "seconds": fragment_quality.get("durationSeconds") or 0,
+                    "density": 1,
+                    "status": "audio_matched",
+                }
+            ]
+            day_repeat_groups = []
+        elif micro:
             micro_quality = micro.get("quality", {})
             full_detected = int(micro.get("fullDetectedNoteCount") or full_note_count or note_count)
             rejected_count = max(0, full_detected - note_count)
@@ -1657,6 +1832,8 @@ def build_daily_records(
         if key_signature.get("label") == "key pending":
             key_signature = key_signature_from_transcriptions(read_transcriptions) or key_signature
         clips = clips_for_day(videos, day_sections, day_transcriptions, day_samples)
+        if matched_fragment:
+            clips = [matched_fragment_clip(matched_fragment), *clips[: max(0, MAX_CLIPS_PER_DAY - 1)]]
         material_status = (
             "confirmed_piece"
             if confirmed
@@ -1714,19 +1891,19 @@ def build_daily_records(
                 "materialLabel": material_label,
                 "transcription": {
                     "status": (
-                        "audio_verified_micro"
+                        "audio_matched_fragment"
                         if has_verified_transcription
                         else "score_audio_only"
                         if failure_summary or has_machine_pitch_events
                         else "pending"
                     ),
                     "displayTitle": (
-                        "Audio-matched transcription"
+                        "Audio-matched fragment"
                         if has_verified_transcription
                         else "Audio evidence"
                     ),
                     "kind": (
-                        "audio_verified_micro_transcription"
+                        "audio_matched_fragment_transcription"
                         if has_verified_transcription
                         else "score_audio_evidence"
                         if has_machine_pitch_events
@@ -1736,7 +1913,7 @@ def build_daily_records(
                     "scoreAlignmentStatus": score_alignment_status,
                     "fullSessionStatus": "incomplete",
                     "reliability": (
-                        "audio_verified_micro"
+                        "audio_matched_fragment"
                         if has_verified_transcription
                         else "score_audio_only"
                         if failure_summary or has_machine_pitch_events
@@ -1814,7 +1991,7 @@ def build_daily_records(
         "violinPositiveSampleCount": len(all_violin_sample_ids),
         "withheldNonViolinSampleCount": withheld_sample_count,
         "transcribedRecordCount": sum(1 for record in records if record.get("transcription", {}).get("transcriptionReady")),
-        "audioEvidenceRecordCount": sum(1 for record in records if record.get("transcription", {}).get("kind") in {"audio_evidence_only", "score_audio_evidence", "audio_verified_micro_transcription"}),
+        "audioEvidenceRecordCount": sum(1 for record in records if record.get("transcription", {}).get("kind") in {"audio_evidence_only", "score_audio_evidence", "audio_verified_micro_transcription", "audio_matched_fragment_transcription"}),
         "scoreAudioOnlyRecordCount": sum(1 for record in records if record.get("transcription", {}).get("reliability") == "score_audio_only"),
         "hiddenPitchTraceRecordCount": sum(1 for record in records if record.get("transcription", {}).get("reliability") == "machine_pitch_hidden"),
         "failedTranscriptionRecordCount": sum(1 for record in records if record.get("transcription", {}).get("reliability") == "transcription_failed"),
