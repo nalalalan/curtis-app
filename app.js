@@ -1195,15 +1195,32 @@ function renderScoreImage(snippet, compact = false) {
   `;
 }
 
-function noteY(note) {
+const TREBLE_STAFF_TOP_Y = 30;
+const TREBLE_STAFF_LINE_GAP = 10;
+const TREBLE_STAFF_BOTTOM_Y = TREBLE_STAFF_TOP_Y + (TREBLE_STAFF_LINE_GAP * 4);
+const TREBLE_G4_Y = TREBLE_STAFF_TOP_Y + (TREBLE_STAFF_LINE_GAP * 3);
+const TREBLE_STAFF_STEP_Y = TREBLE_STAFF_LINE_GAP / 2;
+const TREBLE_NOTE_ORDER = { C: 0, D: 1, E: 2, F: 3, G: 4, A: 5, B: 6 };
+
+function naturalNoteStep(note) {
   const match = String(note || "").match(/^([A-G])(#|b)?(\d)$/);
-  if (!match) return 50;
-  const order = { C: 0, D: 1, E: 2, F: 3, G: 4, A: 5, B: 6 };
-  const value = (Number(match[3]) * 7) + (order[match[1]] || 0);
-  const violinLow = (3 * 7) + order.G;
-  const violinHigh = (7 * 7) + order.C;
-  const normalized = (value - violinLow) / Math.max(1, violinHigh - violinLow);
-  return Math.max(12, Math.min(84, 84 - (normalized * 72)));
+  if (!match) return null;
+  return (Number(match[3]) * 7) + TREBLE_NOTE_ORDER[match[1]];
+}
+
+function staffNoteY(note) {
+  const step = naturalNoteStep(note);
+  if (step === null) return TREBLE_STAFF_TOP_Y + (TREBLE_STAFF_LINE_GAP * 2);
+  const g4Step = (4 * 7) + TREBLE_NOTE_ORDER.G;
+  return TREBLE_G4_Y - ((step - g4Step) * TREBLE_STAFF_STEP_Y);
+}
+
+function compactStaffNoteY(note) {
+  const y = staffNoteY(note);
+  const compactStaffTop = 18;
+  const compactStaffLineGap = 9;
+  const compactY = compactStaffTop + ((y - TREBLE_STAFF_TOP_Y) / TREBLE_STAFF_LINE_GAP * compactStaffLineGap);
+  return Math.max(10, Math.min(90, (compactY / 70) * 100));
 }
 
 function renderTranscriptionStaff(transcription) {
@@ -1213,7 +1230,7 @@ function renderTranscriptionStaff(transcription) {
     <div class="transcription-staff" aria-label="Machine transcription staff">
       <span></span><span></span><span></span><span></span><span></span>
       ${notes.map((note, index) => `
-        <i style="left:${5 + (index * (90 / Math.max(1, notes.length - 1)))}%; top:${noteY(note)}%;" title="${escapeHtml(note)}"></i>
+        <i style="left:${5 + (index * (90 / Math.max(1, notes.length - 1)))}%; top:${compactStaffNoteY(note)}%;" title="${escapeHtml(note)}"></i>
       `).join("")}
     </div>
   `;
@@ -1287,7 +1304,20 @@ function renderKeySignatureMarks(signature) {
 }
 
 function renderTrebleClef() {
-  return `<text class="treble-clef" x="16" y="74">&#119070;</text>`;
+  return `<text class="treble-clef" x="24" y="78">&#119070;</text>`;
+}
+
+function renderLedgerLines(y, x) {
+  const lines = [];
+  for (let lineY = TREBLE_STAFF_BOTTOM_Y + TREBLE_STAFF_LINE_GAP; lineY <= y + 0.1; lineY += TREBLE_STAFF_LINE_GAP) {
+    lines.push(lineY);
+  }
+  for (let lineY = TREBLE_STAFF_TOP_Y - TREBLE_STAFF_LINE_GAP; lineY >= y - 0.1; lineY -= TREBLE_STAFF_LINE_GAP) {
+    lines.push(lineY);
+  }
+  return lines.map((lineY) => (
+    `<line class="ledger-line" x1="${(x - 13).toFixed(1)}" x2="${(x + 13).toFixed(1)}" y1="${lineY.toFixed(1)}" y2="${lineY.toFixed(1)}"></line>`
+  )).join("");
 }
 
 function renderNotationSheet(events, options = {}) {
@@ -1352,15 +1382,19 @@ function renderNotationSheet(events, options = {}) {
         </g>
       `;
     }
-    const y = noteY(event.note) + 3;
+    const y = staffNoteY(event.note);
+    const stemUp = y >= TREBLE_STAFF_TOP_Y + (TREBLE_STAFF_LINE_GAP * 2);
+    const stemX = x + (stemUp ? 6 : -6);
+    const stemEndY = stemUp ? Math.max(10, y - 30) : Math.min(94, y + 30);
     const isUncertain = Boolean(event.uncertain || options?.forceUncertain);
     const uncertain = isUncertain ? " notation-uncertain" : "";
     const raw = event.rawNote ? `raw ${event.rawNote}` : "";
     const label = escapeHtml([event.note, raw, isUncertain ? "uncertain" : ""].filter(Boolean).join(" / "));
     return `
       <g class="notation-note ${durationClass}${uncertain}" aria-label="${label}">
+        ${renderLedgerLines(y, x)}
         <ellipse cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" rx="6.6" ry="4.4" transform="rotate(-16 ${x.toFixed(1)} ${y.toFixed(1)})"></ellipse>
-        ${durationClass === "whole" ? "" : `<line x1="${(x + 6).toFixed(1)}" x2="${(x + 6).toFixed(1)}" y1="${y.toFixed(1)}" y2="${Math.max(14, y - 28).toFixed(1)}"></line>`}
+        ${durationClass === "whole" ? "" : `<line class="note-stem" x1="${stemX.toFixed(1)}" x2="${stemX.toFixed(1)}" y1="${y.toFixed(1)}" y2="${stemEndY.toFixed(1)}"></line>`}
       </g>
     `;
   }).join("");

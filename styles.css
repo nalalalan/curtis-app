@@ -1,3 +1,13 @@
+@font-face {
+  font-family: "CurtisBravura";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src:
+    url("https://cdn.jsdelivr.net/fontsource/fonts/bravura@latest/bravura-latin-400-normal.woff2") format("woff2"),
+    url("https://cdn.jsdelivr.net/fontsource/fonts/bravura@latest/bravura-latin-400-normal.woff") format("woff");
+}
+
 :root {
   color-scheme: light;
   --bg: #edf1ee;
@@ -2093,9 +2103,9 @@ h2 {
 
 .notation-sheet .treble-clef {
   fill: var(--ink);
-  font-family: "Bravura", "November2", "Leland", "Noto Music", "Segoe UI Symbol", Georgia, "Times New Roman", serif;
-  font-size: 76px;
-  font-weight: 500;
+  font-family: "CurtisBravura", "Bravura", "Noto Music", "Segoe UI Symbol", Georgia, "Times New Roman", serif;
+  font-size: 64px;
+  font-weight: 400;
 }
 
 .notation-sheet .key-signature-mark {
@@ -2106,8 +2116,9 @@ h2 {
 }
 
 .staff-lines line {
-  stroke: rgba(31, 41, 39, .5);
-  stroke-width: 1;
+  stroke: rgba(31, 41, 39, .58);
+  stroke-width: 1.05;
+  shape-rendering: crispEdges;
 }
 
 .notation-repeat svg {
@@ -2169,6 +2180,12 @@ h2 {
   stroke: #253330;
   stroke-width: 2;
   stroke-linecap: round;
+}
+
+.notation-note .ledger-line {
+  stroke-width: 1.15;
+  stroke-linecap: square;
+  shape-rendering: crispEdges;
 }
 
 .notation-note.eighth line,
