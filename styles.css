@@ -1058,9 +1058,13 @@ h2 {
   min-height: 128px;
   aspect-ratio: 2.4 / 1;
   background: #fffdf8;
+  contain: paint;
 }
 
 .score-image-crop img {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: auto;
   height: auto;
   max-width: none;
