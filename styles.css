@@ -3320,6 +3320,10 @@ h2 {
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .score-match-grid.pitch-anchor-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .pitch-anchor-grid .matched-practice-pair {
     grid-template-columns: minmax(0, 1fr);
   }
