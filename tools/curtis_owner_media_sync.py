@@ -94,6 +94,11 @@ def sample_starts(item: dict[str, Any]) -> list[int]:
         return [0]
     latest = max(0, duration - SAMPLE_SECONDS - 30)
     window_count = max(1, WINDOWS_PER_VIDEO)
+    if window_count > 8:
+        starts = list(range(0, latest + 1, SAMPLE_SECONDS))
+        if not starts or starts[-1] != latest:
+            starts.append(latest)
+        return starts[:window_count]
     anchors = [SAMPLE_START_SECONDS]
     anchors.extend(int(duration * fraction) for fraction in (0.25, 0.5, 0.625, 0.75))
     anchors.append(latest)

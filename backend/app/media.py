@@ -12,6 +12,7 @@ from .settings import (
     MEDIA_PROBE_LIMIT,
     MEDIA_SAMPLE_SECONDS,
     MEDIA_SAMPLE_START_SECONDS,
+    MEDIA_SAMPLE_RETENTION_LIMIT,
     MEDIA_SAMPLE_WINDOWS_PER_VIDEO,
 )
 from .state import load_state, save_state, utc_now
@@ -46,6 +47,11 @@ def sample_windows(item: dict[str, Any], max_windows: int = MEDIA_SAMPLE_WINDOWS
     if not isinstance(duration, int) or duration <= MEDIA_SAMPLE_SECONDS + 60:
         return [f"*0-{MEDIA_SAMPLE_SECONDS}"]
     latest_start = max(0, duration - MEDIA_SAMPLE_SECONDS - 30)
+    if max_windows > 8:
+        starts = list(range(0, latest_start + 1, MEDIA_SAMPLE_SECONDS))
+        if not starts or starts[-1] != latest_start:
+            starts.append(latest_start)
+        return [f"*{start}-{start + MEDIA_SAMPLE_SECONDS}" for start in starts[:max_windows]]
     anchors = [MEDIA_SAMPLE_START_SECONDS]
     anchors.extend([int(duration * fraction) for fraction in (0.25, 0.5, 0.625, 0.75)])
     anchors.append(latest_start)
@@ -189,7 +195,7 @@ async def probe_youtube_media(limit: int = MEDIA_PROBE_LIMIT) -> dict[str, Any]:
             blockers.append(classify_media_error(output))
 
     media_samples = [*samples, *state.get("mediaSamples", [])]
-    state["mediaSamples"] = media_samples[:80]
+    state["mediaSamples"] = media_samples[:MEDIA_SAMPLE_RETENTION_LIMIT]
     state.setdefault("review", {})["mediaAccess"] = "sample_ready" if samples else "blocked"
     run = {
         "startedAt": utc_now(),
@@ -236,7 +242,7 @@ def record_uploaded_sample(
         "window": window,
         "source": "owner_upload",
     }
-    state["mediaSamples"] = [sample, *state.get("mediaSamples", [])][:80]
+    state["mediaSamples"] = [sample, *state.get("mediaSamples", [])][:MEDIA_SAMPLE_RETENTION_LIMIT]
     state.setdefault("review", {})["mediaAccess"] = "sample_ready"
     state["lastMediaRun"] = {
         "startedAt": utc_now(),

@@ -1633,6 +1633,7 @@ function recordStatusLabel(record) {
 }
 
 function recordStatusTone(record) {
+  if (record?.matchingWorkflow?.status === "score_sequence_matches_ready") return "verified";
   if (record?.transcription?.transcriptionReady === true) return "verified";
   return "pending";
 }
@@ -1947,6 +1948,72 @@ function renderMatchedPracticePair(record, clip, transcription) {
   `;
 }
 
+function matchGroupNotationEvents(group) {
+  const transcription = group?.transcription && typeof group.transcription === "object" ? group.transcription : {};
+  const notes = Array.isArray(transcription.notes) ? transcription.notes : [];
+  return notes
+    .filter((note) => note && note.note)
+    .slice(0, 32)
+    .map((note) => {
+      const start = Number(note.startSeconds) || 0;
+      const end = Math.max(start, Number(note.endSeconds) || start);
+      return {
+        kind: "note",
+        note: String(note.note || ""),
+        midi: note.midi,
+        startSeconds: start,
+        endSeconds: end,
+        localStartSeconds: start,
+        localEndSeconds: end,
+        durationSeconds: Math.max(0.15, Number(note.durationSeconds) || (end - start) || 0.4),
+        durationKind: "quarter",
+        confidence: Number(note.confidence) || 0,
+        uncertain: Boolean(note.uncertain),
+      };
+    });
+}
+
+function renderScoreMatchGroups(record) {
+  const groups = Array.isArray(record?.matchGroups) ? record.matchGroups.slice(0, 3) : [];
+  if (!groups.length) return "";
+  return `
+    <div class="score-match-groups" aria-label="Score matched practice groups">
+      ${groups.map((group, index) => {
+        const clip = group?.clip || {};
+        const events = matchGroupNotationEvents(group);
+        const transcription = {
+          ...(group?.transcription || {}),
+          notationSystems: [{ events, clip }],
+        };
+        const pieceTitle = group?.pieceTitle || recordPieceText(record);
+        const matchedNotes = group?.detectedPitchClassSequence || group?.scorePitchClassSequence || "";
+        const matchLabel = [
+          Number(group?.matchedNoteRun) ? `${Number(group.matchedNoteRun)} notes` : "pitch match",
+          matchedNotes,
+        ].filter(Boolean).join(" / ");
+        return `
+          <article class="score-match-group">
+            <div class="score-match-head">
+              <span>Match ${index + 1}</span>
+              <strong>${escapeHtml(shortText(matchLabel, 86))}</strong>
+            </div>
+            <div class="score-match-grid">
+              <section class="score-reference-panel">
+                <div class="score-heat-header">
+                  <span>Score</span>
+                  <strong>${escapeHtml(shortText(pieceTitle, 56))}</strong>
+                </div>
+                ${renderScoreImage({ score: group?.score || {} }, true)}
+              </section>
+              ${renderSingleMatchedPracticePair(record, clip, transcription, { events, clip })}
+            </div>
+          </article>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
 function renderTranscriptionRunLink(record, transcription) {
   const href = assetUrl(transcription?.pdfUrl || record?.matchingWorkflow?.transcriptionRunPdfUrl || "");
   if (!href) return "";
@@ -2148,6 +2215,7 @@ function renderDailyRecord(record, index = 0) {
   const scoreSnippet = scoreSnippetForRecord(record);
   const transcription = record?.transcription || {};
   const displayNotation = transcription?.displayNotation !== false && transcription?.transcriptionReady === true;
+  const scoreMatches = renderScoreMatchGroups(record);
   const openTarget = new URLSearchParams(window.location.search).get("open") || "";
   const openForReview = openTarget === "first" ? index === 0 : openTarget === record.practiceDay;
   const meta = [
@@ -2166,9 +2234,9 @@ function renderDailyRecord(record, index = 0) {
         <em data-tone="${escapeHtml(recordStatusTone(record))}">${escapeHtml(recordStatusLabel(record))}</em>
       </summary>
       <div class="record-card-body record-essentials-body">
-        ${displayNotation
+        ${scoreMatches || (displayNotation
           ? renderMatchedPracticePair(record, playableClip, transcription)
-          : renderPendingPracticePair(record)}
+          : renderPendingPracticePair(record))}
         ${renderTranscriptionRunLink(record, transcription)}
       </div>
     </details>

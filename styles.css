@@ -1717,6 +1717,66 @@ h2 {
   gap: 8px;
 }
 
+.score-match-groups {
+  display: grid;
+  gap: 10px;
+}
+
+.score-match-group {
+  display: grid;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid rgba(31, 41, 39, .12);
+  border-radius: 8px;
+  background: rgba(255, 253, 248, .72);
+}
+
+.score-match-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.score-match-head span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 780;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.score-match-head strong {
+  margin: 0;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 760;
+  line-height: 1.15;
+  text-align: right;
+}
+
+.score-match-grid {
+  display: grid;
+  grid-template-columns: minmax(160px, .52fr) minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  min-width: 0;
+}
+
+.score-reference-panel {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.score-reference-panel .score-image {
+  min-height: 130px;
+}
+
+.score-reference-panel .score-image img {
+  max-height: 165px;
+}
+
 .transcription-pdf-link {
   display: inline-flex;
   width: fit-content;
@@ -3164,6 +3224,7 @@ h2 {
   .study-card,
   .record-card-body,
   .matched-practice-pair,
+  .score-match-grid,
   .embedded-media-header,
   .score-heat-header,
   .piece-row,

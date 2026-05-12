@@ -2354,6 +2354,9 @@ def build_daily_records(
             }
             for match in score_sequence_matches
         ]
+        if match_groups:
+            score_alignment_status = "pitch_sequence_match"
+            score_or_pattern_limit = "Pitch sequence matched to the piece reference; exact measure/rhythm alignment remains pending."
         matching_workflow = {
             "status": (
                 "score_sequence_matches_ready"
@@ -2411,7 +2414,7 @@ def build_daily_records(
                         if has_machine_pitch_events
                         else "pending"
                     ),
-                    "scoreLinked": False,
+                    "scoreLinked": bool(match_groups),
                     "scoreAlignmentStatus": score_alignment_status,
                     "fullSessionStatus": "incomplete",
                     "reliability": (

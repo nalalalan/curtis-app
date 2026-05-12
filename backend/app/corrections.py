@@ -203,6 +203,16 @@ FIVE_ONE_REJECTED_TITLES = [
 ]
 SOURCE_ACCEPTANCE_REJECT_COUNT = 3
 BUILTIN_CORRECTION_KEYS = [FIVE_ONE_KEY, FIVE_TWO_KEY, FIVE_THREE_KEY]
+WIENIAWSKI_REFERENCE_AUDIO_PITCH_CLASSES = (
+    "D D D D D D# G G D D G G D D D A# A# A# A# F A A E G "
+    "G A# A# A# A# A G D# D# D# F# G G G G C# B A# A# A# A# A# A# A# "
+    "A# A# A# D D D D D D D D D D D D D D D D D D D D D "
+    "D D A# D D D D# A A# A# F A A A E E A A E F F F G G "
+    "G F A# A G D# D# G G G G G G G B B B B B B B B D D "
+    "D D D D D D D D D D D D D D D# D# D D D D# D D A# G "
+    "D D G G D D D D D D G B B B B B D G C C C C D C "
+    "G A A D D F# D A G A D"
+).split()
 
 
 def compact_text(value: Any) -> str:
@@ -274,6 +284,13 @@ def wieniawski_reference_target() -> dict[str, Any]:
             {"x": 13, "y": 26, "width": 75, "height": 20, "label": "early repetition pattern"},
         ],
         "referenceAudio": "needed",
+        "scorePitchClassSequences": [
+            {
+                "label": "Scherzo-Tarantelle reference audio pitch trace, first 180 seconds",
+                "source": "local reference audio transcription",
+                "values": WIENIAWSKI_REFERENCE_AUDIO_PITCH_CLASSES,
+            }
+        ],
         "alignmentGoal": "Match extracted solo-violin pitch/rhythm to Scherzo-Tarantelle sections, then report phrase, section, or measure range.",
         "passageVocabulary": [
             "Presto opening",

@@ -32,6 +32,27 @@ class MediaSamplingTests(unittest.TestCase):
         self.assertIn("*11250-11340", windows)
         self.assertLess(windows.index("*11250-11340"), windows.index("*300-390"))
 
+    def test_full_check_windows_can_cover_video_without_retention_gap(self):
+        item = {"id": "video", "durationSeconds": 600}
+
+        windows = sample_windows(item, max_windows=20)
+
+        self.assertEqual(windows[0], "*0-90")
+        self.assertIn("*90-180", windows)
+        self.assertIn("*180-270", windows)
+        self.assertIn("*270-360", windows)
+        self.assertIn("*360-450", windows)
+        self.assertIn("*480-570", windows)
+
+    def test_owner_sync_full_check_can_walk_video_in_order(self):
+        item = {"id": "video", "durationSeconds": 600}
+
+        with mock.patch.object(owner_sync, "WINDOWS_PER_VIDEO", 20):
+            starts = owner_sync.sample_starts(item)
+
+        self.assertEqual(starts[:5], [0, 90, 180, 270, 360])
+        self.assertIn(480, starts)
+
     def test_owner_sync_prioritizes_deep_long_video_windows(self):
         item = {"id": "video", "durationSeconds": 42900}
 
