@@ -1152,8 +1152,10 @@ def target_pitch_anchors(target: dict[str, Any]) -> list[dict[str, Any]]:
     for anchor in anchors:
         key = (
             str(anchor.get("pitchClass") or ""),
+            str(anchor.get("displayNote") or ""),
             str(anchor.get("sequenceKind") or ""),
             str(anchor.get("source") or ""),
+            str(anchor.get("snippetImageUrl") or ""),
         )
         if key in seen_keys:
             continue
@@ -1175,6 +1177,7 @@ def pitch_anchor_matches_for_series(
             continue
         for piece in pieces:
             target = piece.get("score") if isinstance(piece.get("score"), dict) else {}
+            best_anchor_by_key: dict[tuple[str, str], tuple[int, dict[str, Any], dict[str, Any]]] = {}
             for anchor in target_pitch_anchors(target):
                 pitch_class = str(anchor.get("pitchClass") or "")
                 if not pitch_class:
@@ -1182,7 +1185,19 @@ def pitch_anchor_matches_for_series(
                 key = (str(piece.get("title") or ""), pitch_class)
                 if key in seen:
                     continue
-                matched_note = next(
+                display_note = str(anchor.get("displayNote") or "").strip()
+                display_midi = note_midi_value({"note": display_note}) if display_note else None
+                exact_note = next(
+                    (
+                        note
+                        for note in run_notes
+                        if isinstance(note, dict)
+                        and display_midi is not None
+                        and note_midi_value(note) == display_midi
+                    ),
+                    None,
+                )
+                pitch_class_note = next(
                     (
                         note
                         for note in run_notes
@@ -1191,8 +1206,18 @@ def pitch_anchor_matches_for_series(
                     ),
                     None,
                 )
+                matched_note = exact_note or pitch_class_note
                 if not matched_note:
                     continue
+                match_rank = 2 if exact_note else 1
+                current = best_anchor_by_key.get(key)
+                if current and current[0] >= match_rank:
+                    continue
+                best_anchor_by_key[key] = (match_rank, anchor, matched_note)
+            for key, (_, anchor, matched_note) in best_anchor_by_key.items():
+                if key in seen:
+                    continue
+                pitch_class = str(anchor.get("pitchClass") or "")
                 seen.add(key)
                 score_derived_reference = bool(anchor.get("scoreDerivedReference"))
                 score_anchor_snippet = (

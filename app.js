@@ -553,11 +553,7 @@ function dailyRecordList(ops) {
 
 function scoreMatchGroupCount(records) {
   const list = Array.isArray(records?.records) ? records.records : [];
-  return list.reduce((total, record) => (
-    total
-    + (Array.isArray(record?.matchGroups) ? record.matchGroups.length : 0)
-    + (Array.isArray(record?.pitchAnchorGroups) ? record.pitchAnchorGroups.length : 0)
-  ), 0);
+  return list.reduce((total, record) => total + sourceScoreMatchGroups(record).length, 0);
 }
 
 function analyzedRecordList(ops) {
@@ -684,17 +680,17 @@ function studyPacketForVideo(ops, video, daySamples = []) {
 
 function trainingLabel(ops) {
   const training = trainingState(ops);
-  if (!training) return "0 anchors";
-  const anchors = Number(training.referenceTargetCount ?? training.confirmedSourceCount) || 0;
+  if (!training) return "0 refs";
+  const refs = Number(training.referenceTargetCount ?? training.confirmedSourceCount) || 0;
   const calibration = Number(training.calibrationAnchorCount) || 0;
   const publicSeeds = Number(training.publicReferenceSeedCount) || 0;
   const publicItems = Number(training.publicReferenceItemCount ?? training.publicReference?.storedItemCount) || 0;
   const publicLabel = publicItems || publicSeeds;
   const matches = Number(training.scoreAlignedWindowCount) || 0;
   const pitchWindows = Number(training.pitchRhythmWindowCount) || 0;
-  if (!anchors && !calibration && !publicLabel) return "0 refs";
-  if (pitchWindows && !matches) return `${anchors} refs / ${calibration} cal / ${pitchWindows} pitch / ${publicLabel} public`;
-  return `${anchors} refs / ${calibration} cal / ${matches} score / ${publicLabel} public`;
+  if (!refs && !calibration && !publicLabel) return "0 refs";
+  if (pitchWindows && !matches) return `${refs} refs / ${calibration} cal / ${pitchWindows} pitch / ${publicLabel} public`;
+  return `${refs} refs / ${calibration} cal / ${matches} score / ${publicLabel} public`;
 }
 
 function studyStatusLabel(value) {
@@ -1672,7 +1668,7 @@ function recordStatusLabel(record) {
     record?.matchingWorkflow?.status === "score_sequence_matches_ready"
     || record?.matchingWorkflow?.status === "reference_sequence_matches_ready"
   ) return "note match";
-  if (record?.matchingWorkflow?.status === "pitch_anchor_matches_ready") return "pitch anchor";
+  if (record?.matchingWorkflow?.status === "pitch_anchor_matches_ready") return "score note";
   if (record?.transcription?.reliability === "audio_matched_fragment") return "detected note";
   if (record?.transcription?.reliability === "audio_verified_micro") return "audio-checked transcription";
   if (record?.matchingWorkflow?.status === "awaiting_piece_name") return "piece name";
@@ -2087,7 +2083,7 @@ function renderScoreAnchorPanel(group) {
   const snippet = scoreAnchorSnippet(group);
   const sourceHref = snippet?.sourceUrl || snippet?.pdfUrl || "";
   return `
-    <section class="score-anchor-panel" aria-label="Score pitch anchor">
+    <section class="score-anchor-panel" aria-label="Source score note">
       <div class="matched-notation-head">
         <span>Score</span>
         <strong>${escapeHtml(shortText(pitch, 12))}</strong>
@@ -2132,8 +2128,41 @@ function exactScoreSnippetReady(group) {
   ].some((token) => status.includes(token));
 }
 
+function notePitchClassText(value) {
+  const match = String(value || "").trim().match(/^([A-G](?:#|b)?)/);
+  return match ? match[1] : "";
+}
+
+function detectedMatchNoteLabel(group) {
+  const detected = Array.isArray(group?.matchedDetectedNotes) ? group.matchedDetectedNotes : [];
+  const displayed = Array.isArray(group?.displayDetectedNotes) ? group.displayDetectedNotes : [];
+  const transcription = group?.transcription && typeof group.transcription === "object" ? group.transcription : {};
+  const notes = Array.isArray(transcription?.notes) ? transcription.notes : [];
+  const source = detected[0] || displayed[0] || notes[0] || {};
+  return source?.note || source?.pitchClass || group?.detectedPitchClassSequenceCompact || "";
+}
+
+function sourceScoreAnchorReady(group) {
+  const snippet = group?.scoreAnchorSnippet && typeof group.scoreAnchorSnippet === "object"
+    ? group.scoreAnchorSnippet
+    : {};
+  const score = group?.score && typeof group.score === "object" ? group.score : {};
+  const imageUrl = snippet.imageUrl || score.imageUrl || "";
+  if (!imageUrl) return false;
+  const scorePitch = notePitchClassText(snippet.pitchClass || snippet.note || group?.scorePitchClassSequenceCompact || group?.scorePitchClassSequence);
+  const detectedPitch = notePitchClassText(detectedMatchNoteLabel(group) || group?.detectedPitchClassSequenceCompact || group?.detectedPitchClassSequence);
+  return Boolean(scorePitch && detectedPitch && scorePitch === detectedPitch);
+}
+
+function sourceScoreMatchGroups(record) {
+  const anchors = Array.isArray(record?.pitchAnchorGroups) ? record.pitchAnchorGroups : [];
+  return anchors.filter(sourceScoreAnchorReady).slice(0, 1);
+}
+
 function renderScoreMatchGroups(record) {
-  const groups = Array.isArray(record?.matchGroups) ? record.matchGroups.slice(0, 3) : [];
+  const groups = Array.isArray(record?.matchGroups)
+    ? record.matchGroups.filter(exactScoreSnippetReady).slice(0, 1)
+    : [];
   if (!groups.length) return "";
   return `
     <div class="score-match-groups" aria-label="Note matched practice groups">
@@ -2177,10 +2206,10 @@ function renderScoreMatchGroups(record) {
 }
 
 function renderPitchAnchorGroups(record) {
-  const groups = Array.isArray(record?.pitchAnchorGroups) ? record.pitchAnchorGroups.slice(0, 2) : [];
+  const groups = sourceScoreMatchGroups(record);
   if (!groups.length) return "";
   return `
-    <div class="score-match-groups pitch-anchor-groups" aria-label="Single pitch anchors">
+    <div class="score-match-groups pitch-anchor-groups" aria-label="Source score note matches">
       ${groups.map((group, index) => {
         const clip = group?.clip || {};
         const events = matchGroupNotationEvents(group);
@@ -2188,7 +2217,9 @@ function renderPitchAnchorGroups(record) {
           ...(group?.transcription || {}),
           notationSystems: [{ events, clip }],
         };
-        const pitch = group?.detectedPitchClassSequenceCompact
+        const pitch = detectedMatchNoteLabel(group)
+          || group?.scoreAnchorSnippet?.note
+          || group?.detectedPitchClassSequenceCompact
           || group?.detectedPitchClassSequence
           || group?.scorePitchClassSequenceCompact
           || "pitch";
@@ -2199,7 +2230,7 @@ function renderPitchAnchorGroups(record) {
         return `
           <article class="score-match-group note-match-group pitch-anchor-group">
             <div class="score-match-head">
-              <span>Anchor ${index + 1}</span>
+              <span>Match ${index + 1}</span>
               <strong>${escapeHtml(shortText(label, 64))}</strong>
             </div>
             <div class="score-match-grid pitch-anchor-grid">
@@ -2414,8 +2445,8 @@ function renderDailyRecord(record, index = 0) {
   const scoreSnippet = scoreSnippetForRecord(record);
   const transcription = record?.transcription || {};
   const displayNotation = transcription?.displayNotation !== false && transcription?.transcriptionReady === true;
-  const scoreMatches = renderScoreMatchGroups(record);
-  const pitchAnchors = renderPitchAnchorGroups(record);
+  const sourceScoreMatches = renderPitchAnchorGroups(record);
+  const scoreMatches = sourceScoreMatches ? "" : renderScoreMatchGroups(record);
   const openTarget = new URLSearchParams(window.location.search).get("open") || "";
   const openForReview = openTarget === "first" ? index === 0 : openTarget === record.practiceDay;
   const meta = [
@@ -2432,9 +2463,9 @@ function renderDailyRecord(record, index = 0) {
         <em data-tone="${escapeHtml(recordStatusTone(record))}">${escapeHtml(recordStatusLabel(record))}</em>
       </summary>
       <div class="record-card-body record-essentials-body">
+        ${sourceScoreMatches}
         ${scoreMatches}
-        ${pitchAnchors}
-        ${(!scoreMatches && !pitchAnchors) ? (displayNotation
+        ${(!sourceScoreMatches && !scoreMatches) ? (displayNotation
           ? renderMatchedPracticePair(record, playableClip, transcription)
           : renderPendingPracticePair(record)) : ""}
         ${renderTranscriptionRunLink(record, transcription)}

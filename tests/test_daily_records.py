@@ -7,6 +7,7 @@ from backend.app.daily_records import (
     pitch_anchor_matches_for_series,
     score_sequence_matches_for_series,
 )
+from backend.app.corrections import wieniawski_reference_target
 from backend.app.media import practice_candidates
 from backend.app.transcription import TRANSCRIPTION_PIPELINE_VERSION
 
@@ -926,6 +927,23 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(anchors[0]["score"]["imageUrl"], "/assets/score/test-a.png")
         self.assertEqual(anchors[0]["score"]["boxes"], [])
         self.assertFalse(anchors[0]["scoreLocationVerified"])
+
+    def test_wieniawski_score_note_match_uses_detected_octave_source_crop(self):
+        target = wieniawski_reference_target()
+        anchors_by_note = {anchor["displayNote"]: anchor for anchor in target["scorePitchClassAnchors"]}
+
+        self.assertIn("A4", anchors_by_note)
+        self.assertIn("A5", anchors_by_note)
+
+        a4_series = [{"transcriptionId": "a4", "notes": [note("A4", 0, 1)]}]
+        a4_matches = pitch_anchor_matches_for_series(a4_series, [{"title": "Scherzo", "score": target}])
+        self.assertEqual(a4_matches[0]["scoreAnchorSnippet"]["note"], "A4")
+        self.assertEqual(a4_matches[0]["scoreAnchorSnippet"]["imageUrl"], "/assets/score/wieniawski-scherzo-tarantelle-a4-source-snippet.png")
+
+        a5_series = [{"transcriptionId": "a5", "notes": [note("A5", 0, 1)]}]
+        a5_matches = pitch_anchor_matches_for_series(a5_series, [{"title": "Scherzo", "score": target}])
+        self.assertEqual(a5_matches[0]["scoreAnchorSnippet"]["note"], "A5")
+        self.assertEqual(a5_matches[0]["scoreAnchorSnippet"]["imageUrl"], "/assets/score/wieniawski-scherzo-tarantelle-a5-source-snippet.png")
 
     def test_unaccepted_audio_matched_fragment_stays_hidden(self):
         inventory = {
