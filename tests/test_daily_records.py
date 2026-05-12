@@ -673,7 +673,9 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(matches[0]["detectedPitchClassSequenceCompact"], "D A B")
         self.assertEqual([item["note"] for item in matches[0]["displayDetectedNotes"]], ["D4", "A4", "B4"])
         self.assertEqual(matches[0]["minimumDistinctPitchClasses"], 2)
-        self.assertEqual(matches[0]["score"]["boxes"][0]["label"], "mm. 1-2")
+        self.assertEqual(matches[0]["score"]["boxes"][0]["label"], "mm. 1-2: matched notes")
+        self.assertEqual(matches[0]["score"]["boxes"][0]["sourceRegionLabel"], "mm. 1-2")
+        self.assertLess(matches[0]["score"]["boxes"][0]["width"], 30)
         self.assertEqual(matches[0]["score"]["cropStatus"], "sequence_region_estimate")
         self.assertFalse(matches[0]["rhythmRequired"])
 

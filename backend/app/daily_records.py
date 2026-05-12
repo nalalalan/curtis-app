@@ -720,6 +720,54 @@ def compact_notes_by_pitch_class(notes: list[dict[str, Any]]) -> list[dict[str, 
     return compact
 
 
+def clamp_percentage(value: float, low: float = 0.0, high: float = 100.0) -> float:
+    return max(low, min(high, value))
+
+
+def focused_score_boxes(
+    score_boxes: list[dict[str, Any]],
+    reference_start: int,
+    reference_end: int,
+    reference_length: int,
+) -> list[dict[str, Any]]:
+    if not score_boxes or reference_length <= 0:
+        return score_boxes
+    box_count = len(score_boxes)
+    box_index = min(
+        box_count - 1,
+        max(0, int((reference_start / max(1, reference_length)) * box_count)),
+    )
+    source_box = score_boxes[box_index]
+    x = safe_float(source_box.get("x"))
+    y = safe_float(source_box.get("y"))
+    width = max(1.0, safe_float(source_box.get("width"), 1.0))
+    height = max(1.0, safe_float(source_box.get("height"), 1.0))
+    segment_start = reference_length * (box_index / box_count)
+    segment_end = reference_length * ((box_index + 1) / box_count)
+    segment_length = max(1.0, segment_end - segment_start)
+    start_fraction = clamp_percentage((reference_start - segment_start) / segment_length, 0.0, 1.0)
+    end_fraction = clamp_percentage((reference_end - segment_start) / segment_length, 0.0, 1.0)
+    if end_fraction <= start_fraction:
+        end_fraction = min(1.0, start_fraction + (1.0 / segment_length))
+    matched_fraction = max(0.01, end_fraction - start_fraction)
+    focus_width = min(width, max(width * matched_fraction, min(width, max(8.0, width * 0.12))))
+    focus_center = x + (width * ((start_fraction + end_fraction) / 2))
+    focus_x = clamp_percentage(focus_center - (focus_width / 2), x, x + width - focus_width)
+    focus_height = min(height, max(7.0, height * 0.7))
+    focus_y = clamp_percentage(y + ((height - focus_height) / 2), 0.0, 100.0 - focus_height)
+    label = source_box.get("label") or "matched passage"
+    return [
+        {
+            "x": round(focus_x, 2),
+            "y": round(focus_y, 2),
+            "width": round(focus_width, 2),
+            "height": round(focus_height, 2),
+            "label": f"{label}: matched notes",
+            "sourceRegionLabel": label,
+        }
+    ]
+
+
 def score_sequence_matches_for_series(
     series: list[dict[str, Any]],
     pieces: list[dict[str, Any]],
@@ -757,13 +805,7 @@ def score_sequence_matches_for_series(
                     matched_notes = [run_notes[index] for index in raw_indices if 0 <= index < len(run_notes)]
                     display_notes = matched_notes if query_info["collapsed"] else compact_notes_by_pitch_class(matched_notes)
                     score_boxes = target.get("scoreBoxes") if isinstance(target.get("scoreBoxes"), list) else []
-                    selected_boxes = score_boxes
-                    if len(score_boxes) > 1 and reference_values:
-                        box_index = min(
-                            len(score_boxes) - 1,
-                            max(0, int((r0 / max(1, len(reference_values))) * len(score_boxes))),
-                        )
-                        selected_boxes = [score_boxes[box_index]]
+                    selected_boxes = focused_score_boxes(score_boxes, r0, r1, len(reference_values))
                     best_for_reference = {
                         "status": "score_sequence_match",
                         "pieceTitle": piece.get("title") or "",

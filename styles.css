@@ -1061,6 +1061,15 @@ h2 {
   contain: paint;
 }
 
+.score-image-crop::after {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border: 2px solid rgba(142, 79, 72, .82);
+  border-radius: 5px;
+  pointer-events: none;
+}
+
 .score-image-crop img {
   position: absolute;
   top: 0;
