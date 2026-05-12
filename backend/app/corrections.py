@@ -284,10 +284,14 @@ def wieniawski_reference_target() -> dict[str, Any]:
             {"x": 13, "y": 26, "width": 75, "height": 20, "label": "early repetition pattern"},
         ],
         "referenceAudio": "needed",
-        "scorePitchClassSequences": [
+        "scoreNoteDetectionStatus": "not_available_for_scanned_pdf",
+        "scoreLocationStatus": "exact_score_location_pending",
+        "referencePitchClassSequences": [
             {
                 "label": "Scherzo-Tarantelle reference audio pitch trace, first 180 seconds",
                 "source": "local reference audio transcription",
+                "sequenceKind": "reference_audio_pitch_trace",
+                "scoreLocationStatus": "exact_score_location_pending",
                 "values": WIENIAWSKI_REFERENCE_AUDIO_PITCH_CLASSES,
             }
         ],

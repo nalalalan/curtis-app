@@ -679,7 +679,7 @@ def source_training_state(
                 "note": (
                     "score passage alignment started"
                     if score_aligned_count
-                    else "pitch/rhythm transcription extracted; score match not yet proven"
+                    else "pitch/rhythm transcription extracted; score alignment not yet proven"
                     if pitch_rhythm_items
                     else "audio title match proven before source correction"
                     if blind_match_count
@@ -736,7 +736,7 @@ def source_training_state(
         "label": (
             f"{calibration_count} cal / {calibration_pitch_count} pitch windows"
             if calibration_count and not confirmed_count
-            else f"{reference_count} refs / {score_count} score matches"
+            else f"{reference_count} refs / {score_count} score alignments"
             if not pitch_rhythm_count and not calibration_pitch_count
             else f"{reference_count} refs / {pitch_rhythm_count + calibration_pitch_count} pitch windows"
         ),

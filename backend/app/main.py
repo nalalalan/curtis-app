@@ -263,13 +263,13 @@ def pdf_lines_for_detected_series(series: list[dict[str, Any]]) -> list[str]:
 
 
 def pdf_lines_for_score_matches(matches: list[dict[str, Any]], status: str) -> list[str]:
-    lines = [f"Score/reference sequence matches: {len(matches)}", f"Reference sequence status: {status}", ""]
+    lines = [f"Note/reference sequence matches: {len(matches)}", f"Reference sequence status: {status}", ""]
     for index, match in enumerate(matches, start=1):
         lines.extend(
             [
                 f"Match {index}: {match.get('pieceTitle') or 'piece'} / {match.get('matchedNoteRun') or 0} notes",
                 f"Detected: {match.get('detectedPitchClassSequence') or ''}",
-                f"Reference: {match.get('scorePitchClassSequence') or ''}",
+                f"Reference: {match.get('referencePitchClassSequence') or match.get('scorePitchClassSequence') or ''}",
                 f"Score alignment: {match.get('scoreSnippetStatus') or 'pending'}",
                 "",
             ]

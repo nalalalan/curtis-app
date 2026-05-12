@@ -132,7 +132,7 @@ function transcriptionDisplayText(value) {
     .replace(/Machine pitch extraction needs score\/audio verification:/gi, "Matched notation only:")
     .replace(/Machine pitch extraction was rejected:[^.;]*(?:[.;]\s*)?/gi, "")
     .replace(/the tracker collapsed into repeated [A-G][#b]?\d? events;?\s*/gi, "")
-    .replace(/transcription failed quality gate/gi, "score-linked transcription")
+    .replace(/transcription failed quality gate/gi, "accepted transcription")
     .replace(/transcription failed/gi, "matching evidence")
     .replace(/failed transcription/gi, "matching evidence")
     .replace(/failed quality gates?/gi, "are kept out of notation until matched")
@@ -1369,7 +1369,7 @@ function renderKeySignatureMarks(signature) {
 }
 
 function renderTrebleClef() {
-  return `<text class="treble-clef" x="24" y="70">&#xE050;</text>`;
+  return `<text class="treble-clef" x="24" y="74">&#xE050;</text>`;
 }
 
 function renderLedgerLines(y, x) {
@@ -1519,7 +1519,11 @@ function renderTranscriptionStats(transcription, record = {}) {
         ["Clip", systems ? `${systems} windows` : "ready"],
         pendingMaterial
           ? ["Match", "score or pattern"]
-          : ["Score", transcription?.scoreLinked ? "linked" : "match pending"],
+          : transcription?.scoreLinked
+            ? ["Score", "linked"]
+            : transcription?.referenceLinked
+              ? ["Reference", "note match"]
+              : ["Score", "alignment pending"],
       ];
   return `
     <div class="transcription-stats" aria-label="Transcription state">
@@ -1662,7 +1666,10 @@ function renderHeatMap(record) {
 }
 
 function recordStatusLabel(record) {
-  if (record?.matchingWorkflow?.status === "score_sequence_matches_ready") return "note match";
+  if (
+    record?.matchingWorkflow?.status === "score_sequence_matches_ready"
+    || record?.matchingWorkflow?.status === "reference_sequence_matches_ready"
+  ) return "note match";
   if (record?.transcription?.reliability === "audio_matched_fragment") return "detected note";
   if (record?.transcription?.reliability === "audio_verified_micro") return "audio-checked transcription";
   if (record?.matchingWorkflow?.status === "awaiting_piece_name") return "piece name";
@@ -1682,7 +1689,10 @@ function recordStatusLabel(record) {
 }
 
 function recordStatusTone(record) {
-  if (record?.matchingWorkflow?.status === "score_sequence_matches_ready") return "pending";
+  if (
+    record?.matchingWorkflow?.status === "score_sequence_matches_ready"
+    || record?.matchingWorkflow?.status === "reference_sequence_matches_ready"
+  ) return "pending";
   if (record?.transcription?.transcriptionReady === true) return "verified";
   return "pending";
 }
@@ -1723,7 +1733,7 @@ function transcriptionReasonLine(record) {
     ].filter(Boolean).join(" / ");
     return `Transcription: ${evidence || "detected note"}.`;
   }
-  const limit = transcription.reliabilityLimit || transcription.qualityLimit || transcription.fullSessionLimit || transcription.coverageLimit || "No score-linked transcription has been generated.";
+  const limit = transcription.reliabilityLimit || transcription.qualityLimit || transcription.fullSessionLimit || transcription.coverageLimit || "No accepted transcription has been generated.";
   return `Transcription: ${label}. ${shortTranscriptionText(limit, 180)}`;
 }
 

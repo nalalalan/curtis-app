@@ -2277,7 +2277,7 @@ h2 {
 .notation-sheet .treble-clef {
   fill: var(--ink);
   font-family: "CurtisBravura", "Bravura", "Noto Music", "Segoe UI Symbol", Georgia, "Times New Roman", serif;
-  font-size: 46px;
+  font-size: 54px;
   font-weight: 400;
 }
 
@@ -2417,7 +2417,7 @@ h2 {
 }
 
 .notation-gate .treble-clef {
-  font-size: 42px;
+  font-size: 50px;
   font-weight: 400;
 }
 

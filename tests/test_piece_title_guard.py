@@ -197,7 +197,7 @@ class PieceTitleGuardTests(unittest.TestCase):
         self.assertEqual(training["referenceTargetCount"], 3)
         self.assertEqual(training["blindAudioMatchCount"], 0)
         self.assertEqual(training["scoreAlignedWindowCount"], 0)
-        self.assertEqual(training["label"], "3 refs / 0 score matches")
+        self.assertEqual(training["label"], "3 refs / 0 score alignments")
         self.assertEqual(by_source["5-2-26"]["sampleCount"], 1)
         self.assertEqual(by_source["5-3-26"]["sampleCount"], 0)
         self.assertEqual(
