@@ -362,7 +362,7 @@ def build_snippet(
         "practiceDay": source.get("practiceDay") or "",
         "status": "transcribed" if packet["status"] == "transcribed" else "score_target_ready",
         "scoreMatchStatus": score_match_status,
-        "scoreMatchLabel": "source label only; exact played-to-score location pending",
+        "scoreMatchLabel": "score match pending",
         "score": {
             "source": target.get("scoreSource") or "",
             "sourceUrl": target.get("scoreUrl") or "",

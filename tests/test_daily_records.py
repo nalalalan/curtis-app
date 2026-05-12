@@ -138,6 +138,10 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(daily["failedTranscriptionRecordCount"], 0)
         self.assertEqual(daily["scoreAudioOnlyRecordCount"], 1)
         self.assertEqual(daily["audioEvidenceRecordCount"], 1)
+        self.assertEqual(daily["records"][0]["practiceDay"], "2025-12-20")
+        self.assertEqual(daily["records"][1]["practiceDay"], "2026-05-02")
+        self.assertEqual(daily["totalProcessedSampleSeconds"], 20)
+        self.assertEqual(daily["totalAnalyzedVideoSeconds"], daily["totalUploadedVideoSeconds"])
         self.assertEqual(record["status"], "active_time_measured")
         self.assertEqual(record["transcription"]["status"], "score_audio_only")
         self.assertEqual(record["transcription"]["qualityStatus"], "score_audio_only")
@@ -539,6 +543,16 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(transcription["renderedNoteCount"], 1)
         self.assertEqual(transcription["events"][0]["note"], "D4")
         self.assertTrue(transcription["events"][0]["strictAudioWindow"])
+        self.assertEqual(record["matchingWorkflow"]["status"], "matched_groups_ready")
+        self.assertEqual(record["matchingWorkflow"]["displayMode"], "groups_only")
+        self.assertEqual(record["matchingWorkflow"]["matchCriterion"], "note_sequence")
+        self.assertEqual(record["matchingWorkflow"]["minimumMatchedNoteRun"], 1)
+        self.assertFalse(record["matchingWorkflow"]["rhythmRequired"])
+        self.assertEqual(transcription["pdfUrl"], "/api/curtis/daily-records/2026-05-03/transcription.pdf")
+        self.assertEqual(len(record["matchGroups"]), 1)
+        self.assertEqual(record["matchGroups"][0]["clip"]["sampleId"], "Njh8_zq9_DM-10545")
+        self.assertEqual(record["matchGroups"][0]["minimumMatchedNoteRun"], 1)
+        self.assertEqual(record["matchGroups"][0]["matchCriterion"], "note_sequence")
         self.assertEqual(len(transcription["notationSystems"]), 1)
         self.assertEqual(transcription["notationSystems"][0]["clip"]["localStartSeconds"], 3.866)
         self.assertEqual(transcription["notationSystems"][0]["clip"]["localEndSeconds"], 4.458)
@@ -723,7 +737,7 @@ class DailyRecordTests(unittest.TestCase):
         self.assertNotIn("violin_pyin_onset_v3", [clip.get("pipelineVersion") for clip in record["clips"]])
         self.assertEqual(record["transcription"]["noteCount"], 24)
 
-    def test_repeated_pitch_collapse_is_reported_as_audio_paired_evidence(self):
+    def test_repeated_pitch_collapse_is_reported_as_matching_evidence(self):
         inventory = {
             "youtube": [
                 {
@@ -776,8 +790,8 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(record["transcription"]["reliability"], "score_audio_only")
         self.assertEqual(record["transcription"]["failureMode"], "repeated_pitch_collapse")
         self.assertFalse(record["transcription"]["displayNotation"])
-        self.assertEqual(record["transcription"]["qualityLabel"], "audio paired")
-        self.assertIn("Only audio-matched note/rhythm evidence", record["transcription"]["reliabilityLimit"])
+        self.assertEqual(record["transcription"]["qualityLabel"], "matching")
+        self.assertIn("Only matched note evidence", record["transcription"]["reliabilityLimit"])
         self.assertIn("score", record["mainCurtisBlocker"])
         self.assertIn("Only note/rhythm evidence", record["clips"][0]["reason"])
 

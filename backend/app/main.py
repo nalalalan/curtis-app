@@ -67,6 +67,7 @@ PAPER_PDF = PAPER_DIR / "curtis-aolabs-paper.pdf"
 PAPER_TEX = PAPER_DIR / "curtis-aolabs-paper.tex"
 PAPER_BIB = PAPER_DIR / "references.bib"
 CLIP_CACHE_DIR = RUNTIME_DIR / "clips"
+TRANSCRIPTION_PDF_CACHE_DIR = RUNTIME_DIR / "transcription-pdfs"
 STATIC_ALLOWLIST = {"index.html", "paper.html", "app.js", "styles.css", "favicon.svg", "CNAME", ".nojekyll"}
 app.add_middleware(
     CORSMiddleware,
@@ -112,6 +113,103 @@ def _paper_file_response(path: Path, *, media_type: str, filename: str | None = 
     if not path.exists():
         raise HTTPException(status_code=404, detail="paper file not found")
     return FileResponse(path, media_type=media_type, filename=filename)
+
+
+def _pdf_text(value: str) -> str:
+    return str(value or "").replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+
+
+def _minimal_pdf(path: Path, lines: list[str]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    y = 760
+    commands = ["BT", "/F1 12 Tf", "72 760 Td"]
+    for index, line in enumerate(lines[:42]):
+        if index:
+            commands.append("0 -17 Td")
+        commands.append(f"({_pdf_text(line[:110])}) Tj")
+        y -= 17
+        if y < 80:
+            break
+    commands.append("ET")
+    stream = "\n".join(commands).encode("latin-1", errors="replace")
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        b"<< /Length " + str(len(stream)).encode("ascii") + b" >>\nstream\n" + stream + b"\nendstream",
+    ]
+    content = bytearray(b"%PDF-1.4\n")
+    offsets = [0]
+    for number, obj in enumerate(objects, start=1):
+        offsets.append(len(content))
+        content.extend(f"{number} 0 obj\n".encode("ascii"))
+        content.extend(obj)
+        content.extend(b"\nendobj\n")
+    xref = len(content)
+    content.extend(f"xref\n0 {len(objects) + 1}\n0000000000 65535 f \n".encode("ascii"))
+    for offset in offsets[1:]:
+        content.extend(f"{offset:010d} 00000 n \n".encode("ascii"))
+    content.extend(
+        f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode("ascii")
+    )
+    path.write_bytes(bytes(content))
+
+
+def transcription_pdf_path(practice_day: str) -> Path:
+    safe_day = re.sub(r"[^0-9A-Za-z_-]+", "-", practice_day)[:40] or "practice-day"
+    return TRANSCRIPTION_PDF_CACHE_DIR / f"{safe_day}-transcription.pdf"
+
+
+def ensure_transcription_pdf(practice_day: str) -> Path:
+    records = base_ops(load_state())["review"]["dailyRecords"]
+    record = next((item for item in records.get("records", []) if item.get("practiceDay") == practice_day), None)
+    if not record:
+        raise HTTPException(status_code=404, detail="practice day not found")
+    transcription = record.get("transcription") if isinstance(record.get("transcription"), dict) else {}
+    groups = record.get("matchGroups") if isinstance(record.get("matchGroups"), list) else []
+    piece_title = ", ".join(
+        piece.get("title", "")
+        for piece in record.get("pieces", [])
+        if isinstance(piece, dict) and piece.get("title")
+    ) or "piece pending"
+    lines = [
+        f"Curtis transcription run / {practice_day}",
+        f"Piece: {piece_title}",
+        f"Uploaded video: {record.get('uploadedVideoLabel') or 'pending'}",
+        f"Active violin: {record.get('activeViolinLabel') or 'pending'}",
+        "Display mode: matched groups only",
+        "Match rule: note sequence, rhythm ignored, minimum run 1 note",
+        "",
+    ]
+    if groups:
+        for index, group in enumerate(groups, start=1):
+            clip = group.get("clip") if isinstance(group.get("clip"), dict) else {}
+            source = group.get("transcription") if isinstance(group.get("transcription"), dict) else {}
+            notes = source.get("notes") if isinstance(source.get("notes"), list) else []
+            event_notes = [
+                str(note.get("note"))
+                for note in notes
+                if isinstance(note, dict) and note.get("note")
+            ]
+            lines.extend(
+                [
+                    f"Group {index}: {group.get('status') or 'matched'}",
+                    f"Notes: {' '.join(event_notes[:24]) or 'none rendered'}",
+                    f"Matched note run: {group.get('matchedNoteRun') or group.get('minimumMatchedNoteRun') or 0}",
+                    f"Audio/video sample: {clip.get('sampleId') or 'sample pending'}",
+                    f"Window: {clip.get('windowLabel') or clip.get('sourceWindow') or 'window pending'}",
+                    f"Score snippet: {group.get('scoreSnippetStatus') or 'pending'}",
+                    "",
+                ]
+            )
+    else:
+        lines.append("No accepted matched groups yet.")
+    if transcription.get("rejectedMachinePitchEventCount"):
+        lines.append(f"Hidden machine pitch events: {transcription.get('rejectedMachinePitchEventCount')}")
+    target = transcription_pdf_path(practice_day)
+    _minimal_pdf(target, lines)
+    return target
 
 
 def sample_media_type(path: Path) -> str:
@@ -194,6 +292,16 @@ async def study_packet() -> dict[str, Any]:
 @app.get("/api/curtis/daily-records")
 async def daily_records() -> dict[str, Any]:
     return base_ops(load_state())["review"]["dailyRecords"]
+
+
+@app.get("/api/curtis/daily-records/{practice_day}/transcription.pdf")
+async def daily_record_transcription_pdf(practice_day: str) -> FileResponse:
+    target = ensure_transcription_pdf(practice_day)
+    return FileResponse(
+        target,
+        media_type="application/pdf",
+        filename=f"Curtis {practice_day} transcription run.pdf",
+    )
 
 
 @app.get("/api/curtis/score/page/{asset_id}/{page}")
@@ -336,6 +444,9 @@ async def piece_correction(correction: PieceCorrection) -> dict[str, Any]:
         "scrubbedCount": scrubbed_count,
     }
     save_state(state)
+    if accepted_title:
+        await asyncio.to_thread(identify_pieces_from_samples)
+        state = load_state()
     ops = base_ops(state)
     ops["correction"] = {
         "sourceKey": learned.get("sourceKey"),

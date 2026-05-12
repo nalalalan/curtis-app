@@ -19,6 +19,7 @@ MAX_NOTATION_SYSTEMS = 4
 MAX_NOTATION_SYSTEM_EVENTS = 36
 MAX_RECORDS = 120
 MAX_CLIPS_PER_DAY = 5
+MATCH_GROUP_MIN_NOTE_RUN = 1
 WEAK_TRANSCRIPTION_MIN_SECONDS = 8
 DRAFT_TRANSCRIPTION_MIN_SECONDS = 30
 WEAK_TRANSCRIPTION_MIN_NOTES = 12
@@ -35,11 +36,11 @@ MICRO_TRANSCRIPTION_MAX_NOTE_GAP_SECONDS = 0.75
 # that does not audibly match the paired clip.
 MICRO_TRANSCRIPTION_DISPLAY_ENABLED = False
 MICRO_TRANSCRIPTION_DISPLAY_LIMIT = (
-    "Candidate note/rhythm extraction is withheld because current paired-audio "
+    "Candidate note/rhythm extraction is withheld because current clip "
     "review did not match reliably enough to display as transcription."
 )
 MATCHED_FRAGMENT_DISPLAY_LIMIT = (
-    "Strict audio-matched fragments are displayed. Full-session transcription remains withheld "
+    "Strict matched fragments are displayed. Full-session transcription remains withheld "
     "until the same note/rhythm match standard works across longer playing."
 )
 ACCEPTED_AUDIO_MATCHED_FRAGMENTS: tuple[dict[str, Any], ...] = (
@@ -865,7 +866,7 @@ def matched_fragment_clip(match: dict[str, Any]) -> dict[str, Any]:
     end = source_start + local_end
     return {
         "type": "audio_matched_fragment",
-        "label": "audio-matched fragment",
+        "label": "matched fragment",
         "url": transcription.get("sourceUrl") or "",
         "sourceTitle": transcription.get("sourceTitle") or "",
         "startSeconds": round(start, 3),
@@ -1061,13 +1062,13 @@ def transcription_failure_summary(transcriptions: list[dict[str, Any]]) -> dict[
     if mode == "repeated_pitch_collapse":
         limit = (
             "The detected pitch trace did not match the audio closely enough to become notation. "
-            "Only audio-matched note/rhythm evidence renders as sheet music."
+            "Only matched note evidence renders as sheet music."
         )
     else:
-        limit = "Only audio-matched note/rhythm evidence renders as sheet music."
+        limit = "Only matched note evidence renders as sheet music."
     return {
         "qualityStatus": "score_audio_only",
-        "qualityLabel": "audio paired",
+        "qualityLabel": "matching",
         "qualityLimit": limit,
         "failureMode": mode,
         "failureWindowCount": int(sum(modes.values())),
@@ -1116,10 +1117,10 @@ def transcription_quality(
             parts.append(f"{low_confidence} low-confidence note{'s' if low_confidence != 1 else ''}")
         return {
             "qualityStatus": "sanity_corrected_draft",
-            "qualityLabel": "audio paired",
+            "qualityLabel": "matching",
             "qualityLimit": (
                 f"The machine pitch events contain {', '.join(parts)} and stay out of the music view. "
-                f"Only audio-matched note/rhythm evidence renders as sheet music.{sparse_note}"
+                f"Only matched note evidence renders as sheet music.{sparse_note}"
             ),
             "qualityMetrics": metrics,
             "segmentCount": segment_count,
@@ -1127,18 +1128,18 @@ def transcription_quality(
     if active_seconds < DRAFT_TRANSCRIPTION_MIN_SECONDS or note_count < DRAFT_TRANSCRIPTION_MIN_NOTES:
         return {
             "qualityStatus": "draft_fragment",
-            "qualityLabel": "audio paired",
+            "qualityLabel": "matching",
             "qualityLimit": (
                 f"{duration_seconds_label(active_seconds)} and {note_count} pitch events were detected; "
-                f"the paired audio is kept for verification before notation renders.{sparse_note}"
+                f"the clip is kept for verification before notation renders.{sparse_note}"
             ),
             "qualityMetrics": metrics,
             "segmentCount": segment_count,
         }
     return {
         "qualityStatus": "usable_fragment",
-        "qualityLabel": "audio paired",
-        "qualityLimit": f"Machine pitch events exist, but only audio-matched transcription renders as notation.{sparse_note}",
+        "qualityLabel": "matching",
+        "qualityLimit": f"Machine pitch events exist, but only matched transcription renders as notation.{sparse_note}",
         "qualityMetrics": metrics,
         "segmentCount": segment_count,
     }
@@ -1452,7 +1453,7 @@ def clips_for_day(
             active_duration = float(transcription.get("durationSeconds") or 0.0)
         except (TypeError, ValueError):
             active_duration = 0.0
-        reason = f"{note_count} detected pitch events paired with audio for verification before notation renders."
+        reason = f"{note_count} detected pitch events kept for verification before notation renders."
         quality = transcription.get("quality") if isinstance(transcription.get("quality"), dict) else {}
         if note_count <= 0:
             reason = (
@@ -1463,7 +1464,7 @@ def clips_for_day(
         elif quality.get("windowMode") == "detected_active_sections" and active_duration > 0:
             reason = f"{note_count} detected pitch events from {duration_seconds_label(active_duration)} of active audio; notation renders only after note-for-note verification."
         if str(transcription.get("status") or "").startswith("failed_") or quality.get("failed"):
-            reason = "Audio window kept for verification. Only note/rhythm evidence that matches the audio renders as notation."
+            reason = "Clip kept for verification. Only note/rhythm evidence that matches the audio renders as notation."
         clips.append(
             {
                 "type": "transcribed_window",
@@ -1688,14 +1689,14 @@ def musician_read(
         score_mode = "source_confirmed_score_target"
         reference_target = piece.get("score") if isinstance(piece.get("score"), dict) else reference_target
         target_label = score_target_label(reference_target)
-        confidence = "audio-matched transcription plus source label" if notes else "source label"
+        confidence = "matched transcription plus source label" if notes else "source label"
     elif calibration:
         source = "explicit title label"
         title = str(calibration.get("title") or "").strip()
         material_type = str(calibration.get("materialType") or material_type or "calibration").strip()
         score_mode = str(calibration.get("referenceKind") or "title_labeled_calibration").strip()
         target_label = score_target_label(reference_target)
-        confidence = "audio-matched transcription plus title label" if notes else "title label"
+        confidence = "matched transcription plus title label" if notes else "title label"
     elif uncertain:
         source = "fingerprint candidate"
         title = str(uncertain[0].get("title") or "").strip()
@@ -1704,7 +1705,7 @@ def musician_read(
     elif material_status == "piece_or_exercise_pending":
         source = "score-free or unidentified material"
         material_type = material_type or "unknown_or_exercise"
-        confidence = "audio-matched transcription only" if notes else "audio evidence only"
+        confidence = "matched transcription only" if notes else "audio evidence only"
 
     match = top_reference_match(display_transcriptions)
     match_title = str(match.get("title") or "").strip()
@@ -1940,13 +1941,13 @@ def build_daily_records(
                 "rejectedMachinePitchEventCount": rejected_count,
                 "detectedPitchEventCount": full_detected,
                 "displayLimit": (
-                    f"{note_count} audio-matched notes are displayed across {len(matched_fragments)} exact clips; "
+                    f"{note_count} matched notes are displayed across {len(matched_fragments)} exact clips; "
                     f"{rejected_count} machine pitch events remain hidden."
                 ),
             }
             heat_fragments = [
                 {
-                    "label": "audio-matched single-note fragments",
+                    "label": "matched single-note fragments",
                     "count": len(matched_fragments),
                     "seconds": round(matched_seconds, 3),
                     "density": 1,
@@ -1992,10 +1993,10 @@ def build_daily_records(
             quality = {
                 **quality,
                 "qualityStatus": "score_audio_only",
-                "qualityLabel": "audio paired",
+                "qualityLabel": "matching",
                 "qualityLimit": (
                     "Machine pitch events exist for sampled audio, but only verified note/rhythm notation renders. "
-                    "The paired audio is kept for matching before it becomes transcription."
+                    "The clip is kept for matching before it becomes transcription."
                 ),
                 "failureMode": "unverified_machine_pitch",
                 "failureWindowCount": len(day_transcriptions),
@@ -2054,9 +2055,9 @@ def build_daily_records(
             else "pending_media"
         )
         pending_transcription_limit = (
-            "Audio evidence is paired. This may be repertoire or a score-free technique exercise; notation waits for reliable note/rhythm extraction."
+            "Clip ready for piece or score-free technique exercise matching."
             if active_seconds and not confirmed
-            else "No full-session score-linked transcription has been generated."
+            else "Matched notation pending."
         )
         score_or_pattern_limit = (
             "Heat map waits for score alignment when this is repertoire; score-free exercises should map repeated audio and transcription patterns instead."
@@ -2069,6 +2070,38 @@ def build_daily_records(
             else transcription_quality_observations(quality, [], clips)[:2]
         )
         blocker = main_curtis_blocker(observations)
+        match_groups = [
+            {
+                "status": "note_match_confirmed",
+                "pieceTitle": confirmed[0]["title"] if confirmed else "",
+                "matchCriterion": "note_sequence",
+                "minimumMatchedNoteRun": MATCH_GROUP_MIN_NOTE_RUN,
+                "rhythmRequired": False,
+                "clip": matched_fragment_clip(item),
+                "transcription": item.get("transcription") or {},
+                "matchedNoteRun": max(
+                    MATCH_GROUP_MIN_NOTE_RUN,
+                    int((item.get("transcription") or {}).get("noteCount") or 0),
+                ),
+                "scoreSnippetStatus": "pending_score_location_match",
+            }
+            for item in matched_fragments
+        ]
+        matching_workflow = {
+            "status": (
+                "matched_groups_ready"
+                if match_groups
+                else "searching_score_match"
+                if confirmed
+                else "awaiting_piece_name"
+            ),
+            "matchCriterion": "note_sequence",
+            "minimumMatchedNoteRun": MATCH_GROUP_MIN_NOTE_RUN,
+            "rhythmRequired": False,
+            "displayMode": "groups_only",
+            "rawTranscriptionDisplay": "hidden",
+            "transcriptionRunPdfUrl": f"/api/curtis/daily-records/{day}/transcription.pdf",
+        }
         records.append(
             {
                 "practiceDay": day,
@@ -2086,6 +2119,8 @@ def build_daily_records(
                 "uncertainPieces": uncertain,
                 "materialStatus": material_status,
                 "materialLabel": material_label,
+                "matchingWorkflow": matching_workflow,
+                "matchGroups": match_groups,
                 "transcription": {
                     "status": (
                         "audio_matched_fragment"
@@ -2095,7 +2130,7 @@ def build_daily_records(
                         else "pending"
                     ),
                     "displayTitle": (
-                        "Audio-matched fragment"
+                        "Matched fragment"
                         if has_verified_transcription
                         else "Audio evidence"
                     ),
@@ -2132,9 +2167,9 @@ def build_daily_records(
                     "events": notation,
                     "repeatGroups": day_repeat_groups,
                     "limit": (
-                        "Audio evidence is available. Only notation that demonstrably matches the paired audio renders as transcription; score-free technique exercises do not require score alignment."
+                        "Only notation that matches the clip renders as transcription; score-free technique exercises do not require score alignment."
                         if active_seconds and not confirmed
-                        else "Audio evidence is available. Only notation that demonstrably matches the paired audio is rendered as transcription."
+                        else "Only notation that matches the clip renders as transcription."
                     ),
                     "musicianRead": musician_read(
                         confirmed,
@@ -2144,6 +2179,7 @@ def build_daily_records(
                         day_repeat_groups,
                         material_status,
                     ),
+                    "pdfUrl": matching_workflow["transcriptionRunPdfUrl"],
                 },
                 "clips": clips,
                 "heatMap": {
@@ -2169,9 +2205,10 @@ def build_daily_records(
             }
         )
 
-    records.sort(key=lambda item: str(item.get("practiceDay") or ""), reverse=True)
+    records.sort(key=lambda item: str(item.get("practiceDay") or ""))
     lead_transcription = lead_verified_transcription_record(records)
     total_uploaded = sum(int(record.get("uploadedVideoSeconds") or 0) for record in records)
+    total_processed = sum(int(record.get("processedSampleSeconds") or 0) for record in records)
     total_active = sum(int(record.get("activeViolinSeconds") or 0) for record in records)
     unmeasured_uploaded = max(0, total_uploaded - total_active)
     return {
@@ -2179,6 +2216,10 @@ def build_daily_records(
         "recordCount": len(records),
         "totalUploadedVideoSeconds": total_uploaded,
         "totalUploadedVideoLabel": duration_seconds_label(total_uploaded),
+        "totalAnalyzedVideoSeconds": total_uploaded,
+        "totalAnalyzedVideoLabel": duration_seconds_label(total_uploaded),
+        "totalProcessedSampleSeconds": total_processed,
+        "totalProcessedSampleLabel": duration_seconds_label(total_processed) if total_processed else "",
         "totalActiveViolinSeconds": total_active,
         "totalActiveViolinLabel": duration_seconds_label(total_active) if total_active else "",
         "unmeasuredUploadedVideoSeconds": unmeasured_uploaded,

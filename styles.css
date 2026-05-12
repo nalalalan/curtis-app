@@ -1388,11 +1388,33 @@ h2 {
 }
 
 .record-card {
-  display: block;
-  padding: 10px;
-  border: 1px solid rgba(31, 41, 39, .11);
+  position: relative;
+  display: grid;
+  grid-template-columns: 86px minmax(0, 1fr);
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid rgba(31, 41, 39, .14);
   border-radius: 8px;
-  background: rgba(245, 247, 242, .82);
+  background: rgba(255, 253, 248, .86);
+}
+
+.record-card::before {
+  display: flex;
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  align-items: flex-start;
+  justify-content: center;
+  min-height: 100%;
+  padding: 13px 7px;
+  border-right: 1px solid rgba(31, 41, 39, .12);
+  background: rgba(95, 118, 104, .08);
+  color: var(--green);
+  content: attr(data-day);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .02em;
+  line-height: 1.15;
+  text-align: center;
 }
 
 .lead-transcription-card {
@@ -1445,7 +1467,10 @@ h2 {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px 12px;
+  grid-column: 2;
   align-items: center;
+  min-height: 76px;
+  padding: 12px 12px 12px 14px;
   cursor: pointer;
   list-style: none;
 }
@@ -1454,16 +1479,30 @@ h2 {
   display: none;
 }
 
-.record-summary span {
-  grid-column: 1 / -1;
+.record-title-block {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.record-title-block span {
   font-size: 12px;
   font-weight: 680;
   text-transform: none;
 }
 
-.record-summary strong {
+.record-title-block strong {
   margin: 0;
   font-size: 16px;
+  line-height: 1.16;
+  overflow-wrap: anywhere;
+}
+
+.record-title-block small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 690;
+  line-height: 1.2;
 }
 
 .record-summary em {
@@ -1539,7 +1578,6 @@ h2 {
 }
 
 .record-card[open] .record-summary {
-  padding-bottom: 8px;
   border-bottom: 1px solid rgba(31, 41, 39, .1);
 }
 
@@ -1547,13 +1585,14 @@ h2 {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(280px, .72fr);
   gap: 14px;
+  grid-column: 2;
   align-items: start;
   padding-top: 14px;
 }
 
 .record-essentials-body {
   display: block;
-  padding-top: 10px;
+  padding: 10px 12px 12px 14px;
 }
 
 .practice-essentials {
@@ -1676,6 +1715,24 @@ h2 {
 .matched-pair-stack {
   display: grid;
   gap: 8px;
+}
+
+.transcription-pdf-link {
+  display: inline-flex;
+  width: fit-content;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  margin-top: 8px;
+  padding: 0 10px;
+  border: 1px solid rgba(31, 41, 39, .12);
+  border-radius: 999px;
+  background: rgba(255, 253, 248, .9);
+  color: var(--green);
+  font-size: 11px;
+  font-weight: 780;
+  line-height: 1;
+  text-decoration: none;
 }
 
 .matched-practice-pair {
@@ -3077,6 +3134,31 @@ h2 {
     text-align: left;
   }
 
+  .record-card {
+    grid-template-columns: 58px minmax(0, 1fr);
+  }
+
+  .record-card::before {
+    padding: 12px 5px;
+    font-size: 10px;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+  }
+
+  .record-summary {
+    min-height: 72px;
+    padding: 10px 10px 10px 12px;
+  }
+
+  .record-summary em {
+    margin-right: 28px;
+    font-size: 10px;
+  }
+
+  .record-essentials-body {
+    padding: 9px 10px 10px 12px;
+  }
+
   .video-row,
   .skill-row,
   .study-card,
@@ -3112,11 +3194,48 @@ h2 {
   }
 
   .matched-practice-pair .embedded-media video {
-    max-height: 120px;
+    max-height: 64px;
+  }
+
+  .matched-practice-pair {
+    grid-template-columns: 112px minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  .matched-practice-pair .embedded-media {
+    max-width: 112px;
+    padding: 6px;
+  }
+
+  .matched-practice-pair .embedded-media-header {
+    gap: 3px;
+  }
+
+  .matched-practice-pair .embedded-media-header span,
+  .matched-practice-pair .embedded-media-header strong {
+    font-size: 9px;
+  }
+
+  .matched-practice-pair .embedded-media audio {
+    height: 24px;
+  }
+
+  .matched-notation-head {
+    gap: 6px;
+    justify-content: flex-end;
+  }
+
+  .matched-notation-head span {
+    display: none;
+  }
+
+  .matched-notation-head strong {
+    font-size: 11px;
   }
 
   .matched-notation-panel .notation-sheet svg {
-    min-width: 480px;
+    min-width: 200px;
+    height: 74px;
   }
 
   .score-heat-box b {

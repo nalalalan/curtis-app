@@ -620,7 +620,7 @@ def transcription_failure_state(events: list[dict[str, Any]], quality: dict[str,
             "failureLimit": (
                 "Machine pitch extraction was rejected because the note stream collapsed into repeated "
                 f"{collapse.get('pitchCollapseDominantNote') or 'single-pitch'} events. "
-                "Use the paired audio evidence; do not treat these notes as the played passage."
+                "Use the matched clip evidence; do not treat these notes as the played passage."
             ),
             **collapse,
         }

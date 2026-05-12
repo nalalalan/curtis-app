@@ -234,11 +234,11 @@ function activePracticeText(records) {
 }
 
 function archiveVideoText(records, totals) {
-  return records?.totalUploadedVideoLabel || totals?.totalPracticeLabel || "0h";
+  return records?.totalAnalyzedVideoLabel || records?.totalUploadedVideoLabel || totals?.totalPracticeLabel || "0h";
 }
 
 function archiveVideoSeconds(records, totals) {
-  return Number(records?.totalUploadedVideoSeconds) || Number(totals?.totalPracticeSeconds) || 0;
+  return Number(records?.totalAnalyzedVideoSeconds) || Number(records?.totalUploadedVideoSeconds) || Number(totals?.totalPracticeSeconds) || 0;
 }
 
 function unmeasuredArchiveText(records, totals) {
@@ -387,7 +387,7 @@ async function submitPieceLabel(form) {
   const acceptedTitle = String(input?.value || "").trim();
   const status = form.querySelector("[data-piece-label-status]");
   if (!acceptedTitle) {
-    if (status) status.textContent = "Piece name required.";
+    if (status) status.textContent = "Required.";
     return;
   }
   const button = form.querySelector("button");
@@ -395,7 +395,7 @@ async function submitPieceLabel(form) {
     button.disabled = true;
     button.textContent = "Saving";
   }
-  if (status) status.textContent = "Saving label.";
+  if (status) status.textContent = "Saving.";
   try {
     const ops = await apiFetch("/api/curtis/piece-corrections", {
       method: "POST",
@@ -411,7 +411,7 @@ async function submitPieceLabel(form) {
     render();
   } catch (error) {
     backend.lastError = String(error?.message || error || "label save failed");
-    if (status) status.textContent = "Save failed.";
+    if (status) status.textContent = "Failed.";
     if (button) {
       button.disabled = false;
       button.textContent = "Save";
@@ -480,7 +480,7 @@ function currentStateText(ops) {
   const strictCount = Number(records.scoreAudioOnlyRecordCount || records.failedTranscriptionRecordCount || 0);
   const withheld = Number(records.withheldNonViolinSampleCount) || 0;
   if (recordCount && withheld && !audioEvidenceCount) return `${withheld} sampled media windows withheld / no violin-positive audio yet / ${recordCount} indexed practice days.`;
-  if (recordCount) return `${transcribedCount} matched transcription / ${strictCount} audio-paired windows / ${audioEvidenceCount} playable audio / ${processedCount} processed / ${recordCount} indexed practice days.`;
+  if (recordCount) return `${transcribedCount} matched transcription / ${strictCount} matching windows / ${audioEvidenceCount} playable clips / ${processedCount} processed / ${recordCount} indexed practice days.`;
   if (findingCount) return `${findingCount} Curtis-focused findings. ${progressPlan(ops)?.oneFocus || "Review active."}`;
   const sectionCount = reviewSections(ops).length;
   if (sectionCount) return `${sectionCount} audio/video sections scanned. Musicianship judgment pending.`;
@@ -524,7 +524,7 @@ function dailyRecords(ops) {
 
 function dailyRecordList(ops) {
   const records = dailyRecords(ops).records;
-  return Array.isArray(records) ? records : [];
+  return Array.isArray(records) ? chronologicalRecords(records) : [];
 }
 
 function analyzedRecordList(ops) {
@@ -532,7 +532,21 @@ function analyzedRecordList(ops) {
 }
 
 function latestDailyRecord(ops) {
-  return analyzedRecordList(ops)[0] || dailyRecordList(ops)[0] || null;
+  const analyzed = analyzedRecordList(ops);
+  const records = dailyRecordList(ops);
+  return analyzed[analyzed.length - 1] || records[records.length - 1] || null;
+}
+
+function practiceDayTime(record) {
+  const value = Date.parse(`${record?.practiceDay || ""}T00:00:00Z`);
+  return Number.isFinite(value) ? value : 0;
+}
+
+function chronologicalRecords(records) {
+  return [...records].sort((a, b) => (
+    practiceDayTime(a) - practiceDayTime(b)
+    || String(a?.practiceDay || "").localeCompare(String(b?.practiceDay || ""))
+  ));
 }
 
 function isVerifiedTranscriptionRecord(record) {
@@ -571,13 +585,7 @@ function leadTranscriptionRecord(ops) {
 }
 
 function orderedAnalyzedRecords(ops) {
-  const records = analyzedRecordList(ops);
-  const lead = leadTranscriptionRecord(ops);
-  if (!lead) return records;
-  return [
-    lead,
-    ...records.filter((record) => record !== lead && record?.practiceDay !== lead.practiceDay)
-  ];
+  return analyzedRecordList(ops);
 }
 
 function repertoireEvidence(ops) {
@@ -1064,36 +1072,27 @@ function renderStatus() {
   if (elements.studyCount) {
     const recordCount = Number(records.recordCount) || 0;
     const transcribedCount = Number(records.transcribedRecordCount) || 0;
-    const audioEvidenceCount = Number(records.audioEvidenceRecordCount) || 0;
-    const analyzedCount = analyzedRecords.length;
-    const strictCount = Number(records.scoreAudioOnlyRecordCount || records.failedTranscriptionRecordCount || 0);
-    const withheld = Number(records.withheldNonViolinSampleCount) || 0;
-    elements.studyCount.textContent = withheld && !audioEvidenceCount
-      ? `0 violin audio / ${withheld} withheld`
-      : `${transcribedCount} matched / ${strictCount} audio-paired / ${audioEvidenceCount} audio / ${analyzedCount} processed`;
+    elements.studyCount.textContent = `${transcribedCount} match / ${recordCount} days`;
   }
   const activeSeconds = Number(records.totalActiveViolinSeconds) || 0;
   const archiveSeconds = archiveVideoSeconds(records, totals);
   const archiveLabel = archiveVideoText(records, totals);
-  setText(elements.totalPracticeHours, archiveLabel);
+  setText(elements.totalPracticeHours, activePracticeText(records));
   setText(
     elements.practiceSince,
-    [
-      totals?.sinceTitle ? `Since ${totals.sinceTitle}` : "Since marker pending",
-      totals?.sincePublishedAt ? formatDate(totals.sincePublishedAt) : "",
-      totals?.videoCount ? `${totals.videoCount} videos` : "",
-      "uploaded session duration"
-    ].filter(Boolean).join(" / ")
+    "active only"
   );
-  setText(elements.uploadedVideoTime, activePracticeText(records));
+  setText(elements.uploadedVideoTime, archiveLabel);
   setText(
     elements.uploadedVideoScope,
-    archiveSeconds
-      ? `${percentText(activeSeconds, archiveSeconds)} of archive measured from fetched clips.`
-      : "Full active-playing detection pending."
+    [
+      totals?.videoCount ? `${totals.videoCount} videos` : "",
+      totals?.sincePublishedAt ? `since ${formatDate(totals.sincePublishedAt)}` : "",
+      archiveSeconds ? `${percentText(activeSeconds, archiveSeconds)} active` : "",
+    ].filter(Boolean).join(" / ") || "pending"
   );
   setText(elements.recordSummary, unmeasuredArchiveText(records, totals));
-  setText(elements.currentState, activeHoursLimitText(ops, records, totals));
+  setText(elements.currentState, records.totalProcessedSampleLabel ? `${records.totalProcessedSampleLabel} fetched clips` : "clips pending");
   setText(elements.pieceCount, `${pieceList.length} ${pieceList.length === 1 ? "piece" : "pieces"}`);
   const dayTotal = Number(records.recordCount) || days.length;
   setText(elements.dayCount, `${dayTotal} ${dayTotal === 1 ? "day" : "days"}`);
@@ -1304,7 +1303,7 @@ function renderKeySignatureMarks(signature) {
 }
 
 function renderTrebleClef() {
-  return `<text class="treble-clef" x="24" y="78">&#119070;</text>`;
+  return `<text class="treble-clef" x="22" y="58">&#xE050;</text>`;
 }
 
 function renderLedgerLines(y, x) {
@@ -1419,7 +1418,7 @@ function renderNotationSheet(events, options = {}) {
 
 function renderVerifiedNotationGate(
   title = "Matched transcription",
-  detail = "Only notes that audibly match the paired audio render here.",
+  detail = "Only notes that match the clip render here.",
   keySignature = {}
 ) {
   const staffLines = [30, 40, 50, 60, 70].map((y) => `<line x1="22" x2="698" y1="${y}" y2="${y}" />`).join("");
@@ -1447,11 +1446,11 @@ function renderTranscriptionStats(transcription, record = {}) {
     ? [
         ["Clef", transcription?.clef === "treble" ? "treble" : "pending"],
         ["Key", signature.label || "key pending"],
-        ["Status", ["audio_verified_micro", "audio_matched_fragment"].includes(transcription?.reliability) ? "audio-matched" : "matched"],
+        ["Status", ["audio_verified_micro", "audio_matched_fragment"].includes(transcription?.reliability) ? "matched" : "matched"],
       ]
     : [
         ["Notation", "pending"],
-        ["Audio", systems ? `${systems} paired windows` : "paired"],
+        ["Clip", systems ? `${systems} windows` : "ready"],
         pendingMaterial
           ? ["Match", "score or pattern"]
           : ["Score", transcription?.scoreLinked ? "linked" : "match pending"],
@@ -1507,8 +1506,8 @@ function renderNotationSystems(transcription, fallbackEvents = [], record = {}) 
   const displayNotation = transcription?.displayNotation !== false && transcription?.transcriptionReady === true;
   if (!displayNotation) {
     const withheldText = record?.materialStatus === "piece_or_exercise_pending"
-      ? "Notation withheld until notes/rhythms audibly match the paired audio."
-      : "Notation withheld until audio match and score match.";
+      ? "Match pending."
+      : "Score match pending.";
     return `
       <div class="notation-systems" aria-label="Audio evidence windows">
         ${systems.map((system) => {
@@ -1529,7 +1528,7 @@ function renderNotationSystems(transcription, fallbackEvents = [], record = {}) 
     `;
   }
   return `
-    <div class="notation-systems" aria-label="Audio-paired transcription windows">
+    <div class="notation-systems" aria-label="Matched transcription windows">
       ${systems.map((system) => {
         const window = system?.sourceWindow ? ` / ${system.sourceWindow}s` : "";
         const clipLabel = system?.clip ? clipWindowLabel(system.clip) : "";
@@ -1537,7 +1536,7 @@ function renderNotationSystems(transcription, fallbackEvents = [], record = {}) 
           <div class="notation-system">
             <div class="notation-system-head">
               <span>${escapeHtml(displayNotation ? system?.label || "Line" : "Audio evidence")}${escapeHtml(window)}</span>
-              <strong>${escapeHtml(displayNotation ? (["audio_verified_micro", "audio_matched_fragment"].includes(transcription?.reliability) ? "audio-matched" : "matched notation") : clipLabel || "sample window")}</strong>
+              <strong>${escapeHtml(displayNotation ? (["audio_verified_micro", "audio_matched_fragment"].includes(transcription?.reliability) ? "matched" : "notation") : clipLabel || "sample window")}</strong>
             </div>
             ${renderSnippetAudio(system?.clip || {}, "Window audio")}
             ${displayNotation ? renderNotationSheet(system?.events || [], {
@@ -1599,11 +1598,12 @@ function renderHeatMap(record) {
 function recordStatusLabel(record) {
   if (record?.transcription?.reliability === "audio_matched_fragment") return "matched fragment";
   if (record?.transcription?.reliability === "audio_verified_micro") return "matched transcription";
-  if (record?.transcription?.qualityStatus === "candidate_micro_transcription") return "audio paired";
-  if (record?.transcription?.reliability === "transcription_failed") return "audio paired";
-  if (record?.transcription?.qualityStatus === "transcription_failed") return "audio paired";
-  if (record?.transcription?.reliability === "score_audio_only") return "audio paired";
-  if (record?.transcription?.qualityStatus === "score_audio_only") return "audio paired";
+  if (record?.matchingWorkflow?.status === "awaiting_piece_name") return "piece name";
+  if (record?.transcription?.qualityStatus === "candidate_micro_transcription") return "matching";
+  if (record?.transcription?.reliability === "transcription_failed") return "matching";
+  if (record?.transcription?.qualityStatus === "transcription_failed") return "matching";
+  if (record?.transcription?.reliability === "score_audio_only") return "matching";
+  if (record?.transcription?.qualityStatus === "score_audio_only") return "matching";
   if (record?.transcription?.reliability === "machine_pitch_hidden") return "audio evidence";
   if (record?.transcription?.qualityStatus === "machine_pitch_hidden") return "audio evidence";
   if (record?.transcription?.qualityStatus === "weak_fragment") return "audio evidence";
@@ -1623,17 +1623,17 @@ function transcriptionEvidenceLabel(transcription) {
   if (transcription?.reliability === "audio_matched_fragment") return "matched fragment";
   if (transcription?.reliability === "audio_verified_micro") return "matched transcription";
   if (transcription?.displayNotation === true && transcription?.transcriptionReady === true) return "matched transcription";
-  if (transcription?.qualityStatus === "candidate_micro_transcription") return "audio paired";
+  if (transcription?.qualityStatus === "candidate_micro_transcription") return "matching";
   if (
     transcription?.reliability === "transcription_failed"
     || transcription?.qualityStatus === "transcription_failed"
     || transcription?.reliability === "score_audio_only"
     || transcription?.qualityStatus === "score_audio_only"
   ) {
-    return "audio paired";
+    return "matching";
   }
   if (transcription?.reliability === "machine_pitch_hidden" || transcription?.status === "not_ready") {
-    return "audio paired";
+    return "matching";
   }
   return transcription?.qualityLabel || (transcription?.status === "ready" ? "matched transcription" : "notation not ready");
 }
@@ -1641,8 +1641,8 @@ function transcriptionEvidenceLabel(transcription) {
 function transcriptionReasonLine(record) {
   const transcription = record?.transcription || {};
   const label = transcriptionEvidenceLabel(transcription);
-  if (label === "audio paired") {
-    return "Transcription: audio paired; notation pending.";
+  if (label === "matching") {
+    return "Notation pending.";
   }
   if (label === "matched fragment") {
     const events = Array.isArray(transcription.events) ? transcription.events : [];
@@ -1866,9 +1866,9 @@ function renderEmbeddedMedia(record, preferredClip = null) {
     `;
   }
   const label = clip?.type === "audio_matched_fragment"
-    ? "Audio-matched fragment"
+    ? "Clip"
     : clip?.type === "audio_evidence_window" || clip?.type === "pitch_trace_snippet" || clip?.type === "transcribed_window"
-    ? "Audio evidence sample"
+    ? "Clip"
     : "Local clip";
   return `
     <div class="embedded-media" aria-label="Playable local practice clip">
@@ -1889,7 +1889,7 @@ function matchedNotationSystem(transcription) {
 
 function renderSingleMatchedPracticePair(record, clip, transcription, system) {
   const notationClip = system?.clip || clip || primaryNotationClip(record) || primaryPlayableClip(record);
-  const mediaClip = notationClip ? { ...notationClip, type: "audio_matched_fragment", label: "audio-matched fragment" } : notationClip;
+  const mediaClip = notationClip ? { ...notationClip, type: "audio_matched_fragment", label: "matched fragment" } : notationClip;
   const events = Array.isArray(system?.events) && system.events.length
     ? system.events
     : Array.isArray(transcription?.events) ? transcription.events : [];
@@ -1905,7 +1905,7 @@ function renderSingleMatchedPracticePair(record, clip, transcription, system) {
       <section class="matched-notation-panel">
         <div class="matched-notation-head">
           <span>Transcription</span>
-          <strong>${escapeHtml(label || "audio-matched")}</strong>
+          <strong>${escapeHtml(label || "matched")}</strong>
         </div>
         ${renderNotationSheet(events, {
           keySignature: {},
@@ -1928,17 +1928,20 @@ function renderMatchedPracticePair(record, clip, transcription) {
   `;
 }
 
+function renderTranscriptionRunLink(record, transcription) {
+  const href = assetUrl(transcription?.pdfUrl || record?.matchingWorkflow?.transcriptionRunPdfUrl || "");
+  if (!href) return "";
+  return `<a class="transcription-pdf-link" href="${escapeHtml(href)}" target="_blank" rel="noreferrer">PDF</a>`;
+}
+
 function renderPendingPracticePair(record) {
-  const transcription = record?.transcription || {};
-  const line = transcription?.fullSessionLimit || transcription?.qualityLimit || transcription?.coverageLimit || "No matched audio-transcription pair yet.";
   return `
     <div class="matched-practice-pair pending-practice-pair" aria-label="Matched pair pending">
       <section class="matched-notation-panel">
         <div class="matched-notation-head">
-          <span>Audio-transcription pair</span>
+          <span>Match</span>
           <strong>pending</strong>
         </div>
-        <p class="empty">${escapeHtml(shortTranscriptionText(line, 150))}</p>
         ${renderPieceLabelForm(record)}
       </section>
     </div>
@@ -2046,18 +2049,18 @@ function renderPieceLabelForm(record) {
   const current = recordPieceText(record);
   const hasConfirmed = Array.isArray(record?.pieces) && record.pieces.length > 0;
   const disabled = !backend.online || (!source.sourceUrl && !source.sourceTitle);
-  const placeholder = hasConfirmed ? current : "Piece name";
+  const placeholder = hasConfirmed ? current : "Piece name(s)";
   return `
     <form class="piece-label-form" data-piece-label-form
       data-source-url="${escapeHtml(source.sourceUrl)}"
       data-source-title="${escapeHtml(source.sourceTitle)}"
       data-video-id="${escapeHtml(source.videoId)}">
       <label>
-        <span>Piece label</span>
+        <span>Piece</span>
         <input name="acceptedTitle" type="text" autocomplete="off" placeholder="${escapeHtml(placeholder)}"${disabled ? " disabled" : ""}>
       </label>
       <button type="submit"${disabled ? " disabled" : ""}>Save</button>
-      <small data-piece-label-status>Source label only. Score snippets still require audio/score agreement.</small>
+      <small data-piece-label-status></small>
     </form>
   `;
 }
@@ -2103,7 +2106,7 @@ function renderLeadTranscription(record) {
   const confidence = Number(transcription.microMedianConfidence || 0);
   const meta = [
     record.practiceDay || "",
-    noteCount ? `${noteCount} audio-matched notes` : "",
+    noteCount ? `${noteCount} matched notes` : "",
     seconds ? `${seconds.toFixed(1)}s` : "",
     confidence ? `${Math.round(confidence * 100)}% median confidence` : "",
   ].filter(Boolean).join(" / ");
@@ -2131,24 +2134,25 @@ function renderDailyRecord(record, index = 0) {
     ? (openTarget === "first" && index === 0) || openTarget === record.practiceDay
     : index === 0;
   const meta = [
-    record.practiceDay,
     record.uploadedVideoLabel ? `${record.uploadedVideoLabel} uploaded` : "",
     record.activeViolinLabel ? `${record.activeViolinLabel} active` : record.activeTimeStatus === "pending_media" ? "active time pending" : "",
-    transcriptionEvidenceLabel(record.transcription || {})
   ].filter(Boolean).join(" / ");
+  const noteLine = displayNotation ? transcriptionReasonLine(record) : "";
   return `
-    <details class="record-card" data-status="${escapeHtml(record.status || "pending")}"${openForReview ? " open" : ""}>
+    <details class="record-card" data-day="${escapeHtml(record.practiceDay || "")}" data-status="${escapeHtml(record.status || "pending")}"${openForReview ? " open" : ""}>
       <summary class="record-summary">
-        <span>${escapeHtml(meta)}</span>
-        <strong>${escapeHtml(recordPieceText(record))}</strong>
+        <div class="record-title-block">
+          <span>${escapeHtml(meta)}</span>
+          <strong>${escapeHtml(recordPieceText(record))}</strong>
+          ${noteLine ? `<small>${escapeHtml(noteLine.replace(/^Transcription:\s*/i, ""))}</small>` : ""}
+        </div>
         <em data-tone="${escapeHtml(recordStatusTone(record))}">${escapeHtml(recordStatusLabel(record))}</em>
-        <small class="row-evidence-line">${escapeHtml(recordEvidenceLine(record, scoreSnippet))}</small>
-        <small class="row-transcription-line">${escapeHtml(transcriptionReasonLine(record))}</small>
       </summary>
       <div class="record-card-body record-essentials-body">
         ${displayNotation
           ? renderMatchedPracticePair(record, playableClip, transcription)
           : renderPendingPracticePair(record)}
+        ${renderTranscriptionRunLink(record, transcription)}
       </div>
     </details>
   `;
@@ -2172,7 +2176,7 @@ function renderStudy() {
   elements.studyList.innerHTML = [
     analyzed.map((record, index) => renderDailyRecord(record, index)).join(""),
     pendingCount
-      ? `<p class="empty pending-index">${pendingCount} indexed practice days are waiting for active-playing detection. Uploaded video is still stored separately and is not counted as active practice.</p>`
+      ? `<p class="empty pending-index">${pendingCount} days pending analysis.</p>`
       : ""
   ].join("");
 }
@@ -2234,7 +2238,7 @@ function renderPieces() {
                   ? renderNotationSheet(item.transcriptionSnippet, {
                     keySignature: item?.score?.keySignature || {},
                     systemLabel: "Matched snippet",
-                    qualityLimit: "Audio-matched notation paired with this evidence.",
+                    qualityLimit: "Matched notation linked to this evidence.",
                     maxNotes: 24
                   })
                   : ""}
