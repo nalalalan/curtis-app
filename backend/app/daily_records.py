@@ -25,6 +25,22 @@ MATCH_GROUP_MIN_DISTINCT_PITCH_CLASSES = 2
 MAX_DETECTED_NOTE_SERIES_API = 16
 MAX_DETECTED_NOTE_SERIES_NOTES = 96
 NOTE_SERIES_MAX_GAP_SECONDS = 1.5
+SCORE_SEQUENCE_READY_TOKENS = {
+    "symbolic score sequence ready",
+    "source confirmed symbolic score",
+    "source confirmed score sequence",
+    "manual score sequence ready",
+    "musicxml score ready",
+    "score notes verified",
+    "score pitch classes verified",
+}
+SCORE_SEQUENCE_SOURCE_TOKENS = (
+    "musicxml",
+    "manual score",
+    "source-confirmed score",
+    "source confirmed score",
+    "verified score",
+)
 WEAK_TRANSCRIPTION_MIN_SECONDS = 8
 DRAFT_TRANSCRIPTION_MIN_SECONDS = 30
 WEAK_TRANSCRIPTION_MIN_NOTES = 12
@@ -631,20 +647,104 @@ def detected_note_series(
     return series if max_series is None else series[:max_series]
 
 
+def score_sequence_location_verified_for_candidate(target: dict[str, Any], candidate: dict[str, Any]) -> bool:
+    if exact_score_location_ready(candidate.get("scoreLocationStatus") or candidate.get("status")):
+        return True
+    locations = target.get("scoreSequenceLocations") if isinstance(target.get("scoreSequenceLocations"), list) else []
+    if not locations:
+        return False
+    candidate_label = str(candidate.get("label") or candidate.get("section") or "").strip()
+    candidate_start = int(safe_float(candidate.get("referenceStart"), -1))
+    candidate_end = int(safe_float(candidate.get("referenceEnd"), -1))
+    for location in locations:
+        if not isinstance(location, dict):
+            continue
+        if not exact_score_location_ready(location.get("status") or location.get("scoreLocationStatus")):
+            continue
+        label = str(location.get("label") or location.get("section") or "").strip()
+        if candidate_label and label and candidate_label == label:
+            return True
+        start = int(safe_float(location.get("referenceStart"), -1))
+        end = int(safe_float(location.get("referenceEnd"), -1))
+        if candidate_start >= 0 and candidate_end > candidate_start and start >= 0 and end >= candidate_end:
+            return start <= candidate_start
+    return False
+
+
+def exact_score_location_count_for_target(target: dict[str, Any], sequences: list[dict[str, Any]]) -> int:
+    count = sum(
+        1
+        for sequence in sequences
+        if exact_score_location_ready(sequence.get("scoreLocationStatus") or sequence.get("status"))
+    )
+    locations = target.get("scoreSequenceLocations") if isinstance(target.get("scoreSequenceLocations"), list) else []
+    count += sum(
+        1
+        for location in locations
+        if isinstance(location, dict) and exact_score_location_ready(location.get("status") or location.get("scoreLocationStatus"))
+    )
+    if count == 0 and raw_score_sequence_count(target) == 1 and exact_score_location_ready(target.get("scoreLocationStatus")):
+        return 1
+    return count
+
+
+def score_sequence_source_ready(target: dict[str, Any], candidate: dict[str, Any]) -> bool:
+    statuses = [
+        str(target.get("scoreNoteDetectionStatus") or ""),
+        str(candidate.get("scoreNoteDetectionStatus") or ""),
+        str(candidate.get("scoreLocationStatus") or candidate.get("status") or ""),
+    ]
+    compact_statuses = {compact_text(value) for value in statuses if value}
+    if score_sequence_location_verified_for_candidate(target, candidate):
+        return True
+    if raw_score_sequence_count(target) == 1 and exact_score_location_ready(target.get("scoreLocationStatus")):
+        return True
+    if compact_statuses & SCORE_SEQUENCE_READY_TOKENS:
+        return True
+    source = f"{target.get('scoreSource') or ''} {candidate.get('source') or ''}".lower()
+    return any(token in source for token in SCORE_SEQUENCE_SOURCE_TOKENS)
+
+
+def raw_score_sequence_count(target: dict[str, Any]) -> int:
+    total = 0
+    for key in ("pitchClassSequence", "scorePitchClassSequence", "firstNotes"):
+        if isinstance(target.get(key), list):
+            total += 1
+    for key in ("pitchClassSequences", "scorePitchClassSequences"):
+        value = target.get(key)
+        if isinstance(value, list):
+            total += len(value)
+    return total
+
+
 def reference_pitch_class_sequences(target: dict[str, Any]) -> list[dict[str, Any]]:
     candidates: list[Any] = []
     for key in ("pitchClassSequence", "scorePitchClassSequence", "firstNotes"):
         value = target.get(key)
         if isinstance(value, list):
-            candidates.append({"label": key, "values": value, "sequenceKind": "symbolic_score_sequence"})
+            candidates.append(
+                {
+                    "label": key,
+                    "values": value,
+                    "sequenceKind": "symbolic_score_sequence",
+                    "candidateSourceType": "score_sequence",
+                }
+            )
     for key in ("pitchClassSequences", "scorePitchClassSequences"):
         value = target.get(key)
         if isinstance(value, list):
             for item in value:
                 if isinstance(item, dict):
-                    candidates.append({"sequenceKind": "symbolic_score_sequence", **item})
+                    candidates.append({"sequenceKind": "symbolic_score_sequence", "candidateSourceType": "score_sequence", **item})
                 else:
-                    candidates.append({"label": key, "values": item, "sequenceKind": "symbolic_score_sequence"})
+                    candidates.append(
+                        {
+                            "label": key,
+                            "values": item,
+                            "sequenceKind": "symbolic_score_sequence",
+                            "candidateSourceType": "score_sequence",
+                        }
+                    )
     value = target.get("referencePitchClassSequences")
     if isinstance(value, list):
         for item in value:
@@ -661,6 +761,8 @@ def reference_pitch_class_sequences(target: dict[str, Any]) -> list[dict[str, An
             sequence_kind = str(candidate.get("sequenceKind") or "").strip()
             if "reference audio" in source.lower():
                 sequence_kind = "reference_audio_pitch_trace"
+            if candidate.get("candidateSourceType") == "score_sequence" and not score_sequence_source_ready(target, candidate):
+                continue
         else:
             values = candidate
             label = f"reference sequence {index}"
@@ -682,6 +784,72 @@ def reference_pitch_class_sequences(target: dict[str, Any]) -> list[dict[str, An
                 }
             )
     return sequences
+
+
+def score_reference_audit_for_target(target: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(target, dict):
+        target = {}
+    sequences = reference_pitch_class_sequences(target)
+    symbolic_count = sum(1 for sequence in sequences if reference_sequence_is_score_derived(sequence))
+    reference_audio_count = sum(
+        1
+        for sequence in sequences
+        if str(sequence.get("sequenceKind") or "").lower() == "reference_audio_pitch_trace"
+    )
+    raw_score_count = raw_score_sequence_count(target)
+    ignored_score_count = max(0, raw_score_count - symbolic_count)
+    exact_location_count = exact_score_location_count_for_target(target, sequences)
+    if symbolic_count and exact_location_count:
+        status = "score_location_ready"
+    elif symbolic_count:
+        status = "symbolic_score_sequence_ready"
+    elif reference_audio_count:
+        status = "reference_audio_only"
+    elif raw_score_count:
+        status = "score_sequence_ignored_missing_source"
+    elif target.get("scoreAssetId"):
+        status = "scanned_score_without_symbolic_notes"
+    else:
+        status = "score_reference_missing"
+    return {
+        "status": status,
+        "scoreNoteDetectionStatus": target.get("scoreNoteDetectionStatus") or "",
+        "scoreLocationStatus": target.get("scoreLocationStatus") or "",
+        "rawScoreSequenceCount": raw_score_count,
+        "symbolicScoreSequenceCount": symbolic_count,
+        "referenceAudioSequenceCount": reference_audio_count,
+        "ignoredScoreSequenceCount": ignored_score_count,
+        "exactScoreLocationCount": exact_location_count,
+        "scoreAssetId": target.get("scoreAssetId") or "",
+    }
+
+
+def score_reference_audit_for_pieces(pieces: list[dict[str, Any]]) -> dict[str, Any]:
+    audits = [
+        score_reference_audit_for_target(piece.get("score") if isinstance(piece.get("score"), dict) else {})
+        for piece in pieces
+    ]
+    return {
+        "status": (
+            "score_location_ready"
+            if any(item["exactScoreLocationCount"] for item in audits)
+            else "symbolic_score_sequence_ready"
+            if any(item["symbolicScoreSequenceCount"] for item in audits)
+            else "reference_audio_only"
+            if any(item["referenceAudioSequenceCount"] for item in audits)
+            else "score_sequence_ignored_missing_source"
+            if any(item["ignoredScoreSequenceCount"] for item in audits)
+            else "scanned_score_without_symbolic_notes"
+            if any(item["status"] == "scanned_score_without_symbolic_notes" for item in audits)
+            else "score_reference_missing"
+        ),
+        "rawScoreSequenceCount": sum(item["rawScoreSequenceCount"] for item in audits),
+        "symbolicScoreSequenceCount": sum(item["symbolicScoreSequenceCount"] for item in audits),
+        "referenceAudioSequenceCount": sum(item["referenceAudioSequenceCount"] for item in audits),
+        "ignoredScoreSequenceCount": sum(item["ignoredScoreSequenceCount"] for item in audits),
+        "exactScoreLocationCount": sum(item["exactScoreLocationCount"] for item in audits),
+        "targets": audits,
+    }
 
 
 def reference_sequence_is_score_derived(reference: dict[str, Any]) -> bool:
@@ -2399,6 +2567,7 @@ def build_daily_records(
         all_detected_series = detected_note_series(day_transcriptions, max_series=None)
         api_detected_series = all_detected_series[:MAX_DETECTED_NOTE_SERIES_API]
         score_reference_state = score_reference_status(confirmed)
+        score_reference_audit = score_reference_audit_for_pieces(confirmed)
         score_sequence_matches = score_sequence_matches_for_series(all_detected_series, confirmed)
         heat_fragments: list[dict[str, Any]] = []
         day_repeat_groups: list[dict[str, Any]] = []
@@ -2639,6 +2808,7 @@ def build_daily_records(
             "referenceSequenceMatchCount": len(score_sequence_matches),
             "scoreLocationVerifiedCount": score_location_verified_count,
             "scoreReferenceStatus": score_reference_state,
+            "scoreReferenceAudit": score_reference_audit,
             "transcriptionRunPdfUrl": f"/api/curtis/daily-records/{day}/transcription.pdf",
         }
         records.append(
@@ -2704,6 +2874,7 @@ def build_daily_records(
                     "referenceSequenceMatchCount": len(score_sequence_matches),
                     "scoreLocationVerifiedCount": score_location_verified_count,
                     "scoreReferenceStatus": score_reference_state,
+                    "scoreReferenceAudit": score_reference_audit,
                     "scoreSequenceMatches": score_sequence_matches[:6],
                     **coverage,
                     **quality,

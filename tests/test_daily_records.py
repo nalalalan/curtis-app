@@ -662,6 +662,7 @@ class DailyRecordTests(unittest.TestCase):
                     "title": "Source-backed test piece",
                     "score": {
                         "scoreAssetId": "test-score",
+                        "scoreNoteDetectionStatus": "source_confirmed_score_sequence",
                         "scoreBoxes": [{"x": 10, "y": 20, "width": 30, "height": 8, "label": "mm. 1-2"}],
                         "scorePitchClassSequences": [
                             {"label": "mm. 1-2", "values": ["G4", "D5", "A5", "B5", "E6"]},
@@ -728,6 +729,50 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(matches[0]["score"]["cropStatus"], "exact_score_location_verified")
         self.assertEqual(matches[0]["scoreSnippetStatus"], "exact_score_location_verified")
 
+    def test_verified_score_location_does_not_unlock_unrelated_score_sequences(self):
+        transcriptions = [
+            {
+                "transcriptionId": "unrelated-run",
+                "sampleId": "sample-1",
+                "sourceTitle": "test",
+                "sourceUrl": "https://www.youtube.com/watch?v=test",
+                "sourceWindow": "*10-20",
+                "status": "transcribed",
+                "notes": [
+                    note("E4", 0, 0.2),
+                    note("F4", 0.2, 0.35),
+                    note("G4", 0.35, 0.5),
+                ],
+            }
+        ]
+        series = detected_note_series(transcriptions, max_series=None)
+        matches = score_sequence_matches_for_series(
+            series,
+            [
+                {
+                    "title": "Source-backed test piece",
+                    "score": {
+                        "scoreAssetId": "test-score",
+                        "scoreSequenceLocations": [
+                            {
+                                "label": "mm. 1-2",
+                                "status": "exact_score_location_verified",
+                                "referenceStart": 0,
+                                "referenceEnd": 3,
+                                "boxes": [{"x": 10, "y": 20, "width": 30, "height": 8, "label": "mm. 1-2"}],
+                            }
+                        ],
+                        "scorePitchClassSequences": [
+                            {"label": "mm. 1-2", "values": ["D4", "A4", "B4"]},
+                            {"label": "mm. 3-4", "values": ["E4", "F4", "G4"]},
+                        ],
+                    },
+                }
+            ],
+        )
+
+        self.assertEqual(matches, [])
+
     def test_repeated_single_pitch_series_does_not_create_score_match_group(self):
         transcriptions = [
             {
@@ -748,6 +793,7 @@ class DailyRecordTests(unittest.TestCase):
                     "title": "Source-backed test piece",
                     "score": {
                         "scoreAssetId": "test-score",
+                        "scoreNoteDetectionStatus": "source_confirmed_score_sequence",
                         "scorePitchClassSequences": [
                             {"label": "mm. 1-2", "values": ["D4", "D5", "D5", "D4", "D6"]},
                         ],
@@ -786,6 +832,7 @@ class DailyRecordTests(unittest.TestCase):
                     "title": "Source-backed test piece",
                     "score": {
                         "scoreAssetId": "test-score",
+                        "scoreNoteDetectionStatus": "source_confirmed_score_sequence",
                         "scorePitchClassSequences": [
                             {"label": "mm. 1-2", "values": ["D4", "A#4", "G4", "D4"]},
                         ],
@@ -796,6 +843,35 @@ class DailyRecordTests(unittest.TestCase):
 
         self.assertEqual(matches[0]["detectedPitchClassSequence"], "D A# G D")
         self.assertEqual([item["note"] for item in matches[0]["displayDetectedNotes"]], ["D4", "A#4", "G4", "D4"])
+
+    def test_scanned_pdf_score_sequences_are_ignored_until_note_source_is_proven(self):
+        transcriptions = [
+            {
+                "transcriptionId": "scanned-score-run",
+                "sampleId": "sample-1",
+                "sourceTitle": "test",
+                "sourceUrl": "https://www.youtube.com/watch?v=test",
+                "sourceWindow": "*10-20",
+                "status": "transcribed",
+                "notes": [
+                    note("D4", 0, 0.2),
+                    note("A4", 0.2, 0.35),
+                    note("B4", 0.35, 0.5),
+                ],
+            }
+        ]
+        series = detected_note_series(transcriptions, max_series=None)
+        score_target = {
+            "scoreAssetId": "scanned-score",
+            "scoreNoteDetectionStatus": "not_available_for_scanned_pdf",
+            "scorePitchClassSequences": [
+                {"label": "bad ocr guess", "values": ["D4", "A4", "B4"]},
+            ],
+        }
+
+        matches = score_sequence_matches_for_series(series, [{"title": "Scanned PDF", "score": score_target}])
+
+        self.assertEqual(matches, [])
 
     def test_unaccepted_audio_matched_fragment_stays_hidden(self):
         inventory = {
