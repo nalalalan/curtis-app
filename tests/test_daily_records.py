@@ -206,11 +206,12 @@ class DailyRecordTests(unittest.TestCase):
                 "tempoBpm": 72,
                 "quality": {"windowMode": "detected_active_sections"},
                 "durationSeconds": 4.0,
-                "noteCount": 3,
+                "noteCount": 4,
                 "notes": [
                     note("D4", 0.0, 0.5),
-                    note("A4", 0.6, 1.1),
-                    note("B4", 1.2, 1.7),
+                    note("A#4", 0.6, 1.1),
+                    note("G4", 1.2, 1.7),
+                    note("D4", 1.8, 2.2),
                 ],
             }
         ]
@@ -233,6 +234,9 @@ class DailyRecordTests(unittest.TestCase):
         self.assertTrue(record["matchGroups"])
         self.assertEqual(record["matchGroups"][0]["score"]["assetId"], "wieniawski-scherzo-tarantelle-vln")
         self.assertFalse(record["matchGroups"][0]["rhythmRequired"])
+        self.assertEqual([item["note"] for item in record["matchGroups"][0]["transcription"]["notes"]], ["D4", "A#4", "G4", "D4"])
+        self.assertEqual(record["matchGroups"][0]["clip"]["localStartSeconds"], 0.0)
+        self.assertEqual(record["matchGroups"][0]["clip"]["localEndSeconds"], 2.2)
 
     def test_score_free_exercise_days_are_not_forced_into_score_matching(self):
         inventory = {
@@ -663,6 +667,7 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(matches[0]["detectedPitchClassSequence"], "D A B")
         self.assertEqual(matches[0]["scorePitchClassSequence"], "D A B")
         self.assertEqual(matches[0]["detectedPitchClassSequenceCompact"], "D A B")
+        self.assertEqual([item["note"] for item in matches[0]["displayDetectedNotes"]], ["D4", "A4", "B4"])
         self.assertEqual(matches[0]["minimumDistinctPitchClasses"], 2)
         self.assertFalse(matches[0]["rhythmRequired"])
 

@@ -692,6 +692,19 @@ def compact_pitch_class_sequence(values: list[str]) -> list[str]:
     return compact
 
 
+def compact_notes_by_pitch_class(notes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    compact: list[dict[str, Any]] = []
+    previous = ""
+    for note in notes:
+        current = str(note.get("pitchClass") or "").strip()
+        if not current:
+            continue
+        if current != previous:
+            compact.append(note)
+        previous = current
+    return compact
+
+
 def score_sequence_matches_for_series(
     series: list[dict[str, Any]],
     pieces: list[dict[str, Any]],
@@ -723,6 +736,9 @@ def score_sequence_matches_for_series(
                     score_sequence = reference_values[r0:r1]
                     if len(set(detected_sequence)) < MATCH_GROUP_MIN_DISTINCT_PITCH_CLASSES:
                         continue
+                    run_notes = run.get("notes") if isinstance(run.get("notes"), list) else []
+                    matched_notes = run_notes[q0:q1] if query == raw_query else []
+                    display_notes = compact_notes_by_pitch_class(matched_notes)
                     best_for_reference = {
                         "status": "score_sequence_match",
                         "pieceTitle": piece.get("title") or "",
@@ -736,6 +752,8 @@ def score_sequence_matches_for_series(
                         "scorePitchClassSequence": " ".join(score_sequence),
                         "detectedPitchClassSequenceCompact": " ".join(compact_pitch_class_sequence(detected_sequence)),
                         "scorePitchClassSequenceCompact": " ".join(compact_pitch_class_sequence(score_sequence)),
+                        "matchedDetectedNotes": matched_notes,
+                        "displayDetectedNotes": display_notes,
                         "scoreSequenceLabel": reference.get("label") or "",
                         "scoreSnippetStatus": "sequence_match_score_location_pending",
                         "score": {
@@ -787,6 +805,42 @@ def detected_series_clip(series: dict[str, Any]) -> dict[str, Any]:
         "audioUrl": f"{media_url}/clip?start={local_start:.3f}&end={local_end:.3f}" if media_url and local_end > local_start else "",
         "localStartSeconds": round(local_start, 3),
         "localEndSeconds": round(local_end, 3),
+    }
+
+
+def matched_series_for_group(match: dict[str, Any]) -> dict[str, Any]:
+    series = match.get("detectedSeries") if isinstance(match.get("detectedSeries"), dict) else {}
+    display_notes = match.get("displayDetectedNotes") if isinstance(match.get("displayDetectedNotes"), list) else []
+    span_notes = match.get("matchedDetectedNotes") if isinstance(match.get("matchedDetectedNotes"), list) else []
+    if not display_notes:
+        display_notes = span_notes
+    if not display_notes:
+        display_notes = series.get("notes") if isinstance(series.get("notes"), list) else []
+    if not span_notes:
+        span_notes = display_notes
+    if not span_notes:
+        return series
+    local_start = min(safe_float(note.get("startSeconds")) for note in span_notes if isinstance(note, dict))
+    local_end = max(safe_float(note.get("endSeconds"), local_start) for note in span_notes if isinstance(note, dict))
+    source_start = parse_window_start(str(series.get("sourceWindow") or ""))
+    pitch_classes = [str(note.get("pitchClass") or "") for note in display_notes if isinstance(note, dict) and note.get("pitchClass")]
+    return {
+        **series,
+        "startSeconds": round(source_start + local_start, 3),
+        "endSeconds": round(source_start + local_end, 3),
+        "localStartSeconds": round(local_start, 3),
+        "localEndSeconds": round(local_end, 3),
+        "durationSeconds": round(max(0.0, local_end - local_start), 3),
+        "noteCount": len(display_notes),
+        "displayedNoteCount": len(display_notes),
+        "omittedNoteCount": 0,
+        "notes": display_notes,
+        "noteSeries": [str(note.get("note") or "") for note in display_notes if isinstance(note, dict)],
+        "pitchClasses": pitch_classes,
+        "collapsedPitchClasses": compact_pitch_class_sequence(pitch_classes),
+        "noteSeriesLabel": " ".join(str(note.get("note") or "") for note in display_notes if isinstance(note, dict)),
+        "pitchClassSeriesLabel": " ".join(pitch_classes),
+        "collapsedPitchClassSeriesLabel": " ".join(compact_pitch_class_sequence(pitch_classes)),
     }
 
 
@@ -2358,22 +2412,24 @@ def build_daily_records(
             else transcription_quality_observations(quality, [], clips)[:2]
         )
         blocker = main_curtis_blocker(observations)
-        match_groups = [
-            {
-                **match,
-                "clip": detected_series_clip(match.get("detectedSeries") if isinstance(match.get("detectedSeries"), dict) else {}),
-                "transcription": {
-                    "status": "score_sequence_match",
-                    "notes": (match.get("detectedSeries") or {}).get("notes", []),
-                    "noteCount": (match.get("detectedSeries") or {}).get("noteCount", 0),
-                    "sourceTitle": (match.get("detectedSeries") or {}).get("sourceTitle", ""),
-                    "sourceUrl": (match.get("detectedSeries") or {}).get("sourceUrl", ""),
-                    "sourceWindow": (match.get("detectedSeries") or {}).get("sourceWindow", ""),
-                    "sampleId": (match.get("detectedSeries") or {}).get("sampleId", ""),
-                },
-            }
-            for match in score_sequence_matches
-        ]
+        match_groups = []
+        for match in score_sequence_matches:
+            matched_series = matched_series_for_group(match)
+            match_groups.append(
+                {
+                    **match,
+                    "clip": detected_series_clip(matched_series),
+                    "transcription": {
+                        "status": "score_sequence_match",
+                        "notes": matched_series.get("notes", []),
+                        "noteCount": matched_series.get("noteCount", 0),
+                        "sourceTitle": matched_series.get("sourceTitle", ""),
+                        "sourceUrl": matched_series.get("sourceUrl", ""),
+                        "sourceWindow": matched_series.get("sourceWindow", ""),
+                        "sampleId": matched_series.get("sampleId", ""),
+                    },
+                }
+            )
         if match_groups:
             score_alignment_status = "pitch_sequence_match"
             score_or_pattern_limit = "Pitch sequence matched to the piece reference; exact measure/rhythm alignment remains pending."
