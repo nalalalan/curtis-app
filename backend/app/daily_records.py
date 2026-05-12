@@ -756,6 +756,14 @@ def score_sequence_matches_for_series(
                     raw_indices = query_info["indices"][q0:q1]
                     matched_notes = [run_notes[index] for index in raw_indices if 0 <= index < len(run_notes)]
                     display_notes = matched_notes if query_info["collapsed"] else compact_notes_by_pitch_class(matched_notes)
+                    score_boxes = target.get("scoreBoxes") if isinstance(target.get("scoreBoxes"), list) else []
+                    selected_boxes = score_boxes
+                    if len(score_boxes) > 1 and reference_values:
+                        box_index = min(
+                            len(score_boxes) - 1,
+                            max(0, int((r0 / max(1, len(reference_values))) * len(score_boxes))),
+                        )
+                        selected_boxes = [score_boxes[box_index]]
                     best_for_reference = {
                         "status": "score_sequence_match",
                         "pieceTitle": piece.get("title") or "",
@@ -763,6 +771,9 @@ def score_sequence_matches_for_series(
                         "minimumMatchedNoteRun": MATCH_GROUP_MIN_NOTE_RUN,
                         "minimumDistinctPitchClasses": MATCH_GROUP_MIN_DISTINCT_PITCH_CLASSES,
                         "matchedNoteRun": int(candidate["length"]),
+                        "referenceStart": r0,
+                        "referenceEnd": r1,
+                        "referenceLength": len(reference_values),
                         "rhythmRequired": False,
                         "detectedSeries": run,
                         "detectedPitchClassSequence": " ".join(detected_sequence),
@@ -779,6 +790,8 @@ def score_sequence_matches_for_series(
                             "source": target.get("scoreSource") or "",
                             "sourceUrl": target.get("scoreUrl") or "",
                             "pdfUrl": target.get("scorePdfUrl") or "",
+                            "boxes": selected_boxes,
+                            "cropStatus": "sequence_region_estimate" if selected_boxes else "exact_score_location_pending",
                         },
                     }
                 if best_for_reference:
@@ -2583,6 +2596,12 @@ def build_daily_records(
     total_processed = sum(int(record.get("processedSampleSeconds") or 0) for record in records)
     total_active = sum(int(record.get("activeViolinSeconds") or 0) for record in records)
     unmeasured_uploaded = max(0, total_uploaded - total_processed)
+    active_ratio = (float(total_active) / float(total_processed)) if total_processed else 0.0
+    estimated_total_active = (
+        int(round(total_active + (unmeasured_uploaded * active_ratio)))
+        if total_processed and unmeasured_uploaded
+        else total_active
+    )
     return {
         "status": "ready" if records else "pending",
         "recordCount": len(records),
@@ -2596,6 +2615,15 @@ def build_daily_records(
         "totalPracticeTimeLabel": duration_seconds_label(total_active) if total_active else "",
         "totalActiveViolinSeconds": total_active,
         "totalActiveViolinLabel": duration_seconds_label(total_active) if total_active else "",
+        "estimatedTotalPracticeTimeSeconds": estimated_total_active,
+        "estimatedTotalPracticeTimeLabel": duration_seconds_label(estimated_total_active) if estimated_total_active else "",
+        "estimatedPracticeRatio": round(active_ratio, 4) if active_ratio else 0.0,
+        "estimatedPracticeBasis": (
+            f"{duration_seconds_label(total_active)} detected from {duration_seconds_label(total_processed)} checked"
+            if total_processed and total_active
+            else ""
+        ),
+        "estimatedPracticeStatus": "estimated_from_checked_windows" if total_processed and unmeasured_uploaded else "measured",
         "unmeasuredUploadedVideoSeconds": unmeasured_uploaded,
         "unmeasuredUploadedVideoLabel": duration_seconds_label(unmeasured_uploaded) if unmeasured_uploaded else "",
         "activeMeasurementStatus": "partial" if unmeasured_uploaded else "complete" if total_uploaded else "pending",

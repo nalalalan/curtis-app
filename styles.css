@@ -1054,6 +1054,21 @@ h2 {
   max-height: 190px;
 }
 
+.score-image-crop {
+  min-height: 170px;
+  aspect-ratio: 1.75 / 1;
+  background: #fffdf8;
+}
+
+.score-image-crop img {
+  width: auto;
+  height: auto;
+  max-width: none;
+  max-height: none;
+  object-fit: initial;
+  transform-origin: top left;
+}
+
 .score-image-compact .score-box b {
   top: -21px;
   font-size: 9px;

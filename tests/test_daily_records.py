@@ -148,6 +148,9 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(daily["totalProcessedSampleSeconds"], 20)
         self.assertEqual(daily["totalAnalyzedVideoSeconds"], daily["totalProcessedSampleSeconds"])
         self.assertEqual(daily["totalPracticeTimeSeconds"], daily["totalActiveViolinSeconds"])
+        self.assertEqual(daily["estimatedPracticeStatus"], "estimated_from_checked_windows")
+        self.assertGreater(daily["estimatedTotalPracticeTimeSeconds"], daily["totalPracticeTimeSeconds"])
+        self.assertIn("detected from", daily["estimatedPracticeBasis"])
         self.assertEqual(record["status"], "active_time_measured")
         self.assertEqual(record["transcription"]["status"], "score_audio_only")
         self.assertEqual(record["transcription"]["qualityStatus"], "score_audio_only")
@@ -654,6 +657,7 @@ class DailyRecordTests(unittest.TestCase):
                     "title": "Source-backed test piece",
                     "score": {
                         "scoreAssetId": "test-score",
+                        "scoreBoxes": [{"x": 10, "y": 20, "width": 30, "height": 8, "label": "mm. 1-2"}],
                         "scorePitchClassSequences": [
                             {"label": "mm. 1-2", "values": ["G4", "D5", "A5", "B5", "E6"]},
                         ],
@@ -669,6 +673,8 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(matches[0]["detectedPitchClassSequenceCompact"], "D A B")
         self.assertEqual([item["note"] for item in matches[0]["displayDetectedNotes"]], ["D4", "A4", "B4"])
         self.assertEqual(matches[0]["minimumDistinctPitchClasses"], 2)
+        self.assertEqual(matches[0]["score"]["boxes"][0]["label"], "mm. 1-2")
+        self.assertEqual(matches[0]["score"]["cropStatus"], "sequence_region_estimate")
         self.assertFalse(matches[0]["rhythmRequired"])
 
     def test_repeated_single_pitch_series_does_not_create_score_match_group(self):

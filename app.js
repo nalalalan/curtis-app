@@ -234,6 +234,20 @@ function activePracticeText(records) {
   return seconds ? formatDurationSeconds(seconds) : "pending";
 }
 
+function estimatedPracticeText(records) {
+  const seconds = Number(records?.estimatedTotalPracticeTimeSeconds) || 0;
+  if (!seconds || records?.estimatedPracticeStatus === "measured") return activePracticeText(records);
+  return records?.estimatedTotalPracticeTimeLabel || formatDurationSeconds(seconds);
+}
+
+function practiceTimeCaption(records) {
+  const basis = String(records?.estimatedPracticeBasis || "").trim();
+  if (records?.estimatedPracticeStatus === "estimated_from_checked_windows" && basis) {
+    return `estimate / ${basis}`;
+  }
+  return "detected playing";
+}
+
 function archiveVideoText(records, totals) {
   return records?.totalUploadedVideoLabel || totals?.totalPracticeLabel || "0h";
 }
@@ -1094,10 +1108,10 @@ function renderStatus() {
   const scannedSeconds = scannedVideoSeconds(records);
   const archiveSeconds = archiveVideoSeconds(records, totals);
   const archiveLabel = archiveVideoText(records, totals);
-  setText(elements.totalPracticeHours, activePracticeText(records));
+  setText(elements.totalPracticeHours, estimatedPracticeText(records));
   setText(
     elements.practiceSince,
-    "detected playing"
+    practiceTimeCaption(records)
   );
   setText(elements.uploadedVideoTime, scannedVideoText(records));
   setText(
@@ -1154,6 +1168,34 @@ function scoreBoxes(score) {
   return [];
 }
 
+function normalizedScoreBox(box, padding = 4) {
+  const x = Math.max(0, Math.min(100, Number(box?.x) || 0));
+  const y = Math.max(0, Math.min(100, Number(box?.y) || 0));
+  const width = Math.max(1, Math.min(100 - x, Number(box?.width) || 1));
+  const height = Math.max(1, Math.min(100 - y, Number(box?.height) || 1));
+  const paddedX = Math.max(0, x - padding);
+  const paddedY = Math.max(0, y - padding);
+  return {
+    x: paddedX,
+    y: paddedY,
+    width: Math.min(100 - paddedX, width + padding * 2),
+    height: Math.min(100 - paddedY, height + padding * 2),
+  };
+}
+
+function renderScoreCrop(score, boxes) {
+  const imageUrl = scoreImageUrl(score);
+  const box = Array.isArray(boxes) && boxes.length ? boxes[0] : null;
+  if (!imageUrl || !box) return "";
+  const crop = normalizedScoreBox(box);
+  const scale = Math.max(100, 10000 / crop.width);
+  return `
+    <div class="score-image score-image-compact score-image-crop" aria-label="Cropped score snippet">
+      <img src="${escapeHtml(imageUrl)}" alt="" style="width:${scale.toFixed(2)}%; transform:translate(-${crop.x.toFixed(2)}%, -${crop.y.toFixed(2)}%);">
+    </div>
+  `;
+}
+
 function explicitScoreMatchValue(value) {
   const clean = compactText(value);
   if (!clean) return false;
@@ -1204,6 +1246,7 @@ function renderScoreImage(snippet, compact = false) {
     return `<div class="score-placeholder">Score render pending.</div>`;
   }
   const boxes = scoreBoxes(score);
+  if (compact && boxes.length) return renderScoreCrop(score, boxes);
   const compactClass = compact ? " score-image-compact" : "";
   return `
     <div class="score-image${compactClass}" aria-label="Annotated score snippet">
