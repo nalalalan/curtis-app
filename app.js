@@ -2239,14 +2239,12 @@ function renderDailyRecord(record, index = 0) {
     record.activeViolinLabel ? `${record.activeViolinLabel} practice` : record.activeTimeStatus === "pending_media" ? "practice pending" : "",
     record.uploadedVideoLabel ? `${record.uploadedVideoLabel} video` : "",
   ].filter(Boolean).join(" / ");
-  const noteLine = displayNotation ? transcriptionReasonLine(record) : "";
   return `
     <details class="record-card" data-day="${escapeHtml(record.practiceDay || "")}" data-status="${escapeHtml(record.status || "pending")}"${openForReview ? " open" : ""}>
       <summary class="record-summary">
         <div class="record-title-block">
           <span>${escapeHtml(meta)}</span>
           <strong>${escapeHtml(recordPieceText(record))}</strong>
-          ${noteLine ? `<small>${escapeHtml(noteLine.replace(/^Transcription:\s*/i, ""))}</small>` : ""}
         </div>
         <em data-tone="${escapeHtml(recordStatusTone(record))}">${escapeHtml(recordStatusLabel(record))}</em>
       </summary>
