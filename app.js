@@ -2261,17 +2261,7 @@ function renderTranscriptionRunLink(record, transcription) {
 }
 
 function renderPendingPracticePair(record) {
-  return `
-    <div class="matched-practice-pair pending-practice-pair" aria-label="Practice evidence pending">
-      <section class="matched-notation-panel">
-        <div class="matched-notation-head">
-          <span>Match</span>
-          <strong>pending</strong>
-        </div>
-        ${renderPieceLabelForm(record)}
-      </section>
-    </div>
-  `;
+  return renderPieceLabelForm(record);
 }
 
 function renderClipEvidencePair({ clip, observation, repeatGroup, notationEvents, pieceTitle, keySignature, notationReady = false }) {
