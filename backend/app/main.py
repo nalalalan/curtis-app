@@ -177,7 +177,7 @@ def ensure_transcription_pdf(practice_day: str) -> Path:
         f"Curtis transcription run / {practice_day}",
         f"Piece: {piece_title}",
         f"Uploaded video: {record.get('uploadedVideoLabel') or 'pending'}",
-        f"Active violin: {record.get('activeViolinLabel') or 'pending'}",
+        f"Total practice time: {record.get('activeViolinLabel') or 'pending'}",
         "Display mode: matched groups only",
         "Match rule: note sequence, rhythm ignored, minimum run 1 note",
         "",

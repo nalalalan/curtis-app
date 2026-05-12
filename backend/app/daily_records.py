@@ -1328,7 +1328,7 @@ def problem_observations(
                 "evidence": primary_clip,
                 "transcriptionSnippet": [],
                 "confidence": "pending_media",
-                "curtisReadinessIssue": "Curtis cannot make a playing-quality claim until active violin audio is processed.",
+                "curtisReadinessIssue": "Curtis cannot make a playing-quality claim until violin-playing audio is processed.",
             }
         ]
     if not notation:
@@ -2210,16 +2210,18 @@ def build_daily_records(
     total_uploaded = sum(int(record.get("uploadedVideoSeconds") or 0) for record in records)
     total_processed = sum(int(record.get("processedSampleSeconds") or 0) for record in records)
     total_active = sum(int(record.get("activeViolinSeconds") or 0) for record in records)
-    unmeasured_uploaded = max(0, total_uploaded - total_active)
+    unmeasured_uploaded = max(0, total_uploaded - total_processed)
     return {
         "status": "ready" if records else "pending",
         "recordCount": len(records),
         "totalUploadedVideoSeconds": total_uploaded,
         "totalUploadedVideoLabel": duration_seconds_label(total_uploaded),
-        "totalAnalyzedVideoSeconds": total_uploaded,
-        "totalAnalyzedVideoLabel": duration_seconds_label(total_uploaded),
+        "totalAnalyzedVideoSeconds": total_processed,
+        "totalAnalyzedVideoLabel": duration_seconds_label(total_processed) if total_processed else "",
         "totalProcessedSampleSeconds": total_processed,
         "totalProcessedSampleLabel": duration_seconds_label(total_processed) if total_processed else "",
+        "totalPracticeTimeSeconds": total_active,
+        "totalPracticeTimeLabel": duration_seconds_label(total_active) if total_active else "",
         "totalActiveViolinSeconds": total_active,
         "totalActiveViolinLabel": duration_seconds_label(total_active) if total_active else "",
         "unmeasuredUploadedVideoSeconds": unmeasured_uploaded,
@@ -2235,11 +2237,11 @@ def build_daily_records(
         "failedTranscriptionRecordCount": sum(1 for record in records if record.get("transcription", {}).get("reliability") == "transcription_failed"),
         "leadTranscriptionPracticeDay": lead_transcription.get("practiceDay") if lead_transcription else "",
         "records": records[:MAX_RECORDS],
-        "method": "Groups title-confirmed practice videos by practice day, then attaches uploaded duration, active-time evidence, playable audio/video windows, score targets, and repertoire evidence.",
+        "method": "Groups title-confirmed practice videos by practice day, then attaches uploaded duration, detected violin-playing time, playable audio/video windows, score targets, and repertoire evidence.",
         "limit": (
-            "Uploaded archive duration is visible separately. Exact active violin hours require fetched media "
-            "and are incomplete until each practice video is segmented; media samples are withheld unless they "
-            "are explicitly violin-positive."
+            "Total practice time means detected violin-playing footage and is independent from transcription. "
+            "Uploaded archive duration is visible separately. Exact practice time for the full archive requires "
+            "checking every practice video for violin-playing windows."
         ),
     }
 

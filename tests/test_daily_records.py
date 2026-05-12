@@ -127,9 +127,9 @@ class DailyRecordTests(unittest.TestCase):
         self.assertGreater(daily["totalUploadedVideoSeconds"], daily["totalActiveViolinSeconds"])
         self.assertEqual(
             daily["unmeasuredUploadedVideoSeconds"],
-            daily["totalUploadedVideoSeconds"] - daily["totalActiveViolinSeconds"],
+            daily["totalUploadedVideoSeconds"] - daily["totalProcessedSampleSeconds"],
         )
-        self.assertIn("Uploaded archive duration is visible separately", daily["limit"])
+        self.assertIn("Total practice time means detected violin-playing footage", daily["limit"])
         self.assertEqual(record["videoCount"], 2)
         self.assertEqual(record["uploadedVideoSeconds"], 900)
         self.assertLess(record["activeViolinSeconds"], record["uploadedVideoSeconds"])
@@ -141,7 +141,8 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(daily["records"][0]["practiceDay"], "2025-12-20")
         self.assertEqual(daily["records"][1]["practiceDay"], "2026-05-02")
         self.assertEqual(daily["totalProcessedSampleSeconds"], 20)
-        self.assertEqual(daily["totalAnalyzedVideoSeconds"], daily["totalUploadedVideoSeconds"])
+        self.assertEqual(daily["totalAnalyzedVideoSeconds"], daily["totalProcessedSampleSeconds"])
+        self.assertEqual(daily["totalPracticeTimeSeconds"], daily["totalActiveViolinSeconds"])
         self.assertEqual(record["status"], "active_time_measured")
         self.assertEqual(record["transcription"]["status"], "score_audio_only")
         self.assertEqual(record["transcription"]["qualityStatus"], "score_audio_only")

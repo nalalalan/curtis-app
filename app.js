@@ -133,8 +133,8 @@ function transcriptionDisplayText(value) {
     .replace(/Machine pitch extraction was rejected:[^.;]*(?:[.;]\s*)?/gi, "")
     .replace(/the tracker collapsed into repeated [A-G][#b]?\d? events;?\s*/gi, "")
     .replace(/transcription failed quality gate/gi, "score-linked transcription")
-    .replace(/transcription failed/gi, "audio-paired evidence")
-    .replace(/failed transcription/gi, "audio-paired evidence")
+    .replace(/transcription failed/gi, "matching evidence")
+    .replace(/failed transcription/gi, "matching evidence")
     .replace(/failed quality gates?/gi, "are kept out of notation until matched")
     .replace(/fail the transcription gate/gi, "stay out of notation until matched")
     .replace(/fails the transcription gate/gi, "stays out of notation until matched")
@@ -143,7 +143,7 @@ function transcriptionDisplayText(value) {
     .replace(/The transcription section stays visible with score\/audio evidence; ?/gi, "")
     .replace(/not shown as sheet music/gi, "not rendered as sheet music")
     .replace(/staff output hidden until verified/gi, "notation renders only after audible note match")
-    .replace(/hidden machine evidence/gi, "audio-paired evidence")
+    .replace(/hidden machine evidence/gi, "matching evidence")
     .replace(/hidden machine notes/gi, "unverified machine notes")
     .replace(/hidden from/gi, "not used in")
     .replace(/rejected from notation/gi, "not used as notation")
@@ -228,39 +228,50 @@ function percentText(part, total) {
 }
 
 function activePracticeText(records) {
-  const seconds = Number(records?.totalActiveViolinSeconds) || 0;
+  const seconds = Number(records?.totalPracticeTimeSeconds ?? records?.totalActiveViolinSeconds) || 0;
+  if (records?.totalPracticeTimeLabel) return records.totalPracticeTimeLabel;
   if (records?.totalActiveViolinLabel) return records.totalActiveViolinLabel;
   return seconds ? formatDurationSeconds(seconds) : "pending";
 }
 
 function archiveVideoText(records, totals) {
-  return records?.totalAnalyzedVideoLabel || records?.totalUploadedVideoLabel || totals?.totalPracticeLabel || "0h";
+  return records?.totalUploadedVideoLabel || totals?.totalPracticeLabel || "0h";
 }
 
 function archiveVideoSeconds(records, totals) {
-  return Number(records?.totalAnalyzedVideoSeconds) || Number(records?.totalUploadedVideoSeconds) || Number(totals?.totalPracticeSeconds) || 0;
+  return Number(records?.totalUploadedVideoSeconds) || Number(totals?.totalPracticeSeconds) || 0;
+}
+
+function scannedVideoText(records) {
+  const label = records?.totalAnalyzedVideoLabel || records?.totalProcessedSampleLabel || "";
+  const seconds = Number(records?.totalAnalyzedVideoSeconds ?? records?.totalProcessedSampleSeconds) || 0;
+  return label || (seconds ? formatDurationSeconds(seconds) : "0s");
+}
+
+function scannedVideoSeconds(records) {
+  return Number(records?.totalAnalyzedVideoSeconds ?? records?.totalProcessedSampleSeconds) || 0;
 }
 
 function unmeasuredArchiveText(records, totals) {
   const explicit = Number(records?.unmeasuredUploadedVideoSeconds);
   const seconds = Number.isFinite(explicit) && explicit > 0
     ? explicit
-    : Math.max(0, archiveVideoSeconds(records, totals) - (Number(records?.totalActiveViolinSeconds) || 0));
+    : Math.max(0, archiveVideoSeconds(records, totals) - scannedVideoSeconds(records));
   return seconds ? formatDurationSeconds(seconds) : "0s";
 }
 
 function activeHoursLimitText(ops, records, totals) {
   const archiveSeconds = archiveVideoSeconds(records, totals);
-  const activeSeconds = Number(records?.totalActiveViolinSeconds) || 0;
-  const coverage = percentText(activeSeconds, archiveSeconds);
+  const scannedSeconds = scannedVideoSeconds(records);
+  const coverage = percentText(scannedSeconds, archiveSeconds);
   const blocker = ops?.media?.lastMediaRun?.blockers?.includes("youtube_media_fetch_requires_owner_browser_or_export");
   const withheld = Number(records?.withheldNonViolinSampleCount) || 0;
   if (!archiveSeconds) return "Practice archive not indexed yet.";
-  if (withheld && !activeSeconds) return `${withheld} sampled media window${withheld === 1 ? "" : "s"} withheld until violin-positive audio is found.`;
-  if (withheld) return `${coverage} measured from violin-positive windows; ${withheld} sampled window${withheld === 1 ? "" : "s"} withheld.`;
-  if (blocker) return `${coverage} measured. Full active-hours scan needs owner media export/browser access.`;
-  if (records?.activeMeasurementStatus === "partial") return `${coverage} measured. Full active-hours scan still running/incomplete.`;
-  return "Archive active-time coverage complete.";
+  if (withheld && !scannedSeconds) return `${withheld} sampled media window${withheld === 1 ? "" : "s"} checked / no violin-playing time counted.`;
+  if (withheld) return `${coverage} video checked / ${withheld} sampled window${withheld === 1 ? "" : "s"} not counted as practice.`;
+  if (blocker) return `${coverage} video checked. Full practice-time scan needs owner media export/browser access.`;
+  if (records?.activeMeasurementStatus === "partial") return `${coverage} video checked. Full practice-time scan incomplete.`;
+  return "Practice-time scan complete.";
 }
 
 function timedUrl(url, startSeconds = 0) {
@@ -1074,25 +1085,31 @@ function renderStatus() {
     const transcribedCount = Number(records.transcribedRecordCount) || 0;
     elements.studyCount.textContent = `${transcribedCount} match / ${recordCount} days`;
   }
-  const activeSeconds = Number(records.totalActiveViolinSeconds) || 0;
+  const scannedSeconds = scannedVideoSeconds(records);
   const archiveSeconds = archiveVideoSeconds(records, totals);
   const archiveLabel = archiveVideoText(records, totals);
   setText(elements.totalPracticeHours, activePracticeText(records));
   setText(
     elements.practiceSince,
-    "active only"
+    "detected playing"
   );
-  setText(elements.uploadedVideoTime, archiveLabel);
+  setText(elements.uploadedVideoTime, scannedVideoText(records));
   setText(
     elements.uploadedVideoScope,
     [
+      archiveSeconds ? `${percentText(scannedSeconds, archiveSeconds)} checked` : "",
+      archiveLabel ? `of ${archiveLabel}` : "",
+    ].filter(Boolean).join(" / ") || "scan pending"
+  );
+  setText(elements.recordSummary, archiveLabel);
+  setText(
+    elements.currentState,
+    [
       totals?.videoCount ? `${totals.videoCount} videos` : "",
       totals?.sincePublishedAt ? `since ${formatDate(totals.sincePublishedAt)}` : "",
-      archiveSeconds ? `${percentText(activeSeconds, archiveSeconds)} active` : "",
-    ].filter(Boolean).join(" / ") || "pending"
+      `${unmeasuredArchiveText(records, totals)} unchecked`,
+    ].filter(Boolean).join(" / ")
   );
-  setText(elements.recordSummary, unmeasuredArchiveText(records, totals));
-  setText(elements.currentState, records.totalProcessedSampleLabel ? `${records.totalProcessedSampleLabel} fetched clips` : "clips pending");
   setText(elements.pieceCount, `${pieceList.length} ${pieceList.length === 1 ? "piece" : "pieces"}`);
   const dayTotal = Number(records.recordCount) || days.length;
   setText(elements.dayCount, `${dayTotal} ${dayTotal === 1 ? "day" : "days"}`);
