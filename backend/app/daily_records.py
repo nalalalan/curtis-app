@@ -1119,6 +1119,7 @@ def target_pitch_anchors(target: dict[str, Any]) -> list[dict[str, Any]]:
             anchors.append(
                 {
                     "pitchClass": pitch_class,
+                    "displayNote": item.get("displayNote") or f"{pitch_class}4",
                     "label": item.get("label") or f"{pitch_class} score anchor",
                     "source": item.get("source") or "source-confirmed score pitch anchor",
                     "sequenceKind": "source_confirmed_score_pitch_anchor",
@@ -1132,6 +1133,7 @@ def target_pitch_anchors(target: dict[str, Any]) -> list[dict[str, Any]]:
                 anchors.append(
                     {
                         "pitchClass": pitch_class,
+                        "displayNote": f"{pitch_class}4",
                         "label": f"{pitch_class} score anchor",
                         "source": "source-confirmed score pitch anchor",
                         "sequenceKind": "source_confirmed_score_pitch_anchor",
@@ -1210,6 +1212,16 @@ def pitch_anchor_matches_for_series(
                         "detectedPitchClassSequenceCompact": pitch_class,
                         "referencePitchClassSequenceCompact": pitch_class,
                         "scorePitchClassSequenceCompact": pitch_class,
+                        "scoreAnchorNotes": [
+                            {
+                                "kind": "note",
+                                "note": anchor.get("displayNote") or f"{pitch_class}4",
+                                "pitchClass": pitch_class,
+                                "durationKind": "quarter",
+                                "source": anchor.get("source") or "",
+                                "scoreLocationVerified": False,
+                            }
+                        ],
                         "matchedDetectedNotes": [matched_note],
                         "displayDetectedNotes": [matched_note],
                         "scoreSequenceLabel": anchor.get("label") or "",

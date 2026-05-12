@@ -1795,8 +1795,26 @@ h2 {
   grid-template-columns: minmax(0, 1fr);
 }
 
+.score-match-grid.pitch-anchor-grid {
+  grid-template-columns: minmax(150px, 210px) minmax(0, 1fr);
+}
+
+.score-anchor-panel {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.score-anchor-panel .notation-sheet svg {
+  min-height: 96px;
+}
+
 .note-match-grid .matched-practice-pair {
   grid-template-columns: minmax(180px, 260px) minmax(0, 1fr);
+}
+
+.pitch-anchor-grid .matched-practice-pair {
+  grid-template-columns: minmax(170px, 240px) minmax(0, 1fr);
 }
 
 .score-reference-panel {
@@ -3294,6 +3312,10 @@ h2 {
   }
 
   .piece-label-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pitch-anchor-grid .matched-practice-pair {
     grid-template-columns: minmax(0, 1fr);
   }
 

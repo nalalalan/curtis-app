@@ -2036,6 +2036,49 @@ function matchGroupNotationEvents(group) {
     });
 }
 
+function scoreAnchorNotationEvents(group) {
+  const notes = Array.isArray(group?.scoreAnchorNotes) ? group.scoreAnchorNotes : [];
+  const pitchClass = String(group?.scorePitchClassSequenceCompact || group?.scorePitchClassSequence || group?.detectedPitchClassSequence || "").trim().split(/\s+/)[0] || "A";
+  const fallbackNote = /^[A-G]$/.test(pitchClass) ? `${pitchClass}4` : "A4";
+  const sourceNotes = notes.length ? notes : [{ note: fallbackNote, pitchClass, durationKind: "quarter" }];
+  return sourceNotes
+    .filter((note) => note && note.note)
+    .slice(0, 1)
+    .map((note) => ({
+      kind: "note",
+      note: String(note.note || fallbackNote),
+      pitchClass: note.pitchClass || pitchClass,
+      startSeconds: 0,
+      endSeconds: 1,
+      localStartSeconds: 0,
+      localEndSeconds: 1,
+      durationSeconds: 1,
+      durationKind: note.durationKind || "quarter",
+      confidence: 1,
+      uncertain: false,
+    }));
+}
+
+function renderScoreAnchorPanel(group) {
+  const events = scoreAnchorNotationEvents(group);
+  const pitch = group?.scorePitchClassSequenceCompact
+    || group?.scorePitchClassSequence
+    || group?.detectedPitchClassSequence
+    || "A";
+  return `
+    <section class="score-anchor-panel" aria-label="Score pitch anchor">
+      <div class="matched-notation-head">
+        <span>Score</span>
+        <strong>${escapeHtml(shortText(pitch, 12))}</strong>
+      </div>
+      ${renderNotationSheet(events, {
+        keySignature: {},
+        maxNotes: 1
+      })}
+    </section>
+  `;
+}
+
 function compactPitchSequenceText(value) {
   const parts = String(value || "").trim().split(/\s+/).filter(Boolean);
   const compact = [];
@@ -2130,7 +2173,8 @@ function renderPitchAnchorGroups(record) {
               <span>Anchor ${index + 1}</span>
               <strong>${escapeHtml(shortText(label, 64))}</strong>
             </div>
-            <div class="score-match-grid note-match-grid">
+            <div class="score-match-grid pitch-anchor-grid">
+              ${renderScoreAnchorPanel(group)}
               ${renderSingleMatchedPracticePair(record, clip, transcription, { events, clip })}
             </div>
           </article>

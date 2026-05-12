@@ -907,6 +907,8 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(anchors[0]["status"], "pitch_anchor_match")
         self.assertEqual(anchors[0]["detectedPitchClassSequence"], "A")
         self.assertEqual(anchors[0]["minimumDistinctPitchClasses"], 1)
+        self.assertEqual(anchors[0]["scoreAnchorNotes"][0]["note"], "A4")
+        self.assertEqual(anchors[0]["scoreAnchorNotes"][0]["pitchClass"], "A")
         self.assertEqual(anchors[0]["score"]["boxes"], [])
         self.assertFalse(anchors[0]["scoreLocationVerified"])
 
