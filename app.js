@@ -483,15 +483,14 @@ function currentStateText(ops) {
   const inventoryTotal = inventoryItems(ops).length;
   const records = dailyRecords(ops);
   const recordCount = Number(records.recordCount) || 0;
-  const transcribedCount = Number(records.transcribedRecordCount) || 0;
   const audioEvidenceCount = Number(records.audioEvidenceRecordCount) || 0;
   const processedCount = analyzedRecordList(ops).length;
+  const scoreGroupCount = scoreMatchGroupCount(records);
   const practiceCount = Number(ops?.review?.practiceCandidateCount) || 0;
   const findingCount = skillFindings(ops).length;
-  const strictCount = Number(records.scoreAudioOnlyRecordCount || records.failedTranscriptionRecordCount || 0);
   const withheld = Number(records.withheldNonViolinSampleCount) || 0;
   if (recordCount && withheld && !audioEvidenceCount) return `${withheld} sampled media windows withheld / no violin-positive audio yet / ${recordCount} indexed practice days.`;
-  if (recordCount) return `${transcribedCount} detected transcription / ${strictCount} matching windows / ${audioEvidenceCount} playable clips / ${processedCount} checked / ${recordCount} indexed practice days.`;
+  if (recordCount) return `${scoreGroupCount} score matches / ${audioEvidenceCount} playable clips / ${processedCount} checked / ${recordCount} indexed practice days.`;
   if (findingCount) return `${findingCount} Curtis-focused findings. ${progressPlan(ops)?.oneFocus || "Review active."}`;
   const sectionCount = reviewSections(ops).length;
   if (sectionCount) return `${sectionCount} audio/video sections scanned. Musicianship judgment pending.`;
@@ -536,6 +535,13 @@ function dailyRecords(ops) {
 function dailyRecordList(ops) {
   const records = dailyRecords(ops).records;
   return Array.isArray(records) ? chronologicalRecords(records) : [];
+}
+
+function scoreMatchGroupCount(records) {
+  const list = Array.isArray(records?.records) ? records.records : [];
+  return list.reduce((total, record) => (
+    total + (Array.isArray(record?.matchGroups) ? record.matchGroups.length : 0)
+  ), 0);
 }
 
 function analyzedRecordList(ops) {
@@ -1082,8 +1088,8 @@ function renderStatus() {
   setText(elements.detectionState, detectionStatus(highlight));
   if (elements.studyCount) {
     const recordCount = Number(records.recordCount) || 0;
-    const transcribedCount = Number(records.transcribedRecordCount) || 0;
-    elements.studyCount.textContent = `${transcribedCount} match / ${recordCount} days`;
+    const matchCount = scoreMatchGroupCount(records);
+    elements.studyCount.textContent = `${matchCount} ${matchCount === 1 ? "match" : "matches"} / ${recordCount} days`;
   }
   const scannedSeconds = scannedVideoSeconds(records);
   const archiveSeconds = archiveVideoSeconds(records, totals);

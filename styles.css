@@ -1757,8 +1757,8 @@ h2 {
 
 .score-match-grid {
   display: grid;
-  grid-template-columns: minmax(160px, .52fr) minmax(0, 1fr);
-  gap: 8px;
+  grid-template-columns: minmax(190px, .42fr) minmax(0, 1fr);
+  gap: 10px;
   align-items: start;
   min-width: 0;
 }
@@ -1767,6 +1767,15 @@ h2 {
   display: grid;
   gap: 6px;
   min-width: 0;
+}
+
+.score-reference-panel .score-heat-header {
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+}
+
+.score-reference-panel .score-heat-header strong {
+  text-align: left;
 }
 
 .score-reference-panel .score-image {
@@ -1850,7 +1859,7 @@ h2 {
 }
 
 .matched-notation-panel .notation-sheet svg {
-  min-width: 520px;
+  min-width: 0;
   height: 90px;
 }
 
