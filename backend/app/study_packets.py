@@ -270,7 +270,18 @@ def clean_transcription_text(item: dict[str, Any]) -> str:
 
 
 def score_boxes(target: dict[str, Any]) -> list[dict[str, Any]]:
-    boxes = target.get("scoreBoxes") if isinstance(target.get("scoreBoxes"), list) else []
+    boxes = target.get("exactScoreBoxes") if isinstance(target.get("exactScoreBoxes"), list) else []
+    if not boxes:
+        locations = target.get("scoreSequenceLocations") if isinstance(target.get("scoreSequenceLocations"), list) else []
+        for location in locations:
+            if not isinstance(location, dict):
+                continue
+            status = str(location.get("status") or location.get("scoreLocationStatus") or "").lower()
+            if "exact" not in status or any(token in status for token in ("pending", "estimate", "unverified")):
+                continue
+            boxes = location.get("boxes") if isinstance(location.get("boxes"), list) else []
+            if boxes:
+                break
     clean: list[dict[str, Any]] = []
     for box in boxes:
         if not isinstance(box, dict):
@@ -302,7 +313,7 @@ def snippet_feedback(title: str, source_tip: str, transcription: dict[str, Any] 
 
 def readiness_text(transcription: dict[str, Any] | None, score_image_url: str) -> str:
     if transcription and transcription.get("status") == "transcribed" and score_image_url:
-        return "Pitch/rhythm extracted. Score match pending exact measure proof."
+        return "Pitch/rhythm extracted. Score alignment pending exact measure proof."
     if transcription and transcription.get("status") == "transcribed":
         return "Pitch/rhythm extracted. Score page pending."
     if score_image_url:
@@ -362,7 +373,7 @@ def build_snippet(
         "practiceDay": source.get("practiceDay") or "",
         "status": "transcribed" if packet["status"] == "transcribed" else "score_target_ready",
         "scoreMatchStatus": score_match_status,
-        "scoreMatchLabel": "score match pending",
+        "scoreMatchLabel": "score alignment pending",
         "score": {
             "source": target.get("scoreSource") or "",
             "sourceUrl": target.get("scoreUrl") or "",

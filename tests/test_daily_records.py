@@ -673,11 +673,55 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(matches[0]["detectedPitchClassSequenceCompact"], "D A B")
         self.assertEqual([item["note"] for item in matches[0]["displayDetectedNotes"]], ["D4", "A4", "B4"])
         self.assertEqual(matches[0]["minimumDistinctPitchClasses"], 2)
-        self.assertEqual(matches[0]["score"]["boxes"][0]["label"], "mm. 1-2: matched notes")
-        self.assertEqual(matches[0]["score"]["boxes"][0]["sourceRegionLabel"], "mm. 1-2")
-        self.assertLess(matches[0]["score"]["boxes"][0]["width"], 30)
-        self.assertEqual(matches[0]["score"]["cropStatus"], "sequence_region_estimate")
+        self.assertEqual(matches[0]["score"]["boxes"], [])
+        self.assertEqual(matches[0]["score"]["cropStatus"], "exact_score_location_pending")
+        self.assertEqual(matches[0]["scoreSnippetStatus"], "exact_score_location_pending")
         self.assertFalse(matches[0]["rhythmRequired"])
+
+    def test_score_sequence_match_uses_score_boxes_only_when_location_is_exact(self):
+        transcriptions = [
+            {
+                "transcriptionId": "matched-run",
+                "sampleId": "sample-1",
+                "sourceTitle": "test",
+                "sourceUrl": "https://www.youtube.com/watch?v=test",
+                "sourceWindow": "*10-20",
+                "status": "transcribed",
+                "notes": [
+                    note("D4", 0, 0.2),
+                    note("A4", 0.2, 0.35),
+                    note("B4", 0.35, 0.5),
+                ],
+            }
+        ]
+        series = detected_note_series(transcriptions, max_series=None)
+        matches = score_sequence_matches_for_series(
+            series,
+            [
+                {
+                    "title": "Source-backed test piece",
+                    "score": {
+                        "scoreAssetId": "test-score",
+                        "scoreSequenceLocations": [
+                            {
+                                "label": "mm. 1-2",
+                                "status": "exact_score_location_verified",
+                                "referenceStart": 1,
+                                "referenceEnd": 4,
+                                "boxes": [{"x": 10, "y": 20, "width": 30, "height": 8, "label": "mm. 1-2"}],
+                            }
+                        ],
+                        "scorePitchClassSequences": [
+                            {"label": "mm. 1-2", "values": ["G4", "D5", "A5", "B5", "E6"]},
+                        ],
+                    },
+                }
+            ],
+        )
+
+        self.assertEqual(matches[0]["score"]["boxes"][0]["label"], "mm. 1-2")
+        self.assertEqual(matches[0]["score"]["cropStatus"], "exact_score_location_verified")
+        self.assertEqual(matches[0]["scoreSnippetStatus"], "exact_score_location_verified")
 
     def test_repeated_single_pitch_series_does_not_create_score_match_group(self):
         transcriptions = [

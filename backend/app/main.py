@@ -270,7 +270,7 @@ def pdf_lines_for_score_matches(matches: list[dict[str, Any]], status: str) -> l
                 f"Match {index}: {match.get('pieceTitle') or 'piece'} / {match.get('matchedNoteRun') or 0} notes",
                 f"Detected: {match.get('detectedPitchClassSequence') or ''}",
                 f"Reference: {match.get('scorePitchClassSequence') or ''}",
-                f"Score: {match.get('scoreSnippetStatus') or 'pending'}",
+                f"Score alignment: {match.get('scoreSnippetStatus') or 'pending'}",
                 "",
             ]
         )
@@ -308,7 +308,7 @@ def ensure_transcription_pdf(practice_day: str) -> Path:
     lines.extend(pdf_lines_for_detected_series(all_series))
     lines.extend(pdf_lines_for_score_matches(score_matches, score_status))
     if groups:
-        lines.append("Displayed score groups")
+        lines.append("Displayed note-match groups")
         lines.append("")
         for index, group in enumerate(groups, start=1):
             clip = group.get("clip") if isinstance(group.get("clip"), dict) else {}
@@ -326,12 +326,12 @@ def ensure_transcription_pdf(practice_day: str) -> Path:
                     f"Matched note run: {group.get('matchedNoteRun') or group.get('minimumMatchedNoteRun') or 0}",
                     f"Audio/video sample: {clip.get('sampleId') or 'sample pending'}",
                     f"Window: {clip.get('windowLabel') or clip.get('sourceWindow') or 'window pending'}",
-                    f"Score snippet: {group.get('scoreSnippetStatus') or 'pending'}",
+                    f"Score alignment: {group.get('scoreSnippetStatus') or 'pending'}",
                     "",
                 ]
             )
     else:
-        lines.append("Displayed score groups: none.")
+        lines.append("Displayed note-match groups: none.")
     if transcription.get("rejectedMachinePitchEventCount"):
         lines.append(f"Hidden machine pitch events: {transcription.get('rejectedMachinePitchEventCount')}")
     target = transcription_pdf_path(practice_day)

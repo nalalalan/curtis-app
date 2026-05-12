@@ -768,6 +768,57 @@ def focused_score_boxes(
     ]
 
 
+def exact_score_location_ready(value: Any) -> bool:
+    status = str(value or "").strip().lower()
+    if not status:
+        return False
+    if any(token in status for token in ("pending", "estimate", "estimated", "unverified", "candidate")):
+        return False
+    return any(
+        token in status
+        for token in (
+            "exact_score_location_verified",
+            "exact_measure_match",
+            "exact_measure_verified",
+            "score_location_verified",
+            "measure_location_verified",
+        )
+    )
+
+
+def exact_score_boxes_for_reference_match(
+    target: dict[str, Any],
+    reference: dict[str, Any],
+    reference_start: int,
+    reference_end: int,
+) -> list[dict[str, Any]]:
+    if not isinstance(target, dict) or not isinstance(reference, dict):
+        return []
+    direct_boxes = reference.get("exactScoreBoxes") if isinstance(reference.get("exactScoreBoxes"), list) else []
+    if direct_boxes and exact_score_location_ready(reference.get("scoreLocationStatus") or reference.get("status")):
+        return direct_boxes
+    locations = target.get("scoreSequenceLocations") if isinstance(target.get("scoreSequenceLocations"), list) else []
+    reference_label = str(reference.get("label") or "").strip()
+    for location in locations:
+        if not isinstance(location, dict):
+            continue
+        if not exact_score_location_ready(location.get("status") or location.get("scoreLocationStatus")):
+            continue
+        boxes = location.get("boxes") if isinstance(location.get("boxes"), list) else []
+        if not boxes and isinstance(location.get("box"), dict):
+            boxes = [location["box"]]
+        if not boxes:
+            continue
+        label = str(location.get("label") or location.get("section") or "").strip()
+        start = int(safe_float(location.get("referenceStart"), -1))
+        end = int(safe_float(location.get("referenceEnd"), -1))
+        label_matches = bool(reference_label and label and reference_label == label)
+        span_matches = start >= 0 and end > start and start <= reference_start and end >= reference_end
+        if label_matches or span_matches:
+            return boxes
+    return []
+
+
 def score_sequence_matches_for_series(
     series: list[dict[str, Any]],
     pieces: list[dict[str, Any]],
@@ -804,8 +855,8 @@ def score_sequence_matches_for_series(
                     raw_indices = query_info["indices"][q0:q1]
                     matched_notes = [run_notes[index] for index in raw_indices if 0 <= index < len(run_notes)]
                     display_notes = matched_notes if query_info["collapsed"] else compact_notes_by_pitch_class(matched_notes)
-                    score_boxes = target.get("scoreBoxes") if isinstance(target.get("scoreBoxes"), list) else []
-                    selected_boxes = focused_score_boxes(score_boxes, r0, r1, len(reference_values))
+                    selected_boxes = exact_score_boxes_for_reference_match(target, reference, r0, r1)
+                    score_location_verified = bool(selected_boxes)
                     best_for_reference = {
                         "status": "score_sequence_match",
                         "pieceTitle": piece.get("title") or "",
@@ -825,7 +876,8 @@ def score_sequence_matches_for_series(
                         "matchedDetectedNotes": matched_notes,
                         "displayDetectedNotes": display_notes,
                         "scoreSequenceLabel": reference.get("label") or "",
-                        "scoreSnippetStatus": "sequence_match_score_location_pending",
+                        "scoreSnippetStatus": "exact_score_location_verified" if score_location_verified else "exact_score_location_pending",
+                        "scoreLocationStatus": "exact_score_location_verified" if score_location_verified else "exact_score_location_pending",
                         "score": {
                             "assetId": target.get("scoreAssetId") or "",
                             "page": target.get("scorePage") or 0,
@@ -833,7 +885,7 @@ def score_sequence_matches_for_series(
                             "sourceUrl": target.get("scoreUrl") or "",
                             "pdfUrl": target.get("scorePdfUrl") or "",
                             "boxes": selected_boxes,
-                            "cropStatus": "sequence_region_estimate" if selected_boxes else "exact_score_location_pending",
+                            "cropStatus": "exact_score_location_verified" if score_location_verified else "exact_score_location_pending",
                         },
                     }
                 if best_for_reference:

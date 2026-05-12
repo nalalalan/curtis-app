@@ -504,7 +504,7 @@ function currentStateText(ops) {
   const findingCount = skillFindings(ops).length;
   const withheld = Number(records.withheldNonViolinSampleCount) || 0;
   if (recordCount && withheld && !audioEvidenceCount) return `${withheld} sampled media windows withheld / no violin-positive audio yet / ${recordCount} indexed practice days.`;
-  if (recordCount) return `${scoreGroupCount} score matches / ${audioEvidenceCount} playable clips / ${processedCount} checked / ${recordCount} indexed practice days.`;
+  if (recordCount) return `${scoreGroupCount} note matches / ${audioEvidenceCount} playable clips / ${processedCount} checked / ${recordCount} indexed practice days.`;
   if (findingCount) return `${findingCount} Curtis-focused findings. ${progressPlan(ops)?.oneFocus || "Review active."}`;
   const sectionCount = reviewSections(ops).length;
   if (sectionCount) return `${sectionCount} audio/video sections scanned. Musicianship judgment pending.`;
@@ -1369,7 +1369,7 @@ function renderKeySignatureMarks(signature) {
 }
 
 function renderTrebleClef() {
-  return `<text class="treble-clef" x="22" y="58">&#xE050;</text>`;
+  return `<text class="treble-clef" x="24" y="70">&#xE050;</text>`;
 }
 
 function renderLedgerLines(y, x) {
@@ -1512,7 +1512,7 @@ function renderTranscriptionStats(transcription, record = {}) {
     ? [
         ["Clef", transcription?.clef === "treble" ? "treble" : "pending"],
         ["Key", signature.label || "key pending"],
-        ["Status", transcription?.scoreSequenceMatchCount ? "score match" : "detected"],
+        ["Status", transcription?.scoreSequenceMatchCount ? "note match" : "detected"],
       ]
     : [
         ["Notation", "pending"],
@@ -1573,7 +1573,7 @@ function renderNotationSystems(transcription, fallbackEvents = [], record = {}) 
   if (!displayNotation) {
     const withheldText = record?.materialStatus === "piece_or_exercise_pending"
       ? "Match pending."
-      : "Score match pending.";
+      : "Score alignment pending.";
     return `
       <div class="notation-systems" aria-label="Audio evidence windows">
         ${systems.map((system) => {
@@ -1602,7 +1602,7 @@ function renderNotationSystems(transcription, fallbackEvents = [], record = {}) 
           <div class="notation-system">
             <div class="notation-system-head">
               <span>${escapeHtml(displayNotation ? system?.label || "Line" : "Audio evidence")}${escapeHtml(window)}</span>
-              <strong>${escapeHtml(displayNotation ? (transcription?.scoreSequenceMatchCount ? "score match" : "detected") : clipLabel || "sample window")}</strong>
+              <strong>${escapeHtml(displayNotation ? (transcription?.scoreSequenceMatchCount ? "note match" : "detected") : clipLabel || "sample window")}</strong>
             </div>
             ${renderSnippetAudio(system?.clip || {}, "Window audio")}
             ${displayNotation ? renderNotationSheet(system?.events || [], {
@@ -1662,7 +1662,7 @@ function renderHeatMap(record) {
 }
 
 function recordStatusLabel(record) {
-  if (record?.matchingWorkflow?.status === "score_sequence_matches_ready") return "score match";
+  if (record?.matchingWorkflow?.status === "score_sequence_matches_ready") return "note match";
   if (record?.transcription?.reliability === "audio_matched_fragment") return "detected note";
   if (record?.transcription?.reliability === "audio_verified_micro") return "audio-checked transcription";
   if (record?.matchingWorkflow?.status === "awaiting_piece_name") return "piece name";
@@ -1682,13 +1682,13 @@ function recordStatusLabel(record) {
 }
 
 function recordStatusTone(record) {
-  if (record?.matchingWorkflow?.status === "score_sequence_matches_ready") return "verified";
+  if (record?.matchingWorkflow?.status === "score_sequence_matches_ready") return "pending";
   if (record?.transcription?.transcriptionReady === true) return "verified";
   return "pending";
 }
 
 function transcriptionEvidenceLabel(transcription) {
-  if (transcription?.scoreSequenceMatchCount) return "score match";
+  if (transcription?.scoreSequenceMatchCount) return "note match";
   if (transcription?.reliability === "audio_matched_fragment") return "detected note";
   if (transcription?.reliability === "audio_verified_micro") return "audio-checked transcription";
   if (transcription?.displayNotation === true && transcription?.transcriptionReady === true) return "detected transcription";
@@ -1782,7 +1782,7 @@ function renderTranscriptionProof(record, scoreSnippet) {
   const confidence = piece?.confidence || record?.evidenceStatus || record?.transcription?.status || "pending";
   const noteCount = Number(record?.transcription?.noteCount) || 0;
   const notationLabel = noteCount ? transcriptionEvidenceLabel(record?.transcription) : "pending";
-  const scoreReadiness = scoreSnippet?.readiness || scoreSnippet?.score?.status || piece?.score?.status || "score match pending";
+  const scoreReadiness = scoreSnippet?.readiness || scoreSnippet?.score?.status || piece?.score?.status || "score alignment pending";
   const windowLabel = scoreSnippet?.practiceLabel || record?.processedSampleLabel || record?.activeViolinLabel || "";
   return `
     <div class="transcription-proof-ledger" aria-label="Transcription evidence state">
@@ -2031,11 +2031,26 @@ function compactPitchSequenceText(value) {
   return compact.join(" ");
 }
 
+function exactScoreSnippetReady(group) {
+  const score = group?.score && typeof group.score === "object" ? group.score : {};
+  const status = compactText(score.cropStatus || score.status || group?.scoreSnippetStatus || group?.scoreAlignmentStatus || "");
+  if (!status || ["pending", "estimate", "estimated", "unverified", "candidate"].some((token) => status.includes(token))) {
+    return false;
+  }
+  return [
+    "exact_score_location_verified",
+    "exact_measure_match",
+    "exact_measure_verified",
+    "score_location_verified",
+    "measure_location_verified",
+  ].some((token) => status.includes(token));
+}
+
 function renderScoreMatchGroups(record) {
   const groups = Array.isArray(record?.matchGroups) ? record.matchGroups.slice(0, 3) : [];
   if (!groups.length) return "";
   return `
-    <div class="score-match-groups" aria-label="Score matched practice groups">
+    <div class="score-match-groups" aria-label="Note matched practice groups">
       ${groups.map((group, index) => {
         const clip = group?.clip || {};
         const events = matchGroupNotationEvents(group);
@@ -2051,20 +2066,21 @@ function renderScoreMatchGroups(record) {
           Number(group?.matchedNoteRun) ? `${Number(group.matchedNoteRun)} notes` : "pitch match",
           matchedNotes,
         ].filter(Boolean).join(" / ");
+        const showScoreSnippet = exactScoreSnippetReady(group);
         return `
-          <article class="score-match-group">
+          <article class="score-match-group note-match-group">
             <div class="score-match-head">
               <span>Match ${index + 1}</span>
               <strong>${escapeHtml(shortText(matchLabel, 86))}</strong>
             </div>
-            <div class="score-match-grid">
-              <section class="score-reference-panel">
+            <div class="score-match-grid${showScoreSnippet ? "" : " note-match-grid"}">
+              ${showScoreSnippet ? `<section class="score-reference-panel">
                 <div class="score-heat-header">
                   <span>Score</span>
                   <strong>${escapeHtml(shortText(pieceTitle, 56))}</strong>
                 </div>
                 ${renderScoreImage({ score: group?.score || {} }, true)}
-              </section>
+              </section>` : ""}
               ${renderSingleMatchedPracticePair(record, clip, transcription, { events, clip })}
             </div>
           </article>
@@ -2233,7 +2249,7 @@ function recordEvidenceLine(record, scoreSnippet) {
     parts.push("media pending");
   }
   if (scoreSnippet?.score?.imageUrl || scoreSnippet?.score?.assetId) {
-    parts.push(scoreSnippetIsMatched(scoreSnippet, record) ? "score match ready" : "score match pending");
+    parts.push(scoreSnippetIsMatched(scoreSnippet, record) ? "score alignment ready" : "score alignment pending");
   } else if (record?.materialStatus === "piece_or_exercise_pending") {
     parts.push("score or pattern pending");
   } else {

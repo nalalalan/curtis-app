@@ -1791,6 +1791,14 @@ h2 {
   min-width: 0;
 }
 
+.score-match-grid.note-match-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.note-match-grid .matched-practice-pair {
+  grid-template-columns: minmax(180px, 260px) minmax(0, 1fr);
+}
+
 .score-reference-panel {
   display: grid;
   gap: 6px;
@@ -2269,7 +2277,7 @@ h2 {
 .notation-sheet .treble-clef {
   fill: var(--ink);
   font-family: "CurtisBravura", "Bravura", "Noto Music", "Segoe UI Symbol", Georgia, "Times New Roman", serif;
-  font-size: 64px;
+  font-size: 46px;
   font-weight: 400;
 }
 
@@ -2405,12 +2413,12 @@ h2 {
 .notation-gate .treble-clef,
 .notation-gate .key-signature-mark {
   fill: var(--ink);
-  font-family: "Segoe UI Symbol", "Noto Music", Georgia, "Times New Roman", serif;
+  font-family: "CurtisBravura", "Bravura", "Noto Music", "Segoe UI Symbol", Georgia, "Times New Roman", serif;
 }
 
 .notation-gate .treble-clef {
   font-size: 42px;
-  font-weight: 500;
+  font-weight: 400;
 }
 
 .notation-gate .key-signature-mark {

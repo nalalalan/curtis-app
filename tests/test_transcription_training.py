@@ -510,7 +510,7 @@ class TranscriptionTrainingTests(unittest.TestCase):
         self.assertEqual(packet["transcription"]["status"], "pending")
         self.assertEqual(snippet["score"]["assetId"], "haydn-94-finale-score")
         self.assertEqual(snippet["score"]["page"], 45)
-        self.assertTrue(snippet["score"]["boxes"])
+        self.assertEqual(snippet["score"]["boxes"], [])
         self.assertEqual(snippet["scoreMatchStatus"], "pending_exact_alignment")
         self.assertEqual(snippet["score"]["matchStatus"], "pending_exact_alignment")
         self.assertEqual(snippet["audio"]["url"], "https://www.youtube.com/watch?v=wDfVpTU4I_I")
