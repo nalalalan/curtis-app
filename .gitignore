@@ -7,6 +7,9 @@
 *.run.xml
 node_modules/
 *.png
+!assets/
+!assets/score/
+!assets/score/*.png
 .runtime/
 verification/
 __pycache__/

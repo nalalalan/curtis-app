@@ -289,8 +289,16 @@ def wieniawski_reference_target() -> dict[str, Any]:
         "scorePitchClassAnchors": [
             {
                 "pitchClass": "A",
+                "displayNote": "A4",
+                "label": "A in source score",
                 "status": "source_confirmed_pitch_anchor",
-                "source": "Alan-confirmed score pitch anchor",
+                "source": "IMSLP public-domain Scherzo-Tarantelle solo violin part",
+                "sourceUrl": "https://imslp.org/wiki/Scherzo_tarantelle%2C_Op.16_%28Wieniawski%2C_Henri%29",
+                "pdfUrl": "https://s9.imslp.org/files/imglnks/usimg/b/b0/IMSLP724668-PMLP17451-01._WIENIAWSKI_-_SCHERZO_TARANTELLE%2C_OP._16_%28GILSON%29_-_Solo_Part.pdf",
+                "sourcePage": 3,
+                "snippetImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-a4-source-snippet.png",
+                "snippetStatus": "source_score_pitch_anchor",
+                "noteLocation": "highlighted A4 on the second space of the treble staff",
             }
         ],
         "referencePitchClassSequences": [

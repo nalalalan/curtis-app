@@ -1805,6 +1805,37 @@ h2 {
   min-width: 0;
 }
 
+.score-anchor-image {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.score-anchor-image img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.score-anchor-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 760;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.score-anchor-meta a {
+  color: var(--green);
+  text-decoration: none;
+}
+
 .score-anchor-panel .notation-sheet {
   overflow: hidden;
 }

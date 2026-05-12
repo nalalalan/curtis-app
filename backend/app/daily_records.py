@@ -1122,6 +1122,12 @@ def target_pitch_anchors(target: dict[str, Any]) -> list[dict[str, Any]]:
                     "displayNote": item.get("displayNote") or f"{pitch_class}4",
                     "label": item.get("label") or f"{pitch_class} score anchor",
                     "source": item.get("source") or "source-confirmed score pitch anchor",
+                    "sourceUrl": item.get("sourceUrl") or target.get("scoreUrl") or "",
+                    "pdfUrl": item.get("pdfUrl") or target.get("scorePdfUrl") or "",
+                    "sourcePage": item.get("sourcePage") or target.get("scorePage") or 0,
+                    "snippetImageUrl": item.get("snippetImageUrl") or item.get("imageUrl") or "",
+                    "snippetStatus": item.get("snippetStatus") or "",
+                    "noteLocation": item.get("noteLocation") or "",
                     "sequenceKind": "source_confirmed_score_pitch_anchor",
                     "scoreDerivedReference": True,
                     "status": item.get("status") or "source_confirmed_pitch_anchor",
@@ -1189,6 +1195,22 @@ def pitch_anchor_matches_for_series(
                     continue
                 seen.add(key)
                 score_derived_reference = bool(anchor.get("scoreDerivedReference"))
+                score_anchor_snippet = (
+                    {
+                        "imageUrl": anchor.get("snippetImageUrl") or "",
+                        "source": anchor.get("source") or "",
+                        "sourceUrl": anchor.get("sourceUrl") or "",
+                        "pdfUrl": anchor.get("pdfUrl") or "",
+                        "page": anchor.get("sourcePage") or 0,
+                        "note": anchor.get("displayNote") or f"{pitch_class}4",
+                        "pitchClass": pitch_class,
+                        "label": anchor.get("label") or "",
+                        "status": anchor.get("snippetStatus") or "source_score_pitch_anchor",
+                        "noteLocation": anchor.get("noteLocation") or "",
+                    }
+                    if anchor.get("snippetImageUrl")
+                    else {}
+                )
                 matches.append(
                     {
                         "status": "pitch_anchor_match",
@@ -1219,22 +1241,34 @@ def pitch_anchor_matches_for_series(
                                 "pitchClass": pitch_class,
                                 "durationKind": "quarter",
                                 "source": anchor.get("source") or "",
+                                "sourceUrl": anchor.get("sourceUrl") or "",
+                                "snippetImageUrl": anchor.get("snippetImageUrl") or "",
                                 "scoreLocationVerified": False,
                             }
                         ],
+                        "scoreAnchorSnippet": score_anchor_snippet,
                         "matchedDetectedNotes": [matched_note],
                         "displayDetectedNotes": [matched_note],
                         "scoreSequenceLabel": anchor.get("label") or "",
-                        "scoreSnippetStatus": "exact_score_location_pending",
+                        "scoreSnippetStatus": (
+                            score_anchor_snippet.get("status")
+                            if score_anchor_snippet
+                            else "exact_score_location_pending"
+                        ),
                         "scoreLocationStatus": "exact_score_location_pending",
-                        "anchorLimit": "Single pitch overlap only; exact measure and score crop remain pending.",
+                        "anchorLimit": (
+                            "Source score crop proves the score-side pitch; exact measure alignment remains pending."
+                            if score_anchor_snippet
+                            else "Single pitch overlap only; exact measure and score crop remain pending."
+                        ),
                         "minimumClipSeconds": 1.0,
                         "score": {
                             "assetId": target.get("scoreAssetId") or "",
                             "page": target.get("scorePage") or 0,
-                            "source": target.get("scoreSource") or "",
-                            "sourceUrl": target.get("scoreUrl") or "",
-                            "pdfUrl": target.get("scorePdfUrl") or "",
+                            "source": anchor.get("source") or target.get("scoreSource") or "",
+                            "sourceUrl": anchor.get("sourceUrl") or target.get("scoreUrl") or "",
+                            "pdfUrl": anchor.get("pdfUrl") or target.get("scorePdfUrl") or "",
+                            "imageUrl": score_anchor_snippet.get("imageUrl") if score_anchor_snippet else "",
                             "boxes": [],
                             "cropStatus": "exact_score_location_pending",
                         },
@@ -2956,7 +2990,7 @@ def build_daily_records(
             )
         elif pitch_anchor_groups:
             score_alignment_status = "pitch_anchor_match_pending_score_location"
-            score_or_pattern_limit = "A played pitch exists in the confirmed target; exact sequence, measure, and score crop remain pending."
+            score_or_pattern_limit = "A played pitch exists in the confirmed target; exact sequence and measure alignment remain pending."
         matching_workflow = {
             "status": (
                 "score_sequence_matches_ready"

@@ -79,6 +79,7 @@ PAPER_TEX = PAPER_DIR / "curtis-aolabs-paper.tex"
 PAPER_BIB = PAPER_DIR / "references.bib"
 CLIP_CACHE_DIR = RUNTIME_DIR / "clips"
 TRANSCRIPTION_PDF_CACHE_DIR = RUNTIME_DIR / "transcription-pdfs"
+ASSETS_DIR = ROOT_DIR / "assets"
 STATIC_ALLOWLIST = {"index.html", "paper.html", "app.js", "styles.css", "favicon.svg", "CNAME", ".nojekyll"}
 app.add_middleware(
     CORSMiddleware,
@@ -689,6 +690,17 @@ async def paper_tex() -> FileResponse:
 @app.get("/paper/references.bib")
 async def paper_bib() -> FileResponse:
     return _paper_file_response(PAPER_BIB, media_type="text/plain; charset=utf-8")
+
+
+@app.get("/assets/{path:path}")
+async def static_assets(path: str) -> FileResponse:
+    target = (ASSETS_DIR / path).resolve()
+    assets_root = ASSETS_DIR.resolve()
+    if target != assets_root and assets_root not in target.parents:
+        raise HTTPException(status_code=404, detail="Asset not found")
+    if not target.exists() or not target.is_file():
+        raise HTTPException(status_code=404, detail="Asset not found")
+    return FileResponse(target)
 
 
 @app.get("/{path:path}")

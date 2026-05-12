@@ -897,7 +897,17 @@ class DailyRecordTests(unittest.TestCase):
                     "score": {
                         "scoreAssetId": "test-score",
                         "scorePitchClassAnchors": [
-                            {"pitchClass": "A", "status": "source_confirmed_pitch_anchor"},
+                            {
+                                "pitchClass": "A",
+                                "status": "source_confirmed_pitch_anchor",
+                                "source": "IMSLP public-domain source score",
+                                "sourceUrl": "https://imslp.org/wiki/test",
+                                "pdfUrl": "https://imslp.org/test.pdf",
+                                "sourcePage": 3,
+                                "snippetImageUrl": "/assets/score/test-a.png",
+                                "snippetStatus": "source_score_pitch_anchor",
+                                "noteLocation": "highlighted A4",
+                            },
                         ],
                     },
                 }
@@ -909,6 +919,11 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(anchors[0]["minimumDistinctPitchClasses"], 1)
         self.assertEqual(anchors[0]["scoreAnchorNotes"][0]["note"], "A4")
         self.assertEqual(anchors[0]["scoreAnchorNotes"][0]["pitchClass"], "A")
+        self.assertEqual(anchors[0]["scoreAnchorSnippet"]["imageUrl"], "/assets/score/test-a.png")
+        self.assertEqual(anchors[0]["scoreAnchorSnippet"]["note"], "A4")
+        self.assertEqual(anchors[0]["scoreAnchorSnippet"]["pitchClass"], "A")
+        self.assertEqual(anchors[0]["scoreAnchorSnippet"]["status"], "source_score_pitch_anchor")
+        self.assertEqual(anchors[0]["score"]["imageUrl"], "/assets/score/test-a.png")
         self.assertEqual(anchors[0]["score"]["boxes"], [])
         self.assertFalse(anchors[0]["scoreLocationVerified"])
 

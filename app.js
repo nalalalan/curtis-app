@@ -2059,19 +2059,48 @@ function scoreAnchorNotationEvents(group) {
     }));
 }
 
+function scoreAnchorSnippet(group) {
+  const snippet = group?.scoreAnchorSnippet && typeof group.scoreAnchorSnippet === "object"
+    ? group.scoreAnchorSnippet
+    : {};
+  const score = group?.score && typeof group.score === "object" ? group.score : {};
+  const imageUrl = assetUrl(snippet.imageUrl || score.imageUrl || "");
+  if (!imageUrl) return null;
+  return {
+    imageUrl,
+    sourceUrl: assetUrl(snippet.sourceUrl || score.sourceUrl || ""),
+    pdfUrl: assetUrl(snippet.pdfUrl || score.pdfUrl || ""),
+    note: snippet.note || group?.scoreAnchorNotes?.[0]?.note || "",
+    pitchClass: snippet.pitchClass || group?.scorePitchClassSequenceCompact || group?.scorePitchClassSequence || "",
+    source: snippet.source || score.source || "",
+    label: snippet.label || group?.scoreSequenceLabel || "",
+    noteLocation: snippet.noteLocation || "",
+  };
+}
+
 function renderScoreAnchorPanel(group) {
   const events = scoreAnchorNotationEvents(group);
   const pitch = group?.scorePitchClassSequenceCompact
     || group?.scorePitchClassSequence
     || group?.detectedPitchClassSequence
     || "A";
+  const snippet = scoreAnchorSnippet(group);
+  const sourceHref = snippet?.sourceUrl || snippet?.pdfUrl || "";
   return `
     <section class="score-anchor-panel" aria-label="Score pitch anchor">
       <div class="matched-notation-head">
         <span>Score</span>
         <strong>${escapeHtml(shortText(pitch, 12))}</strong>
       </div>
-      ${renderNotationSheet(events, {
+      ${snippet ? `
+        <div class="score-anchor-image" aria-label="Source score snippet">
+          <img src="${escapeHtml(snippet.imageUrl)}" alt="Actual score snippet showing ${escapeHtml(snippet.note || pitch)}">
+        </div>
+        <div class="score-anchor-meta">
+          <span>${escapeHtml(shortText(snippet.note || pitch, 18))}</span>
+          ${sourceHref ? `<a href="${escapeHtml(sourceHref)}" target="_blank" rel="noreferrer">IMSLP</a>` : ""}
+        </div>
+      ` : renderNotationSheet(events, {
         keySignature: {},
         maxNotes: 1
       })}
