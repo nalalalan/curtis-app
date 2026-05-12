@@ -701,6 +701,45 @@ class DailyRecordTests(unittest.TestCase):
 
         self.assertEqual(matches, [])
 
+    def test_collapsed_score_match_maps_back_to_compact_source_notes(self):
+        transcriptions = [
+            {
+                "transcriptionId": "collapsed-run",
+                "sampleId": "sample-1",
+                "sourceTitle": "test",
+                "sourceUrl": "https://www.youtube.com/watch?v=test",
+                "sourceWindow": "*10-20",
+                "status": "transcribed",
+                "notes": [
+                    note("D4", 0.0, 0.2),
+                    note("D4", 0.2, 0.4),
+                    note("D4", 0.4, 0.6),
+                    note("A#4", 0.6, 0.8),
+                    note("A#4", 0.8, 1.0),
+                    note("G4", 1.0, 1.2),
+                    note("D4", 1.2, 1.4),
+                ],
+            }
+        ]
+        series = detected_note_series(transcriptions, max_series=None)
+        matches = score_sequence_matches_for_series(
+            series,
+            [
+                {
+                    "title": "Source-backed test piece",
+                    "score": {
+                        "scoreAssetId": "test-score",
+                        "scorePitchClassSequences": [
+                            {"label": "mm. 1-2", "values": ["D4", "A#4", "G4", "D4"]},
+                        ],
+                    },
+                }
+            ],
+        )
+
+        self.assertEqual(matches[0]["detectedPitchClassSequence"], "D A# G D")
+        self.assertEqual([item["note"] for item in matches[0]["displayDetectedNotes"]], ["D4", "A#4", "G4", "D4"])
+
     def test_unaccepted_audio_matched_fragment_stays_hidden(self):
         inventory = {
             "youtube": [

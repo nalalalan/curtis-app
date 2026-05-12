@@ -692,6 +692,21 @@ def compact_pitch_class_sequence(values: list[str]) -> list[str]:
     return compact
 
 
+def compact_pitch_class_sequence_with_indices(values: list[str]) -> tuple[list[str], list[int]]:
+    compact: list[str] = []
+    indices: list[int] = []
+    previous = ""
+    for index, value in enumerate(values):
+        current = str(value or "").strip()
+        if not current or current == previous:
+            previous = current
+            continue
+        compact.append(current)
+        indices.append(index)
+        previous = current
+    return compact, indices
+
+
 def compact_notes_by_pitch_class(notes: list[dict[str, Any]]) -> list[dict[str, Any]]:
     compact: list[dict[str, Any]] = []
     previous = ""
@@ -713,16 +728,17 @@ def score_sequence_matches_for_series(
     matches: list[dict[str, Any]] = []
     for run in series:
         raw_query = [str(value) for value in run.get("pitchClasses", []) if value]
-        collapsed_query = [str(value) for value in run.get("collapsedPitchClasses", []) if value]
-        queries = [raw_query]
+        collapsed_query, collapsed_indices = compact_pitch_class_sequence_with_indices(raw_query)
+        queries = [{"values": raw_query, "indices": list(range(len(raw_query))), "collapsed": False}]
         if collapsed_query != raw_query:
-            queries.append(collapsed_query)
+            queries.append({"values": collapsed_query, "indices": collapsed_indices, "collapsed": True})
         for piece in pieces:
             target = piece.get("score") if isinstance(piece.get("score"), dict) else {}
             for reference in reference_pitch_class_sequences(target):
                 reference_values = reference.get("pitchClasses") if isinstance(reference.get("pitchClasses"), list) else []
                 best_for_reference: dict[str, Any] = {}
-                for query in queries:
+                for query_info in queries:
+                    query = query_info["values"]
                     candidate = longest_common_contiguous_run(query, reference_values)
                     if candidate["length"] < MATCH_GROUP_MIN_NOTE_RUN:
                         continue
@@ -737,8 +753,9 @@ def score_sequence_matches_for_series(
                     if len(set(detected_sequence)) < MATCH_GROUP_MIN_DISTINCT_PITCH_CLASSES:
                         continue
                     run_notes = run.get("notes") if isinstance(run.get("notes"), list) else []
-                    matched_notes = run_notes[q0:q1] if query == raw_query else []
-                    display_notes = compact_notes_by_pitch_class(matched_notes)
+                    raw_indices = query_info["indices"][q0:q1]
+                    matched_notes = [run_notes[index] for index in raw_indices if 0 <= index < len(run_notes)]
+                    display_notes = matched_notes if query_info["collapsed"] else compact_notes_by_pitch_class(matched_notes)
                     best_for_reference = {
                         "status": "score_sequence_match",
                         "pieceTitle": piece.get("title") or "",
