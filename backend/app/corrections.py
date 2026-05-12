@@ -286,6 +286,13 @@ def wieniawski_reference_target() -> dict[str, Any]:
         "referenceAudio": "needed",
         "scoreNoteDetectionStatus": "not_available_for_scanned_pdf",
         "scoreLocationStatus": "exact_score_location_pending",
+        "scorePitchClassAnchors": [
+            {
+                "pitchClass": "A",
+                "status": "source_confirmed_pitch_anchor",
+                "source": "Alan-confirmed score pitch anchor",
+            }
+        ],
         "referencePitchClassSequences": [
             {
                 "label": "Scherzo-Tarantelle reference audio pitch trace, first 180 seconds",

@@ -554,7 +554,9 @@ function dailyRecordList(ops) {
 function scoreMatchGroupCount(records) {
   const list = Array.isArray(records?.records) ? records.records : [];
   return list.reduce((total, record) => (
-    total + (Array.isArray(record?.matchGroups) ? record.matchGroups.length : 0)
+    total
+    + (Array.isArray(record?.matchGroups) ? record.matchGroups.length : 0)
+    + (Array.isArray(record?.pitchAnchorGroups) ? record.pitchAnchorGroups.length : 0)
   ), 0);
 }
 
@@ -1670,6 +1672,7 @@ function recordStatusLabel(record) {
     record?.matchingWorkflow?.status === "score_sequence_matches_ready"
     || record?.matchingWorkflow?.status === "reference_sequence_matches_ready"
   ) return "note match";
+  if (record?.matchingWorkflow?.status === "pitch_anchor_matches_ready") return "pitch anchor";
   if (record?.transcription?.reliability === "audio_matched_fragment") return "detected note";
   if (record?.transcription?.reliability === "audio_verified_micro") return "audio-checked transcription";
   if (record?.matchingWorkflow?.status === "awaiting_piece_name") return "piece name";
@@ -1692,6 +1695,7 @@ function recordStatusTone(record) {
   if (
     record?.matchingWorkflow?.status === "score_sequence_matches_ready"
     || record?.matchingWorkflow?.status === "reference_sequence_matches_ready"
+    || record?.matchingWorkflow?.status === "pitch_anchor_matches_ready"
   ) return "pending";
   if (record?.transcription?.transcriptionReady === true) return "verified";
   return "pending";
@@ -2100,6 +2104,42 @@ function renderScoreMatchGroups(record) {
   `;
 }
 
+function renderPitchAnchorGroups(record) {
+  const groups = Array.isArray(record?.pitchAnchorGroups) ? record.pitchAnchorGroups.slice(0, 2) : [];
+  if (!groups.length) return "";
+  return `
+    <div class="score-match-groups pitch-anchor-groups" aria-label="Single pitch anchors">
+      ${groups.map((group, index) => {
+        const clip = group?.clip || {};
+        const events = matchGroupNotationEvents(group);
+        const transcription = {
+          ...(group?.transcription || {}),
+          notationSystems: [{ events, clip }],
+        };
+        const pitch = group?.detectedPitchClassSequenceCompact
+          || group?.detectedPitchClassSequence
+          || group?.scorePitchClassSequenceCompact
+          || "pitch";
+        const label = [
+          "1 note",
+          pitch,
+        ].filter(Boolean).join(" / ");
+        return `
+          <article class="score-match-group note-match-group pitch-anchor-group">
+            <div class="score-match-head">
+              <span>Anchor ${index + 1}</span>
+              <strong>${escapeHtml(shortText(label, 64))}</strong>
+            </div>
+            <div class="score-match-grid note-match-grid">
+              ${renderSingleMatchedPracticePair(record, clip, transcription, { events, clip })}
+            </div>
+          </article>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
 function renderTranscriptionRunLink(record, transcription) {
   const href = assetUrl(transcription?.pdfUrl || record?.matchingWorkflow?.transcriptionRunPdfUrl || "");
   if (!href) return "";
@@ -2302,6 +2342,7 @@ function renderDailyRecord(record, index = 0) {
   const transcription = record?.transcription || {};
   const displayNotation = transcription?.displayNotation !== false && transcription?.transcriptionReady === true;
   const scoreMatches = renderScoreMatchGroups(record);
+  const pitchAnchors = renderPitchAnchorGroups(record);
   const openTarget = new URLSearchParams(window.location.search).get("open") || "";
   const openForReview = openTarget === "first" ? index === 0 : openTarget === record.practiceDay;
   const meta = [
@@ -2318,9 +2359,11 @@ function renderDailyRecord(record, index = 0) {
         <em data-tone="${escapeHtml(recordStatusTone(record))}">${escapeHtml(recordStatusLabel(record))}</em>
       </summary>
       <div class="record-card-body record-essentials-body">
-        ${scoreMatches || (displayNotation
+        ${scoreMatches}
+        ${pitchAnchors}
+        ${(!scoreMatches && !pitchAnchors) ? (displayNotation
           ? renderMatchedPracticePair(record, playableClip, transcription)
-          : renderPendingPracticePair(record))}
+          : renderPendingPracticePair(record)) : ""}
         ${renderTranscriptionRunLink(record, transcription)}
       </div>
     </details>

@@ -22,6 +22,8 @@ MAX_RECORDS = 120
 MAX_CLIPS_PER_DAY = 5
 MATCH_GROUP_MIN_NOTE_RUN = 1
 MATCH_GROUP_MIN_DISTINCT_PITCH_CLASSES = 2
+PITCH_ANCHOR_MIN_DISTINCT_PITCH_CLASSES = 1
+MAX_PITCH_ANCHOR_MATCHES = 8
 MAX_DETECTED_NOTE_SERIES_API = 16
 MAX_DETECTED_NOTE_SERIES_NOTES = 96
 NOTE_SERIES_MAX_GAP_SECONDS = 1.5
@@ -1106,6 +1108,131 @@ def score_sequence_matches_for_series(
     return matches
 
 
+def target_pitch_anchors(target: dict[str, Any]) -> list[dict[str, Any]]:
+    anchors: list[dict[str, Any]] = []
+    raw_anchors = target.get("scorePitchClassAnchors") if isinstance(target.get("scorePitchClassAnchors"), list) else []
+    for item in raw_anchors:
+        if isinstance(item, dict):
+            pitch_class = note_pitch_class(item.get("pitchClass") or item.get("note") or item.get("value"))
+            if not pitch_class:
+                continue
+            anchors.append(
+                {
+                    "pitchClass": pitch_class,
+                    "label": item.get("label") or f"{pitch_class} score anchor",
+                    "source": item.get("source") or "source-confirmed score pitch anchor",
+                    "sequenceKind": "source_confirmed_score_pitch_anchor",
+                    "scoreDerivedReference": True,
+                    "status": item.get("status") or "source_confirmed_pitch_anchor",
+                }
+            )
+        else:
+            pitch_class = note_pitch_class(item)
+            if pitch_class:
+                anchors.append(
+                    {
+                        "pitchClass": pitch_class,
+                        "label": f"{pitch_class} score anchor",
+                        "source": "source-confirmed score pitch anchor",
+                        "sequenceKind": "source_confirmed_score_pitch_anchor",
+                        "scoreDerivedReference": True,
+                        "status": "source_confirmed_pitch_anchor",
+                    }
+                )
+    deduped: list[dict[str, Any]] = []
+    seen_keys: set[tuple[str, str, str]] = set()
+    for anchor in anchors:
+        key = (
+            str(anchor.get("pitchClass") or ""),
+            str(anchor.get("sequenceKind") or ""),
+            str(anchor.get("source") or ""),
+        )
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+        deduped.append(anchor)
+    return deduped
+
+
+def pitch_anchor_matches_for_series(
+    series: list[dict[str, Any]],
+    pieces: list[dict[str, Any]],
+    max_matches: int = MAX_PITCH_ANCHOR_MATCHES,
+) -> list[dict[str, Any]]:
+    matches: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for run in series:
+        run_notes = run.get("notes") if isinstance(run.get("notes"), list) else []
+        if not run_notes:
+            continue
+        for piece in pieces:
+            target = piece.get("score") if isinstance(piece.get("score"), dict) else {}
+            for anchor in target_pitch_anchors(target):
+                pitch_class = str(anchor.get("pitchClass") or "")
+                if not pitch_class:
+                    continue
+                key = (str(piece.get("title") or ""), pitch_class)
+                if key in seen:
+                    continue
+                matched_note = next(
+                    (
+                        note
+                        for note in run_notes
+                        if isinstance(note, dict)
+                        and note_pitch_class(note.get("pitchClass") or note.get("note")) == pitch_class
+                    ),
+                    None,
+                )
+                if not matched_note:
+                    continue
+                seen.add(key)
+                score_derived_reference = bool(anchor.get("scoreDerivedReference"))
+                matches.append(
+                    {
+                        "status": "pitch_anchor_match",
+                        "pieceTitle": piece.get("title") or "",
+                        "matchCriterion": "single_pitch_anchor",
+                        "minimumMatchedNoteRun": 1,
+                        "minimumDistinctPitchClasses": PITCH_ANCHOR_MIN_DISTINCT_PITCH_CLASSES,
+                        "matchedNoteRun": 1,
+                        "referenceStart": 0,
+                        "referenceEnd": 1,
+                        "referenceLength": 1,
+                        "referenceSequenceKind": anchor.get("sequenceKind") or "",
+                        "referenceSequenceSource": anchor.get("source") or "",
+                        "scoreDerivedReference": score_derived_reference,
+                        "scoreLocationVerified": False,
+                        "rhythmRequired": False,
+                        "detectedSeries": run,
+                        "detectedPitchClassSequence": pitch_class,
+                        "referencePitchClassSequence": pitch_class,
+                        "scorePitchClassSequence": pitch_class,
+                        "detectedPitchClassSequenceCompact": pitch_class,
+                        "referencePitchClassSequenceCompact": pitch_class,
+                        "scorePitchClassSequenceCompact": pitch_class,
+                        "matchedDetectedNotes": [matched_note],
+                        "displayDetectedNotes": [matched_note],
+                        "scoreSequenceLabel": anchor.get("label") or "",
+                        "scoreSnippetStatus": "exact_score_location_pending",
+                        "scoreLocationStatus": "exact_score_location_pending",
+                        "anchorLimit": "Single pitch overlap only; exact measure and score crop remain pending.",
+                        "minimumClipSeconds": 1.0,
+                        "score": {
+                            "assetId": target.get("scoreAssetId") or "",
+                            "page": target.get("scorePage") or 0,
+                            "source": target.get("scoreSource") or "",
+                            "sourceUrl": target.get("scoreUrl") or "",
+                            "pdfUrl": target.get("scorePdfUrl") or "",
+                            "boxes": [],
+                            "cropStatus": "exact_score_location_pending",
+                        },
+                    }
+                )
+                if len(matches) >= max_matches:
+                    return matches
+    return matches
+
+
 def score_reference_status(pieces: list[dict[str, Any]]) -> str:
     if not pieces:
         return "awaiting_piece_name"
@@ -1166,6 +1293,15 @@ def matched_series_for_group(match: dict[str, Any]) -> dict[str, Any]:
         return series
     local_start = min(safe_float(note.get("startSeconds")) for note in span_notes if isinstance(note, dict))
     local_end = max(safe_float(note.get("endSeconds"), local_start) for note in span_notes if isinstance(note, dict))
+    minimum_clip_seconds = safe_float(match.get("minimumClipSeconds"), 0)
+    if minimum_clip_seconds and local_end - local_start < minimum_clip_seconds:
+        center = (local_start + local_end) / 2
+        series_end = safe_float(series.get("localEndSeconds"), safe_float(series.get("durationSeconds"), local_end))
+        local_start = max(0.0, center - (minimum_clip_seconds / 2))
+        local_end = local_start + minimum_clip_seconds
+        if series_end and local_end > series_end:
+            local_end = series_end
+            local_start = max(0.0, local_end - minimum_clip_seconds)
     source_start = parse_window_start(str(series.get("sourceWindow") or ""))
     pitch_classes = [str(note.get("pitchClass") or "") for note in display_notes if isinstance(note, dict) and note.get("pitchClass")]
     return {
@@ -2569,6 +2705,7 @@ def build_daily_records(
         score_reference_state = score_reference_status(confirmed)
         score_reference_audit = score_reference_audit_for_pieces(confirmed)
         score_sequence_matches = score_sequence_matches_for_series(all_detected_series, confirmed)
+        pitch_anchor_matches = pitch_anchor_matches_for_series(all_detected_series, confirmed)
         heat_fragments: list[dict[str, Any]] = []
         day_repeat_groups: list[dict[str, Any]] = []
         full_note_count = transcription_note_count(day_transcriptions)
@@ -2775,6 +2912,24 @@ def build_daily_records(
                     },
                 }
             )
+        pitch_anchor_groups = []
+        for match in pitch_anchor_matches:
+            matched_series = matched_series_for_group(match)
+            pitch_anchor_groups.append(
+                {
+                    **match,
+                    "clip": detected_series_clip(matched_series),
+                    "transcription": {
+                        "status": match.get("status") or "pitch_anchor_match",
+                        "notes": matched_series.get("notes", []),
+                        "noteCount": matched_series.get("noteCount", 0),
+                        "sourceTitle": matched_series.get("sourceTitle", ""),
+                        "sourceUrl": matched_series.get("sourceUrl", ""),
+                        "sourceWindow": matched_series.get("sourceWindow", ""),
+                        "sampleId": matched_series.get("sampleId", ""),
+                    },
+                }
+            )
         score_location_verified_count = sum(1 for match in match_groups if match.get("scoreLocationVerified"))
         if match_groups:
             score_alignment_status = (
@@ -2787,25 +2942,39 @@ def build_daily_records(
                 if score_location_verified_count
                 else "Played notes matched a reference sequence; exact score-note and measure alignment remains pending."
             )
+        elif pitch_anchor_groups:
+            score_alignment_status = "pitch_anchor_match_pending_score_location"
+            score_or_pattern_limit = "A played pitch exists in the confirmed target; exact sequence, measure, and score crop remain pending."
         matching_workflow = {
             "status": (
                 "score_sequence_matches_ready"
                 if score_location_verified_count
                 else "reference_sequence_matches_ready"
                 if match_groups
+                else "pitch_anchor_matches_ready"
+                if pitch_anchor_groups
                 else "searching_score_match"
                 if confirmed
                 else "awaiting_piece_name"
             ),
-            "matchCriterion": "pitch_class_sequence",
-            "minimumMatchedNoteRun": MATCH_GROUP_MIN_NOTE_RUN,
-            "minimumDistinctPitchClasses": MATCH_GROUP_MIN_DISTINCT_PITCH_CLASSES,
+            "matchCriterion": (
+                "single_pitch_anchor"
+                if pitch_anchor_groups and not match_groups
+                else "pitch_class_sequence"
+            ),
+            "minimumMatchedNoteRun": 1 if pitch_anchor_groups and not match_groups else MATCH_GROUP_MIN_NOTE_RUN,
+            "minimumDistinctPitchClasses": (
+                PITCH_ANCHOR_MIN_DISTINCT_PITCH_CLASSES
+                if pitch_anchor_groups and not match_groups
+                else MATCH_GROUP_MIN_DISTINCT_PITCH_CLASSES
+            ),
             "rhythmRequired": False,
             "displayMode": "groups_only",
             "rawTranscriptionDisplay": "hidden",
             "detectedSeriesCount": len(all_detected_series),
             "scoreSequenceMatchCount": len(score_sequence_matches),
             "referenceSequenceMatchCount": len(score_sequence_matches),
+            "pitchAnchorMatchCount": len(pitch_anchor_groups),
             "scoreLocationVerifiedCount": score_location_verified_count,
             "scoreReferenceStatus": score_reference_state,
             "scoreReferenceAudit": score_reference_audit,
@@ -2830,6 +2999,7 @@ def build_daily_records(
                 "materialLabel": material_label,
                 "matchingWorkflow": matching_workflow,
                 "matchGroups": match_groups,
+                "pitchAnchorGroups": pitch_anchor_groups,
                 "transcription": {
                     "status": (
                         "audio_matched_fragment"
@@ -2872,6 +3042,7 @@ def build_daily_records(
                     "detectedSeries": api_detected_series,
                     "scoreSequenceMatchCount": len(score_sequence_matches),
                     "referenceSequenceMatchCount": len(score_sequence_matches),
+                    "pitchAnchorMatchCount": len(pitch_anchor_groups),
                     "scoreLocationVerifiedCount": score_location_verified_count,
                     "scoreReferenceStatus": score_reference_state,
                     "scoreReferenceAudit": score_reference_audit,

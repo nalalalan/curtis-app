@@ -4,6 +4,7 @@ from backend.app.daily_records import (
     build_daily_records,
     build_repertoire_evidence,
     detected_note_series,
+    pitch_anchor_matches_for_series,
     score_sequence_matches_for_series,
 )
 from backend.app.media import practice_candidates
@@ -872,6 +873,42 @@ class DailyRecordTests(unittest.TestCase):
         matches = score_sequence_matches_for_series(series, [{"title": "Scanned PDF", "score": score_target}])
 
         self.assertEqual(matches, [])
+
+    def test_single_pitch_anchor_records_obvious_note_overlap_without_score_location(self):
+        transcriptions = [
+            {
+                "transcriptionId": "anchor-run",
+                "sampleId": "sample-1",
+                "sourceTitle": "test",
+                "sourceUrl": "https://www.youtube.com/watch?v=test",
+                "sourceWindow": "*10-20",
+                "status": "transcribed",
+                "notes": [
+                    note("A4", 0.25, 0.45),
+                ],
+            }
+        ]
+        series = detected_note_series(transcriptions, max_series=None)
+        anchors = pitch_anchor_matches_for_series(
+            series,
+            [
+                {
+                    "title": "Source-backed test piece",
+                    "score": {
+                        "scoreAssetId": "test-score",
+                        "scorePitchClassAnchors": [
+                            {"pitchClass": "A", "status": "source_confirmed_pitch_anchor"},
+                        ],
+                    },
+                }
+            ],
+        )
+
+        self.assertEqual(anchors[0]["status"], "pitch_anchor_match")
+        self.assertEqual(anchors[0]["detectedPitchClassSequence"], "A")
+        self.assertEqual(anchors[0]["minimumDistinctPitchClasses"], 1)
+        self.assertEqual(anchors[0]["score"]["boxes"], [])
+        self.assertFalse(anchors[0]["scoreLocationVerified"])
 
     def test_unaccepted_audio_matched_fragment_stays_hidden(self):
         inventory = {
