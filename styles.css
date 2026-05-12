@@ -3315,12 +3315,13 @@ h2 {
   }
 
   .matched-practice-pair {
-    grid-template-columns: 112px minmax(0, 1fr);
-    gap: 6px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 7px;
   }
 
   .matched-practice-pair .embedded-media {
-    max-width: 112px;
+    width: min(100%, 180px);
+    max-width: 180px;
     padding: 6px;
   }
 
@@ -3339,15 +3340,18 @@ h2 {
 
   .matched-notation-head {
     gap: 6px;
-    justify-content: flex-end;
+    justify-content: space-between;
   }
 
   .matched-notation-head span {
-    display: none;
+    display: inline;
   }
 
   .matched-notation-head strong {
     font-size: 11px;
+    max-width: 58%;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .matched-notation-panel .notation-sheet svg {
