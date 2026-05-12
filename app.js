@@ -2149,9 +2149,7 @@ function renderDailyRecord(record, index = 0) {
   const transcription = record?.transcription || {};
   const displayNotation = transcription?.displayNotation !== false && transcription?.transcriptionReady === true;
   const openTarget = new URLSearchParams(window.location.search).get("open") || "";
-  const openForReview = openTarget
-    ? (openTarget === "first" && index === 0) || openTarget === record.practiceDay
-    : index === 0;
+  const openForReview = openTarget === "first" ? index === 0 : openTarget === record.practiceDay;
   const meta = [
     record.activeViolinLabel ? `${record.activeViolinLabel} practice` : record.activeTimeStatus === "pending_media" ? "practice pending" : "",
     record.uploadedVideoLabel ? `${record.uploadedVideoLabel} video` : "",
