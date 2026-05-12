@@ -3319,6 +3319,10 @@ h2 {
     gap: 7px;
   }
 
+  .note-match-grid .matched-practice-pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .matched-practice-pair .embedded-media {
     width: min(100%, 180px);
     max-width: 180px;
