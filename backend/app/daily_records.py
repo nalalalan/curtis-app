@@ -21,6 +21,7 @@ MAX_NOTATION_SYSTEM_EVENTS = 36
 MAX_RECORDS = 120
 MAX_CLIPS_PER_DAY = 5
 MATCH_GROUP_MIN_NOTE_RUN = 1
+MATCH_GROUP_MIN_DISTINCT_PITCH_CLASSES = 2
 MAX_DETECTED_NOTE_SERIES_API = 16
 MAX_DETECTED_NOTE_SERIES_NOTES = 96
 NOTE_SERIES_MAX_GAP_SECONDS = 1.5
@@ -679,6 +680,18 @@ def longest_common_contiguous_run(query: list[str], reference: list[str]) -> dic
     return best
 
 
+def compact_pitch_class_sequence(values: list[str]) -> list[str]:
+    compact: list[str] = []
+    previous = ""
+    for value in values:
+        current = str(value or "").strip()
+        if not current or current == previous:
+            continue
+        compact.append(current)
+        previous = current
+    return compact
+
+
 def score_sequence_matches_for_series(
     series: list[dict[str, Any]],
     pieces: list[dict[str, Any]],
@@ -706,16 +719,23 @@ def score_sequence_matches_for_series(
                     q1 = q0 + int(candidate["length"])
                     r0 = int(candidate["referenceStart"])
                     r1 = r0 + int(candidate["length"])
+                    detected_sequence = query[q0:q1]
+                    score_sequence = reference_values[r0:r1]
+                    if len(set(detected_sequence)) < MATCH_GROUP_MIN_DISTINCT_PITCH_CLASSES:
+                        continue
                     best_for_reference = {
                         "status": "score_sequence_match",
                         "pieceTitle": piece.get("title") or "",
                         "matchCriterion": "pitch_class_sequence",
                         "minimumMatchedNoteRun": MATCH_GROUP_MIN_NOTE_RUN,
+                        "minimumDistinctPitchClasses": MATCH_GROUP_MIN_DISTINCT_PITCH_CLASSES,
                         "matchedNoteRun": int(candidate["length"]),
                         "rhythmRequired": False,
                         "detectedSeries": run,
-                        "detectedPitchClassSequence": " ".join(query[q0:q1]),
-                        "scorePitchClassSequence": " ".join(reference_values[r0:r1]),
+                        "detectedPitchClassSequence": " ".join(detected_sequence),
+                        "scorePitchClassSequence": " ".join(score_sequence),
+                        "detectedPitchClassSequenceCompact": " ".join(compact_pitch_class_sequence(detected_sequence)),
+                        "scorePitchClassSequenceCompact": " ".join(compact_pitch_class_sequence(score_sequence)),
                         "scoreSequenceLabel": reference.get("label") or "",
                         "scoreSnippetStatus": "sequence_match_score_location_pending",
                         "score": {
@@ -2367,6 +2387,7 @@ def build_daily_records(
             ),
             "matchCriterion": "pitch_class_sequence",
             "minimumMatchedNoteRun": MATCH_GROUP_MIN_NOTE_RUN,
+            "minimumDistinctPitchClasses": MATCH_GROUP_MIN_DISTINCT_PITCH_CLASSES,
             "rhythmRequired": False,
             "displayMode": "groups_only",
             "rawTranscriptionDisplay": "hidden",

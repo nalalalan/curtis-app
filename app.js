@@ -1973,6 +1973,15 @@ function matchGroupNotationEvents(group) {
     });
 }
 
+function compactPitchSequenceText(value) {
+  const parts = String(value || "").trim().split(/\s+/).filter(Boolean);
+  const compact = [];
+  parts.forEach((part) => {
+    if (compact[compact.length - 1] !== part) compact.push(part);
+  });
+  return compact.join(" ");
+}
+
 function renderScoreMatchGroups(record) {
   const groups = Array.isArray(record?.matchGroups) ? record.matchGroups.slice(0, 3) : [];
   if (!groups.length) return "";
@@ -1986,7 +1995,9 @@ function renderScoreMatchGroups(record) {
           notationSystems: [{ events, clip }],
         };
         const pieceTitle = group?.pieceTitle || recordPieceText(record);
-        const matchedNotes = group?.detectedPitchClassSequence || group?.scorePitchClassSequence || "";
+        const matchedNotes = group?.detectedPitchClassSequenceCompact
+          || group?.scorePitchClassSequenceCompact
+          || compactPitchSequenceText(group?.detectedPitchClassSequence || group?.scorePitchClassSequence || "");
         const matchLabel = [
           Number(group?.matchedNoteRun) ? `${Number(group.matchedNoteRun)} notes` : "pitch match",
           matchedNotes,

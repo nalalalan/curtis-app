@@ -607,15 +607,16 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(transcription["renderedNoteCount"], 1)
         self.assertEqual(transcription["events"][0]["note"], "D4")
         self.assertTrue(transcription["events"][0]["strictAudioWindow"])
-        self.assertEqual(record["matchingWorkflow"]["status"], "score_sequence_matches_ready")
+        self.assertEqual(record["matchingWorkflow"]["status"], "searching_score_match")
         self.assertEqual(record["matchingWorkflow"]["displayMode"], "groups_only")
         self.assertEqual(record["matchingWorkflow"]["matchCriterion"], "pitch_class_sequence")
         self.assertEqual(record["matchingWorkflow"]["minimumMatchedNoteRun"], 1)
+        self.assertEqual(record["matchingWorkflow"]["minimumDistinctPitchClasses"], 2)
         self.assertFalse(record["matchingWorkflow"]["rhythmRequired"])
         self.assertEqual(transcription["pdfUrl"], "/api/curtis/daily-records/2026-05-03/transcription.pdf")
-        self.assertGreaterEqual(len(record["matchGroups"]), 1)
+        self.assertEqual(record["matchGroups"], [])
         self.assertEqual(transcription["scoreReferenceStatus"], "symbolic_score_sequence_ready")
-        self.assertGreaterEqual(transcription["scoreSequenceMatchCount"], 1)
+        self.assertEqual(transcription["scoreSequenceMatchCount"], 0)
         self.assertEqual(len(transcription["notationSystems"]), 1)
         self.assertEqual(transcription["notationSystems"][0]["clip"]["localStartSeconds"], 3.866)
         self.assertEqual(transcription["notationSystems"][0]["clip"]["localEndSeconds"], 4.458)
@@ -661,7 +662,39 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(matches[0]["matchedNoteRun"], 3)
         self.assertEqual(matches[0]["detectedPitchClassSequence"], "D A B")
         self.assertEqual(matches[0]["scorePitchClassSequence"], "D A B")
+        self.assertEqual(matches[0]["detectedPitchClassSequenceCompact"], "D A B")
+        self.assertEqual(matches[0]["minimumDistinctPitchClasses"], 2)
         self.assertFalse(matches[0]["rhythmRequired"])
+
+    def test_repeated_single_pitch_series_does_not_create_score_match_group(self):
+        transcriptions = [
+            {
+                "transcriptionId": "repeated-run",
+                "sampleId": "sample-1",
+                "sourceTitle": "test",
+                "sourceUrl": "https://www.youtube.com/watch?v=test",
+                "sourceWindow": "*10-20",
+                "status": "transcribed",
+                "notes": [note("D4", index * 0.2, index * 0.2 + 0.1) for index in range(8)],
+            }
+        ]
+        series = detected_note_series(transcriptions, max_series=None)
+        matches = score_sequence_matches_for_series(
+            series,
+            [
+                {
+                    "title": "Source-backed test piece",
+                    "score": {
+                        "scoreAssetId": "test-score",
+                        "scorePitchClassSequences": [
+                            {"label": "mm. 1-2", "values": ["D4", "D5", "D5", "D4", "D6"]},
+                        ],
+                    },
+                }
+            ],
+        )
+
+        self.assertEqual(matches, [])
 
     def test_unaccepted_audio_matched_fragment_stays_hidden(self):
         inventory = {
