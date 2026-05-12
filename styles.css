@@ -1814,6 +1814,17 @@ h2 {
   max-height: 165px;
 }
 
+.score-reference-panel .score-image-crop {
+  width: 100%;
+  max-width: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+}
+
+.score-reference-panel .score-image-crop img {
+  max-height: none;
+}
+
 .transcription-pdf-link {
   display: inline-flex;
   width: fit-content;
