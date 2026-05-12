@@ -1113,6 +1113,13 @@ def target_pitch_anchors(target: dict[str, Any]) -> list[dict[str, Any]]:
     raw_anchors = target.get("scorePitchClassAnchors") if isinstance(target.get("scorePitchClassAnchors"), list) else []
     for item in raw_anchors:
         if isinstance(item, dict):
+            visual_note_verified = (
+                item.get("visualNoteVerified") is True
+                or item.get("scoreNoteVerified") is True
+                or item.get("verified") is True
+            )
+            if not visual_note_verified:
+                continue
             pitch_class = note_pitch_class(item.get("pitchClass") or item.get("note") or item.get("value"))
             if not pitch_class:
                 continue
@@ -1131,22 +1138,9 @@ def target_pitch_anchors(target: dict[str, Any]) -> list[dict[str, Any]]:
                     "sequenceKind": "source_confirmed_score_pitch_anchor",
                     "scoreDerivedReference": True,
                     "status": item.get("status") or "source_confirmed_pitch_anchor",
+                    "visualNoteVerified": True,
                 }
             )
-        else:
-            pitch_class = note_pitch_class(item)
-            if pitch_class:
-                anchors.append(
-                    {
-                        "pitchClass": pitch_class,
-                        "displayNote": f"{pitch_class}4",
-                        "label": f"{pitch_class} score anchor",
-                        "source": "source-confirmed score pitch anchor",
-                        "sequenceKind": "source_confirmed_score_pitch_anchor",
-                        "scoreDerivedReference": True,
-                        "status": "source_confirmed_pitch_anchor",
-                    }
-                )
     deduped: list[dict[str, Any]] = []
     seen_keys: set[tuple[str, str, str]] = set()
     for anchor in anchors:
@@ -1232,6 +1226,8 @@ def pitch_anchor_matches_for_series(
                         "label": anchor.get("label") or "",
                         "status": anchor.get("snippetStatus") or "source_score_pitch_anchor",
                         "noteLocation": anchor.get("noteLocation") or "",
+                        "visualNoteVerified": bool(anchor.get("visualNoteVerified")),
+                        "scoreNoteVerified": bool(anchor.get("visualNoteVerified")),
                     }
                     if anchor.get("snippetImageUrl")
                     else {}
@@ -1269,6 +1265,7 @@ def pitch_anchor_matches_for_series(
                                 "sourceUrl": anchor.get("sourceUrl") or "",
                                 "snippetImageUrl": anchor.get("snippetImageUrl") or "",
                                 "scoreLocationVerified": False,
+                                "visualNoteVerified": bool(anchor.get("visualNoteVerified")),
                             }
                         ],
                         "scoreAnchorSnippet": score_anchor_snippet,

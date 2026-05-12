@@ -286,34 +286,22 @@ def wieniawski_reference_target() -> dict[str, Any]:
         "referenceAudio": "needed",
         "scoreNoteDetectionStatus": "not_available_for_scanned_pdf",
         "scoreLocationStatus": "exact_score_location_pending",
-        "scorePitchClassAnchors": [
+        "scorePitchClassAnchors": [],
+        "rejectedScorePitchClassAnchors": [
             {
                 "pitchClass": "A",
                 "displayNote": "A4",
-                "label": "A in source score",
-                "status": "source_confirmed_pitch_anchor",
-                "source": "IMSLP public-domain Scherzo-Tarantelle solo violin part",
-                "sourceUrl": "https://imslp.org/wiki/Scherzo_tarantelle%2C_Op.16_%28Wieniawski%2C_Henri%29",
-                "pdfUrl": "https://s9.imslp.org/files/imglnks/usimg/b/b0/IMSLP724668-PMLP17451-01._WIENIAWSKI_-_SCHERZO_TARANTELLE%2C_OP._16_%28GILSON%29_-_Solo_Part.pdf",
-                "sourcePage": 2,
-                "snippetImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-a4-source-snippet.png",
-                "snippetStatus": "source_score_pitch_anchor",
-                "noteLocation": "highlighted A4 in the treble staff",
+                "status": "rejected_visual_note_review",
+                "reason": "The highlighted score crop was reported as G4, not A4.",
             },
             {
                 "pitchClass": "A",
                 "displayNote": "A5",
-                "label": "A in source score",
-                "status": "source_confirmed_pitch_anchor",
-                "source": "IMSLP public-domain Scherzo-Tarantelle solo violin part",
-                "sourceUrl": "https://imslp.org/wiki/Scherzo_tarantelle%2C_Op.16_%28Wieniawski%2C_Henri%29",
-                "pdfUrl": "https://s9.imslp.org/files/imglnks/usimg/b/b0/IMSLP724668-PMLP17451-01._WIENIAWSKI_-_SCHERZO_TARANTELLE%2C_OP._16_%28GILSON%29_-_Solo_Part.pdf",
-                "sourcePage": 2,
-                "snippetImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-a5-source-snippet.png",
-                "snippetStatus": "source_score_pitch_anchor",
-                "noteLocation": "highlighted A5 above the treble staff",
-            }
+                "status": "rejected_visual_note_review",
+                "reason": "The highlighted score crop was reported as G5, not A5.",
+            },
         ],
+        "scoreNoteCropStatus": "withheld_failed_visual_note_review",
         "referencePitchClassSequences": [
             {
                 "label": "Scherzo-Tarantelle reference audio pitch trace, first 180 seconds",

@@ -1664,11 +1664,11 @@ function renderHeatMap(record) {
 }
 
 function recordStatusLabel(record) {
-  if (
-    record?.matchingWorkflow?.status === "score_sequence_matches_ready"
-    || record?.matchingWorkflow?.status === "reference_sequence_matches_ready"
-  ) return "note match";
-  if (record?.matchingWorkflow?.status === "pitch_anchor_matches_ready") return "score note";
+  if (record?.matchingWorkflow?.status === "score_sequence_matches_ready") return "note match";
+  if (record?.matchingWorkflow?.status === "reference_sequence_matches_ready") return "matching";
+  if (record?.matchingWorkflow?.status === "pitch_anchor_matches_ready") {
+    return sourceScoreMatchGroups(record).length ? "score note" : "matching";
+  }
   if (record?.transcription?.reliability === "audio_matched_fragment") return "detected note";
   if (record?.transcription?.reliability === "audio_verified_micro") return "audio-checked transcription";
   if (record?.matchingWorkflow?.status === "awaiting_piece_name") return "piece name";
@@ -1698,7 +1698,7 @@ function recordStatusTone(record) {
 }
 
 function transcriptionEvidenceLabel(transcription) {
-  if (transcription?.scoreSequenceMatchCount) return "note match";
+  if (transcription?.scoreLocationVerifiedCount) return "note match";
   if (transcription?.reliability === "audio_matched_fragment") return "detected note";
   if (transcription?.reliability === "audio_verified_micro") return "audio-checked transcription";
   if (transcription?.displayNotation === true && transcription?.transcriptionReady === true) return "detected transcription";
@@ -2149,6 +2149,16 @@ function sourceScoreAnchorReady(group) {
   const score = group?.score && typeof group.score === "object" ? group.score : {};
   const imageUrl = snippet.imageUrl || score.imageUrl || "";
   if (!imageUrl) return false;
+  const visualNoteVerified = (
+    snippet.visualNoteVerified === true
+    || snippet.scoreNoteVerified === true
+    || snippet.verified === true
+    || group?.visualNoteVerified === true
+    || group?.scoreNoteVerified === true
+    || score.visualNoteVerified === true
+    || score.scoreNoteVerified === true
+  );
+  if (!visualNoteVerified) return false;
   const scorePitch = notePitchClassText(snippet.pitchClass || snippet.note || group?.scorePitchClassSequenceCompact || group?.scorePitchClassSequence);
   const detectedPitch = notePitchClassText(detectedMatchNoteLabel(group) || group?.detectedPitchClassSequenceCompact || group?.detectedPitchClassSequence);
   return Boolean(scorePitch && detectedPitch && scorePitch === detectedPitch);

@@ -908,6 +908,7 @@ class DailyRecordTests(unittest.TestCase):
                                 "snippetImageUrl": "/assets/score/test-a.png",
                                 "snippetStatus": "source_score_pitch_anchor",
                                 "noteLocation": "highlighted A4",
+                                "visualNoteVerified": True,
                             },
                         ],
                     },
@@ -924,26 +925,61 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(anchors[0]["scoreAnchorSnippet"]["note"], "A4")
         self.assertEqual(anchors[0]["scoreAnchorSnippet"]["pitchClass"], "A")
         self.assertEqual(anchors[0]["scoreAnchorSnippet"]["status"], "source_score_pitch_anchor")
+        self.assertTrue(anchors[0]["scoreAnchorSnippet"]["visualNoteVerified"])
         self.assertEqual(anchors[0]["score"]["imageUrl"], "/assets/score/test-a.png")
         self.assertEqual(anchors[0]["score"]["boxes"], [])
         self.assertFalse(anchors[0]["scoreLocationVerified"])
 
-    def test_wieniawski_score_note_match_uses_detected_octave_source_crop(self):
-        target = wieniawski_reference_target()
-        anchors_by_note = {anchor["displayNote"]: anchor for anchor in target["scorePitchClassAnchors"]}
+    def test_unverified_pitch_anchor_is_not_accepted_as_score_match(self):
+        transcriptions = [
+            {
+                "transcriptionId": "anchor-run",
+                "sampleId": "sample-1",
+                "sourceTitle": "test",
+                "sourceUrl": "https://www.youtube.com/watch?v=test",
+                "sourceWindow": "*10-20",
+                "status": "transcribed",
+                "notes": [
+                    note("A4", 0.25, 0.45),
+                ],
+            }
+        ]
+        series = detected_note_series(transcriptions, max_series=None)
+        anchors = pitch_anchor_matches_for_series(
+            series,
+            [
+                {
+                    "title": "Unverified score crop",
+                    "score": {
+                        "scoreAssetId": "test-score",
+                        "scorePitchClassAnchors": [
+                            {
+                                "pitchClass": "A",
+                                "displayNote": "A4",
+                                "snippetImageUrl": "/assets/score/bad-a.png",
+                                "snippetStatus": "source_score_pitch_anchor",
+                            },
+                        ],
+                    },
+                }
+            ],
+        )
 
-        self.assertIn("A4", anchors_by_note)
-        self.assertIn("A5", anchors_by_note)
+        self.assertEqual(anchors, [])
+
+    def test_wieniawski_rejected_score_note_crops_are_withheld(self):
+        target = wieniawski_reference_target()
+        rejected_by_note = {anchor["displayNote"]: anchor for anchor in target["rejectedScorePitchClassAnchors"]}
+
+        self.assertEqual(target["scorePitchClassAnchors"], [])
+        self.assertEqual(target["scoreNoteCropStatus"], "withheld_failed_visual_note_review")
+        self.assertEqual(rejected_by_note["A4"]["status"], "rejected_visual_note_review")
+        self.assertEqual(rejected_by_note["A5"]["status"], "rejected_visual_note_review")
 
         a4_series = [{"transcriptionId": "a4", "notes": [note("A4", 0, 1)]}]
-        a4_matches = pitch_anchor_matches_for_series(a4_series, [{"title": "Scherzo", "score": target}])
-        self.assertEqual(a4_matches[0]["scoreAnchorSnippet"]["note"], "A4")
-        self.assertEqual(a4_matches[0]["scoreAnchorSnippet"]["imageUrl"], "/assets/score/wieniawski-scherzo-tarantelle-a4-source-snippet.png")
-
         a5_series = [{"transcriptionId": "a5", "notes": [note("A5", 0, 1)]}]
-        a5_matches = pitch_anchor_matches_for_series(a5_series, [{"title": "Scherzo", "score": target}])
-        self.assertEqual(a5_matches[0]["scoreAnchorSnippet"]["note"], "A5")
-        self.assertEqual(a5_matches[0]["scoreAnchorSnippet"]["imageUrl"], "/assets/score/wieniawski-scherzo-tarantelle-a5-source-snippet.png")
+        self.assertEqual(pitch_anchor_matches_for_series(a4_series, [{"title": "Scherzo", "score": target}]), [])
+        self.assertEqual(pitch_anchor_matches_for_series(a5_series, [{"title": "Scherzo", "score": target}]), [])
 
     def test_unaccepted_audio_matched_fragment_stays_hidden(self):
         inventory = {
