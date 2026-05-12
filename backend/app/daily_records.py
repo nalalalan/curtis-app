@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections import Counter, defaultdict
 from typing import Any
 
@@ -20,6 +21,9 @@ MAX_NOTATION_SYSTEM_EVENTS = 36
 MAX_RECORDS = 120
 MAX_CLIPS_PER_DAY = 5
 MATCH_GROUP_MIN_NOTE_RUN = 1
+MAX_DETECTED_NOTE_SERIES_API = 16
+MAX_DETECTED_NOTE_SERIES_NOTES = 96
+NOTE_SERIES_MAX_GAP_SECONDS = 1.5
 WEAK_TRANSCRIPTION_MIN_SECONDS = 8
 DRAFT_TRANSCRIPTION_MIN_SECONDS = 30
 WEAK_TRANSCRIPTION_MIN_NOTES = 12
@@ -40,8 +44,8 @@ MICRO_TRANSCRIPTION_DISPLAY_LIMIT = (
     "review did not match reliably enough to display as transcription."
 )
 MATCHED_FRAGMENT_DISPLAY_LIMIT = (
-    "Strict matched fragments are displayed. Full-session transcription remains withheld "
-    "until the same note/rhythm match standard works across longer playing."
+    "Audio-checked note fragments are displayed. Score matches require pitch-class sequence agreement "
+    "with a score or symbolic reference."
 )
 ACCEPTED_AUDIO_MATCHED_FRAGMENTS: tuple[dict[str, Any], ...] = (
     {
@@ -92,6 +96,9 @@ VIOLIN_POSITIVE_VALUES = {
     "human_verified_violin",
     "usable_violin",
 }
+NOTE_CLASS_NAMES = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
+NOTE_CLASS_VALUES = {name: index for index, name in enumerate(NOTE_CLASS_NAMES)}
+NOTE_CLASS_VALUES.update({"DB": 1, "EB": 3, "GB": 6, "AB": 8, "BB": 10})
 
 
 def is_current_transcription(item: dict[str, Any]) -> bool:
@@ -506,6 +513,263 @@ def note_midi_value(note: dict[str, Any]) -> int | None:
     return (octave + 1) * 12 + pitch_class
 
 
+def note_pitch_class(note: dict[str, Any] | str) -> str:
+    if isinstance(note, dict):
+        midi = note_midi_value(note)
+        if midi is not None:
+            return NOTE_CLASS_NAMES[midi % 12]
+        raw_value = str(note.get("note") or "").strip()
+    elif isinstance(note, int):
+        return NOTE_CLASS_NAMES[note % 12] if 0 <= note <= 127 else ""
+    else:
+        raw_value = str(note or "").strip()
+    raw = raw_value.upper().replace("♭", "B").replace("♯", "#").replace("FLAT", "B").replace("SHARP", "#")
+    match = re.match(r"^([A-G](?:#|B)?)", raw)
+    if not match:
+        return ""
+    pitch = match.group(1)
+    value = NOTE_CLASS_VALUES.get(pitch)
+    return NOTE_CLASS_NAMES[value] if value is not None else ""
+
+
+def note_event_for_series(note: dict[str, Any]) -> dict[str, Any]:
+    start = safe_float(note.get("startSeconds"))
+    end = safe_float(note.get("endSeconds"), start)
+    return {
+        "note": str(note.get("note") or "").strip(),
+        "pitchClass": note_pitch_class(note),
+        "midi": note_midi_value(note),
+        "startSeconds": round(start, 3),
+        "endSeconds": round(max(start, end), 3),
+        "durationSeconds": round(max(0.0, safe_float(note.get("durationSeconds"), end - start)), 3),
+        "confidence": round(safe_float(note.get("confidence")), 3),
+        "uncertain": bool(note.get("uncertain")) or safe_float(note.get("confidence")) < 0.62,
+    }
+
+
+def compact_adjacent_pitch_classes(values: list[str]) -> list[str]:
+    compact: list[str] = []
+    for value in values:
+        if value and (not compact or compact[-1] != value):
+            compact.append(value)
+    return compact
+
+
+def detected_note_series(
+    transcriptions: list[dict[str, Any]],
+    max_series: int | None = MAX_DETECTED_NOTE_SERIES_API,
+    max_notes_per_series: int | None = MAX_DETECTED_NOTE_SERIES_NOTES,
+) -> list[dict[str, Any]]:
+    series: list[dict[str, Any]] = []
+    for transcription in transcriptions:
+        notes = [
+            note_event_for_series(note)
+            for note in (transcription.get("notes") if isinstance(transcription.get("notes"), list) else [])
+            if isinstance(note, dict) and str(note.get("note") or "").strip()
+        ]
+        notes = [note for note in notes if note.get("pitchClass")]
+        if not notes:
+            continue
+        notes.sort(key=lambda note: (safe_float(note.get("startSeconds")), safe_float(note.get("endSeconds"))))
+        source_start = parse_window_start(str(transcription.get("sourceWindow") or ""))
+        sample_id = str(transcription.get("sampleId") or "").strip()
+        source_title = str(transcription.get("sourceTitle") or "").strip()
+        source_url = str(transcription.get("sourceUrl") or "").strip()
+        source_window = str(transcription.get("sourceWindow") or "").strip()
+        current: list[dict[str, Any]] = []
+        previous_end = 0.0
+
+        def flush() -> None:
+            nonlocal current
+            if not current:
+                return
+            run = current if max_notes_per_series is None else current[:max_notes_per_series]
+            pitch_classes = [str(note.get("pitchClass") or "") for note in run if note.get("pitchClass")]
+            collapsed = compact_adjacent_pitch_classes(pitch_classes)
+            start = safe_float(run[0].get("startSeconds"))
+            end = safe_float(run[-1].get("endSeconds"), start)
+            detected_count = len(current)
+            series.append(
+                {
+                    "id": f"{sample_id or source_title}:{source_window}:{len(series) + 1}",
+                    "sourceTitle": source_title,
+                    "sourceUrl": source_url,
+                    "sourceWindow": source_window,
+                    "sampleId": sample_id,
+                    "startSeconds": round(source_start + start, 3),
+                    "endSeconds": round(source_start + end, 3),
+                    "localStartSeconds": round(start, 3),
+                    "localEndSeconds": round(end, 3),
+                    "durationSeconds": round(max(0.0, end - start), 3),
+                    "noteCount": detected_count,
+                    "displayedNoteCount": len(run),
+                    "omittedNoteCount": max(0, detected_count - len(run)),
+                    "uncertainNoteCount": sum(1 for note in current if note.get("uncertain")),
+                    "notes": run,
+                    "noteSeries": [str(note.get("note") or "") for note in run],
+                    "pitchClasses": pitch_classes,
+                    "collapsedPitchClasses": collapsed,
+                    "noteSeriesLabel": " ".join(str(note.get("note") or "") for note in run),
+                    "pitchClassSeriesLabel": " ".join(pitch_classes),
+                    "collapsedPitchClassSeriesLabel": " ".join(collapsed),
+                    "status": str(transcription.get("status") or ""),
+                    "pipelineVersion": str(transcription.get("pipelineVersion") or ""),
+                }
+            )
+            current = []
+
+        for note in notes:
+            start = safe_float(note.get("startSeconds"))
+            if current and start - previous_end > NOTE_SERIES_MAX_GAP_SECONDS:
+                flush()
+            current.append(note)
+            previous_end = max(previous_end, safe_float(note.get("endSeconds"), start))
+        flush()
+        if max_series is not None and len(series) >= max_series:
+            return series[:max_series]
+    return series if max_series is None else series[:max_series]
+
+
+def reference_pitch_class_sequences(target: dict[str, Any]) -> list[dict[str, Any]]:
+    candidates: list[Any] = []
+    for key in ("pitchClassSequence", "scorePitchClassSequence", "firstNotes"):
+        value = target.get(key)
+        if isinstance(value, list):
+            candidates.append({"label": key, "values": value})
+    for key in ("pitchClassSequences", "scorePitchClassSequences"):
+        value = target.get(key)
+        if isinstance(value, list):
+            candidates.extend(value)
+    sequences: list[dict[str, Any]] = []
+    for index, candidate in enumerate(candidates, start=1):
+        if isinstance(candidate, dict):
+            values = candidate.get("values") or candidate.get("notes") or candidate.get("pitchClasses") or candidate.get("sequence")
+            label = str(candidate.get("label") or candidate.get("section") or f"reference sequence {index}")
+        else:
+            values = candidate
+            label = f"reference sequence {index}"
+        if not isinstance(values, list):
+            continue
+        pitch_classes = [note_pitch_class(value) for value in values]
+        pitch_classes = [value for value in pitch_classes if value]
+        if pitch_classes:
+            sequences.append({"label": label, "pitchClasses": pitch_classes})
+    return sequences
+
+
+def longest_common_contiguous_run(query: list[str], reference: list[str]) -> dict[str, int]:
+    best = {"length": 0, "queryStart": 0, "referenceStart": 0}
+    if not query or not reference:
+        return best
+    previous = [0] * (len(reference) + 1)
+    for query_index, query_value in enumerate(query, start=1):
+        current = [0] * (len(reference) + 1)
+        for reference_index, reference_value in enumerate(reference, start=1):
+            if query_value != reference_value:
+                continue
+            length = previous[reference_index - 1] + 1
+            current[reference_index] = length
+            if length > best["length"]:
+                best = {
+                    "length": length,
+                    "queryStart": query_index - length,
+                    "referenceStart": reference_index - length,
+                }
+        previous = current
+    return best
+
+
+def score_sequence_matches_for_series(
+    series: list[dict[str, Any]],
+    pieces: list[dict[str, Any]],
+    max_matches: int = 12,
+) -> list[dict[str, Any]]:
+    matches: list[dict[str, Any]] = []
+    for run in series:
+        raw_query = [str(value) for value in run.get("pitchClasses", []) if value]
+        collapsed_query = [str(value) for value in run.get("collapsedPitchClasses", []) if value]
+        queries = [raw_query]
+        if collapsed_query != raw_query:
+            queries.append(collapsed_query)
+        for piece in pieces:
+            target = piece.get("score") if isinstance(piece.get("score"), dict) else {}
+            for reference in reference_pitch_class_sequences(target):
+                reference_values = reference.get("pitchClasses") if isinstance(reference.get("pitchClasses"), list) else []
+                best_for_reference: dict[str, Any] = {}
+                for query in queries:
+                    candidate = longest_common_contiguous_run(query, reference_values)
+                    if candidate["length"] < MATCH_GROUP_MIN_NOTE_RUN:
+                        continue
+                    if candidate["length"] <= int(best_for_reference.get("matchedNoteRun") or 0):
+                        continue
+                    q0 = int(candidate["queryStart"])
+                    q1 = q0 + int(candidate["length"])
+                    r0 = int(candidate["referenceStart"])
+                    r1 = r0 + int(candidate["length"])
+                    best_for_reference = {
+                        "status": "score_sequence_match",
+                        "pieceTitle": piece.get("title") or "",
+                        "matchCriterion": "pitch_class_sequence",
+                        "minimumMatchedNoteRun": MATCH_GROUP_MIN_NOTE_RUN,
+                        "matchedNoteRun": int(candidate["length"]),
+                        "rhythmRequired": False,
+                        "detectedSeries": run,
+                        "detectedPitchClassSequence": " ".join(query[q0:q1]),
+                        "scorePitchClassSequence": " ".join(reference_values[r0:r1]),
+                        "scoreSequenceLabel": reference.get("label") or "",
+                        "scoreSnippetStatus": "sequence_match_score_location_pending",
+                        "score": {
+                            "assetId": target.get("scoreAssetId") or "",
+                            "page": target.get("scorePage") or 0,
+                            "source": target.get("scoreSource") or "",
+                            "sourceUrl": target.get("scoreUrl") or "",
+                            "pdfUrl": target.get("scorePdfUrl") or "",
+                        },
+                    }
+                if best_for_reference:
+                    matches.append(best_for_reference)
+                    if len(matches) >= max_matches:
+                        return matches
+    return matches
+
+
+def score_reference_status(pieces: list[dict[str, Any]]) -> str:
+    if not pieces:
+        return "awaiting_piece_name"
+    if any(reference_pitch_class_sequences(piece.get("score") if isinstance(piece.get("score"), dict) else {}) for piece in pieces):
+        return "symbolic_score_sequence_ready"
+    if any((piece.get("score") if isinstance(piece.get("score"), dict) else {}).get("scoreAssetId") for piece in pieces):
+        return "symbolic_score_sequence_missing"
+    return "score_reference_missing"
+
+
+def detected_series_clip(series: dict[str, Any]) -> dict[str, Any]:
+    sample_id = str(series.get("sampleId") or "").strip()
+    local_start = safe_float(series.get("localStartSeconds"))
+    local_end = max(local_start, safe_float(series.get("localEndSeconds"), local_start))
+    media_url = f"/api/curtis/media/sample/{sample_id}" if sample_id else ""
+    return {
+        "type": "detected_note_series",
+        "label": "detected note series",
+        "url": series.get("sourceUrl") or "",
+        "sourceTitle": series.get("sourceTitle") or "",
+        "startSeconds": series.get("startSeconds") or 0,
+        "endSeconds": series.get("endSeconds") or 0,
+        "durationSeconds": series.get("durationSeconds") or 0,
+        "activeTranscribedSeconds": series.get("durationSeconds") or 0,
+        "noteCount": series.get("noteCount") or 0,
+        "transcriptionStatus": "detected_note_series",
+        "transcriptionId": series.get("id") or "",
+        "pipelineVersion": series.get("pipelineVersion") or "",
+        "reason": "Detected notes from the violin-playing window.",
+        "sampleId": sample_id,
+        "mediaUrl": media_url,
+        "audioUrl": f"{media_url}/clip?start={local_start:.3f}&end={local_end:.3f}" if media_url and local_end > local_start else "",
+        "localStartSeconds": round(local_start, 3),
+        "localEndSeconds": round(local_end, 3),
+    }
+
+
 def longest_note_run(values: list[int]) -> int:
     longest = 0
     current = 0
@@ -866,7 +1130,7 @@ def matched_fragment_clip(match: dict[str, Any]) -> dict[str, Any]:
     end = source_start + local_end
     return {
         "type": "audio_matched_fragment",
-        "label": "matched fragment",
+        "label": "detected note",
         "url": transcription.get("sourceUrl") or "",
         "sourceTitle": transcription.get("sourceTitle") or "",
         "startSeconds": round(start, 3),
@@ -966,7 +1230,7 @@ def transcription_coverage(
             "windowSeconds": 0,
             "windowLabel": "",
             "coveragePercent": 0,
-            "coverageLabel": "No matched transcription window yet.",
+            "coverageLabel": "No audio-checked transcription window yet.",
             "coverageLimit": "No playable score-linked transcription window is available for this day yet.",
             "coverageStatus": "pending_transcription",
         }
@@ -1062,10 +1326,10 @@ def transcription_failure_summary(transcriptions: list[dict[str, Any]]) -> dict[
     if mode == "repeated_pitch_collapse":
         limit = (
             "The detected pitch trace did not match the audio closely enough to become notation. "
-            "Only matched note evidence renders as sheet music."
+            "Only audio-checked note evidence renders as sheet music."
         )
     else:
-        limit = "Only matched note evidence renders as sheet music."
+        limit = "Only audio-checked note evidence renders as sheet music."
     return {
         "qualityStatus": "score_audio_only",
         "qualityLabel": "matching",
@@ -1120,7 +1384,7 @@ def transcription_quality(
             "qualityLabel": "matching",
             "qualityLimit": (
                 f"The machine pitch events contain {', '.join(parts)} and stay out of the music view. "
-                f"Only matched note evidence renders as sheet music.{sparse_note}"
+                f"Only audio-checked note evidence renders as sheet music.{sparse_note}"
             ),
             "qualityMetrics": metrics,
             "segmentCount": segment_count,
@@ -1139,7 +1403,7 @@ def transcription_quality(
     return {
         "qualityStatus": "usable_fragment",
         "qualityLabel": "matching",
-        "qualityLimit": f"Machine pitch events exist, but only matched transcription renders as notation.{sparse_note}",
+        "qualityLimit": f"Machine pitch events exist, but only audio-checked transcription renders as notation.{sparse_note}",
         "qualityMetrics": metrics,
         "segmentCount": segment_count,
     }
@@ -1464,7 +1728,7 @@ def clips_for_day(
         elif quality.get("windowMode") == "detected_active_sections" and active_duration > 0:
             reason = f"{note_count} detected pitch events from {duration_seconds_label(active_duration)} of active audio; notation renders only after note-for-note verification."
         if str(transcription.get("status") or "").startswith("failed_") or quality.get("failed"):
-            reason = "Clip kept for verification. Only note/rhythm evidence that matches the audio renders as notation."
+            reason = "Clip kept for verification. Only audio-checked note evidence renders as notation."
         clips.append(
             {
                 "type": "transcribed_window",
@@ -1689,14 +1953,14 @@ def musician_read(
         score_mode = "source_confirmed_score_target"
         reference_target = piece.get("score") if isinstance(piece.get("score"), dict) else reference_target
         target_label = score_target_label(reference_target)
-        confidence = "matched transcription plus source label" if notes else "source label"
+        confidence = "audio-checked transcription plus source label" if notes else "source label"
     elif calibration:
         source = "explicit title label"
         title = str(calibration.get("title") or "").strip()
         material_type = str(calibration.get("materialType") or material_type or "calibration").strip()
         score_mode = str(calibration.get("referenceKind") or "title_labeled_calibration").strip()
         target_label = score_target_label(reference_target)
-        confidence = "matched transcription plus title label" if notes else "title label"
+        confidence = "audio-checked transcription plus title label" if notes else "title label"
     elif uncertain:
         source = "fingerprint candidate"
         title = str(uncertain[0].get("title") or "").strip()
@@ -1705,7 +1969,7 @@ def musician_read(
     elif material_status == "piece_or_exercise_pending":
         source = "score-free or unidentified material"
         material_type = material_type or "unknown_or_exercise"
-        confidence = "matched transcription only" if notes else "audio evidence only"
+        confidence = "audio-checked transcription only" if notes else "audio evidence only"
 
     match = top_reference_match(display_transcriptions)
     match_title = str(match.get("title") or "").strip()
@@ -1882,6 +2146,10 @@ def build_daily_records(
         )
         confirmed = confirmed_pieces_for_day(state, videos, day_transcriptions)
         uncertain = uncertain_pieces_for_day(day_transcriptions)
+        all_detected_series = detected_note_series(day_transcriptions, max_series=None)
+        api_detected_series = all_detected_series[:MAX_DETECTED_NOTE_SERIES_API]
+        score_reference_state = score_reference_status(confirmed)
+        score_sequence_matches = score_sequence_matches_for_series(all_detected_series, confirmed)
         heat_fragments: list[dict[str, Any]] = []
         day_repeat_groups: list[dict[str, Any]] = []
         full_note_count = transcription_note_count(day_transcriptions)
@@ -1923,7 +2191,7 @@ def build_daily_records(
             quality = {
                 **quality,
                 "qualityStatus": "audio_matched_fragment",
-                "qualityLabel": "matched fragment",
+                "qualityLabel": "detected note",
                 "qualityLimit": MATCHED_FRAGMENT_DISPLAY_LIMIT,
                 "matchedFragmentCount": len(matched_fragments),
                 "matchedFragmentNoteCount": note_count,
@@ -1941,13 +2209,13 @@ def build_daily_records(
                 "rejectedMachinePitchEventCount": rejected_count,
                 "detectedPitchEventCount": full_detected,
                 "displayLimit": (
-                    f"{note_count} matched notes are displayed across {len(matched_fragments)} exact clips; "
+                    f"{note_count} audio-checked notes are displayed across {len(matched_fragments)} exact clips; "
                     f"{rejected_count} machine pitch events remain hidden."
                 ),
             }
             heat_fragments = [
                 {
-                    "label": "matched single-note fragments",
+                    "label": "audio-checked detected notes",
                     "count": len(matched_fragments),
                     "seconds": round(matched_seconds, 3),
                     "density": 1,
@@ -2072,34 +2340,36 @@ def build_daily_records(
         blocker = main_curtis_blocker(observations)
         match_groups = [
             {
-                "status": "note_match_confirmed",
-                "pieceTitle": confirmed[0]["title"] if confirmed else "",
-                "matchCriterion": "note_sequence",
-                "minimumMatchedNoteRun": MATCH_GROUP_MIN_NOTE_RUN,
-                "rhythmRequired": False,
-                "clip": matched_fragment_clip(item),
-                "transcription": item.get("transcription") or {},
-                "matchedNoteRun": max(
-                    MATCH_GROUP_MIN_NOTE_RUN,
-                    int((item.get("transcription") or {}).get("noteCount") or 0),
-                ),
-                "scoreSnippetStatus": "pending_score_location_match",
+                **match,
+                "clip": detected_series_clip(match.get("detectedSeries") if isinstance(match.get("detectedSeries"), dict) else {}),
+                "transcription": {
+                    "status": "score_sequence_match",
+                    "notes": (match.get("detectedSeries") or {}).get("notes", []),
+                    "noteCount": (match.get("detectedSeries") or {}).get("noteCount", 0),
+                    "sourceTitle": (match.get("detectedSeries") or {}).get("sourceTitle", ""),
+                    "sourceUrl": (match.get("detectedSeries") or {}).get("sourceUrl", ""),
+                    "sourceWindow": (match.get("detectedSeries") or {}).get("sourceWindow", ""),
+                    "sampleId": (match.get("detectedSeries") or {}).get("sampleId", ""),
+                },
             }
-            for item in matched_fragments
+            for match in score_sequence_matches
         ]
         matching_workflow = {
             "status": (
-                "matched_groups_ready"
+                "score_sequence_matches_ready"
                 if match_groups
                 else "searching_score_match"
                 if confirmed
                 else "awaiting_piece_name"
             ),
-            "matchCriterion": "note_sequence",
+            "matchCriterion": "pitch_class_sequence",
             "minimumMatchedNoteRun": MATCH_GROUP_MIN_NOTE_RUN,
             "rhythmRequired": False,
             "displayMode": "groups_only",
             "rawTranscriptionDisplay": "hidden",
+            "detectedSeriesCount": len(all_detected_series),
+            "scoreSequenceMatchCount": len(score_sequence_matches),
+            "scoreReferenceStatus": score_reference_state,
             "transcriptionRunPdfUrl": f"/api/curtis/daily-records/{day}/transcription.pdf",
         }
         records.append(
@@ -2130,7 +2400,7 @@ def build_daily_records(
                         else "pending"
                     ),
                     "displayTitle": (
-                        "Matched fragment"
+                        "Detected note"
                         if has_verified_transcription
                         else "Audio evidence"
                     ),
@@ -2158,6 +2428,11 @@ def build_daily_records(
                     ),
                     "noteCount": public_note_count,
                     "segmentCount": len(notation_segments),
+                    "detectedSeriesCount": len(all_detected_series),
+                    "detectedSeries": api_detected_series,
+                    "scoreSequenceMatchCount": len(score_sequence_matches),
+                    "scoreReferenceStatus": score_reference_state,
+                    "scoreSequenceMatches": score_sequence_matches[:6],
                     **coverage,
                     **quality,
                     **display_state,

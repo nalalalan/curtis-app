@@ -1,6 +1,11 @@
 import unittest
 
-from backend.app.daily_records import build_daily_records, build_repertoire_evidence
+from backend.app.daily_records import (
+    build_daily_records,
+    build_repertoire_evidence,
+    detected_note_series,
+    score_sequence_matches_for_series,
+)
 from backend.app.media import practice_candidates
 from backend.app.transcription import TRANSCRIPTION_PIPELINE_VERSION
 
@@ -471,6 +476,10 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(scherzo["clips"][1]["sampleId"], "Njh8_zq9_DM-10815")
         self.assertEqual(scherzo["transcription"]["musicianRead"]["source"], "Alan-confirmed source label")
         self.assertEqual(scherzo["transcription"]["musicianRead"]["scoreMode"], "source_confirmed_score_target")
+        self.assertEqual(scherzo["matchingWorkflow"]["status"], "searching_score_match")
+        self.assertEqual(scherzo["matchGroups"], [])
+        self.assertEqual(scherzo["transcription"]["scoreSequenceMatchCount"], 0)
+        self.assertGreaterEqual(scherzo["transcription"]["detectedSeriesCount"], 1)
 
     def test_audio_matched_single_note_fragment_renders_with_exact_clip_window(self):
         inventory = {
@@ -544,16 +553,15 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(transcription["renderedNoteCount"], 1)
         self.assertEqual(transcription["events"][0]["note"], "D4")
         self.assertTrue(transcription["events"][0]["strictAudioWindow"])
-        self.assertEqual(record["matchingWorkflow"]["status"], "matched_groups_ready")
+        self.assertEqual(record["matchingWorkflow"]["status"], "searching_score_match")
         self.assertEqual(record["matchingWorkflow"]["displayMode"], "groups_only")
-        self.assertEqual(record["matchingWorkflow"]["matchCriterion"], "note_sequence")
+        self.assertEqual(record["matchingWorkflow"]["matchCriterion"], "pitch_class_sequence")
         self.assertEqual(record["matchingWorkflow"]["minimumMatchedNoteRun"], 1)
         self.assertFalse(record["matchingWorkflow"]["rhythmRequired"])
         self.assertEqual(transcription["pdfUrl"], "/api/curtis/daily-records/2026-05-03/transcription.pdf")
-        self.assertEqual(len(record["matchGroups"]), 1)
-        self.assertEqual(record["matchGroups"][0]["clip"]["sampleId"], "Njh8_zq9_DM-10545")
-        self.assertEqual(record["matchGroups"][0]["minimumMatchedNoteRun"], 1)
-        self.assertEqual(record["matchGroups"][0]["matchCriterion"], "note_sequence")
+        self.assertEqual(record["matchGroups"], [])
+        self.assertEqual(transcription["scoreReferenceStatus"], "symbolic_score_sequence_missing")
+        self.assertEqual(transcription["scoreSequenceMatchCount"], 0)
         self.assertEqual(len(transcription["notationSystems"]), 1)
         self.assertEqual(transcription["notationSystems"][0]["clip"]["localStartSeconds"], 3.866)
         self.assertEqual(transcription["notationSystems"][0]["clip"]["localEndSeconds"], 4.458)
@@ -562,6 +570,44 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(record["clips"][0]["localStartSeconds"], 3.866)
         self.assertEqual(record["clips"][0]["localEndSeconds"], 4.458)
         self.assertIn("/clip?start=3.866&end=4.458", record["clips"][0]["audioUrl"])
+
+    def test_detected_note_series_can_match_score_pitch_classes_without_rhythm(self):
+        transcriptions = [
+            {
+                "transcriptionId": "detected-run",
+                "sampleId": "sample-1",
+                "sourceTitle": "test",
+                "sourceUrl": "https://www.youtube.com/watch?v=test",
+                "sourceWindow": "*10-20",
+                "status": "transcribed",
+                "notes": [
+                    note("D4", 0, 0.2),
+                    note("A4", 0.2, 0.35),
+                    note("B4", 0.35, 0.5),
+                ],
+            }
+        ]
+        series = detected_note_series(transcriptions, max_series=None)
+        matches = score_sequence_matches_for_series(
+            series,
+            [
+                {
+                    "title": "Source-backed test piece",
+                    "score": {
+                        "scoreAssetId": "test-score",
+                        "scorePitchClassSequences": [
+                            {"label": "mm. 1-2", "values": ["G4", "D5", "A5", "B5", "E6"]},
+                        ],
+                    },
+                }
+            ],
+        )
+
+        self.assertEqual(series[0]["collapsedPitchClassSeriesLabel"], "D A B")
+        self.assertEqual(matches[0]["matchedNoteRun"], 3)
+        self.assertEqual(matches[0]["detectedPitchClassSequence"], "D A B")
+        self.assertEqual(matches[0]["scorePitchClassSequence"], "D A B")
+        self.assertFalse(matches[0]["rhythmRequired"])
 
     def test_unaccepted_audio_matched_fragment_stays_hidden(self):
         inventory = {
@@ -792,9 +838,9 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(record["transcription"]["failureMode"], "repeated_pitch_collapse")
         self.assertFalse(record["transcription"]["displayNotation"])
         self.assertEqual(record["transcription"]["qualityLabel"], "matching")
-        self.assertIn("Only matched note evidence", record["transcription"]["reliabilityLimit"])
+        self.assertIn("Only audio-checked note evidence", record["transcription"]["reliabilityLimit"])
         self.assertIn("score", record["mainCurtisBlocker"])
-        self.assertIn("Only note/rhythm evidence", record["clips"][0]["reason"])
+        self.assertIn("Only audio-checked note evidence", record["clips"][0]["reason"])
 
     def test_repertoire_promotes_only_confirmed_daily_evidence(self):
         inventory = {

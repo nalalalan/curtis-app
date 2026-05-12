@@ -24,9 +24,20 @@ from .auth import (
 )
 from .coach import review_media_sections
 from .corrections import learn_acceptance, learn_rejection, scrub_rejected_source
+from .daily_records import (
+    detected_note_series,
+    is_current_transcription,
+    item_has_violin_positive_sample,
+    item_matches_keys,
+    sample_is_violin_positive,
+    score_reference_status,
+    score_sequence_matches_for_series,
+    video_match_keys,
+    violin_positive_sample_ids,
+)
 from .media import probe_youtube_media, record_uploaded_sample
 from .piece_id import identify_pieces_from_samples
-from .scanner import base_ops, run_scan
+from .scanner import base_ops, run_scan, transcription_items
 from .score_assets import ensure_score_page
 from .settings import MEDIA_DIR, ROOT_DIR, RUNTIME_DIR, SCAN_INTERVAL_SECONDS, SERVICE_NAME, allowed_origins, token_matches
 from .state import load_state, save_state
@@ -121,23 +132,54 @@ def _pdf_text(value: str) -> str:
 
 def _minimal_pdf(path: Path, lines: list[str]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    y = 760
-    commands = ["BT", "/F1 12 Tf", "72 760 Td"]
-    for index, line in enumerate(lines[:42]):
-        if index:
-            commands.append("0 -17 Td")
-        commands.append(f"({_pdf_text(line[:110])}) Tj")
-        y -= 17
-        if y < 80:
-            break
-    commands.append("ET")
-    stream = "\n".join(commands).encode("latin-1", errors="replace")
+    line_height = 15
+    top = 760
+    bottom = 60
+    max_chars = 112
+    wrapped: list[str] = []
+    for line in lines:
+        text = str(line or "")
+        if not text:
+            wrapped.append("")
+            continue
+        while len(text) > max_chars:
+            split_at = text.rfind(" ", 0, max_chars)
+            if split_at < 40:
+                split_at = max_chars
+            wrapped.append(text[:split_at].rstrip())
+            text = text[split_at:].lstrip()
+        wrapped.append(text)
+    lines_per_page = max(1, int((top - bottom) / line_height))
+    pages = [wrapped[index : index + lines_per_page] for index in range(0, len(wrapped), lines_per_page)] or [[]]
+    page_objects: list[bytes] = []
+    kids: list[str] = []
+    font_object_number = 3
+    for page_index, page_lines in enumerate(pages):
+        page_number = 4 + (page_index * 2)
+        content_number = page_number + 1
+        kids.append(f"{page_number} 0 R")
+        commands = ["BT", "/F1 11 Tf", f"60 {top} Td"]
+        for index, line in enumerate(page_lines):
+            if index:
+                commands.append(f"0 -{line_height} Td")
+            commands.append(f"({_pdf_text(line)}) Tj")
+        commands.append("ET")
+        stream = "\n".join(commands).encode("latin-1", errors="replace")
+        page_objects.extend(
+            [
+                (
+                    f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+                    f"/Resources << /Font << /F1 {font_object_number} 0 R >> >> "
+                    f"/Contents {content_number} 0 R >>"
+                ).encode("ascii"),
+                b"<< /Length " + str(len(stream)).encode("ascii") + b" >>\nstream\n" + stream + b"\nendstream",
+            ]
+        )
     objects = [
         b"<< /Type /Catalog /Pages 2 0 R >>",
-        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+        f"<< /Type /Pages /Kids [{' '.join(kids)}] /Count {len(pages)} >>".encode("ascii"),
         b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-        b"<< /Length " + str(len(stream)).encode("ascii") + b" >>\nstream\n" + stream + b"\nendstream",
+        *page_objects,
     ]
     content = bytearray(b"%PDF-1.4\n")
     offsets = [0]
@@ -161,28 +203,113 @@ def transcription_pdf_path(practice_day: str) -> Path:
     return TRANSCRIPTION_PDF_CACHE_DIR / f"{safe_day}-transcription.pdf"
 
 
+def day_transcriptions_from_state(state: dict[str, Any], record: dict[str, Any]) -> list[dict[str, Any]]:
+    raw_videos = record.get("videos", [])
+    videos = [video for video in raw_videos if isinstance(video, dict)] if isinstance(raw_videos, list) else []
+    keys = set().union(*(video_match_keys(video) for video in videos)) if videos else set()
+    raw_samples = state.get("mediaSamples", [])
+    samples = [sample for sample in raw_samples if isinstance(sample, dict)] if isinstance(raw_samples, list) else []
+    day_samples = [sample for sample in samples if item_matches_keys(sample, keys)]
+    day_violin_ids = violin_positive_sample_ids([sample for sample in day_samples if sample_is_violin_positive(sample)])
+    all_violin_ids = violin_positive_sample_ids([sample for sample in samples if sample_is_violin_positive(sample)])
+    sample_ids = day_violin_ids or all_violin_ids
+    items = []
+    for item in transcription_items(state):
+        if not is_current_transcription(item):
+            continue
+        if keys and not item_matches_keys(item, keys):
+            continue
+        if sample_ids and not item_has_violin_positive_sample(item, sample_ids):
+            continue
+        items.append(item)
+    return sorted(
+        items,
+        key=lambda item: (
+            str(item.get("sourceTitle") or ""),
+            str(item.get("sourceWindow") or ""),
+            str(item.get("transcriptionId") or ""),
+        ),
+    )
+
+
+def pdf_lines_for_detected_series(series: list[dict[str, Any]]) -> list[str]:
+    if not series:
+        return ["Detected note series: none stored yet.", ""]
+    lines = [f"Detected note series: {len(series)}", ""]
+    for index, run in enumerate(series, start=1):
+        source = " / ".join(
+            part
+            for part in [
+                str(run.get("sourceTitle") or "").strip(),
+                str(run.get("sourceWindow") or "").strip(),
+                str(run.get("sampleId") or "").strip(),
+            ]
+            if part
+        )
+        notes = str(run.get("noteSeriesLabel") or "").strip()
+        collapsed = str(run.get("collapsedPitchClassSeriesLabel") or "").strip()
+        if run.get("omittedNoteCount"):
+            notes = f"{notes} ... +{run.get('omittedNoteCount')} notes"
+        lines.extend(
+            [
+                f"Series {index}: {run.get('noteCount') or 0} notes / {run.get('startSeconds')}-{run.get('endSeconds')}s",
+                f"Source: {source or 'source pending'}",
+                f"Notes: {notes or 'none'}",
+                f"Pitch classes for matching: {collapsed or run.get('pitchClassSeriesLabel') or 'none'}",
+                "",
+            ]
+        )
+    return lines
+
+
+def pdf_lines_for_score_matches(matches: list[dict[str, Any]], status: str) -> list[str]:
+    lines = [f"Score/reference sequence matches: {len(matches)}", f"Reference sequence status: {status}", ""]
+    for index, match in enumerate(matches, start=1):
+        lines.extend(
+            [
+                f"Match {index}: {match.get('pieceTitle') or 'piece'} / {match.get('matchedNoteRun') or 0} notes",
+                f"Detected: {match.get('detectedPitchClassSequence') or ''}",
+                f"Reference: {match.get('scorePitchClassSequence') or ''}",
+                f"Score: {match.get('scoreSnippetStatus') or 'pending'}",
+                "",
+            ]
+        )
+    return lines
+
+
 def ensure_transcription_pdf(practice_day: str) -> Path:
-    records = base_ops(load_state())["review"]["dailyRecords"]
+    state = load_state()
+    records = base_ops(state)["review"]["dailyRecords"]
     record = next((item for item in records.get("records", []) if item.get("practiceDay") == practice_day), None)
     if not record:
         raise HTTPException(status_code=404, detail="practice day not found")
     transcription = record.get("transcription") if isinstance(record.get("transcription"), dict) else {}
     groups = record.get("matchGroups") if isinstance(record.get("matchGroups"), list) else []
+    raw_transcriptions = day_transcriptions_from_state(state, record)
+    all_series = detected_note_series(raw_transcriptions, max_series=None, max_notes_per_series=None)
     piece_title = ", ".join(
         piece.get("title", "")
         for piece in record.get("pieces", [])
         if isinstance(piece, dict) and piece.get("title")
     ) or "piece pending"
+    pieces = record.get("pieces") if isinstance(record.get("pieces"), list) else []
+    score_matches = score_sequence_matches_for_series(all_series, pieces, max_matches=40)
+    score_status = score_reference_status(pieces)
     lines = [
         f"Curtis transcription run / {practice_day}",
         f"Piece: {piece_title}",
         f"Uploaded video: {record.get('uploadedVideoLabel') or 'pending'}",
         f"Total practice time: {record.get('activeViolinLabel') or 'pending'}",
-        "Display mode: matched groups only",
-        "Match rule: note sequence, rhythm ignored, minimum run 1 note",
+        f"Video checked for practice time: {record.get('processedSampleLabel') or 'pending'}",
+        "PDF scope: all stored detected note series for this day",
+        "Match rule: pitch-class sequence; rhythm ignored; octave ignored",
         "",
     ]
+    lines.extend(pdf_lines_for_detected_series(all_series))
+    lines.extend(pdf_lines_for_score_matches(score_matches, score_status))
     if groups:
+        lines.append("Displayed score groups")
+        lines.append("")
         for index, group in enumerate(groups, start=1):
             clip = group.get("clip") if isinstance(group.get("clip"), dict) else {}
             source = group.get("transcription") if isinstance(group.get("transcription"), dict) else {}
@@ -204,7 +331,7 @@ def ensure_transcription_pdf(practice_day: str) -> Path:
                 ]
             )
     else:
-        lines.append("No accepted matched groups yet.")
+        lines.append("Displayed score groups: none.")
     if transcription.get("rejectedMachinePitchEventCount"):
         lines.append(f"Hidden machine pitch events: {transcription.get('rejectedMachinePitchEventCount')}")
     target = transcription_pdf_path(practice_day)
