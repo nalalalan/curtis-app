@@ -1168,7 +1168,7 @@ function scoreBoxes(score) {
   return [];
 }
 
-function normalizedScoreBox(box, padding = 4) {
+function normalizedScoreBox(box, padding = 1.5) {
   const x = Math.max(0, Math.min(100, Number(box?.x) || 0));
   const y = Math.max(0, Math.min(100, Number(box?.y) || 0));
   const width = Math.max(1, Math.min(100 - x, Number(box?.width) || 1));

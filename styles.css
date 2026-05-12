@@ -1055,8 +1055,8 @@ h2 {
 }
 
 .score-image-crop {
-  min-height: 170px;
-  aspect-ratio: 1.75 / 1;
+  min-height: 128px;
+  aspect-ratio: 2.4 / 1;
   background: #fffdf8;
 }
 
