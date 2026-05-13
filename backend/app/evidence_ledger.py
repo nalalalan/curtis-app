@@ -125,8 +125,17 @@ def build_active_practice_coverage(
     media_samples: list[dict[str, Any]],
     transcriptions: list[dict[str, Any]],
     sections: list[dict[str, Any]],
+    active_practice_scan: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     ledger = practice_ledger_videos(inventory)
+    scan = active_practice_scan or {}
+    scan_intervals = [
+        item
+        for item in scan.get("intervals", [])
+        if isinstance(item, dict) and item.get("status") == "active_violin"
+    ]
+    scan_results = [item for item in scan.get("sampleResults", []) if isinstance(item, dict)]
+    pending_windows = [item for item in scan.get("pendingWindows", []) if isinstance(item, dict)]
     by_day: dict[str, dict[str, Any]] = defaultdict(
         lambda: {
             "practiceDay": "",
@@ -135,6 +144,8 @@ def build_active_practice_coverage(
             "checkedVideoSeconds": 0,
             "activePracticeSeconds": 0,
             "activeCandidateSeconds": 0,
+            "activeScanSeconds": 0,
+            "activeScanIntervalCount": 0,
             "unmeasuredVideoSeconds": 0,
             "videos": [],
         }
@@ -146,10 +157,16 @@ def build_active_practice_coverage(
         samples = [sample for sample in media_samples if item_matches_keys(sample, keys)]
         positive_samples = [sample for sample in samples if sample_is_violin_positive(sample)]
         positive_sample_ids = violin_positive_sample_ids(positive_samples)
-        checked_intervals = [_bounded_interval(sample, video_seconds) for sample in samples]
+        active_scan_items = [item for item in scan_intervals if item_matches_keys(item, keys)]
+        active_scan_intervals = [_bounded_interval(item, video_seconds) for item in active_scan_items]
+        checked_intervals = [
+            *[_bounded_interval(sample, video_seconds) for sample in samples],
+            *active_scan_intervals,
+        ]
         candidate_intervals = [_bounded_interval(sample, video_seconds) for sample in positive_samples]
         checked_seconds = min(video_seconds, interval_seconds(checked_intervals)) if video_seconds else interval_seconds(checked_intervals)
-        candidate_seconds = min(video_seconds, interval_seconds(candidate_intervals)) if video_seconds else interval_seconds(candidate_intervals)
+        scan_active_seconds = min(video_seconds, interval_seconds(active_scan_intervals)) if video_seconds else interval_seconds(active_scan_intervals)
+        candidate_seconds = min(video_seconds, interval_seconds([*candidate_intervals, *active_scan_intervals])) if video_seconds else interval_seconds([*candidate_intervals, *active_scan_intervals])
         video_transcriptions = [
             item
             for item in transcriptions
@@ -168,7 +185,7 @@ def build_active_practice_coverage(
         ]
         note_active = active_seconds_from_transcriptions(video_transcriptions)
         section_active = active_seconds_from_sections(video_sections)
-        active_seconds = min(video_seconds, max(note_active, section_active)) if video_seconds else max(note_active, section_active)
+        active_seconds = min(video_seconds, max(note_active, section_active, scan_active_seconds)) if video_seconds else max(note_active, section_active, scan_active_seconds)
         unmeasured_seconds = max(0, video_seconds - checked_seconds)
         status = _coverage_status(checked_seconds, candidate_seconds, active_seconds, video_seconds)
         row = {
@@ -186,6 +203,9 @@ def build_active_practice_coverage(
             "activePracticeLabel": duration_seconds_label(active_seconds) if active_seconds else "",
             "activeCandidateSeconds": candidate_seconds,
             "activeCandidateLabel": duration_seconds_label(candidate_seconds) if candidate_seconds else "",
+            "activeScanSeconds": scan_active_seconds,
+            "activeScanLabel": duration_seconds_label(scan_active_seconds) if scan_active_seconds else "",
+            "activeScanIntervalCount": len(active_scan_items),
             "unmeasuredVideoSeconds": unmeasured_seconds,
             "unmeasuredVideoLabel": duration_seconds_label(unmeasured_seconds) if unmeasured_seconds else "",
             "checkedPercent": _coverage_percent(checked_seconds, video_seconds),
@@ -206,6 +226,8 @@ def build_active_practice_coverage(
             day["checkedVideoSeconds"] += checked_seconds
             day["activePracticeSeconds"] += active_seconds
             day["activeCandidateSeconds"] += candidate_seconds
+            day["activeScanSeconds"] += scan_active_seconds
+            day["activeScanIntervalCount"] += len(active_scan_items)
             day["unmeasuredVideoSeconds"] += unmeasured_seconds
             day["videos"].append(row)
 
@@ -215,11 +237,13 @@ def build_active_practice_coverage(
         checked = _safe_int(day.get("checkedVideoSeconds"))
         active = _safe_int(day.get("activePracticeSeconds"))
         candidate = _safe_int(day.get("activeCandidateSeconds"))
+        active_scan = _safe_int(day.get("activeScanSeconds"))
         unmeasured = _safe_int(day.get("unmeasuredVideoSeconds"))
         day["uploadedVideoLabel"] = duration_seconds_label(uploaded)
         day["checkedVideoLabel"] = duration_seconds_label(checked) if checked else ""
         day["activePracticeLabel"] = duration_seconds_label(active) if active else ""
         day["activeCandidateLabel"] = duration_seconds_label(candidate) if candidate else ""
+        day["activeScanLabel"] = duration_seconds_label(active_scan) if active_scan else ""
         day["unmeasuredVideoLabel"] = duration_seconds_label(unmeasured) if unmeasured else ""
         day["checkedPercent"] = _coverage_percent(checked, uploaded)
         day["status"] = _coverage_status(checked, candidate, active, uploaded)
@@ -257,6 +281,14 @@ def build_active_practice_coverage(
         "measurementStatus": "complete" if total_uploaded and not unmeasured else "partial" if total_uploaded else "pending",
         "estimateStatus": "estimated_from_checked_windows" if total_checked and unmeasured else "measured" if total_uploaded else "pending",
         "statusCounts": dict(status_counts),
+        "activePracticeScan": {
+            "status": "ready" if scan_intervals or scan_results or pending_windows else "pending",
+            "version": scan.get("version") or "",
+            "activeIntervalCount": len(scan_intervals),
+            "sampleResultCount": len(scan_results),
+            "pendingWindowCount": len(pending_windows),
+            "lastRun": scan.get("lastRun") if isinstance(scan.get("lastRun"), dict) else None,
+        },
         "days": day_rows,
         "videos": video_rows,
         "method": "practice time is measured from violin-playing intervals; checked video includes every sampled window, including non-playing windows",

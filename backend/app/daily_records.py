@@ -2185,6 +2185,37 @@ def active_seconds_from_sections(sections: list[dict[str, Any]]) -> int:
     return total
 
 
+def _merged_interval_seconds(intervals: list[tuple[int, int]]) -> int:
+    valid = sorted((start, end) for start, end in intervals if end > start)
+    if not valid:
+        return 0
+    merged = [valid[0]]
+    for start, end in valid[1:]:
+        last_start, last_end = merged[-1]
+        if start <= last_end:
+            merged[-1] = (last_start, max(last_end, end))
+        else:
+            merged.append((start, end))
+    return sum(end - start for start, end in merged)
+
+
+def active_scan_items_for_keys(state: dict[str, Any], keys: set[str]) -> list[dict[str, Any]]:
+    scan = state.get("activePracticeScan") if isinstance(state.get("activePracticeScan"), dict) else {}
+    intervals = scan.get("intervals") if isinstance(scan.get("intervals"), list) else []
+    return [
+        item
+        for item in intervals
+        if isinstance(item, dict)
+        and item.get("status") == "active_violin"
+        and item_matches_keys(item, keys)
+    ]
+
+
+def active_seconds_from_scan_items(items: list[dict[str, Any]]) -> int:
+    intervals = [window_bounds(item) for item in items]
+    return _merged_interval_seconds(intervals)
+
+
 def transcription_fragments(transcriptions: list[dict[str, Any]]) -> list[dict[str, Any]]:
     counter: Counter[str] = Counter()
     durations: dict[str, float] = defaultdict(float)
@@ -2900,12 +2931,16 @@ def build_daily_records(
         raw_notation = notation_events(day_transcriptions)
         note_active = active_seconds_from_transcriptions(day_transcriptions)
         section_active = active_seconds_from_sections(day_sections)
-        active_seconds = note_active or section_active
+        day_active_scan_items = active_scan_items_for_keys(state, keys)
+        scan_active = active_seconds_from_scan_items(day_active_scan_items)
+        active_seconds = max(note_active, section_active, scan_active)
         active_status = (
             "measured_from_pitch"
             if note_active
             else "estimated_from_audio_energy"
             if section_active
+            else "measured_from_active_practice_scan"
+            if scan_active
             else "pending_media"
         )
         confirmed = confirmed_pieces_for_day(state, videos, day_transcriptions)
@@ -3205,6 +3240,9 @@ def build_daily_records(
                 "activeViolinSeconds": active_seconds,
                 "activeViolinLabel": duration_seconds_label(active_seconds) if active_seconds else "",
                 "activeTimeStatus": active_status,
+                "activePracticeScanSeconds": scan_active,
+                "activePracticeScanLabel": duration_seconds_label(scan_active) if scan_active else "",
+                "activePracticeScanIntervalCount": len(day_active_scan_items),
                 "pieces": confirmed,
                 "uncertainPieces": uncertain,
                 "materialStatus": material_status,

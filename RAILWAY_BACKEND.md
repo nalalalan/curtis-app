@@ -65,6 +65,9 @@ If OAuth callback storage is not used, set all of:
 - `POST /api/curtis/scan/run`
 - `POST /api/curtis/media/probe`
 - `POST /api/curtis/media/upload`
+- `GET /api/curtis/active-practice-coverage`
+- `GET /api/curtis/active-practice-scan`
+- `POST /api/curtis/active-practice-scan/run`
 - `GET /api/auth/youtube/status`
 - `GET /api/auth/youtube/start`
 - `GET /api/auth/youtube/callback`
@@ -78,6 +81,7 @@ If OAuth callback storage is not used, set all of:
 - `/api/curtis/ops-check` also exposes `review.practiceTotals`: total title-confirmed practice-video duration from `violin 1` onward, with video title, upload date, duration, URL, video-checked coverage, and current exact-practice-time limits.
 - `/api/curtis/ops-check` exposes `review.dailyRecords`: analyzed practice-day records grouped from title-confirmed practice videos, with uploaded duration separated from total practice time, violin-playing status, detected note series, score-sequence match state, clips, heat-map layers, confirmed or uncertain pieces, and specific evidence-backed observations.
 - `GET /api/curtis/daily-records` returns the daily-record object directly.
+- `GET /api/curtis/active-practice-coverage` returns the uploaded-video ledger, checked windows, measured active violin-playing time, estimated unchecked practice time, and per-day/per-video practice-time coverage. `POST /api/curtis/active-practice-scan/run` performs the low-cost owner-media scan over cached violin-positive samples and stores active sub-intervals separately from transcription and score matching.
 - `/api/curtis/ops-check` exposes `review.repertoireEvidence`: repertoire entries promoted only from confirmed daily-record evidence, including clips, notation snippets, practice dates, total practice time when measured, and blocker observations.
 - `/api/curtis/study` exposes confirmed practice-day study packets with transcription state, rendered score-page targets, boxed passages, and clip links.
 - `/api/curtis/score/page/{asset_id}/{page}` renders cached public-domain PDF score pages for the score packet. The Docker image installs `poppler-utils` for this.

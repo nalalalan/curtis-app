@@ -5,7 +5,7 @@ This section is the working plan for making Curtis able to produce long, trustwo
 
 \subsection{Current tracker state}
 
-The tracker starts from the 2026-05-13 11:20 AM EDT live state. The system has a real media ledger and a conservative evidence gate, but long-phrase transcription is not solved. The existing trusted musical output is limited to short audio-checked note fragments. The system has no accepted exact score-aligned Scherzo-Tarantelle window, and the previously displayed single-note score crops are rejected because the highlighted score-side note did not match the displayed note label.
+The tracker starts from the 2026-05-13 12:33 PM EDT live state. The system has a real media ledger and a conservative evidence gate, but long-phrase transcription is not solved. The existing trusted musical output is limited to short audio-checked note fragments. The system has no accepted exact score-aligned Scherzo-Tarantelle window, and the previously displayed single-note score crops are rejected because the highlighted score-side note did not match the displayed note label.
 
 \begin{table}[htbp]
 \centering
@@ -23,6 +23,7 @@ Current estimate & 94 h 39 min total active practice estimated from checked wind
 Current user burden to remove & Alan is still forced to inspect whether a note is real, whether a score box points to the correct pitch, whether audio matches notation, and whether practice time means playing rather than uploaded duration. \\
 First tracker update & This PDF now defines the full implementation plan and becomes the required progress record for future Curtis work. \\
 2026-05-13 11:57 AM EDT code update & Backend coverage ledger, evidence-correction route, and benchmark-fixture scaffold added. Checked video time now includes sampled non-playing windows; total practice time remains measured active playing only. Live deployed coverage now reports 213 h 23 min uploaded video, 2 h checked video, 53 min 14 s measured active practice, and 211 h 23 min unchecked. Wrong score-note corrections can be stored as rejected benchmark cases. Full archive scan and long-phrase transcription remain unsolved. \\
+2026-05-13 12:33 PM EDT code update & Low-cost active-practice scan route implemented. The new scan persists active violin-playing sub-intervals from stored violin-positive media samples, keeps checked non-playing samples separate from practice time, exposes \texttt{/api/curtis/active-practice-scan}, adds an active-scan run endpoint, queues remaining strict-ledger windows for owner media capture, and feeds persisted active intervals into daily records and the coverage ledger. Local unit tests verify active sub-interval extraction, negative-sample withholding, and coverage accounting. Live scan execution is pending deployment of this endpoint. \\
 \bottomrule
 \end{tabularx}
 \end{table}
@@ -107,7 +108,7 @@ The acceptance condition for this phase is that a wrong A-to-B or A-to-G score c
 
 \subsubsection*{Phase 2: Complete the full active-practice scan}
 
-The practice-time problem is separate from transcription. Curtis should first scan the full 205 h 24 min uploaded practice ledger for violin-playing intervals with a low-cost pass. The pass should use audio energy, violin-range voiced pitch, onset density, spectral shape, and visual fallback only where necessary. It should not require full transcription.
+The practice-time problem is separate from transcription. Curtis should first scan the full 213 h 23 min uploaded practice ledger for violin-playing intervals with a low-cost pass. The pass should use audio energy, violin-range voiced pitch, onset density, spectral shape, and visual fallback only where necessary. It should not require full transcription.
 
 The fast pass should walk every practice video in chronological order and store approximate active intervals. A second exact pass should refine boundaries around detected regions. The UI should show three numbers for every day: uploaded video time, checked video time, and total practice time. While scanning is partial, the estimate stays labeled as estimated. When every video has been scanned, the estimate should be replaced by measured total practice time.
 
@@ -369,7 +370,7 @@ Acceptance for this phase is procedural: after every Curtis change that affects 
 Milestone & Target & Acceptance evidence & Status \\
 \midrule
 M0 & Paper tracker & Roadmap is included in the Curtis paper PDF and becomes the update record. & Complete in this revision. \\
-M1 & Practice time & All 205 h 24 min of strict-ledger video has active-practice coverage and per-day totals. & Coverage ledger/API added; full scan pending. \\
+M1 & Practice time & All 213 h 23 min of strict-ledger video has active-practice coverage and per-day totals. & Coverage ledger/API and active-scan route added; live full scan pending. \\
 M2 & Score truth & Scherzo-Tarantelle has verified symbolic notes and score coordinates. & Pending. \\
 M3 & One-note anchor & A displayed A from audio is matched to a verified score-side A, with no wrong-note crop. & Pending. \\
 M4 & Short sequence & Three-to-five played notes align to exact score notes and render with local audio/video. & Pending. \\
@@ -397,7 +398,18 @@ The 2026-05-13 11:57 AM EDT backend update completed the coverage and correction
     \item added regression tests for checked non-playing windows, wrong score-note benchmark creation, and rejecting accepted score evidence when the displayed score note conflicts with the observed note.
 \end{itemize}
 
-The remaining M1 work is the full low-cost media pass over every unmeasured strict-ledger video. The remaining M10 work is the larger benchmark suite for repeated notes, arpeggios, fast runs, score-free exercises, score-coordinate truth, and accepted notation/media completeness.
+The 2026-05-13 12:33 PM EDT backend update completed the active-scan route portion:
+\begin{itemize}
+    \item added a persistent \texttt{activePracticeScan} state record with active intervals, sample results, pending windows, and run history;
+    \item scans stored local media samples only after the violin-presence gate is positive;
+    \item extracts sound-active sub-intervals inside the source window and stores them as active-practice intervals;
+    \item records negative violin-presence samples as checked without adding practice time;
+    \item feeds persisted active intervals into per-day totals and the active-practice coverage ledger;
+    \item exposes active-scan status and run endpoints so the deployed runtime can perform the pass without transcription;
+    \item queues the next unchecked 90-second strict-ledger windows for owner media capture.
+\end{itemize}
+
+The remaining M1 work is running the deployed active-scan endpoint on the live media state, then continuing the low-cost media pass over every unmeasured strict-ledger video. The remaining M10 work is the larger benchmark suite for repeated notes, arpeggios, fast runs, score-free exercises, score-coordinate truth, and accepted notation/media completeness.
 
 The next coding pass should:
 \begin{enumerate}

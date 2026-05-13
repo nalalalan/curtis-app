@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+from .active_practice_scan import active_scan_state_summary, run_active_practice_scan
 from .analyzer import analyze_media_samples
 from .analyzer import run_process
 from .auth import (
@@ -157,6 +158,7 @@ async def worker_loop() -> None:
         if os.getenv("CURTIS_MEDIA_AUTORUN", "1").strip().lower() not in {"0", "false", "no"}:
             await probe_youtube_media()
             await asyncio.to_thread(analyze_media_samples)
+            await asyncio.to_thread(run_active_practice_scan)
             await asyncio.to_thread(transcribe_media_samples)
             await asyncio.to_thread(identify_pieces_from_samples)
             if os.getenv("CURTIS_MODEL_REVIEW_AUTORUN", "1").strip().lower() not in {"0", "false", "no"}:
@@ -641,6 +643,19 @@ async def piece_correction(correction: PieceCorrection) -> dict[str, Any]:
 @app.get("/api/curtis/active-practice-coverage")
 async def active_practice_coverage() -> dict[str, Any]:
     return base_ops(load_state())["review"]["activePracticeCoverage"]
+
+
+@app.get("/api/curtis/active-practice-scan")
+async def active_practice_scan_status() -> dict[str, Any]:
+    return active_scan_state_summary(load_state())
+
+
+@app.post("/api/curtis/active-practice-scan/run")
+async def active_practice_scan_run(max_samples: int = 80, max_queue: int = 250) -> dict[str, Any]:
+    run = await asyncio.to_thread(run_active_practice_scan, max_samples, max_queue)
+    ops = base_ops(load_state())
+    ops["activePracticeScanRun"] = run
+    return ops
 
 
 @app.get("/api/curtis/evidence-progress")

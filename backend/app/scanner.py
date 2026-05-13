@@ -1093,7 +1093,13 @@ def derive_review(
     transcriptions = transcription_items(state)
     daily_records = build_daily_records(state, inventory, media_samples, transcriptions, sections)
     repertoire_evidence = build_repertoire_evidence(daily_records)
-    active_practice_coverage = build_active_practice_coverage(inventory, media_samples, transcriptions, sections)
+    active_practice_coverage = build_active_practice_coverage(
+        inventory,
+        media_samples,
+        transcriptions,
+        sections,
+        state.get("activePracticeScan") if isinstance(state.get("activePracticeScan"), dict) else {},
+    )
     evidence_progress = build_evidence_progress(state)
     progress_plan = existing.get("progressPlan") if isinstance(existing.get("progressPlan"), dict) else None
     youtube_items = inventory.get("youtube", [])
