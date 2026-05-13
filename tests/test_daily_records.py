@@ -967,19 +967,147 @@ class DailyRecordTests(unittest.TestCase):
 
         self.assertEqual(anchors, [])
 
-    def test_wieniawski_rejected_score_note_crops_are_withheld(self):
+    def test_exact_verified_score_anchor_does_not_accept_same_pitch_class_different_octave(self):
+        target = {
+            "scorePitchClassAnchors": [
+                {
+                    "pitchClass": "A",
+                    "displayNote": "A4",
+                    "snippetImageUrl": "/assets/score/test-a4.png",
+                    "visualNoteVerified": True,
+                }
+            ]
+        }
+
+        a4_series = [{"transcriptionId": "a4", "notes": [note("A4", 0, 1)]}]
+        a5_series = [{"transcriptionId": "a5", "notes": [note("A5", 0, 1)]}]
+
+        self.assertEqual(
+            pitch_anchor_matches_for_series(a4_series, [{"title": "Score", "score": target}])[0]["matchedDetectedNotes"][0]["note"],
+            "A4",
+        )
+        self.assertEqual(pitch_anchor_matches_for_series(a5_series, [{"title": "Score", "score": target}]), [])
+
+    def test_wieniawski_verified_a4_score_note_anchor_is_exact_and_old_bad_crops_are_withheld(self):
         target = wieniawski_reference_target()
         rejected_by_note = {anchor["displayNote"]: anchor for anchor in target["rejectedScorePitchClassAnchors"]}
+        accepted_by_note = {anchor["displayNote"]: anchor for anchor in target["scorePitchClassAnchors"]}
 
-        self.assertEqual(target["scorePitchClassAnchors"], [])
-        self.assertEqual(target["scoreNoteCropStatus"], "withheld_failed_visual_note_review")
+        self.assertEqual(target["scoreNoteCropStatus"], "one_visual_note_verified_anchor_ready")
+        self.assertTrue(accepted_by_note["A4"]["visualNoteVerified"])
+        self.assertTrue(accepted_by_note["A4"]["scoreNoteVerified"])
+        self.assertEqual(accepted_by_note["A4"]["staffPosition"], "second_space_from_bottom")
+        self.assertEqual(
+            accepted_by_note["A4"]["snippetImageUrl"],
+            "/assets/score/wieniawski-scherzo-tarantelle-a4-source-verified.png",
+        )
         self.assertEqual(rejected_by_note["A4"]["status"], "rejected_visual_note_review")
         self.assertEqual(rejected_by_note["A5"]["status"], "rejected_visual_note_review")
 
         a4_series = [{"transcriptionId": "a4", "notes": [note("A4", 0, 1)]}]
         a5_series = [{"transcriptionId": "a5", "notes": [note("A5", 0, 1)]}]
-        self.assertEqual(pitch_anchor_matches_for_series(a4_series, [{"title": "Scherzo", "score": target}]), [])
+        a4_matches = pitch_anchor_matches_for_series(a4_series, [{"title": "Scherzo", "score": target}])
+        self.assertEqual(a4_matches[0]["scoreAnchorSnippet"]["note"], "A4")
+        self.assertEqual(a4_matches[0]["matchedDetectedNotes"][0]["note"], "A4")
+        self.assertEqual(
+            a4_matches[0]["scoreAnchorSnippet"]["imageUrl"],
+            "/assets/score/wieniawski-scherzo-tarantelle-a4-source-verified.png",
+        )
         self.assertEqual(pitch_anchor_matches_for_series(a5_series, [{"title": "Scherzo", "score": target}]), [])
+
+    def test_daily_score_anchor_requires_audio_accepted_fragment_not_raw_detector_note(self):
+        inventory = {
+            "youtube": [
+                {
+                    "id": "Njh8_zq9_DM",
+                    "title": "5-3-26",
+                    "url": "https://www.youtube.com/watch?v=Njh8_zq9_DM",
+                    "publishedAt": "2026-05-03T10:10:00Z",
+                    "durationSeconds": 900,
+                    "practiceCandidate": True,
+                }
+            ]
+        }
+        transcriptions = [
+            {
+                "transcriptionId": "raw-a4-only",
+                "sampleId": "Njh8_zq9_DM-999",
+                "sourceUrl": "https://www.youtube.com/watch?v=Njh8_zq9_DM",
+                "sourceTitle": "5-3-26",
+                "sourceWindow": "*999-1089",
+                "status": "transcribed",
+                "pipelineVersion": TRANSCRIPTION_PIPELINE_VERSION,
+                "notes": [note("A4", 4.133, 4.191, 0.784)],
+            }
+        ]
+
+        daily = build_daily_records(
+            inventory=inventory,
+            state={},
+            media_samples=[
+                {
+                    "id": "Njh8_zq9_DM-999",
+                    "path": "raw-a4.webm",
+                    "window": "*999-1089",
+                    "containsViolin": True,
+                }
+            ],
+            transcriptions=transcriptions,
+            sections=[],
+        )
+        record = next(item for item in daily["records"] if item["practiceDay"] == "2026-05-03")
+
+        self.assertEqual(record["pitchAnchorGroups"], [])
+
+    def test_daily_score_anchor_uses_exact_audio_accepted_a4_fragment(self):
+        inventory = {
+            "youtube": [
+                {
+                    "id": "Njh8_zq9_DM",
+                    "title": "5-3-26",
+                    "url": "https://www.youtube.com/watch?v=Njh8_zq9_DM",
+                    "publishedAt": "2026-05-03T10:10:00Z",
+                    "durationSeconds": 900,
+                    "practiceCandidate": True,
+                }
+            ]
+        }
+        transcriptions = [
+            {
+                "transcriptionId": "accepted-a4",
+                "sampleId": "Njh8_zq9_DM-8925",
+                "sourceUrl": "https://www.youtube.com/watch?v=Njh8_zq9_DM",
+                "sourceTitle": "5-3-26",
+                "sourceWindow": "*8925-9015",
+                "status": "transcribed",
+                "pipelineVersion": TRANSCRIPTION_PIPELINE_VERSION,
+                "notes": [note("A4", 7.198, 7.605, 0.891)],
+            }
+        ]
+
+        daily = build_daily_records(
+            inventory=inventory,
+            state={},
+            media_samples=[
+                {
+                    "id": "Njh8_zq9_DM-8925",
+                    "path": "accepted-a4.webm",
+                    "window": "*8925-9015",
+                    "containsViolin": True,
+                }
+            ],
+            transcriptions=transcriptions,
+            sections=[],
+        )
+        record = next(item for item in daily["records"] if item["practiceDay"] == "2026-05-03")
+        anchor = record["pitchAnchorGroups"][0]
+
+        self.assertEqual(anchor["scoreAnchorSnippet"]["note"], "A4")
+        self.assertEqual(anchor["matchedDetectedNotes"][0]["note"], "A4")
+        self.assertEqual(round(anchor["matchedDetectedNotes"][0]["durationSeconds"], 3), 0.407)
+        self.assertEqual(anchor["clip"]["sampleId"], "Njh8_zq9_DM-8925")
+        self.assertLessEqual(anchor["clip"]["localStartSeconds"], 7.198)
+        self.assertGreaterEqual(anchor["clip"]["localEndSeconds"], 7.605)
 
     def test_unaccepted_audio_matched_fragment_stays_hidden(self):
         inventory = {

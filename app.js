@@ -1973,7 +1973,7 @@ function renderSingleMatchedPracticePair(record, clip, transcription, system) {
     ? system.events
     : Array.isArray(transcription?.events) ? transcription.events : [];
   const notes = events.filter((event) => event?.kind === "note").map((event) => event.note).filter(Boolean);
-  const seconds = Number(notationClip?.durationSeconds || events[0]?.durationSeconds || transcription?.microVerifiedSeconds || 0);
+  const seconds = Number(events[0]?.durationSeconds || notationClip?.durationSeconds || transcription?.microVerifiedSeconds || 0);
   const label = [
     notes.length ? notes.slice(0, 4).join(" ") : "detected note",
     seconds ? `${seconds.toFixed(seconds < 1 ? 3 : 1)}s` : ""
@@ -2133,6 +2133,11 @@ function notePitchClassText(value) {
   return match ? match[1] : "";
 }
 
+function exactNoteText(value) {
+  const match = String(value || "").trim().match(/^([A-G](?:#|b)?\d+)/);
+  return match ? match[1] : "";
+}
+
 function detectedMatchNoteLabel(group) {
   const detected = Array.isArray(group?.matchedDetectedNotes) ? group.matchedDetectedNotes : [];
   const displayed = Array.isArray(group?.displayDetectedNotes) ? group.displayDetectedNotes : [];
@@ -2159,6 +2164,9 @@ function sourceScoreAnchorReady(group) {
     || score.scoreNoteVerified === true
   );
   if (!visualNoteVerified) return false;
+  const scoreNote = exactNoteText(snippet.note || group?.scorePitchClassSequenceCompact || group?.scorePitchClassSequence);
+  const detectedNote = exactNoteText(detectedMatchNoteLabel(group) || group?.detectedPitchClassSequenceCompact || group?.detectedPitchClassSequence);
+  if (scoreNote && detectedNote && scoreNote !== detectedNote) return false;
   const scorePitch = notePitchClassText(snippet.pitchClass || snippet.note || group?.scorePitchClassSequenceCompact || group?.scorePitchClassSequence);
   const detectedPitch = notePitchClassText(detectedMatchNoteLabel(group) || group?.detectedPitchClassSequenceCompact || group?.detectedPitchClassSequence);
   return Boolean(scorePitch && detectedPitch && scorePitch === detectedPitch);

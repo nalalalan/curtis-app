@@ -89,6 +89,24 @@ ACCEPTED_AUDIO_MATCHED_FRAGMENTS: tuple[dict[str, Any], ...] = (
         "sourceVideoId": "Njh8_zq9_DM",
         "sourceTitle": "5-3-26",
         "sourceUrl": "https://www.youtube.com/watch?v=Njh8_zq9_DM",
+        "sourceWindow": "*8925-9015",
+        "sampleId": "Njh8_zq9_DM-8925",
+        "note": "A4",
+        "midi": 69,
+        "startSeconds": 7.198,
+        "endSeconds": 7.605,
+        "durationSeconds": 0.407,
+        "confidence": 0.891,
+        "pitchStdCents": 0.0,
+        "medianPitchOffsetCents": 0.0,
+        "voicedFrameCount": 31,
+        "detectors": ["pyin", "yin"],
+        "verification": "strict_pyin_yin_same_semitone_audio_matched_fragment",
+    },
+    {
+        "sourceVideoId": "Njh8_zq9_DM",
+        "sourceTitle": "5-3-26",
+        "sourceUrl": "https://www.youtube.com/watch?v=Njh8_zq9_DM",
         "sourceWindow": "*10815-10905",
         "sampleId": "Njh8_zq9_DM-10815",
         "note": "A4",
@@ -1176,11 +1194,12 @@ def pitch_anchor_matches_for_series(
                 pitch_class = str(anchor.get("pitchClass") or "")
                 if not pitch_class:
                     continue
-                key = (str(piece.get("title") or ""), pitch_class)
-                if key in seen:
-                    continue
                 display_note = str(anchor.get("displayNote") or "").strip()
                 display_midi = note_midi_value({"note": display_note}) if display_note else None
+                anchor_match_key = display_note if display_midi is not None else pitch_class
+                key = (str(piece.get("title") or ""), anchor_match_key)
+                if key in seen:
+                    continue
                 exact_note = next(
                     (
                         note
@@ -1191,16 +1210,18 @@ def pitch_anchor_matches_for_series(
                     ),
                     None,
                 )
-                pitch_class_note = next(
-                    (
-                        note
-                        for note in run_notes
-                        if isinstance(note, dict)
-                        and note_pitch_class(note.get("pitchClass") or note.get("note")) == pitch_class
-                    ),
-                    None,
-                )
-                matched_note = exact_note or pitch_class_note
+                pitch_class_note = None
+                if display_midi is None:
+                    pitch_class_note = next(
+                        (
+                            note
+                            for note in run_notes
+                            if isinstance(note, dict)
+                            and note_pitch_class(note.get("pitchClass") or note.get("note")) == pitch_class
+                        ),
+                        None,
+                    )
+                matched_note = exact_note if display_midi is not None else pitch_class_note
                 if not matched_note:
                     continue
                 match_rank = 2 if exact_note else 1
@@ -2773,7 +2794,7 @@ def build_daily_records(
         score_reference_state = score_reference_status(confirmed)
         score_reference_audit = score_reference_audit_for_pieces(confirmed)
         score_sequence_matches = score_sequence_matches_for_series(all_detected_series, confirmed)
-        pitch_anchor_matches = pitch_anchor_matches_for_series(all_detected_series, confirmed)
+        pitch_anchor_matches: list[dict[str, Any]] = []
         heat_fragments: list[dict[str, Any]] = []
         day_repeat_groups: list[dict[str, Any]] = []
         full_note_count = transcription_note_count(day_transcriptions)
@@ -2788,6 +2809,8 @@ def build_daily_records(
         has_verified_transcription = bool(matched_fragments)
         display_transcriptions = [item["transcription"] for item in matched_fragments] if has_verified_transcription else []
         read_transcriptions = display_transcriptions if has_verified_transcription else day_transcriptions
+        accepted_detected_series = detected_note_series(display_transcriptions, max_series=None) if has_verified_transcription else []
+        pitch_anchor_matches = pitch_anchor_matches_for_series(accepted_detected_series, confirmed)
         notation = notation_events(display_transcriptions)
         day_notation_systems = notation_systems(notation)
         visible_quality = matched_fragment.get("quality", {}) if matched_fragment else micro.get("quality", {})

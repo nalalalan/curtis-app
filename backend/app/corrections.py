@@ -286,22 +286,41 @@ def wieniawski_reference_target() -> dict[str, Any]:
         "referenceAudio": "needed",
         "scoreNoteDetectionStatus": "not_available_for_scanned_pdf",
         "scoreLocationStatus": "exact_score_location_pending",
-        "scorePitchClassAnchors": [],
+        "scorePitchClassAnchors": [
+            {
+                "pitchClass": "A",
+                "displayNote": "A4",
+                "label": "A4 source-score pitch anchor",
+                "status": "source_confirmed_pitch_anchor",
+                "source": "IMSLP public-domain solo part",
+                "sourceUrl": "https://imslp.org/wiki/Scherzo_tarantelle%2C_Op.16_%28Wieniawski%2C_Henri%29",
+                "pdfUrl": "https://s9.imslp.org/files/imglnks/usimg/b/b0/IMSLP724668-PMLP17451-01._WIENIAWSKI_-_SCHERZO_TARANTELLE%2C_OP._16_%28GILSON%29_-_Solo_Part.pdf",
+                "sourcePage": 2,
+                "snippetImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-a4-source-verified.png",
+                "snippetStatus": "visual_note_verified_source_score_pitch_anchor",
+                "noteLocation": "A4, second space from the bottom of the treble staff",
+                "staffPosition": "second_space_from_bottom",
+                "clef": "treble",
+                "verifiedPitchBasis": "Treble-staff geometry: lines are E4, G4, B4, D5, F5 from bottom to top; the highlighted notehead center is between G4 and B4.",
+                "visualNoteVerified": True,
+                "scoreNoteVerified": True,
+            }
+        ],
         "rejectedScorePitchClassAnchors": [
             {
                 "pitchClass": "A",
                 "displayNote": "A4",
                 "status": "rejected_visual_note_review",
-                "reason": "The highlighted score crop was reported as G4, not A4.",
+                "reason": "The previous A4 crop was reported as G4, not A4, and remains rejected.",
             },
             {
                 "pitchClass": "A",
                 "displayNote": "A5",
                 "status": "rejected_visual_note_review",
-                "reason": "The highlighted score crop was reported as G5, not A5.",
+                "reason": "The previous A5 crop was reported as G5, not A5, and remains rejected.",
             },
         ],
-        "scoreNoteCropStatus": "withheld_failed_visual_note_review",
+        "scoreNoteCropStatus": "one_visual_note_verified_anchor_ready",
         "referencePitchClassSequences": [
             {
                 "label": "Scherzo-Tarantelle reference audio pitch trace, first 180 seconds",
