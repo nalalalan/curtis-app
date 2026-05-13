@@ -135,6 +135,7 @@ def build_active_practice_coverage(
         if isinstance(item, dict) and item.get("status") == "active_violin"
     ]
     scan_results = [item for item in scan.get("sampleResults", []) if isinstance(item, dict)]
+    scan_status_counts = Counter(str(item.get("status") or "unknown") for item in scan_results)
     pending_windows = [item for item in scan.get("pendingWindows", []) if isinstance(item, dict)]
     by_day: dict[str, dict[str, Any]] = defaultdict(
         lambda: {
@@ -292,6 +293,10 @@ def build_active_practice_coverage(
             "version": scan.get("version") or "",
             "activeIntervalCount": len(scan_intervals),
             "sampleResultCount": len(scan_results),
+            "sampleStatusCounts": dict(scan_status_counts),
+            "activeViolinSampleCount": scan_status_counts.get("active_violin", 0),
+            "checkedNoViolinSampleCount": scan_status_counts.get("checked_no_violin", 0),
+            "blockedSampleCount": scan_status_counts.get("blocked", 0),
             "pendingWindowCount": len(pending_windows),
             "lastRun": scan.get("lastRun") if isinstance(scan.get("lastRun"), dict) else None,
         },

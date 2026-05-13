@@ -5,25 +5,29 @@ This section is the working plan for making Curtis able to produce long, trustwo
 
 \subsection{Current tracker state}
 
-The tracker starts from the 2026-05-13 12:33 PM EDT live state. The system has a real media ledger and a conservative evidence gate, but long-phrase transcription is not solved. The existing trusted musical output is limited to short audio-checked note fragments. The system has no accepted exact score-aligned Scherzo-Tarantelle window, and the previously displayed single-note score crops are rejected because the highlighted score-side note did not match the displayed note label.
+The tracker starts from the 2026-05-13 12:59 PM EDT live state. The system has a real media ledger, a deployed active-practice scan route, and a conservative evidence gate, but long-phrase transcription is not solved. The existing trusted musical output is limited to short audio-checked note fragments. The system has no accepted exact score-aligned Scherzo-Tarantelle window, and the previously displayed single-note score crops are rejected because the highlighted score-side note did not match the displayed note label.
 
 \begin{table}[htbp]
 \centering
+\scriptsize
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{0.94}
 \caption{Progress tracker baseline for the long-phrase transcription goal.}
 \label{tab:roadmap_baseline}
-\begin{tabularx}{\textwidth}{>{\bfseries}p{0.24\textwidth}X}
+\begin{tabularx}{\textwidth}{>{\bfseries}p{0.22\textwidth}X}
 \toprule
 Tracker item & Baseline state \\
 \midrule
 Goal & Produce compact daily evidence groups: original score snippet, generated transcription, local audio, local video, heat-map context, and specific observation. \\
 Current accepted transcription & Short audio-checked D4/A4 fragments only; not a full phrase and not a score-location match. \\
 Current accepted score match & 0 exact score-aligned snippets. \\
-Current archive coverage & 213 h 23 min uploaded practice video across 46 strict-ledger videos and 39 practice days; 2 h checked; 53 min 14 s measured active violin; 211 h 23 min still unchecked. \\
-Current estimate & 94 h 39 min total active practice estimated from checked windows; not final. \\
+Current archive coverage & 213 h 23 min uploaded practice video across 46 strict-ledger videos and 39 practice days; 2 h checked; 1 h 57 min 24 s measured active violin; 211 h 23 min still unchecked. \\
+Current estimate & 208 h 46 min total active practice estimated from checked windows; provisional and sample-biased until the full chronological scan covers the archive. \\
 Current user burden to remove & Alan is still forced to inspect whether a note is real, whether a score box points to the correct pitch, whether audio matches notation, and whether practice time means playing rather than uploaded duration. \\
 First tracker update & This PDF now defines the full implementation plan and becomes the required progress record for future Curtis work. \\
 2026-05-13 11:57 AM EDT code update & Backend coverage ledger, evidence-correction route, and benchmark-fixture scaffold added. Checked video time now includes sampled non-playing windows; total practice time remains measured active playing only. Live deployed coverage now reports 213 h 23 min uploaded video, 2 h checked video, 53 min 14 s measured active practice, and 211 h 23 min unchecked. Wrong score-note corrections can be stored as rejected benchmark cases. Full archive scan and long-phrase transcription remain unsolved. \\
-2026-05-13 12:33 PM EDT code update & Low-cost active-practice scan route implemented. The new scan persists active violin-playing sub-intervals from stored violin-positive media samples, keeps checked non-playing samples separate from practice time, exposes \texttt{/api/curtis/active-practice-scan}, adds an active-scan run endpoint, queues remaining strict-ledger windows for owner media capture, and feeds persisted active intervals into daily records and the coverage ledger. Local unit tests verify active sub-interval extraction, negative-sample withholding, and coverage accounting. Live scan execution is pending deployment of this endpoint. \\
+2026-05-13 12:33 PM EDT code update & Low-cost active-practice scan route implemented. The new scan persists active violin-playing sub-intervals from stored violin-positive media samples, keeps checked non-playing samples separate from practice time, exposes \texttt{/api/curtis/active-practice-scan}, adds an active-scan run endpoint, queues remaining strict-ledger windows for owner media capture, and feeds persisted active intervals into daily records and the coverage ledger. Local unit tests verify active sub-interval extraction, negative-sample withholding, and coverage accounting. \\
+2026-05-13 12:59 PM EDT deployed scan update & The active-scan endpoint was deployed and run against the live Curtis state. It persisted 214 active sub-intervals from 80 stored media-sample results, representing 41 min 42 s of scan-derived active audio, and queued 250 strict-ledger windows for later owner-media capture. The coverage ledger reports 1 h 57 min 24 s measured active practice from 2 h checked and a 208 h 46 min provisional archive estimate. A regression fix now caps active practice by checked source coverage and makes active-scan results supersede noisy transcription-duration evidence where scan results exist. The full 213 h 23 min archive scan and long-phrase transcription remain unsolved. \\
 \bottomrule
 \end{tabularx}
 \end{table}
@@ -370,7 +374,7 @@ Acceptance for this phase is procedural: after every Curtis change that affects 
 Milestone & Target & Acceptance evidence & Status \\
 \midrule
 M0 & Paper tracker & Roadmap is included in the Curtis paper PDF and becomes the update record. & Complete in this revision. \\
-M1 & Practice time & All 213 h 23 min of strict-ledger video has active-practice coverage and per-day totals. & Coverage ledger/API and active-scan route added; live full scan pending. \\
+M1 & Practice time & All 213 h 23 min of strict-ledger video has active-practice coverage and per-day totals. & Active-scan route deployed; first live run persisted 214 active intervals; full chronological scan still pending. \\
 M2 & Score truth & Scherzo-Tarantelle has verified symbolic notes and score coordinates. & Pending. \\
 M3 & One-note anchor & A displayed A from audio is matched to a verified score-side A, with no wrong-note crop. & Pending. \\
 M4 & Short sequence & Three-to-five played notes align to exact score notes and render with local audio/video. & Pending. \\
@@ -409,15 +413,16 @@ The 2026-05-13 12:33 PM EDT backend update completed the active-scan route porti
     \item queues the next unchecked 90-second strict-ledger windows for owner media capture.
 \end{itemize}
 
-The remaining M1 work is running the deployed active-scan endpoint on the live media state, then continuing the low-cost media pass over every unmeasured strict-ledger video. The remaining M10 work is the larger benchmark suite for repeated notes, arpeggios, fast runs, score-free exercises, score-coordinate truth, and accepted notation/media completeness.
+The 2026-05-13 12:59 PM EDT deployed scan update completed the first live run and exposed a practice-time accounting failure mode: sparse, captured samples can make an archive-wide estimate look too certain. The implementation now records active-scan status counts, caps active seconds by checked source coverage, and treats active-scan results as the practice-time source for scanned samples instead of letting noisy transcription durations override them.
+
+The remaining M1 work is continuing the low-cost media pass over every unmeasured strict-ledger video in chronological windows, then replacing the sample-biased estimate with full-archive checked intervals. The remaining M10 work is the larger benchmark suite for repeated notes, arpeggios, fast runs, score-free exercises, score-coordinate truth, accepted notation/media completeness, and practice-time accounting regressions.
 
 The next coding pass should:
 \begin{enumerate}
-    \item run a low-cost active-practice pass over all remaining unchecked videos;
-    \item expose per-day uploaded duration, checked duration, detected active time, and estimate state;
-    \item persist exact active intervals produced by that pass;
-    \item expand the benchmark fixtures beyond the known wrong-score-note failure mode;
-    \item update this paper with the new coverage numbers and any solved milestone.
+    \item expand the active-practice scan beyond the 80 stored media samples into the queued chronological 90-second windows;
+    \item keep every scan run recorded in this PDF with checked windows, active intervals, pending windows, and failures;
+    \item add regression tests using real rejected score-note cases, accepted audio-note anchors, and practice-time caps;
+    \item only then expand sequence matching and notation display.
 \end{enumerate}
 
 Only after M1 and the correction/benchmark loop are in place should the system try to claim longer transcription or score matching. Otherwise Curtis will keep producing plausible-looking fragments that Alan has to audit manually, which is the exact burden this roadmap is meant to remove.

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -325,11 +326,16 @@ def active_scan_state_summary(state: dict[str, Any]) -> dict[str, Any]:
     intervals = [item for item in scan.get("intervals", []) if isinstance(item, dict)]
     results = [item for item in scan.get("sampleResults", []) if isinstance(item, dict)]
     pending = [item for item in scan.get("pendingWindows", []) if isinstance(item, dict)]
+    status_counts = Counter(str(item.get("status") or "unknown") for item in results)
     return {
         "status": "ready" if intervals or results or pending else "pending",
         "version": scan.get("version") or ACTIVE_PRACTICE_SCAN_VERSION,
         "activeIntervalCount": len(intervals),
         "sampleResultCount": len(results),
+        "sampleStatusCounts": dict(status_counts),
+        "activeViolinSampleCount": status_counts.get(ACTIVE_INTERVAL_STATUS, 0),
+        "checkedNoViolinSampleCount": status_counts.get(CHECKED_NO_VIOLIN_STATUS, 0),
+        "blockedSampleCount": status_counts.get("blocked", 0),
         "pendingWindowCount": len(pending),
         "activePracticeSeconds": round(sum(float(item.get("durationSeconds") or 0.0) for item in intervals), 3),
         "lastRun": scan.get("lastRun") if isinstance(scan.get("lastRun"), dict) else None,
