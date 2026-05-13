@@ -158,6 +158,7 @@ def build_active_practice_coverage(
         positive_samples = [sample for sample in samples if sample_is_violin_positive(sample)]
         positive_sample_ids = violin_positive_sample_ids(positive_samples)
         active_scan_items = [item for item in scan_intervals if item_matches_keys(item, keys)]
+        active_scan_result_items = [item for item in scan_results if item_matches_keys(item, keys)]
         active_scan_intervals = [_bounded_interval(item, video_seconds) for item in active_scan_items]
         checked_intervals = [
             *[_bounded_interval(sample, video_seconds) for sample in samples],
@@ -185,7 +186,10 @@ def build_active_practice_coverage(
         ]
         note_active = active_seconds_from_transcriptions(video_transcriptions)
         section_active = active_seconds_from_sections(video_sections)
-        active_seconds = min(video_seconds, max(note_active, section_active, scan_active_seconds)) if video_seconds else max(note_active, section_active, scan_active_seconds)
+        active_ceiling = checked_seconds or video_seconds
+        active_seconds = scan_active_seconds if active_scan_items or active_scan_result_items else max(note_active, section_active)
+        if active_ceiling:
+            active_seconds = min(active_ceiling, active_seconds)
         unmeasured_seconds = max(0, video_seconds - checked_seconds)
         status = _coverage_status(checked_seconds, candidate_seconds, active_seconds, video_seconds)
         row = {
@@ -253,12 +257,14 @@ def build_active_practice_coverage(
     total_active = sum(_safe_int(video.get("activePracticeSeconds")) for video in video_rows)
     total_candidate = sum(_safe_int(video.get("activeCandidateSeconds")) for video in video_rows)
     unmeasured = max(0, total_uploaded - total_checked)
-    active_ratio = (total_active / total_checked) if total_checked else 0.0
+    active_ratio = min(1.0, total_active / total_checked) if total_checked else 0.0
     estimated_total = (
         int(round(total_active + (unmeasured * active_ratio)))
         if total_checked and unmeasured
         else total_active
     )
+    if total_uploaded:
+        estimated_total = min(total_uploaded, estimated_total)
     status_counts = Counter(str(video.get("status") or "pending") for video in video_rows)
     return {
         "status": "ready" if video_rows else "pending",

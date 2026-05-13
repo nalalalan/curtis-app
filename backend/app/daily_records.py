@@ -2211,6 +2211,18 @@ def active_scan_items_for_keys(state: dict[str, Any], keys: set[str]) -> list[di
     ]
 
 
+def active_scan_result_items_for_keys(state: dict[str, Any], keys: set[str]) -> list[dict[str, Any]]:
+    scan = state.get("activePracticeScan") if isinstance(state.get("activePracticeScan"), dict) else {}
+    results = scan.get("sampleResults") if isinstance(scan.get("sampleResults"), list) else []
+    return [
+        item
+        for item in results
+        if isinstance(item, dict)
+        and item.get("detectorVersion")
+        and item_matches_keys(item, keys)
+    ]
+
+
 def active_seconds_from_scan_items(items: list[dict[str, Any]]) -> int:
     intervals = [window_bounds(item) for item in items]
     return _merged_interval_seconds(intervals)
@@ -2902,6 +2914,7 @@ def build_daily_records(
         keys = set().union(*(video_match_keys(video) for video in videos))
         raw_day_samples = [sample for sample in media_samples if item_matches_keys(sample, keys)]
         day_samples = [sample for sample in raw_day_samples if sample_is_violin_positive(sample)]
+        processed_seconds = sum(sample_duration_seconds(sample) for sample in day_samples)
         day_sample_ids = violin_positive_sample_ids(day_samples)
         day_transcriptions = sorted(
             [
@@ -2932,8 +2945,11 @@ def build_daily_records(
         note_active = active_seconds_from_transcriptions(day_transcriptions)
         section_active = active_seconds_from_sections(day_sections)
         day_active_scan_items = active_scan_items_for_keys(state, keys)
+        day_active_scan_result_items = active_scan_result_items_for_keys(state, keys)
         scan_active = active_seconds_from_scan_items(day_active_scan_items)
-        active_seconds = max(note_active, section_active, scan_active)
+        active_seconds = scan_active if day_active_scan_items or day_active_scan_result_items else max(note_active, section_active)
+        if processed_seconds:
+            active_seconds = min(processed_seconds, active_seconds)
         active_status = (
             "measured_from_pitch"
             if note_active
@@ -3084,7 +3100,6 @@ def build_daily_records(
                 ),
             }
         uploaded_seconds = sum(int(video.get("durationSeconds") or 0) for video in videos)
-        processed_seconds = sum(sample_duration_seconds(sample) for sample in day_samples)
         transcribed_seconds = transcription_window_seconds(day_transcriptions)
         active_section_mode = any(
             isinstance(item.get("quality"), dict) and item["quality"].get("windowMode") == "detected_active_sections"
@@ -3350,12 +3365,14 @@ def build_daily_records(
     total_processed = sum(int(record.get("processedSampleSeconds") or 0) for record in records)
     total_active = sum(int(record.get("activeViolinSeconds") or 0) for record in records)
     unmeasured_uploaded = max(0, total_uploaded - total_processed)
-    active_ratio = (float(total_active) / float(total_processed)) if total_processed else 0.0
+    active_ratio = min(1.0, float(total_active) / float(total_processed)) if total_processed else 0.0
     estimated_total_active = (
         int(round(total_active + (unmeasured_uploaded * active_ratio)))
         if total_processed and unmeasured_uploaded
         else total_active
     )
+    if total_uploaded:
+        estimated_total_active = min(total_uploaded, estimated_total_active)
     return {
         "status": "ready" if records else "pending",
         "recordCount": len(records),

@@ -116,6 +116,118 @@ class ActivePracticeScanTests(unittest.TestCase):
         self.assertEqual(coverage["videos"][0]["activeScanSeconds"], 3)
         self.assertEqual(coverage["videos"][0]["status"], "active_measured")
 
+    def test_active_practice_coverage_caps_active_and_estimate_to_checked_video(self):
+        inventory = {
+            "youtube": [
+                {
+                    "id": "v1",
+                    "title": "5-3-26",
+                    "url": "https://www.youtube.com/watch?v=v1",
+                    "publishedAt": "2026-05-03T09:00:00Z",
+                    "durationSeconds": 100,
+                    "practiceCandidate": True,
+                }
+            ]
+        }
+        samples = [
+            {
+                "id": "v1-0",
+                "url": "https://www.youtube.com/watch?v=v1",
+                "title": "5-3-26",
+                "window": "*0-10",
+                "containsViolin": True,
+            }
+        ]
+        transcriptions = [
+            {
+                "transcriptionId": "too-long",
+                "sampleId": "v1-0",
+                "sourceUrl": "https://www.youtube.com/watch?v=v1",
+                "sourceTitle": "5-3-26",
+                "sourceWindow": "*0-10",
+                "status": "transcribed",
+                "quality": {"windowMode": "detected_active_sections"},
+                "durationSeconds": 30,
+            }
+        ]
+
+        coverage = build_active_practice_coverage(inventory, samples, transcriptions, [])
+
+        self.assertEqual(coverage["checkedVideoSeconds"], 10)
+        self.assertEqual(coverage["activePracticeSeconds"], 10)
+        self.assertLessEqual(coverage["estimatedPracticeRatio"], 1.0)
+        self.assertEqual(coverage["estimatedTotalPracticeSeconds"], 100)
+        self.assertEqual(coverage["videos"][0]["activePracticeSeconds"], 10)
+
+    def test_active_practice_scan_supersedes_noisy_transcription_duration(self):
+        inventory = {
+            "youtube": [
+                {
+                    "id": "v1",
+                    "title": "5-3-26",
+                    "url": "https://www.youtube.com/watch?v=v1",
+                    "publishedAt": "2026-05-03T09:00:00Z",
+                    "durationSeconds": 100,
+                    "practiceCandidate": True,
+                }
+            ]
+        }
+        samples = [
+            {
+                "id": "v1-0",
+                "url": "https://www.youtube.com/watch?v=v1",
+                "title": "5-3-26",
+                "window": "*0-10",
+                "containsViolin": True,
+            }
+        ]
+        transcriptions = [
+            {
+                "transcriptionId": "too-long",
+                "sampleId": "v1-0",
+                "sourceUrl": "https://www.youtube.com/watch?v=v1",
+                "sourceTitle": "5-3-26",
+                "sourceWindow": "*0-10",
+                "status": "transcribed",
+                "quality": {"windowMode": "detected_active_sections"},
+                "durationSeconds": 30,
+            }
+        ]
+        active_scan = {
+            "version": "active_practice_scan_v1",
+            "intervals": [
+                {
+                    "intervalId": "active_1",
+                    "sourceVideoId": "v1",
+                    "sourceUrl": "https://www.youtube.com/watch?v=v1",
+                    "sourceTitle": "5-3-26",
+                    "sampleId": "v1-0",
+                    "status": "active_violin",
+                    "startSeconds": 2,
+                    "endSeconds": 5,
+                    "durationSeconds": 3,
+                }
+            ],
+            "sampleResults": [
+                {
+                    "sampleId": "v1-0",
+                    "sourceVideoId": "v1",
+                    "sourceUrl": "https://www.youtube.com/watch?v=v1",
+                    "sourceTitle": "5-3-26",
+                    "sourceWindow": "*0-10",
+                    "detectorVersion": "active_practice_scan_v1",
+                    "status": "active_violin",
+                }
+            ],
+            "pendingWindows": [],
+        }
+
+        coverage = build_active_practice_coverage(inventory, samples, transcriptions, [], active_scan)
+
+        self.assertEqual(coverage["checkedVideoSeconds"], 10)
+        self.assertEqual(coverage["activePracticeSeconds"], 3)
+        self.assertEqual(coverage["videos"][0]["activePracticeSeconds"], 3)
+
 
 if __name__ == "__main__":
     unittest.main()
