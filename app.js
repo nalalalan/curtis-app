@@ -301,6 +301,7 @@ function timedUrl(url, startSeconds = 0) {
 function assetUrl(value) {
   const path = String(value || "").trim();
   if (!path) return "";
+  if (path.startsWith("data:image/")) return path;
   if (path.startsWith("http://") || path.startsWith("https://")) return path;
   return `${apiBase()}${path}`;
 }
@@ -1372,7 +1373,7 @@ function renderKeySignatureMarks(signature) {
 }
 
 function renderTrebleClef() {
-  return `<text class="treble-clef" x="24" y="74">&#xE050;</text>`;
+  return `<text class="treble-clef" x="24" y="83">&#119070;</text>`;
 }
 
 function renderLedgerLines(y, x) {

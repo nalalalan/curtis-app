@@ -76,12 +76,17 @@ input {
   overflow: hidden;
 }
 
+.brand-cluster,
 .brand,
 .topbar nav,
 .topbar nav a,
 button {
   display: inline-flex;
   align-items: center;
+}
+
+.brand-cluster {
+  gap: 10px;
 }
 
 .brand {
@@ -123,8 +128,17 @@ button {
   cursor: pointer;
 }
 
+.ao-home {
+  display: inline-grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  text-decoration: none;
+}
+
 .topbar nav a.ao-home {
-  width: 40px;
+  width: 42px;
   padding: 0;
   border-color: transparent;
   background: transparent;
@@ -132,8 +146,8 @@ button {
 }
 
 .ao-home img {
-  width: 31px;
-  height: 31px;
+  width: 34px;
+  height: 34px;
   display: block;
 }
 
@@ -2330,8 +2344,8 @@ h2 {
 
 .notation-sheet .treble-clef {
   fill: var(--ink);
-  font-family: "CurtisBravura", "Bravura", "Noto Music", "Segoe UI Symbol", Georgia, "Times New Roman", serif;
-  font-size: 54px;
+  font-family: "Noto Music", "Segoe UI Symbol", "Apple Symbols", Georgia, "Times New Roman", serif;
+  font-size: 68px;
   font-weight: 400;
 }
 

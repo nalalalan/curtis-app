@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import re
 from collections import Counter, defaultdict
 from typing import Any
@@ -12,6 +13,7 @@ from .study_packets import (
     practice_ledger_videos,
     source_matches,
 )
+from .symbolic_scores import render_symbolic_score_svg, symbolic_score_audit, symbolic_score_from_target
 from .transcription import TRANSCRIPTION_PIPELINE_VERSION
 
 
@@ -22,6 +24,8 @@ MAX_RECORDS = 120
 MAX_CLIPS_PER_DAY = 5
 MATCH_GROUP_MIN_NOTE_RUN = 1
 MATCH_GROUP_MIN_DISTINCT_PITCH_CLASSES = 2
+SYMBOLIC_SCORE_MATCH_MIN_NOTE_RUN = 5
+SYMBOLIC_SCORE_MATCH_MIN_DISTINCT_PITCH_CLASSES = 3
 PITCH_ANCHOR_MIN_DISTINCT_PITCH_CLASSES = 1
 MAX_PITCH_ANCHOR_MATCHES = 8
 MAX_DETECTED_NOTE_SERIES_API = 16
@@ -810,6 +814,8 @@ def score_reference_audit_for_target(target: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(target, dict):
         target = {}
     sequences = reference_pitch_class_sequences(target)
+    symbolic_audit = symbolic_score_audit(target)
+    symbolic_score_note_count = int(symbolic_audit.get("symbolicScoreNoteCount") or 0)
     symbolic_count = sum(1 for sequence in sequences if reference_sequence_is_score_derived(sequence))
     reference_audio_count = sum(
         1
@@ -819,7 +825,9 @@ def score_reference_audit_for_target(target: dict[str, Any]) -> dict[str, Any]:
     raw_score_count = raw_score_sequence_count(target)
     ignored_score_count = max(0, raw_score_count - symbolic_count)
     exact_location_count = exact_score_location_count_for_target(target, sequences)
-    if symbolic_count and exact_location_count:
+    if symbolic_score_note_count:
+        status = "symbolic_score_ready"
+    elif symbolic_count and exact_location_count:
         status = "score_location_ready"
     elif symbolic_count:
         status = "symbolic_score_sequence_ready"
@@ -836,7 +844,10 @@ def score_reference_audit_for_target(target: dict[str, Any]) -> dict[str, Any]:
         "scoreNoteDetectionStatus": target.get("scoreNoteDetectionStatus") or "",
         "scoreLocationStatus": target.get("scoreLocationStatus") or "",
         "rawScoreSequenceCount": raw_score_count,
-        "symbolicScoreSequenceCount": symbolic_count,
+        "symbolicScoreSequenceCount": symbolic_count + (1 if symbolic_score_note_count else 0),
+        "symbolicScoreNoteCount": symbolic_score_note_count,
+        "symbolicScoreStatus": symbolic_audit.get("status") or "",
+        "symbolicScoreSourceId": symbolic_audit.get("symbolicScoreSourceId") or "",
         "referenceAudioSequenceCount": reference_audio_count,
         "ignoredScoreSequenceCount": ignored_score_count,
         "exactScoreLocationCount": exact_location_count,
@@ -851,7 +862,9 @@ def score_reference_audit_for_pieces(pieces: list[dict[str, Any]]) -> dict[str, 
     ]
     return {
         "status": (
-            "score_location_ready"
+            "symbolic_score_ready"
+            if any(item.get("symbolicScoreNoteCount", 0) for item in audits)
+            else "score_location_ready"
             if any(item["exactScoreLocationCount"] for item in audits)
             else "symbolic_score_sequence_ready"
             if any(item["symbolicScoreSequenceCount"] for item in audits)
@@ -865,6 +878,7 @@ def score_reference_audit_for_pieces(pieces: list[dict[str, Any]]) -> dict[str, 
         ),
         "rawScoreSequenceCount": sum(item["rawScoreSequenceCount"] for item in audits),
         "symbolicScoreSequenceCount": sum(item["symbolicScoreSequenceCount"] for item in audits),
+        "symbolicScoreNoteCount": sum(item.get("symbolicScoreNoteCount", 0) for item in audits),
         "referenceAudioSequenceCount": sum(item["referenceAudioSequenceCount"] for item in audits),
         "ignoredScoreSequenceCount": sum(item["ignoredScoreSequenceCount"] for item in audits),
         "exactScoreLocationCount": sum(item["exactScoreLocationCount"] for item in audits),
@@ -1043,6 +1057,104 @@ def exact_score_boxes_for_reference_match(
     return []
 
 
+def _svg_data_url(svg: str) -> str:
+    return "data:image/svg+xml;base64," + base64.b64encode(svg.encode("utf-8")).decode("ascii")
+
+
+def symbolic_score_sequence_matches_for_run(
+    run: dict[str, Any],
+    piece: dict[str, Any],
+    target: dict[str, Any],
+) -> list[dict[str, Any]]:
+    score = symbolic_score_from_target(target)
+    score_notes = score.get("notes") if isinstance(score.get("notes"), list) else []
+    if not score_notes:
+        return []
+    raw_query = [str(value) for value in run.get("pitchClasses", []) if value]
+    if not raw_query:
+        return []
+    collapsed_query, collapsed_indices = compact_pitch_class_sequence_with_indices(raw_query)
+    queries = [{"values": raw_query, "indices": list(range(len(raw_query))), "collapsed": False}]
+    if collapsed_query != raw_query:
+        queries.append({"values": collapsed_query, "indices": collapsed_indices, "collapsed": True})
+    reference_values = [str(note.get("pitchClass") or "") for note in score_notes if note.get("pitchClass")]
+    best_match: dict[str, Any] = {}
+    for query_info in queries:
+        query = query_info["values"]
+        candidate = longest_common_contiguous_run(query, reference_values)
+        if candidate["length"] < SYMBOLIC_SCORE_MATCH_MIN_NOTE_RUN:
+            continue
+        if candidate["length"] <= int(best_match.get("matchedNoteRun") or 0):
+            continue
+        q0 = int(candidate["queryStart"])
+        q1 = q0 + int(candidate["length"])
+        r0 = int(candidate["referenceStart"])
+        r1 = r0 + int(candidate["length"])
+        detected_sequence = query[q0:q1]
+        if len(set(detected_sequence)) < SYMBOLIC_SCORE_MATCH_MIN_DISTINCT_PITCH_CLASSES:
+            continue
+        run_notes = run.get("notes") if isinstance(run.get("notes"), list) else []
+        raw_indices = query_info["indices"][q0:q1]
+        matched_notes = [run_notes[index] for index in raw_indices if 0 <= index < len(run_notes)]
+        score_slice = score_notes[r0:r1]
+        if len(score_slice) < SYMBOLIC_SCORE_MATCH_MIN_NOTE_RUN:
+            continue
+        score_sequence = [str(note.get("pitchClass") or "") for note in score_slice if note.get("pitchClass")]
+        measures = [str(note.get("measure") or "") for note in score_slice if note.get("measure")]
+        if measures:
+            label = f"m. {measures[0]}" if measures[0] == measures[-1] else f"mm. {measures[0]}-{measures[-1]}"
+        else:
+            label = f"score notes {r0 + 1}-{r1}"
+        svg = render_symbolic_score_svg(
+            score_slice,
+            title=str(piece.get("title") or score.get("title") or target.get("work") or ""),
+            label=label,
+        )
+        best_match = {
+            "status": "symbolic_score_phrase_match",
+            "pieceTitle": piece.get("title") or score.get("title") or "",
+            "matchCriterion": "symbolic_score_pitch_class_phrase",
+            "minimumMatchedNoteRun": SYMBOLIC_SCORE_MATCH_MIN_NOTE_RUN,
+            "minimumDistinctPitchClasses": SYMBOLIC_SCORE_MATCH_MIN_DISTINCT_PITCH_CLASSES,
+            "matchedNoteRun": int(candidate["length"]),
+            "referenceStart": r0,
+            "referenceEnd": r1,
+            "referenceLength": len(reference_values),
+            "referenceSequenceKind": "symbolic_score_notes",
+            "referenceSequenceSource": target.get("scoreSource") or score.get("sourceId") or "",
+            "scoreDerivedReference": True,
+            "scoreLocationVerified": True,
+            "rhythmRequired": False,
+            "detectedSeries": run,
+            "detectedPitchClassSequence": " ".join(detected_sequence),
+            "referencePitchClassSequence": " ".join(score_sequence),
+            "scorePitchClassSequence": " ".join(score_sequence),
+            "detectedPitchClassSequenceCompact": " ".join(compact_pitch_class_sequence(detected_sequence)),
+            "referencePitchClassSequenceCompact": " ".join(compact_pitch_class_sequence(score_sequence)),
+            "scorePitchClassSequenceCompact": " ".join(compact_pitch_class_sequence(score_sequence)),
+            "matchedDetectedNotes": matched_notes,
+            "displayDetectedNotes": matched_notes if not query_info["collapsed"] else compact_notes_by_pitch_class(matched_notes),
+            "scoreMatchedNotes": score_slice,
+            "scoreSequenceLabel": label,
+            "scoreSnippetStatus": "exact_score_location_verified",
+            "scoreLocationStatus": "exact_score_location_verified",
+            "score": {
+                "assetId": target.get("scoreAssetId") or score.get("sourceId") or "",
+                "page": target.get("scorePage") or 0,
+                "source": target.get("scoreSource") or "symbolic score",
+                "sourceUrl": target.get("scoreUrl") or "",
+                "pdfUrl": target.get("scorePdfUrl") or "",
+                "imageUrl": _svg_data_url(svg),
+                "boxes": [],
+                "cropStatus": "exact_score_location_verified",
+                "snippetKind": "symbolic_score_phrase",
+                "measureLabel": label,
+                "scoreMatchedNotes": score_slice,
+            },
+        }
+    return [best_match] if best_match else []
+
+
 def score_sequence_matches_for_series(
     series: list[dict[str, Any]],
     pieces: list[dict[str, Any]],
@@ -1057,6 +1169,10 @@ def score_sequence_matches_for_series(
             queries.append({"values": collapsed_query, "indices": collapsed_indices, "collapsed": True})
         for piece in pieces:
             target = piece.get("score") if isinstance(piece.get("score"), dict) else {}
+            for symbolic_match in symbolic_score_sequence_matches_for_run(run, piece, target):
+                matches.append(symbolic_match)
+                if len(matches) >= max_matches:
+                    return matches
             for reference in reference_pitch_class_sequences(target):
                 reference_values = reference.get("pitchClasses") if isinstance(reference.get("pitchClasses"), list) else []
                 score_derived_reference = reference_sequence_is_score_derived(reference)
@@ -1325,6 +1441,11 @@ def pitch_anchor_matches_for_series(
 def score_reference_status(pieces: list[dict[str, Any]]) -> str:
     if not pieces:
         return "awaiting_piece_name"
+    if any(
+        symbolic_score_audit(piece.get("score") if isinstance(piece.get("score"), dict) else {}).get("status") == "symbolic_score_ready"
+        for piece in pieces
+    ):
+        return "symbolic_score_sequence_ready"
     references = [
         reference
         for piece in pieces
