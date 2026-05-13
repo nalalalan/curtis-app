@@ -1,0 +1,399 @@
+\section{Roadmap to solved long-phrase transcription}
+\label{sec:roadmap}
+
+This section is the working plan for making Curtis able to produce long, trustworthy audio--video--transcription--score evidence from Alan's actual violin practice. It is intentionally part of the paper rather than a separate planning note. Whenever Curtis makes real progress toward full-session active-practice measurement, accurate transcription, score matching, heat maps, repertoire updates, or Curtis-level observation, this PDF should be updated with the new state, the acceptance evidence, and the remaining blocker.
+
+\subsection{Current tracker state}
+
+The tracker starts from the 2026-05-13 11:20 AM EDT live state. The system has a real media ledger and a conservative evidence gate, but long-phrase transcription is not solved. The existing trusted musical output is limited to short audio-checked note fragments. The system has no accepted exact score-aligned Scherzo-Tarantelle window, and the previously displayed single-note score crops are rejected because the highlighted score-side note did not match the displayed note label.
+
+\begin{table}[htbp]
+\centering
+\caption{Progress tracker baseline for the long-phrase transcription goal.}
+\label{tab:roadmap_baseline}
+\begin{tabularx}{\textwidth}{>{\bfseries}p{0.24\textwidth}X}
+\toprule
+Tracker item & Baseline state \\
+\midrule
+Goal & Produce compact daily evidence groups: original score snippet, generated transcription, local audio, local video, heat-map context, and specific observation. \\
+Current accepted transcription & Short audio-checked D4/A4 fragments only; not a full phrase and not a score-location match. \\
+Current accepted score match & 0 exact score-aligned snippets. \\
+Current archive coverage & 205 h 24 min uploaded practice video; 1 h 42 min checked for active violin; 29 min 18 s detected active violin; 203 h 42 min still unchecked. \\
+Current estimate & 59 h total active practice estimated from checked windows; not final. \\
+Current user burden to remove & Alan is still forced to inspect whether a note is real, whether a score box points to the correct pitch, whether audio matches notation, and whether practice time means playing rather than uploaded duration. \\
+First tracker update & This PDF now defines the full implementation plan and becomes the required progress record for future Curtis work. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Definition of solved}
+
+Long-phrase transcription is solved for Curtis only when the system can take Alan's long-form practice archive and produce evidence groups that a musician can trust without manually checking every note. The complete goal is not merely a model that prints plausible notation. The solved system must satisfy all of the following conditions.
+
+\begin{enumerate}
+    \item \textbf{Full archive accounting.} Every practice video from the strict practice ledger is assigned to the correct practice day, has exact uploaded duration, and has a measured or explicitly pending active-practice state.
+    \item \textbf{Active violin time.} Total practice time means intervals where Alan is actually playing violin. Talking, tuning, setup, walking, camera adjustment, silence, scrolling, and other non-playing intervals are excluded.
+    \item \textbf{Local evidence playback.} Every accepted transcription snippet has a playable local video clip and audio clip in the Curtis site. Accepted evidence does not rely on a YouTube embed.
+    \item \textbf{Accurate note events.} The transcribed notes match the paired audio, including repeated notes, fast scalar runs, arpeggios, shifts, string crossings, rests, and obvious restarts. A fast passage must not collapse into a false repeated pitch stream such as \texttt{D D D D}.
+    \item \textbf{Rhythm and timing.} The system estimates onsets, durations, rests, tempo changes, slow-practice stretches, restarts, and repeated attempts. When rhythm is uncertain, the notation must mark uncertainty rather than invent a clean answer.
+    \item \textbf{Professional notation.} Displayed notation uses a real notation engine or a notation-quality rendering path. Treble clef placement, staff scaling, note placement, stems, beams, rests, spacing, key signature, and measure layout must look like real sheet music, not a hand-drawn mockup.
+    \item \textbf{Score-source truth.} A score snippet can appear only when the score-side notes are source-confirmed. Scanned images without a verified note map are not enough. A displayed A must point to an actual A in the score.
+    \item \textbf{Score alignment.} For known repertoire, the played note sequence must align to a specific location in the score. The match can ignore rhythm during the first pitch-class search, but accepted score display needs exact score-note identity and a stable location.
+    \item \textbf{Score-free exercise handling.} If Alan invents an exercise or practices a technique pattern that is not in the score, Curtis should still transcribe and group the pattern. It should not force the pattern into Scherzo-Tarantelle, Haydn, or another piece.
+    \item \textbf{Repeat grouping.} Repeated attempts of the same passage are grouped as attempts, loops, restarts, or slow/faster passes. The UI should not dump the same measures repeatedly.
+    \item \textbf{Heat maps.} Practice density, repetition density, problem density, and improvement layers appear on actual score coordinates when a score match exists, or on the generated pattern/transcription when the material is score-free.
+    \item \textbf{Curtis-level observations.} Observations are specific and evidence-tied: what happened, where it happened, how often it happened, whether it improved, and why the issue blocks Curtis-level readiness. Generic advice is not accepted.
+    \item \textbf{Compact interface.} Expanded daily entries stay compact. The useful unit is the grouped score--transcription--audio--video pair, not a large dashboard or a long explanatory panel.
+    \item \textbf{Regression protection.} Wrong score-note boxes, failed transcriptions, unmatched notation, stale piece labels, and non-playing practice-time credit cannot silently reappear after a later change.
+\end{enumerate}
+
+\subsection{Acceptance gates}
+
+The following gates define whether progress is real. If a change fails one of these gates, it is not counted as solved, even if the UI looks better.
+
+\begin{description}[leftmargin=1.85em,style=nextline]
+    \item[Archive gate.] The strict practice ledger must list every video from \texttt{violin 1} forward that is either violin-numbered or date-titled as practice. Same-day videos must merge into one daily record. Each record stores source video id, title, uploaded date, inferred practice date, uploaded duration, and processing coverage.
+    \item[Practice-time gate.] Active violin time is the sum of detected playing intervals, not the uploaded duration. The API must expose measured active time, checked video time, unmeasured video time, and estimate status separately. The UI label should use total practice time for active violin time and uploaded video for total source duration.
+    \item[Evidence-media gate.] A transcription line is accepted only if the exact audio and video window are available locally, playable in the same Curtis page, and time-linked to the source record.
+    \item[Note gate.] A displayed note must agree with the paired audio. The note label, octave where claimed, and staff position must be internally consistent. If the audio says A4, the rendered staff note must be A4, not F, G, B, or a visually adjacent note.
+    \item[Score gate.] A score snippet must come from a verified symbolic score, a manually verified note map, or a rendered score source where the highlighted note identity is known. Scanned-image crops may be used only after note-coordinate verification.
+    \item[Single-note gate.] A one-note score display is allowed only as a calibration anchor, and only if both sides explicitly show the same pitch name and the score-side coordinate is verified. It must not be used as proof of a long passage.
+    \item[Phrase gate.] A real phrase match requires a contiguous pitch-class sequence in the score or pattern source. Rhythm can be ignored for early matching, but accepted phrase display must keep the exact played sequence, the exact score sequence, and any omitted or uncertain notes.
+    \item[Notation gate.] Hand-built notation SVG is not the long-term display path. The production path must use a professional renderer or renderer-equivalent layout with verified clef, key, staff, note, rest, spacing, and responsive behavior.
+    \item[Exercise gate.] If no score match exists and the material forms a repeated exercise, the system must label it as an exercise or pattern, preserve the generated transcription, and avoid adding a fake repertoire entry.
+    \item[Observation gate.] A Curtis-level observation must cite the clip, transcription event, score measure or pattern segment, issue type, repeat count, direction of change, and readiness consequence.
+    \item[UI gate.] The day row stays chronological, the expanded state is compact, and only grouped evidence appears by default. Raw untrusted transcription stays hidden or goes to the transcription-run PDF with clear status.
+    \item[Paper gate.] Any meaningful progress changes this section, the system-state table, and the limitation text in the same work cycle.
+\end{description}
+
+\subsection{Required source material}
+
+The implementation cannot be completed by code alone. It needs a source bundle that makes the audio, score, and corrections checkable.
+
+\begin{enumerate}
+    \item \textbf{Raw or locally captured practice media.} Curtis needs stable local access to audio/video windows from the YouTube archive or owner-provided files. Metadata alone cannot produce practice time, clips, or transcription.
+    \item \textbf{Source-confirmed piece names by day.} Alan can supply piece names when automatic detection is uncertain. These labels should seed matching but never become score evidence by themselves.
+    \item \textbf{Symbolic scores for known repertoire.} For each piece, Curtis needs MusicXML, MEI, a verified MuseScore export, or an equivalent symbolic note map with measure numbers, pitches, durations, voices, and staff positions.
+    \item \textbf{Score images tied to symbolic coordinates.} To show actual score snippets, the image/PDF rendering must be linked to the same symbolic note ids or verified coordinate boxes.
+    \item \textbf{Manual corrections.} Alan or a reviewer must be able to correct a note, octave, onset, rhythm, score location, or false match. These corrections become training and regression data.
+    \item \textbf{Calibration recordings.} Labeled scales, arpeggios, open strings, repeated notes, shifts, slow exercises, and fast exercises help tune pitch detection before attempting long phrases.
+    \item \textbf{Gold benchmark clips.} A small set of manually checked audio--transcription--score pairs is required before the app can claim improvement. The benchmark must include easy anchors, repeated notes, fast runs, arpeggios, and real Scherzo-Tarantelle fragments.
+\end{enumerate}
+
+\subsection{Implementation plan}
+
+\subsubsection*{Phase 0: Make the paper the tracker}
+
+\textbf{Status: complete in this revision.} The first required step is to make the plan durable in the Curtis paper PDF. The paper now records the definition of solved, the current baseline, the gates, the phase plan, and the update protocol. Future changes are not complete unless the paper is checked or updated.
+
+\subsubsection*{Phase 1: Build the canonical evidence ledger}
+
+The backend needs a stricter data model for practice evidence. The current modules already include the daily-record builder, media sampler, transcription engine, symbolic-score parser, score-asset layer, reference corpus, and correction layer. The next version should make the following entities explicit:
+
+\begin{itemize}
+    \item \texttt{source\_video}: immutable source id, title, URL, uploaded time, duration, practice-date basis, and ledger inclusion basis.
+    \item \texttt{practice\_day}: date, list of source videos, uploaded duration, active-practice coverage, piece labels, and status.
+    \item \texttt{active\_interval}: source id, start, end, confidence, detector version, reason for inclusion, and reason for exclusion when withheld.
+    \item \texttt{media\_clip}: local video path, local audio path, waveform path, source interval, duration, and playable route.
+    \item \texttt{note\_event}: onset, offset, pitch class, octave, cents deviation, confidence, detector sources, uncertainty reason, and correction state.
+    \item \texttt{score\_note}: piece id, movement, measure, voice, pitch class, octave, duration, note id, and rendered coordinates.
+    \item \texttt{match\_candidate}: played note ids, score note ids or exercise-pattern ids, match score, mismatch list, and display eligibility.
+    \item \texttt{accepted\_evidence}: only the groups that pass the gates; these are the only groups the main UI can show.
+    \item \texttt{rejected\_evidence}: wrong notes, wrong score boxes, false labels, failed transcriptions, and model guesses that must not reappear.
+\end{itemize}
+
+The acceptance condition for this phase is that a wrong A-to-B or A-to-G score crop can be stored as rejected evidence and cannot be selected by the display builder again.
+
+\subsubsection*{Phase 2: Complete the full active-practice scan}
+
+The practice-time problem is separate from transcription. Curtis should first scan the full 205 h 24 min uploaded practice ledger for violin-playing intervals with a low-cost pass. The pass should use audio energy, violin-range voiced pitch, onset density, spectral shape, and visual fallback only where necessary. It should not require full transcription.
+
+The fast pass should walk every practice video in chronological order and store approximate active intervals. A second exact pass should refine boundaries around detected regions. The UI should show three numbers for every day: uploaded video time, checked video time, and total practice time. While scanning is partial, the estimate stays labeled as estimated. When every video has been scanned, the estimate should be replaced by measured total practice time.
+
+Acceptance for this phase:
+\begin{itemize}
+    \item every strict-ledger video has a coverage record;
+    \item every day has uploaded duration and active-practice status;
+    \item non-playing windows are excluded;
+    \item active-practice total can be recomputed from stored intervals;
+    \item the paper table is updated with checked duration, active duration, unmeasured duration, and estimate status.
+\end{itemize}
+
+\subsubsection*{Phase 3: Generate stable local evidence clips}
+
+Every accepted interval and every candidate transcription window needs local media. Curtis should generate short MP4 clips and audio clips with stable IDs derived from source video id and time range. The browser should play the local clip and audio without YouTube embedding. The audio used for transcription must be the same audio the user can play.
+
+Acceptance for this phase:
+\begin{itemize}
+    \item each accepted transcription event links to local video and local audio;
+    \item the site can play the clip in the same window;
+    \item source time, local file, and rendered transcription agree;
+    \item dead local media routes fail the evidence gate rather than rendering a broken accepted group.
+\end{itemize}
+
+\subsubsection*{Phase 4: Build the verified score library}
+
+The current weak link is score-side truth. Curtis must stop relying on guessed scanned-score boxes. For Wieniawski Scherzo-Tarantelle and any future piece, the score library needs symbolic notes and rendered coordinates.
+
+The best path is:
+\begin{enumerate}
+    \item acquire a legal public-domain score image or PDF;
+    \item obtain or create a symbolic MusicXML/MEI/MuseScore representation;
+    \item render the symbolic score to image or SVG with stable note ids;
+    \item map each rendered note to pitch, octave, measure, and coordinates;
+    \item manually verify a representative set of anchors, especially A, D, G, B, fast runs, ledger lines, accidentals, and octave-displaced passages;
+    \item reject any score source where the note map cannot distinguish adjacent notes reliably.
+\end{enumerate}
+
+Acceptance for this phase:
+\begin{itemize}
+    \item a score-side A in the UI is generated from an actual score-side A;
+    \item the rendered crop includes enough context to be legible;
+    \item the crop does not cut off clefs, notes, beams, stems, or measure context;
+    \item single-note anchors are visually verified before display;
+    \item phrase snippets use the exact matched symbolic notes, not a guessed image region.
+\end{itemize}
+
+\subsubsection*{Phase 5: Replace fragile note extraction with a multi-stage transcription engine}
+
+The note detector needs to work on violin practice, not only on clean isolated notes. The engine should process active intervals in stages:
+
+\begin{enumerate}
+    \item normalize audio and remove long silence;
+    \item isolate violin-dominant energy where possible;
+    \item detect onsets and repeated attacks before pitch smoothing;
+    \item run multiple pitch estimators over the same window;
+    \item separate stable pitch, glissando/shift, vibrato, noise, and uncertain frames;
+    \item group frames into note events by onset, pitch stability, and duration;
+    \item preserve fast pitch changes instead of smoothing them into one repeated pitch;
+    \item estimate rests and pauses between attempts;
+    \item detect double stops or chords as multi-note events when monophonic assumptions fail;
+    \item attach confidence and uncertainty to every event;
+    \item store rejected alternatives so repeated failures can be debugged.
+\end{enumerate}
+
+Acceptance for this phase:
+\begin{itemize}
+    \item open strings and simple scales transcribe correctly;
+    \item repeated notes remain repeated notes with distinct onsets;
+    \item arpeggios become changing pitch sequences, not a repeated-note collapse;
+    \item obvious fast runs preserve the contour and most pitch classes;
+    \item uncertain events are labeled uncertain rather than shown as clean notation;
+    \item every displayed note can be played from its paired audio.
+\end{itemize}
+
+\subsubsection*{Phase 6: Make transcription score-aware}
+
+For known repertoire, Curtis should not transcribe in isolation and then guess the piece later. The user-supplied or detected piece name should provide a score prior. The aligner should search the score for pitch-class sequences that match the audio-derived note stream, allowing restarts, skipped notes, slow practice, repeated loops, tempo changes, and rhythm mismatch during early search.
+
+The alignment should use multiple layers:
+\begin{itemize}
+    \item pitch-class subsequence search for easy anchors;
+    \item interval-contour search when absolute pitch is uncertain;
+    \item dynamic time warping for variable tempo;
+    \item Viterbi-style path selection through the symbolic score for longer passages;
+    \item restart and loop detection when the path jumps backward;
+    \item score-free fallback when no score path is plausible.
+\end{itemize}
+
+Acceptance for this phase:
+\begin{itemize}
+    \item one-note anchors pass only when the score coordinate is verified;
+    \item three-to-five-note sequences can be matched to exact score notes;
+    \item longer phrases show played notes beside matched score notes;
+    \item mismatches are visible rather than hidden;
+    \item rhythm mismatch can be tolerated during matching but not during final notation labeling;
+    \item accepted score matches survive a musician spot-check.
+\end{itemize}
+
+\subsubsection*{Phase 7: Support score-free technique exercises}
+
+Alan may invent an exercise during practice. Curtis must treat this as first-class evidence. If the note stream is coherent but does not match the named score, the system should cluster repeated patterns, render generated notation, and label the material as a technique pattern or exercise.
+
+Acceptance for this phase:
+\begin{itemize}
+    \item repeated made-up patterns group together;
+    \item the generated transcription is linked to audio/video;
+    \item no fake score snippet appears;
+    \item the repertoire entry records technique-pattern evidence separately from piece evidence;
+    \item heat maps can show pattern density without pretending there is a score location.
+\end{itemize}
+
+\subsubsection*{Phase 8: Add manual correction and training}
+
+Fully automatic transcription will not become reliable without corrections. Curtis needs a correction UI that allows Alan to say: this note is A, this staff note is wrong, this score box points to B, this clip is non-playing, this rhythm is wrong, this is Scherzo-Tarantelle, this is a made-up exercise, or this score match is false.
+
+Every correction should become data:
+\begin{itemize}
+    \item corrected note events become gold labels;
+    \item rejected matches become negative examples;
+    \item accepted matches become benchmark fixtures;
+    \item corrected piece names update source labels without unlocking score snippets by themselves;
+    \item corrections invalidate stale derived evidence.
+\end{itemize}
+
+Acceptance for this phase:
+\begin{itemize}
+    \item Alan can fix a wrong note or score box without editing code;
+    \item the corrected example appears in the benchmark set;
+    \item the same failure cannot reappear after rerendering;
+    \item the PDF tracker records the correction count and benchmark count.
+\end{itemize}
+
+\subsubsection*{Phase 9: Build the benchmark suite}
+
+Curtis needs objective tests before claiming improvement. The benchmark should include:
+
+\begin{itemize}
+    \item open-string clips;
+    \item G, D, A, and E major/minor scales where available;
+    \item arpeggios;
+    \item repeated single-note attacks;
+    \item fast scalar runs;
+    \item shifts with sliding or unstable pitch;
+    \item Scherzo-Tarantelle fragments with verified score locations;
+    \item Haydn fragments with verified score locations;
+    \item score-free exercises;
+    \item non-playing windows that must not count as practice time.
+\end{itemize}
+
+Metrics should include note precision, note recall, pitch-class accuracy, octave accuracy when claimed, onset error, duration error, false-note rate, repeated-note recall, phrase-match precision, phrase-match recall, score-coordinate accuracy, false accepted score match count, active-practice precision, active-practice recall, and UI evidence completeness.
+
+Acceptance for this phase:
+\begin{itemize}
+    \item tests fail on the known A-to-wrong-score-note examples;
+    \item tests fail on repeated-pitch collapse;
+    \item tests fail when accepted notation lacks paired audio/video;
+    \item tests fail when practice time includes non-playing footage;
+    \item tests pass only when the displayed evidence is actually trustworthy.
+\end{itemize}
+
+\subsubsection*{Phase 10: Use professional notation rendering}
+
+The current custom notation path is only a temporary evidence display. The solved system should render notation from MusicXML, MEI, or another structured notation representation through a professional renderer or renderer-equivalent layout. The renderer must handle treble clef placement, staff scale, ledger lines, rests, stems, beams, ties, slurs where known, key signatures, accidentals, note spacing, measure widths, and responsive crop behavior.
+
+Acceptance for this phase:
+\begin{itemize}
+    \item treble clef is correctly centered around the G-line spiral;
+    \item the staff note for A4 appears in the A4 position;
+    \item key signature and accidentals follow the chosen notation policy;
+    \item snippets look publication-quality at desktop and mobile widths;
+    \item the same notation source can export to the transcription-run PDF.
+\end{itemize}
+
+\subsubsection*{Phase 11: Build heat maps from matched coordinates}
+
+Heat maps should be computed from actual practice behavior. For score-matched passages, each matched score note or measure receives density values. For score-free exercises, each pattern segment receives density values.
+
+The layers are:
+\begin{itemize}
+    \item practice density: active time spent on the passage;
+    \item repetition density: number of attempts or loops;
+    \item problem density: restarts, stops, slowdowns, unstable notes, and failed attempts;
+    \item improvement: later attempts cleaner than earlier attempts.
+\end{itemize}
+
+Acceptance for this phase:
+\begin{itemize}
+    \item a heat-map mark can be traced to clips and note events;
+    \item a score-free exercise can still have a pattern heat map;
+    \item heat maps do not appear as decorative overlays when no match exists;
+    \item the day-level heat map and repertoire heat map use the same evidence.
+\end{itemize}
+
+\subsubsection*{Phase 12: Generate specific Curtis-level observations}
+
+Observation generation should happen after transcription and alignment, not before. The observation engine should compare attempts of the same passage and classify issues as pitch, rhythm, bow, shift, tone, articulation, tempo, consistency, musical shape, or visible tension.
+
+The output for each main passage should include:
+\begin{itemize}
+    \item likely passage or exercise pattern;
+    \item evidence clip;
+    \item transcription snippet;
+    \item score snippet when verified;
+    \item exact issue;
+    \item number of attempts where it occurred;
+    \item whether it improved, stayed the same, or got worse;
+    \item why it blocks Curtis-level readiness.
+\end{itemize}
+
+Acceptance for this phase:
+\begin{itemize}
+    \item observations cite evidence;
+    \item generic advice is absent;
+    \item a day ends with one specific main blocker;
+    \item rejected or uncertain transcription does not feed readiness claims.
+\end{itemize}
+
+\subsubsection*{Phase 13: Keep the UI compact}
+
+The main page should show the paper card, analyzed practice days, and repertoire. Expanded daily entries should show one or a small number of grouped evidence pairs, not a full debug dashboard. The day marker should remain visible on the left so boundaries between days are clear. Videos should be small enough that a day entry fits on screen when possible.
+
+Acceptance for this phase:
+\begin{itemize}
+    \item one daily group contains score, clip, audio, transcription, and the minimum useful status;
+    \item raw text explanations are removed from the main view;
+    \item chronological order is stable;
+    \item desktop and mobile render without overlap, excessive height, or broken media controls;
+    \item unresolved material is visible as state, not as a fake dashboard.
+\end{itemize}
+
+\subsubsection*{Phase 14: Automate paper updates}
+
+The paper is now the progress tracker. Future meaningful Curtis changes should update:
+\begin{itemize}
+    \item live state numbers;
+    \item solved gates;
+    \item benchmark metrics;
+    \item accepted score-match count;
+    \item accepted transcription duration;
+    \item full archive scan coverage;
+    \item remaining blockers;
+    \item limitations.
+\end{itemize}
+
+Acceptance for this phase is procedural: after every Curtis change that affects transcription, score matching, practice time, clips, heat maps, repertoire, observations, or evidence gates, the LaTeX paper is checked, rebuilt, and the root \texttt{paper.pdf} is refreshed.
+
+\subsection{Milestones}
+
+\begin{table}[htbp]
+\centering
+\scriptsize
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{1.1}
+\caption{Milestone plan for moving from current evidence gates to solved long-phrase transcription.}
+\label{tab:roadmap_milestones}
+\begin{tabularx}{\textwidth}{>{\bfseries}p{0.12\textwidth}p{0.18\textwidth}X p{0.18\textwidth}}
+\toprule
+Milestone & Target & Acceptance evidence & Status \\
+\midrule
+M0 & Paper tracker & Roadmap is included in the Curtis paper PDF and becomes the update record. & Complete in this revision. \\
+M1 & Practice time & All 205 h 24 min of strict-ledger video has active-practice coverage and per-day totals. & Pending. \\
+M2 & Score truth & Scherzo-Tarantelle has verified symbolic notes and score coordinates. & Pending. \\
+M3 & One-note anchor & A displayed A from audio is matched to a verified score-side A, with no wrong-note crop. & Pending. \\
+M4 & Short sequence & Three-to-five played notes align to exact score notes and render with local audio/video. & Pending. \\
+M5 & Long phrase & A 10--30 s passage transcription matches the paired audio and score location. & Pending. \\
+M6 & Repeat grouping & Multiple attempts of the same passage group into loops, restarts, slow attempts, and faster attempts. & Pending. \\
+M7 & Heat map & Practice density and problem density appear on verified score coordinates. & Pending. \\
+M8 & Repertoire update & Piece entries update from accepted daily evidence and show active time, clips, snippets, and blockers. & Pending. \\
+M9 & Readiness observation & Main blocker is generated from accepted evidence, not generic advice. & Pending. \\
+M10 & Regression lock & Tests prevent failed notation, wrong score boxes, and non-playing practice-time credit from returning. & Pending. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Immediate next implementation}
+
+After this PDF tracker, the next concrete implementation should be \textbf{full active-practice coverage plus benchmark/correction scaffolding}. This is the first useful code milestone because transcription cannot be trusted without knowing which source windows contain violin playing, and it cannot improve reliably without a gold correction loop.
+
+The next coding pass should:
+\begin{enumerate}
+    \item add persistent scan coverage for every strict-ledger video;
+    \item run a low-cost active-practice pass over all remaining unchecked videos;
+    \item expose per-day uploaded duration, checked duration, detected active time, and estimate state;
+    \item add a correction schema for note, score, match, piece, and active-interval errors;
+    \item add tests for the known wrong-score-note failure mode;
+    \item update this paper with the new coverage numbers and any solved milestone.
+\end{enumerate}
+
+Only after M1 and the correction/benchmark loop are in place should the system try to claim longer transcription or score matching. Otherwise Curtis will keep producing plausible-looking fragments that Alan has to audit manually, which is the exact burden this roadmap is meant to remove.
