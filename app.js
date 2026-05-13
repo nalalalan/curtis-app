@@ -65,7 +65,9 @@ const elements = {
   storageState: document.querySelector("#storageState"),
   automationState: document.querySelector("#automationState"),
   mediaState: document.querySelector("#mediaState"),
-  instagramState: document.querySelector("#instagramState")
+  instagramState: document.querySelector("#instagramState"),
+  transcriptionCompletionPill: document.querySelector("#transcriptionCompletionPill"),
+  transcriptionCompletion: document.querySelector("#transcriptionCompletion")
 };
 
 function setText(element, value) {
@@ -1125,6 +1127,8 @@ function renderStatus() {
     const matchCount = scoreMatchGroupCount(records);
     elements.studyCount.textContent = `${matchCount} ${matchCount === 1 ? "match" : "matches"} / ${recordCount} days`;
   }
+  const transcriptionCompletion = transcriptionCompletionState(ops);
+  setText(elements.transcriptionCompletionPill, transcriptionCompletion?.completionLabel || "0%");
   const scannedSeconds = scannedVideoSeconds(practiceCoverage);
   const archiveSeconds = archiveVideoSeconds(practiceCoverage, totals);
   const archiveLabel = archiveVideoText(practiceCoverage, totals);
@@ -2604,6 +2608,121 @@ function renderPieces() {
   }).join("");
 }
 
+function transcriptionCompletionState(ops) {
+  const completion = ops?.review?.transcriptionCompletion;
+  return completion && typeof completion === "object" ? completion : null;
+}
+
+function compactPointLabel(item) {
+  const points = Number(item?.points) || 0;
+  const weight = Number(item?.weight) || 0;
+  if (!weight) return "";
+  const pointText = Number.isInteger(points) ? String(points) : points.toFixed(1).replace(/\.0$/, "");
+  const weightText = Number.isInteger(weight) ? String(weight) : weight.toFixed(1).replace(/\.0$/, "");
+  return `${pointText}/${weightText}`;
+}
+
+function completionList(items, emptyText) {
+  const list = Array.isArray(items) ? items.filter(Boolean) : [];
+  if (!list.length) return `<p class="empty roadmap-empty">${escapeHtml(emptyText)}</p>`;
+  return `
+    <ol class="roadmap-list">
+      ${list.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+    </ol>
+  `;
+}
+
+function renderTranscriptionCompletion() {
+  if (!elements.transcriptionCompletion) return;
+  if (!backend.online) {
+    elements.transcriptionCompletion.innerHTML = `<p class="empty">Backend offline.</p>`;
+    return;
+  }
+  const completion = transcriptionCompletionState(backend.ops);
+  if (!completion) {
+    elements.transcriptionCompletion.innerHTML = `<p class="empty">Transcription completion pending.</p>`;
+    return;
+  }
+  const percent = Math.max(0, Math.min(100, Number(completion.completionPercent) || 0));
+  const gates = Array.isArray(completion.gates) ? completion.gates : [];
+  const doneItems = Array.isArray(completion.doneItems) ? completion.doneItems : [];
+  const remainingItems = Array.isArray(completion.remainingItems) ? completion.remainingItems : [];
+  const completedPoints = Number(completion.completedPoints) || 0;
+  const totalPoints = Number(completion.totalPoints) || 0;
+  const pointSummary = totalPoints
+    ? `${completedPoints.toFixed(1).replace(/\.0$/, "")}/${totalPoints.toFixed(0)} points`
+    : "";
+  elements.transcriptionCompletion.innerHTML = `
+    <div class="roadmap-score">
+      <div>
+        <span>Implementation Gate</span>
+        <strong>${escapeHtml(completion.completionLabel || `${percent}%`)}</strong>
+        <small>${escapeHtml(pointSummary || completion.basis || "")}</small>
+      </div>
+      <div class="roadmap-meter" aria-label="Transcription completion ${escapeHtml(String(percent))}%">
+        <i style="width: ${percent}%"></i>
+      </div>
+    </div>
+    <div class="roadmap-stats" aria-label="Current transcription state">
+      <article>
+        <span>Long Phrases</span>
+        <strong>${escapeHtml(String(completion.longPhraseAcceptedCount || 0))}</strong>
+        <em>accepted</em>
+      </article>
+      <article>
+        <span>Exact Score Windows</span>
+        <strong>${escapeHtml(String(completion.exactScoreAlignedWindowCount || 0))}</strong>
+        <em>verified</em>
+      </article>
+      <article>
+        <span>Video Checked</span>
+        <strong>${escapeHtml(completion.checkedVideoLabel || "0s")}</strong>
+        <em>${escapeHtml(completion.uploadedVideoLabel ? `of ${completion.uploadedVideoLabel}` : "archive pending")}</em>
+      </article>
+      <article>
+        <span>Practice Time</span>
+        <strong>${escapeHtml(completion.estimatedTotalPracticeLabel || completion.activePracticeLabel || "pending")}</strong>
+        <em>${escapeHtml(completion.activePracticeLabel ? `${completion.activePracticeLabel} checked active` : "active scan pending")}</em>
+      </article>
+      <article>
+        <span>Scan Queue</span>
+        <strong>${escapeHtml(String(completion.pendingWindowCount || 0))}</strong>
+        <em>${escapeHtml(`${completion.activeIntervalCount || 0} active intervals`)}</em>
+      </article>
+    </div>
+    <div class="roadmap-columns">
+      <article>
+        <span>Done</span>
+        ${completionList(doneItems, "No completed gates yet.")}
+      </article>
+      <article>
+        <span>Still Needed</span>
+        ${completionList(remainingItems, "No remaining gates.")}
+      </article>
+    </div>
+    <details class="roadmap-gates" open>
+      <summary>Gate checklist</summary>
+      <div class="roadmap-gate-list">
+        ${gates.map((gate) => `
+          <article class="roadmap-gate" data-status="${escapeHtml(gate.status || "pending")}">
+            <div>
+              <span>${escapeHtml(gate.status || "pending")}</span>
+              <strong>${escapeHtml(gate.label || "Gate")}</strong>
+              <small>${escapeHtml(gate.evidence || "")}</small>
+            </div>
+            <em>${escapeHtml(compactPointLabel(gate))}</em>
+            <p>${escapeHtml(gate.remaining || "")}</p>
+          </article>
+        `).join("")}
+      </div>
+    </details>
+    <div class="roadmap-next">
+      <span>Next</span>
+      <strong>${escapeHtml(completion.nextAction || "Next scan pending.")}</strong>
+    </div>
+  `;
+}
+
 function pieceEvidenceLine(piece, evidence) {
   const evidenceCount = Array.isArray(evidence) ? evidence.length : 0;
   const days = Array.isArray(piece?.recentPracticeDays) ? piece.recentPracticeDays.filter(Boolean).length : 0;
@@ -2844,6 +2963,7 @@ function render() {
   renderStatus();
   renderStudy();
   renderPieces();
+  renderTranscriptionCompletion();
   if (elements.highlightFrame) renderHighlight();
   if (elements.dayList) renderDays();
   if (elements.inventoryList) renderInventory();

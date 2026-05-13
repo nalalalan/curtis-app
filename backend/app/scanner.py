@@ -1070,6 +1070,234 @@ async def refresh_public_reference_corpus(state: dict[str, Any]) -> None:
         corpus["lastError"] = str(exc)[:500]
 
 
+def score_sequence_match_count(daily_records: dict[str, Any]) -> int:
+    records = daily_records.get("records") if isinstance(daily_records.get("records"), list) else []
+    total = 0
+    for record in records:
+        transcription = record.get("transcription") if isinstance(record.get("transcription"), dict) else {}
+        total += int(transcription.get("scoreSequenceMatchCount") or 0)
+    return total
+
+
+def score_location_verified_count(daily_records: dict[str, Any]) -> int:
+    records = daily_records.get("records") if isinstance(daily_records.get("records"), list) else []
+    total = 0
+    for record in records:
+        transcription = record.get("transcription") if isinstance(record.get("transcription"), dict) else {}
+        total += int(transcription.get("scoreLocationVerifiedCount") or 0)
+    return total
+
+
+def roadmap_gate(
+    gate_id: str,
+    label: str,
+    weight: float,
+    points: float,
+    evidence: str,
+    done: str,
+    remaining: str,
+) -> dict[str, Any]:
+    bounded_points = round(max(0.0, min(float(weight), float(points))), 2)
+    status = "complete" if bounded_points >= weight else "partial" if bounded_points > 0 else "pending"
+    return {
+        "id": gate_id,
+        "label": label,
+        "weight": weight,
+        "points": bounded_points,
+        "status": status,
+        "evidence": evidence,
+        "done": done,
+        "remaining": remaining,
+    }
+
+
+def build_transcription_completion(
+    training: dict[str, Any],
+    daily_records: dict[str, Any],
+    repertoire_evidence: dict[str, Any],
+    active_practice_coverage: dict[str, Any],
+    evidence_progress: dict[str, Any],
+    media_samples: list[dict[str, Any]],
+    transcriptions: list[dict[str, Any]],
+) -> dict[str, Any]:
+    active_scan = (
+        active_practice_coverage.get("activePracticeScan")
+        if isinstance(active_practice_coverage.get("activePracticeScan"), dict)
+        else {}
+    )
+    uploaded_seconds = int(active_practice_coverage.get("uploadedVideoSeconds") or 0)
+    checked_seconds = int(active_practice_coverage.get("checkedVideoSeconds") or 0)
+    coverage_ratio = min(1.0, checked_seconds / uploaded_seconds) if uploaded_seconds else 0.0
+    record_count = int(daily_records.get("recordCount") or 0)
+    ledger_video_count = int(active_practice_coverage.get("ledgerVideoCount") or 0)
+    sample_result_count = int(active_scan.get("sampleResultCount") or 0)
+    active_interval_count = int(active_scan.get("activeIntervalCount") or 0)
+    pending_window_count = int(active_scan.get("pendingWindowCount") or 0)
+    active_sample_count = int(active_scan.get("activeViolinSampleCount") or 0)
+    checked_no_violin_count = int(active_scan.get("checkedNoViolinSampleCount") or 0)
+    audio_record_count = int(daily_records.get("audioEvidenceRecordCount") or 0)
+    transcribed_record_count = int(daily_records.get("transcribedRecordCount") or 0)
+    score_sequence_count = score_sequence_match_count(daily_records)
+    score_verified_count = score_location_verified_count(daily_records)
+    benchmark_count = int(evidence_progress.get("benchmarkCount") or 0)
+    rejected_score_count = int(evidence_progress.get("wrongScoreNoteRegressionCount") or 0)
+    repertoire_entries = repertoire_evidence.get("entries") if isinstance(repertoire_evidence.get("entries"), list) else []
+    score_target_count = int(training.get("scoreReferenceTargetCount") or training.get("sourceConfirmedScoreTargetCount") or 0)
+    long_phrase_count = 0
+
+    gates = [
+        roadmap_gate(
+            "source-ledger",
+            "Source ledger and daily grouping",
+            5,
+            5 if ledger_video_count and record_count else 0,
+            f"{ledger_video_count} strict-ledger videos / {record_count} practice days",
+            "Practice videos are indexed from the strict ledger and grouped by day.",
+            "Keep new uploads entering the same ledger without changing historical dates.",
+        ),
+        roadmap_gate(
+            "paper-tracker",
+            "Paper tracker",
+            5,
+            5,
+            "Curtis paper PDF is the progress record.",
+            "The paper contains the long-phrase transcription roadmap and live progress entries.",
+            "Update this PDF on every material transcription, score, practice-time, or evidence-gate change.",
+        ),
+        roadmap_gate(
+            "active-scan-route",
+            "Active-practice scan route",
+            8,
+            8 if active_interval_count or sample_result_count or pending_window_count else 0,
+            f"{active_interval_count} active intervals / {sample_result_count} scan results / {pending_window_count} queued windows",
+            "Active violin-playing time is separated from uploaded video duration.",
+            "Continue converting queued windows into checked source coverage.",
+        ),
+        roadmap_gate(
+            "full-archive-coverage",
+            "Full archive practice-time coverage",
+            12,
+            12 * coverage_ratio,
+            f"{active_practice_coverage.get('checkedVideoLabel') or '0s'} checked of {active_practice_coverage.get('uploadedVideoLabel') or 'unknown'}",
+            "Checked windows count playing and non-playing intervals separately.",
+            "Every strict-ledger video still needs chronological playing/non-playing coverage.",
+        ),
+        roadmap_gate(
+            "local-media-evidence",
+            "Local audio/video evidence",
+            6,
+            (2 if media_samples else 0) + (2 if audio_record_count else 0),
+            f"{len(media_samples)} media samples / {audio_record_count} audio-evidence daily records",
+            "Accepted snippets can use local media evidence instead of YouTube embeds.",
+            "Every accepted transcription and future phrase match needs stable local audio/video.",
+        ),
+        roadmap_gate(
+            "correction-benchmarks",
+            "Correction and benchmark loop",
+            6,
+            (1.5 if benchmark_count else 0) + (0.5 if rejected_score_count else 0),
+            f"{benchmark_count} benchmark corrections / {rejected_score_count} wrong-score-note regressions",
+            "Rejected score-note mistakes can be stored as regression evidence.",
+            "Build a larger benchmark suite for notes, rhythm, score boxes, and full phrases.",
+        ),
+        roadmap_gate(
+            "score-truth",
+            "Verified score library and note coordinates",
+            15,
+            (1.5 if score_target_count else 0) + (4 if score_verified_count else 0),
+            f"{score_target_count} score targets / {score_verified_count} score-location-verified notes",
+            "Source-confirmed pieces can seed score targets.",
+            "Scherzo-Tarantelle needs verified symbolic notes plus rendered score coordinates.",
+        ),
+        roadmap_gate(
+            "single-note-anchor",
+            "Verified single-note score anchor",
+            5,
+            5 if score_verified_count else 0,
+            f"{score_verified_count} verified score locations",
+            "No accepted one-note score crop is currently visible.",
+            "A displayed A from audio must be matched to an actual score-side A.",
+        ),
+        roadmap_gate(
+            "note-rhythm-engine",
+            "Accurate note and rhythm extraction",
+            18,
+            (1 if transcriptions else 0) + (1 if transcribed_record_count else 0) + (1 if audio_record_count else 0),
+            f"{len(transcriptions)} transcription records / {transcribed_record_count} notation-ready daily records / {audio_record_count} audio-evidence records",
+            "Short audio-checked fragments exist; failed broad transcription stays hidden.",
+            "Fast runs, arpeggios, repeated notes, rests, rhythm, and full active windows remain unsolved.",
+        ),
+        roadmap_gate(
+            "notation-rendering",
+            "Professional notation rendering",
+            6,
+            1 if transcribed_record_count else 0,
+            f"{transcribed_record_count} notation-ready daily records",
+            "Notation is gated so failed transcription is not displayed as accepted evidence.",
+            "Replace fragile hand-built notation with publication-quality rendering for accepted phrases.",
+        ),
+        roadmap_gate(
+            "score-pattern-alignment",
+            "Score or exercise-pattern alignment",
+            8,
+            1.5 if score_sequence_match_count(daily_records) else 0,
+            f"{score_sequence_count} pitch-sequence groups / {score_verified_count} exact score locations",
+            "Pitch-sequence groups are separated from exact score evidence.",
+            "Exact score locations and score-free exercise grouping remain open.",
+        ),
+        roadmap_gate(
+            "repeat-heatmap",
+            "Repeat grouping and heat maps",
+            3,
+            0.5 if score_sequence_count else 0,
+            "Heat-map scaffolds exist, but score-coordinate heat maps are not accepted.",
+            "Display density, repetition, problem, and improvement layers on verified score or pattern coordinates.",
+            "Score-coordinate heat maps require accepted phrase locations first.",
+        ),
+        roadmap_gate(
+            "repertoire-observation",
+            "Repertoire and Curtis-level observations",
+            3,
+            1 if repertoire_entries else 0,
+            f"{len(repertoire_entries)} repertoire entries / {long_phrase_count} accepted long phrases",
+            "Confirmed source evidence can promote repertoire without fake progress percentages.",
+            "Curtis-level blockers need accepted clips, transcription events, and score or pattern locations.",
+        ),
+    ]
+
+    total_weight = sum(float(item["weight"]) for item in gates)
+    completed_points = round(sum(float(item["points"]) for item in gates), 2)
+    completion_percent = int(round((completed_points / total_weight) * 100)) if total_weight else 0
+    return {
+        "status": "partial" if completed_points else "pending",
+        "completionPercent": completion_percent,
+        "completionLabel": f"{completion_percent}%",
+        "completedPoints": completed_points,
+        "totalPoints": total_weight,
+        "basis": "100-point implementation gate checklist for solved long-phrase transcription; not a playing-readiness score.",
+        "longPhraseAcceptedCount": long_phrase_count,
+        "exactScoreAlignedWindowCount": score_verified_count,
+        "pitchSequenceGroupCount": score_sequence_count,
+        "checkedVideoLabel": active_practice_coverage.get("checkedVideoLabel") or "",
+        "uploadedVideoLabel": active_practice_coverage.get("uploadedVideoLabel") or "",
+        "activePracticeLabel": active_practice_coverage.get("activePracticeLabel") or "",
+        "estimatedTotalPracticeLabel": active_practice_coverage.get("estimatedTotalPracticeLabel") or "",
+        "activeIntervalCount": active_interval_count,
+        "sampleResultCount": sample_result_count,
+        "activeViolinSampleCount": active_sample_count,
+        "checkedNoViolinSampleCount": checked_no_violin_count,
+        "pendingWindowCount": pending_window_count,
+        "doneItems": [item["done"] for item in gates if item["points"] > 0],
+        "remainingItems": [item["remaining"] for item in gates if item["points"] < item["weight"]],
+        "gates": gates,
+        "nextAction": (
+            "Queue-only owner sync from the active-scan pending list, then rerun active-practice scan."
+            if pending_window_count
+            else "Expand accepted phrase transcription only after active coverage and score truth gates advance."
+        ),
+    }
+
+
 def derive_review(
     inventory: dict[str, list[dict[str, Any]]],
     existing: dict[str, Any] | None = None,
@@ -1101,6 +1329,15 @@ def derive_review(
         state.get("activePracticeScan") if isinstance(state.get("activePracticeScan"), dict) else {},
     )
     evidence_progress = build_evidence_progress(state)
+    transcription_completion = build_transcription_completion(
+        training,
+        daily_records,
+        repertoire_evidence,
+        active_practice_coverage,
+        evidence_progress,
+        media_samples,
+        transcriptions,
+    )
     progress_plan = existing.get("progressPlan") if isinstance(existing.get("progressPlan"), dict) else None
     youtube_items = inventory.get("youtube", [])
     practice_candidates = [
@@ -1142,6 +1379,7 @@ def derive_review(
         "dailyRecords": daily_records,
         "activePracticeCoverage": active_practice_coverage,
         "evidenceProgress": evidence_progress,
+        "transcriptionCompletion": transcription_completion,
         "repertoireEvidence": repertoire_evidence,
         "progressPlan": progress_plan,
         "currentWork": current_work,

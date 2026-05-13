@@ -134,6 +134,48 @@ class MediaSamplingTests(unittest.TestCase):
         self.assertEqual(candidates[0]["sampleWindow"], "*270-360")
         self.assertEqual(candidates[0]["queueSource"], "active_practice_scan")
 
+    def test_owner_sync_queue_only_skips_cached_samples(self):
+        with TemporaryDirectory() as directory:
+            media_dir = Path(directory)
+            cached = media_dir / "video123-11400-browser.webm"
+            cached.write_bytes(b"cached media")
+            ops = {
+                "inventory": {
+                    "youtube": [
+                        {
+                            "id": "video123",
+                            "url": "https://youtube.test/watch?v=video123",
+                            "title": "5-3-26",
+                            "durationSeconds": 12000,
+                            "practiceCandidate": True,
+                            "publishedAt": "2026-05-03T00:00:00Z",
+                        }
+                    ]
+                },
+                "media": {"sampleIndex": []},
+            }
+            active_scan = {
+                "pendingWindows": [
+                    {
+                        "sampleId": "video123-0",
+                        "sourceVideoId": "video123",
+                        "sourceUrl": "https://youtube.test/watch?v=video123",
+                        "sourceTitle": "5-3-26",
+                        "startSeconds": 0,
+                        "endSeconds": 90,
+                    }
+                ]
+            }
+            with mock.patch.object(owner_sync, "MEDIA_DIR", media_dir), mock.patch.object(
+                owner_sync,
+                "local_violin_presence",
+                return_value={"containsViolin": True, "violinPresence": "violin_positive"},
+            ):
+                candidates = owner_sync.media_candidates(ops, active_scan, queue_only=True)
+
+        self.assertEqual([item["sampleId"] for item in candidates], ["video123-0"])
+        self.assertEqual(candidates[0]["queueSource"], "active_practice_scan")
+
     def test_sample_id_includes_window_start(self):
         self.assertEqual(sample_id("abc", "*5940-6030"), "abc-5940")
 

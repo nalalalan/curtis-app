@@ -1,0 +1,54 @@
+import unittest
+
+from backend.app.scanner import build_transcription_completion
+
+
+class TranscriptionCompletionTests(unittest.TestCase):
+    def test_completion_reports_weighted_roadmap_and_open_long_phrase_gate(self):
+        completion = build_transcription_completion(
+            {"scoreReferenceTargetCount": 3},
+            {
+                "recordCount": 39,
+                "audioEvidenceRecordCount": 3,
+                "transcribedRecordCount": 1,
+                "records": [
+                    {
+                        "transcription": {
+                            "scoreSequenceMatchCount": 15,
+                            "scoreLocationVerifiedCount": 0,
+                        }
+                    }
+                ],
+            },
+            {"entries": [{"title": "Wieniawski Scherzo-Tarantelle, Op. 16"}]},
+            {
+                "ledgerVideoCount": 46,
+                "uploadedVideoSeconds": 768230,
+                "uploadedVideoLabel": "213h 23m",
+                "checkedVideoSeconds": 7290,
+                "checkedVideoLabel": "2h 1m",
+                "activePracticeLabel": "1h 58m",
+                "estimatedTotalPracticeLabel": "208h 49m",
+                "activePracticeScan": {
+                    "activeIntervalCount": 215,
+                    "sampleResultCount": 81,
+                    "activeViolinSampleCount": 72,
+                    "checkedNoViolinSampleCount": 9,
+                    "pendingWindowCount": 250,
+                },
+            },
+            {"benchmarkCount": 1, "wrongScoreNoteRegressionCount": 1},
+            [{"id": "sample"}],
+            [{"transcriptionId": "t1"}],
+        )
+
+        self.assertGreater(completion["completionPercent"], 0)
+        self.assertLess(completion["completionPercent"], 50)
+        self.assertEqual(completion["longPhraseAcceptedCount"], 0)
+        self.assertEqual(completion["exactScoreAlignedWindowCount"], 0)
+        self.assertIn("not a playing-readiness score", completion["basis"])
+        self.assertTrue(any(item["id"] == "full-archive-coverage" for item in completion["gates"]))
+
+
+if __name__ == "__main__":
+    unittest.main()

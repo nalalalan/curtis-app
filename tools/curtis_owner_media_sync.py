@@ -30,6 +30,7 @@ SAMPLE_START_SECONDS = int(os.getenv("CURTIS_OWNER_SAMPLE_START_SECONDS", str(10
 WINDOWS_PER_VIDEO = int(os.getenv("CURTIS_OWNER_WINDOWS_PER_VIDEO", "8"))
 BATCH_SIZE = int(os.getenv("CURTIS_OWNER_BATCH_SIZE", "4"))
 PENDING_QUEUE_LIMIT = int(os.getenv("CURTIS_OWNER_PENDING_QUEUE_LIMIT", "500"))
+QUEUE_ONLY = os.getenv("CURTIS_OWNER_QUEUE_ONLY", "").strip().lower() in {"1", "true", "yes", "queue"}
 EXPAND_OFFSETS = tuple(
     int(value.strip())
     for value in os.getenv("CURTIS_OWNER_EXPAND_OFFSETS", "90,180,360,720").split(",")
@@ -377,13 +378,19 @@ def active_scan_queue_candidates(
     return candidates
 
 
-def media_candidates(ops: dict[str, Any], active_scan: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+def media_candidates(
+    ops: dict[str, Any],
+    active_scan: dict[str, Any] | None = None,
+    queue_only: bool = False,
+) -> list[dict[str, Any]]:
     inventory = ops.get("inventory", {}).get("youtube", [])
     sampled_ids, sampled_windows = live_sample_keys(ops)
     cached = cached_media_candidates(ops)
     cached_ids = {str(item.get("sampleId")) for item in cached if item.get("sampleId")}
     queued = active_scan_queue_candidates(ops, active_scan or {}, cached_ids)
     queued_ids = {str(item.get("sampleId")) for item in queued if item.get("sampleId")}
+    if queue_only:
+        return queued
     positive_starts = positive_sample_starts(ops)
 
     expansion: list[dict[str, Any]] = []
@@ -597,7 +604,7 @@ def main() -> int:
         except Exception:
             ops = client.get(f"{API_BASE}/api/curtis/ops-check").json()
         active_scan = fetch_active_scan_queue(client)
-        candidates = media_candidates(ops, active_scan)
+        candidates = media_candidates(ops, active_scan, queue_only=QUEUE_ONLY)
         queued_candidate_count = sum(
             1 for item in candidates if item.get("queueSource") == "active_practice_scan"
         )
@@ -609,6 +616,7 @@ def main() -> int:
                         "blocker": "no_unsynced_practice_candidates",
                         "activeScanPendingWindowCount": active_scan.get("pendingWindowCount"),
                         "queuedCandidateCount": queued_candidate_count,
+                        "queueOnly": QUEUE_ONLY,
                     }
                 )
             )
@@ -660,6 +668,7 @@ def main() -> int:
         "samples": len(updated.get("media", {}).get("samples", [])),
         "activeScanPendingWindowCount": active_scan.get("pendingWindowCount"),
         "queuedCandidateCount": queued_candidate_count,
+        "queueOnly": QUEUE_ONLY,
     }))
     return 0 if uploaded else 1
 
