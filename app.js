@@ -556,6 +556,11 @@ function scoreMatchGroupCount(records) {
   return list.reduce((total, record) => total + sourceScoreMatchGroups(record).length, 0);
 }
 
+function firstSourceScoreMatchDay(records) {
+  const match = (Array.isArray(records) ? records : []).find((record) => sourceScoreMatchGroups(record).length);
+  return match?.practiceDay || "";
+}
+
 function analyzedRecordList(ops) {
   return dailyRecordList(ops).filter((record) => record?.status && record.status !== "pending_media");
 }
@@ -2448,7 +2453,7 @@ function renderLeadTranscription(record) {
   `;
 }
 
-function renderDailyRecord(record, index = 0) {
+function renderDailyRecord(record, index = 0, defaultOpenDay = "") {
   const playableClip = primaryNotationClip(record) || primaryPlayableClip(record);
   const scoreSnippet = scoreSnippetForRecord(record);
   const transcription = record?.transcription || {};
@@ -2456,7 +2461,9 @@ function renderDailyRecord(record, index = 0) {
   const sourceScoreMatches = renderPitchAnchorGroups(record);
   const scoreMatches = sourceScoreMatches ? "" : renderScoreMatchGroups(record);
   const openTarget = new URLSearchParams(window.location.search).get("open") || "";
-  const openForReview = openTarget === "first" ? index === 0 : openTarget === record.practiceDay;
+  const openForReview = openTarget
+    ? (openTarget === "first" ? index === 0 : openTarget === record.practiceDay)
+    : defaultOpenDay === record.practiceDay;
   const meta = [
     record.activeViolinLabel ? `${record.activeViolinLabel} practice` : record.activeTimeStatus === "pending_media" ? "practice pending" : "",
     record.uploadedVideoLabel ? `${record.uploadedVideoLabel} video` : "",
@@ -2497,8 +2504,9 @@ function renderStudy() {
       : `<p class="empty">Daily records pending YouTube inventory.</p>`;
     return;
   }
+  const defaultOpenDay = firstSourceScoreMatchDay(analyzed);
   elements.studyList.innerHTML = [
-    analyzed.map((record, index) => renderDailyRecord(record, index)).join(""),
+    analyzed.map((record, index) => renderDailyRecord(record, index, defaultOpenDay)).join(""),
     pendingCount
       ? `<p class="empty pending-index">${pendingCount} days pending analysis.</p>`
       : ""
