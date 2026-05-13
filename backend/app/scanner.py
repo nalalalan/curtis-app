@@ -42,6 +42,7 @@ from .settings import (
 )
 from .state import append_run, load_state, save_state, utc_now
 from .daily_records import build_daily_records, build_repertoire_evidence
+from .evidence_ledger import build_active_practice_coverage, build_evidence_progress
 from .study_packets import build_practice_study, build_practice_totals
 
 DEFAULT_YOUTUBE_SOURCE = "https://www.youtube.com/@nalalan"
@@ -1092,6 +1093,8 @@ def derive_review(
     transcriptions = transcription_items(state)
     daily_records = build_daily_records(state, inventory, media_samples, transcriptions, sections)
     repertoire_evidence = build_repertoire_evidence(daily_records)
+    active_practice_coverage = build_active_practice_coverage(inventory, media_samples, transcriptions, sections)
+    evidence_progress = build_evidence_progress(state)
     progress_plan = existing.get("progressPlan") if isinstance(existing.get("progressPlan"), dict) else None
     youtube_items = inventory.get("youtube", [])
     practice_candidates = [
@@ -1131,6 +1134,8 @@ def derive_review(
         "practiceTotals": practice_totals,
         "practiceStudy": practice_study,
         "dailyRecords": daily_records,
+        "activePracticeCoverage": active_practice_coverage,
+        "evidenceProgress": evidence_progress,
         "repertoireEvidence": repertoire_evidence,
         "progressPlan": progress_plan,
         "currentWork": current_work,

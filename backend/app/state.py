@@ -41,6 +41,8 @@ DEFAULT_STATE: dict[str, Any] = {
     },
     "runs": [],
     "lastScan": None,
+    "evidenceCorrections": [],
+    "transcriptionBenchmarks": [],
 }
 
 

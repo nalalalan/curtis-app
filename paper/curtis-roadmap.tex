@@ -22,6 +22,7 @@ Current archive coverage & 205 h 24 min uploaded practice video; 1 h 42 min chec
 Current estimate & 59 h total active practice estimated from checked windows; not final. \\
 Current user burden to remove & Alan is still forced to inspect whether a note is real, whether a score box points to the correct pitch, whether audio matches notation, and whether practice time means playing rather than uploaded duration. \\
 First tracker update & This PDF now defines the full implementation plan and becomes the required progress record for future Curtis work. \\
+2026-05-13 11:57 AM EDT code update & Backend coverage ledger, evidence-correction route, and benchmark-fixture scaffold added. Checked video time now includes sampled non-playing windows; total practice time remains measured active playing only. Wrong score-note corrections can be stored as rejected benchmark cases. Full archive scan and long-phrase transcription remain unsolved. \\
 \bottomrule
 \end{tabularx}
 \end{table}
@@ -368,7 +369,7 @@ Acceptance for this phase is procedural: after every Curtis change that affects 
 Milestone & Target & Acceptance evidence & Status \\
 \midrule
 M0 & Paper tracker & Roadmap is included in the Curtis paper PDF and becomes the update record. & Complete in this revision. \\
-M1 & Practice time & All 205 h 24 min of strict-ledger video has active-practice coverage and per-day totals. & Pending. \\
+M1 & Practice time & All 205 h 24 min of strict-ledger video has active-practice coverage and per-day totals. & Coverage ledger/API added; full scan pending. \\
 M2 & Score truth & Scherzo-Tarantelle has verified symbolic notes and score coordinates. & Pending. \\
 M3 & One-note anchor & A displayed A from audio is matched to a verified score-side A, with no wrong-note crop. & Pending. \\
 M4 & Short sequence & Three-to-five played notes align to exact score notes and render with local audio/video. & Pending. \\
@@ -377,22 +378,33 @@ M6 & Repeat grouping & Multiple attempts of the same passage group into loops, r
 M7 & Heat map & Practice density and problem density appear on verified score coordinates. & Pending. \\
 M8 & Repertoire update & Piece entries update from accepted daily evidence and show active time, clips, snippets, and blockers. & Pending. \\
 M9 & Readiness observation & Main blocker is generated from accepted evidence, not generic advice. & Pending. \\
-M10 & Regression lock & Tests prevent failed notation, wrong score boxes, and non-playing practice-time credit from returning. & Pending. \\
+M10 & Regression lock & Tests prevent failed notation, wrong score boxes, and non-playing practice-time credit from returning. & Correction benchmark scaffold added; full benchmark suite pending. \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
 \subsection{Immediate next implementation}
 
-After this PDF tracker, the next concrete implementation should be \textbf{full active-practice coverage plus benchmark/correction scaffolding}. This is the first useful code milestone because transcription cannot be trusted without knowing which source windows contain violin playing, and it cannot improve reliably without a gold correction loop.
+After this PDF tracker, the first concrete implementation target is \textbf{full active-practice coverage plus benchmark/correction scaffolding}. This is the first useful code milestone because transcription cannot be trusted without knowing which source windows contain violin playing, and it cannot improve reliably without a gold correction loop.
+
+The 2026-05-13 11:57 AM EDT backend update completed the coverage and correction scaffolding portion:
+\begin{itemize}
+    \item added a canonical active-practice coverage ledger exposed through the review API and \texttt{/api/curtis/active-practice-coverage};
+    \item separated uploaded video duration, checked sampled video duration, measured active practice time, candidate violin windows, unmeasured video time, and estimate state;
+    \item counted checked non-playing sampled windows as checked video without adding them to practice time;
+    \item added \texttt{/api/curtis/evidence-corrections} for note, score, match, piece, and active-interval corrections;
+    \item added benchmark fixtures for rejected score-note and match corrections;
+    \item added regression tests for checked non-playing windows, wrong score-note benchmark creation, and rejecting accepted score evidence when the displayed score note conflicts with the observed note.
+\end{itemize}
+
+The remaining M1 work is the full low-cost media pass over every unmeasured strict-ledger video. The remaining M10 work is the larger benchmark suite for repeated notes, arpeggios, fast runs, score-free exercises, score-coordinate truth, and accepted notation/media completeness.
 
 The next coding pass should:
 \begin{enumerate}
-    \item add persistent scan coverage for every strict-ledger video;
     \item run a low-cost active-practice pass over all remaining unchecked videos;
     \item expose per-day uploaded duration, checked duration, detected active time, and estimate state;
-    \item add a correction schema for note, score, match, piece, and active-interval errors;
-    \item add tests for the known wrong-score-note failure mode;
+    \item persist exact active intervals produced by that pass;
+    \item expand the benchmark fixtures beyond the known wrong-score-note failure mode;
     \item update this paper with the new coverage numbers and any solved milestone.
 \end{enumerate}
 

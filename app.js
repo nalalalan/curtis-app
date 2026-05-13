@@ -228,16 +228,18 @@ function percentText(part, total) {
 }
 
 function activePracticeText(records) {
-  const seconds = Number(records?.totalPracticeTimeSeconds ?? records?.totalActiveViolinSeconds) || 0;
+  const seconds = Number(records?.totalPracticeTimeSeconds ?? records?.totalActiveViolinSeconds ?? records?.activePracticeSeconds) || 0;
   if (records?.totalPracticeTimeLabel) return records.totalPracticeTimeLabel;
   if (records?.totalActiveViolinLabel) return records.totalActiveViolinLabel;
+  if (records?.activePracticeLabel) return records.activePracticeLabel;
   return seconds ? formatDurationSeconds(seconds) : "pending";
 }
 
 function estimatedPracticeText(records) {
-  const seconds = Number(records?.estimatedTotalPracticeTimeSeconds) || 0;
-  if (!seconds || records?.estimatedPracticeStatus === "measured") return activePracticeText(records);
-  return records?.estimatedTotalPracticeTimeLabel || formatDurationSeconds(seconds);
+  const seconds = Number(records?.estimatedTotalPracticeSeconds ?? records?.estimatedTotalPracticeTimeSeconds) || 0;
+  const status = records?.estimateStatus || records?.estimatedPracticeStatus || "";
+  if (!seconds || status === "measured") return activePracticeText(records);
+  return records?.estimatedTotalPracticeLabel || records?.estimatedTotalPracticeTimeLabel || formatDurationSeconds(seconds);
 }
 
 function practiceTimeCaption(records) {
@@ -245,25 +247,30 @@ function practiceTimeCaption(records) {
   if (records?.estimatedPracticeStatus === "estimated_from_checked_windows" && basis) {
     return `estimate / ${basis}`;
   }
+  if (records?.estimateStatus === "estimated_from_checked_windows") {
+    const active = records?.activePracticeLabel || formatDurationSeconds(records?.activePracticeSeconds || 0);
+    const checked = records?.checkedVideoLabel || formatDurationSeconds(records?.checkedVideoSeconds || 0);
+    return `estimate / ${active} from ${checked} checked`;
+  }
   return "detected playing";
 }
 
 function archiveVideoText(records, totals) {
-  return records?.totalUploadedVideoLabel || totals?.totalPracticeLabel || "0h";
+  return records?.uploadedVideoLabel || records?.totalUploadedVideoLabel || totals?.totalPracticeLabel || "0h";
 }
 
 function archiveVideoSeconds(records, totals) {
-  return Number(records?.totalUploadedVideoSeconds) || Number(totals?.totalPracticeSeconds) || 0;
+  return Number(records?.uploadedVideoSeconds ?? records?.totalUploadedVideoSeconds) || Number(totals?.totalPracticeSeconds) || 0;
 }
 
 function scannedVideoText(records) {
-  const label = records?.totalAnalyzedVideoLabel || records?.totalProcessedSampleLabel || "";
-  const seconds = Number(records?.totalAnalyzedVideoSeconds ?? records?.totalProcessedSampleSeconds) || 0;
+  const label = records?.checkedVideoLabel || records?.totalAnalyzedVideoLabel || records?.totalProcessedSampleLabel || "";
+  const seconds = Number(records?.checkedVideoSeconds ?? records?.totalAnalyzedVideoSeconds ?? records?.totalProcessedSampleSeconds) || 0;
   return label || (seconds ? formatDurationSeconds(seconds) : "0s");
 }
 
 function scannedVideoSeconds(records) {
-  return Number(records?.totalAnalyzedVideoSeconds ?? records?.totalProcessedSampleSeconds) || 0;
+  return Number(records?.checkedVideoSeconds ?? records?.totalAnalyzedVideoSeconds ?? records?.totalProcessedSampleSeconds) || 0;
 }
 
 function unmeasuredArchiveText(records, totals) {
@@ -284,6 +291,7 @@ function activeHoursLimitText(ops, records, totals) {
   if (withheld && !scannedSeconds) return `${withheld} sampled media window${withheld === 1 ? "" : "s"} checked / no violin-playing time counted.`;
   if (withheld) return `${coverage} video checked / ${withheld} sampled window${withheld === 1 ? "" : "s"} not counted as practice.`;
   if (blocker) return `${coverage} video checked. Full practice-time scan needs owner media export/browser access.`;
+  if (records?.measurementStatus === "partial") return `${coverage} video checked. Full practice-time scan incomplete.`;
   if (records?.activeMeasurementStatus === "partial") return `${coverage} video checked. Full practice-time scan incomplete.`;
   return "Practice-time scan complete.";
 }
@@ -545,6 +553,12 @@ function dailyRecords(ops) {
   return ops?.review?.dailyRecords && typeof ops.review.dailyRecords === "object"
     ? ops.review.dailyRecords
     : { records: [], recordCount: 0, transcribedRecordCount: 0, audioEvidenceRecordCount: 0 };
+}
+
+function activePracticeCoverage(ops) {
+  return ops?.review?.activePracticeCoverage && typeof ops.review.activePracticeCoverage === "object"
+    ? ops.review.activePracticeCoverage
+    : null;
 }
 
 function dailyRecordList(ops) {
@@ -1078,6 +1092,8 @@ function renderStatus() {
   const highlight = primaryHighlight(ops);
   const days = practiceDays(ops);
   const records = dailyRecords(ops);
+  const coverage = activePracticeCoverage(ops);
+  const practiceCoverage = coverage?.status === "ready" ? coverage : records;
   const analyzedRecords = analyzedRecordList(ops);
   const latestRecord = latestDailyRecord(ops);
   const latestPiece = Array.isArray(latestRecord?.pieces) && latestRecord.pieces.length ? latestRecord.pieces[0] : null;
@@ -1109,15 +1125,15 @@ function renderStatus() {
     const matchCount = scoreMatchGroupCount(records);
     elements.studyCount.textContent = `${matchCount} ${matchCount === 1 ? "match" : "matches"} / ${recordCount} days`;
   }
-  const scannedSeconds = scannedVideoSeconds(records);
-  const archiveSeconds = archiveVideoSeconds(records, totals);
-  const archiveLabel = archiveVideoText(records, totals);
-  setText(elements.totalPracticeHours, estimatedPracticeText(records));
+  const scannedSeconds = scannedVideoSeconds(practiceCoverage);
+  const archiveSeconds = archiveVideoSeconds(practiceCoverage, totals);
+  const archiveLabel = archiveVideoText(practiceCoverage, totals);
+  setText(elements.totalPracticeHours, estimatedPracticeText(practiceCoverage));
   setText(
     elements.practiceSince,
-    practiceTimeCaption(records)
+    practiceTimeCaption(practiceCoverage)
   );
-  setText(elements.uploadedVideoTime, scannedVideoText(records));
+  setText(elements.uploadedVideoTime, scannedVideoText(practiceCoverage));
   setText(
     elements.uploadedVideoScope,
     [
@@ -1131,7 +1147,7 @@ function renderStatus() {
     [
       totals?.videoCount ? `${totals.videoCount} videos` : "",
       totals?.sincePublishedAt ? `since ${formatDate(totals.sincePublishedAt)}` : "",
-      `${unmeasuredArchiveText(records, totals)} unchecked`,
+      `${unmeasuredArchiveText(practiceCoverage, totals)} unchecked`,
     ].filter(Boolean).join(" / ")
   );
   setText(elements.pieceCount, `${pieceList.length} ${pieceList.length === 1 ? "piece" : "pieces"}`);

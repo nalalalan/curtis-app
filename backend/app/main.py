@@ -35,6 +35,7 @@ from .daily_records import (
     video_match_keys,
     violin_positive_sample_ids,
 )
+from .evidence_ledger import record_evidence_correction
 from .media import probe_youtube_media, record_uploaded_sample
 from .piece_id import identify_pieces_from_samples
 from .scanner import base_ops, run_scan, transcription_items
@@ -70,6 +71,58 @@ class PieceCorrection(BaseModel):
     rejected_title: str = Field(default="", alias="rejectedTitle")
     accepted_title: str = Field(default="", alias="acceptedTitle")
     note: str = ""
+
+
+class EvidenceCorrection(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    type: str = "match"
+    status: str = "rejected"
+    source_video_id: str = Field(default="", alias="sourceVideoId")
+    video_id: str = Field(default="", alias="videoId")
+    source_url: str = Field(default="", alias="sourceUrl")
+    source_title: str = Field(default="", alias="sourceTitle")
+    practice_day: str = Field(default="", alias="practiceDay")
+    sample_id: str = Field(default="", alias="sampleId")
+    start_seconds: float = Field(default=0.0, alias="startSeconds")
+    end_seconds: float = Field(default=0.0, alias="endSeconds")
+    observed_note: str = Field(default="", alias="observedNote")
+    transcribed_note: str = Field(default="", alias="transcribedNote")
+    displayed_score_note: str = Field(default="", alias="displayedScoreNote")
+    score_note: str = Field(default="", alias="scoreNote")
+    corrected_score_note: str = Field(default="", alias="correctedScoreNote")
+    accepted_score_note: str = Field(default="", alias="acceptedScoreNote")
+    piece_title: str = Field(default="", alias="pieceTitle")
+    score_source: str = Field(default="", alias="scoreSource")
+    score_location: str = Field(default="", alias="scoreLocation")
+    reason: str = ""
+    note: str = ""
+    benchmark: bool = False
+
+    def to_state(self) -> dict[str, Any]:
+        return {
+            "type": self.type,
+            "status": self.status,
+            "sourceVideoId": self.source_video_id or self.video_id,
+            "sourceUrl": self.source_url,
+            "sourceTitle": self.source_title,
+            "practiceDay": self.practice_day,
+            "sampleId": self.sample_id,
+            "startSeconds": self.start_seconds,
+            "endSeconds": self.end_seconds,
+            "observedNote": self.observed_note,
+            "transcribedNote": self.transcribed_note,
+            "displayedScoreNote": self.displayed_score_note,
+            "scoreNote": self.score_note,
+            "correctedScoreNote": self.corrected_score_note,
+            "acceptedScoreNote": self.accepted_score_note,
+            "pieceTitle": self.piece_title,
+            "scoreSource": self.score_source,
+            "scoreLocation": self.score_location,
+            "reason": self.reason,
+            "note": self.note,
+            "benchmark": self.benchmark,
+        }
 
 
 app = FastAPI(title="Curtis Media Review", version="0.2.0")
@@ -582,6 +635,29 @@ async def piece_correction(correction: PieceCorrection) -> dict[str, Any]:
         "acceptedTitle": accepted_title,
         "scrubbedCount": scrubbed_count,
     }
+    return ops
+
+
+@app.get("/api/curtis/active-practice-coverage")
+async def active_practice_coverage() -> dict[str, Any]:
+    return base_ops(load_state())["review"]["activePracticeCoverage"]
+
+
+@app.get("/api/curtis/evidence-progress")
+async def evidence_progress() -> dict[str, Any]:
+    return base_ops(load_state())["review"]["evidenceProgress"]
+
+
+@app.post("/api/curtis/evidence-corrections")
+async def evidence_correction(correction: EvidenceCorrection) -> dict[str, Any]:
+    state = load_state()
+    try:
+        result = record_evidence_correction(state, correction.to_state())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    save_state(state)
+    ops = base_ops(state)
+    ops["correction"] = result
     return ops
 
 
