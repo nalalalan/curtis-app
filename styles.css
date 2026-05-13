@@ -99,8 +99,8 @@ button {
 }
 
 .brand-mark {
-  width: 31px;
-  height: 31px;
+  width: 38px;
+  height: 38px;
   flex: 0 0 31px;
   overflow: visible;
   filter: drop-shadow(0 6px 10px rgba(31, 41, 39, .11));
@@ -146,8 +146,8 @@ button {
 }
 
 .ao-home img {
-  width: 34px;
-  height: 34px;
+  width: 38px;
+  height: 38px;
   display: block;
 }
 
