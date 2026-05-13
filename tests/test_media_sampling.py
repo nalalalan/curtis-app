@@ -134,10 +134,10 @@ class MediaSamplingTests(unittest.TestCase):
         self.assertEqual(candidates[0]["sampleWindow"], "*270-360")
         self.assertEqual(candidates[0]["queueSource"], "active_practice_scan")
 
-    def test_owner_sync_queue_only_skips_cached_samples(self):
+    def test_owner_sync_queue_only_uses_cached_pending_samples(self):
         with TemporaryDirectory() as directory:
             media_dir = Path(directory)
-            cached = media_dir / "video123-11400-browser.webm"
+            cached = media_dir / "video123-90-browser.webm"
             cached.write_bytes(b"cached media")
             ops = {
                 "inventory": {
@@ -157,24 +157,26 @@ class MediaSamplingTests(unittest.TestCase):
             active_scan = {
                 "pendingWindows": [
                     {
-                        "sampleId": "video123-0",
+                        "sampleId": "video123-90",
                         "sourceVideoId": "video123",
                         "sourceUrl": "https://youtube.test/watch?v=video123",
                         "sourceTitle": "5-3-26",
-                        "startSeconds": 0,
-                        "endSeconds": 90,
+                        "startSeconds": 90,
+                        "endSeconds": 180,
                     }
                 ]
             }
             with mock.patch.object(owner_sync, "MEDIA_DIR", media_dir), mock.patch.object(
                 owner_sync,
                 "local_violin_presence",
-                return_value={"containsViolin": True, "violinPresence": "violin_positive"},
+                return_value={"containsViolin": False, "violinPresence": "not_violin_or_unclear"},
             ):
                 candidates = owner_sync.media_candidates(ops, active_scan, queue_only=True)
 
-        self.assertEqual([item["sampleId"] for item in candidates], ["video123-0"])
+        self.assertEqual([item["sampleId"] for item in candidates], ["video123-90"])
+        self.assertEqual(candidates[0]["cachedPath"], str(cached))
         self.assertEqual(candidates[0]["queueSource"], "active_practice_scan")
+        self.assertEqual(candidates[0]["localPresence"]["violinPresence"], "not_violin_or_unclear")
 
     def test_sample_id_includes_window_start(self):
         self.assertEqual(sample_id("abc", "*5940-6030"), "abc-5940")

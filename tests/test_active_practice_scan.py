@@ -228,6 +228,37 @@ class ActivePracticeScanTests(unittest.TestCase):
         self.assertEqual(coverage["activePracticeSeconds"], 3)
         self.assertEqual(coverage["videos"][0]["activePracticeSeconds"], 3)
 
+    def test_unchecked_transcription_does_not_count_as_practice_time(self):
+        inventory = {
+            "youtube": [
+                {
+                    "id": "v1",
+                    "title": "5-3-26",
+                    "url": "https://www.youtube.com/watch?v=v1",
+                    "publishedAt": "2026-05-03T09:00:00Z",
+                    "durationSeconds": 100,
+                    "practiceCandidate": True,
+                }
+            ]
+        }
+        transcriptions = [
+            {
+                "transcriptionId": "unchecked",
+                "sourceUrl": "https://www.youtube.com/watch?v=v1",
+                "sourceTitle": "5-3-26",
+                "sourceWindow": "*0-10",
+                "status": "transcribed",
+                "quality": {"windowMode": "detected_active_sections"},
+                "durationSeconds": 30,
+            }
+        ]
+
+        coverage = build_active_practice_coverage(inventory, [], transcriptions, [])
+
+        self.assertEqual(coverage["checkedVideoSeconds"], 0)
+        self.assertEqual(coverage["activePracticeSeconds"], 0)
+        self.assertEqual(coverage["videos"][0]["activePracticeSeconds"], 0)
+
     def test_active_scan_summary_exposes_limited_pending_queue(self):
         state = {
             "activePracticeScan": {

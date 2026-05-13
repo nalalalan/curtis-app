@@ -187,10 +187,12 @@ def build_active_practice_coverage(
         ]
         note_active = active_seconds_from_transcriptions(video_transcriptions)
         section_active = active_seconds_from_sections(video_sections)
-        active_ceiling = checked_seconds or video_seconds
+        active_ceiling = checked_seconds
         active_seconds = scan_active_seconds if active_scan_items or active_scan_result_items else max(note_active, section_active)
         if active_ceiling:
             active_seconds = min(active_ceiling, active_seconds)
+        else:
+            active_seconds = 0
         unmeasured_seconds = max(0, video_seconds - checked_seconds)
         status = _coverage_status(checked_seconds, candidate_seconds, active_seconds, video_seconds)
         row = {

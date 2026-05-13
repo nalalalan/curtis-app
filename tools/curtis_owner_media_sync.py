@@ -284,7 +284,7 @@ def cached_local_violin_presence(path: Path, cache: dict[str, Any]) -> tuple[dic
     return presence, True
 
 
-def cached_media_candidates(ops: dict[str, Any]) -> list[dict[str, Any]]:
+def cached_media_candidates(ops: dict[str, Any], include_negative: bool | None = None) -> list[dict[str, Any]]:
     inventory = ops.get("inventory", {}).get("youtube", [])
     sampled_ids, sampled_windows = live_sample_keys(ops)
     by_id = {
@@ -295,7 +295,8 @@ def cached_media_candidates(ops: dict[str, Any]) -> list[dict[str, Any]]:
     candidates: list[dict[str, Any]] = []
     if not MEDIA_DIR.exists():
         return candidates
-    include_negative = os.getenv("CURTIS_OWNER_UPLOAD_CACHED_NEGATIVES", "").strip().lower() in {"1", "true", "yes", "on"}
+    if include_negative is None:
+        include_negative = os.getenv("CURTIS_OWNER_UPLOAD_CACHED_NEGATIVES", "").strip().lower() in {"1", "true", "yes", "on"}
     presence_cache = load_presence_cache()
     presence_cache_changed = False
     for path in sorted(MEDIA_DIR.glob("*-browser.webm")):
@@ -385,12 +386,41 @@ def media_candidates(
 ) -> list[dict[str, Any]]:
     inventory = ops.get("inventory", {}).get("youtube", [])
     sampled_ids, sampled_windows = live_sample_keys(ops)
-    cached = cached_media_candidates(ops)
+    cached = cached_media_candidates(ops, include_negative=queue_only)
     cached_ids = {str(item.get("sampleId")) for item in cached if item.get("sampleId")}
     queued = active_scan_queue_candidates(ops, active_scan or {}, cached_ids)
     queued_ids = {str(item.get("sampleId")) for item in queued if item.get("sampleId")}
     if queue_only:
-        return queued
+        cached_by_id = {str(item.get("sampleId")): item for item in cached if item.get("sampleId")}
+        queued_by_id = {str(item.get("sampleId")): item for item in queued if item.get("sampleId")}
+        pending = active_scan.get("pendingWindows") if isinstance(active_scan, dict) and isinstance(active_scan.get("pendingWindows"), list) else []
+        ordered: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for index, item in enumerate(pending):
+            if not isinstance(item, dict):
+                continue
+            video_id = str(item.get("sourceVideoId") or "").strip()
+            try:
+                start = int(float(item.get("startSeconds") or 0))
+                end = int(float(item.get("endSeconds") or (start + SAMPLE_SECONDS)))
+            except (TypeError, ValueError):
+                continue
+            sample_id_value = str(item.get("sampleId") or f"{video_id}-{start}").strip()
+            candidate = cached_by_id.get(sample_id_value) or queued_by_id.get(sample_id_value)
+            if not candidate or sample_id_value in seen:
+                continue
+            ordered.append(
+                {
+                    **candidate,
+                    "sampleStartSeconds": start,
+                    "sampleId": sample_id_value,
+                    "sampleWindow": f"*{start}-{end}",
+                    "queuePriority": index,
+                    "queueSource": "active_practice_scan",
+                }
+            )
+            seen.add(sample_id_value)
+        return ordered
     positive_starts = positive_sample_starts(ops)
 
     expansion: list[dict[str, Any]] = []
