@@ -321,12 +321,13 @@ def run_active_practice_scan(max_samples: int = 80, max_queue: int = 250) -> dic
     return run
 
 
-def active_scan_state_summary(state: dict[str, Any]) -> dict[str, Any]:
+def active_scan_state_summary(state: dict[str, Any], pending_limit: int = 50) -> dict[str, Any]:
     scan = state.get("activePracticeScan") if isinstance(state.get("activePracticeScan"), dict) else {}
     intervals = [item for item in scan.get("intervals", []) if isinstance(item, dict)]
     results = [item for item in scan.get("sampleResults", []) if isinstance(item, dict)]
     pending = [item for item in scan.get("pendingWindows", []) if isinstance(item, dict)]
     status_counts = Counter(str(item.get("status") or "unknown") for item in results)
+    pending_limit = max(0, min(500, int(pending_limit or 0)))
     return {
         "status": "ready" if intervals or results or pending else "pending",
         "version": scan.get("version") or ACTIVE_PRACTICE_SCAN_VERSION,
@@ -337,6 +338,7 @@ def active_scan_state_summary(state: dict[str, Any]) -> dict[str, Any]:
         "checkedNoViolinSampleCount": status_counts.get(CHECKED_NO_VIOLIN_STATUS, 0),
         "blockedSampleCount": status_counts.get("blocked", 0),
         "pendingWindowCount": len(pending),
+        "pendingWindows": pending[:pending_limit],
         "activePracticeSeconds": round(sum(float(item.get("durationSeconds") or 0.0) for item in intervals), 3),
         "lastRun": scan.get("lastRun") if isinstance(scan.get("lastRun"), dict) else None,
     }

@@ -29,6 +29,7 @@ SAMPLE_SECONDS = int(os.getenv("CURTIS_OWNER_SAMPLE_SECONDS", "90"))
 SAMPLE_START_SECONDS = int(os.getenv("CURTIS_OWNER_SAMPLE_START_SECONDS", str(10 * 60)))
 WINDOWS_PER_VIDEO = int(os.getenv("CURTIS_OWNER_WINDOWS_PER_VIDEO", "8"))
 BATCH_SIZE = int(os.getenv("CURTIS_OWNER_BATCH_SIZE", "4"))
+PENDING_QUEUE_LIMIT = int(os.getenv("CURTIS_OWNER_PENDING_QUEUE_LIMIT", "500"))
 EXPAND_OFFSETS = tuple(
     int(value.strip())
     for value in os.getenv("CURTIS_OWNER_EXPAND_OFFSETS", "90,180,360,720").split(",")
@@ -143,6 +144,37 @@ def live_sample_keys(ops: dict[str, Any]) -> tuple[set[str], set[tuple[str, int]
             sampled_ids.add(f"{video_id}-{start}")
             sampled_windows.add((str(sample.get("url") or ""), start))
     return sampled_ids, sampled_windows
+
+
+def fetch_active_scan_queue(client: httpx.Client) -> dict[str, Any]:
+    try:
+        response = client.post(
+            f"{API_BASE}/api/curtis/active-practice-scan/run",
+            params={
+                "max_samples": 0,
+                "max_queue": PENDING_QUEUE_LIMIT,
+                "pending_limit": PENDING_QUEUE_LIMIT,
+            },
+            timeout=120,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        scan = payload.get("activePracticeScan") if isinstance(payload, dict) else {}
+        if isinstance(scan, dict):
+            return scan
+    except Exception:
+        pass
+    try:
+        response = client.get(
+            f"{API_BASE}/api/curtis/active-practice-scan",
+            params={"pending_limit": PENDING_QUEUE_LIMIT},
+            timeout=60,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        return payload if isinstance(payload, dict) else {}
+    except Exception:
+        return {}
 
 
 def positive_sample_starts(ops: dict[str, Any]) -> dict[str, list[int]]:
@@ -298,11 +330,60 @@ def cached_media_candidates(ops: dict[str, Any]) -> list[dict[str, Any]]:
     )
 
 
-def media_candidates(ops: dict[str, Any]) -> list[dict[str, Any]]:
+def active_scan_queue_candidates(
+    ops: dict[str, Any],
+    active_scan: dict[str, Any],
+    cached_ids: set[str],
+) -> list[dict[str, Any]]:
+    inventory = ops.get("inventory", {}).get("youtube", [])
+    sampled_ids, sampled_windows = live_sample_keys(ops)
+    by_id = {
+        str(item.get("id")): item
+        for item in inventory
+        if isinstance(item, dict) and item.get("id") and item.get("url")
+    }
+    pending = active_scan.get("pendingWindows") if isinstance(active_scan.get("pendingWindows"), list) else []
+    candidates: list[dict[str, Any]] = []
+    for index, item in enumerate(pending):
+        if not isinstance(item, dict):
+            continue
+        video_id = str(item.get("sourceVideoId") or "").strip()
+        url = str(item.get("sourceUrl") or "").strip()
+        try:
+            start = int(float(item.get("startSeconds") or 0))
+            end = int(float(item.get("endSeconds") or (start + SAMPLE_SECONDS)))
+        except (TypeError, ValueError):
+            continue
+        sample_id_value = str(item.get("sampleId") or f"{video_id}-{start}").strip()
+        key = (url, start)
+        if not video_id or not url or sample_id_value in sampled_ids or sample_id_value in cached_ids or key in sampled_windows:
+            continue
+        source = by_id.get(video_id, {})
+        candidate = {
+            **source,
+            "id": video_id,
+            "url": url,
+            "title": item.get("sourceTitle") or source.get("title") or video_id,
+            "durationSeconds": source.get("durationSeconds") or end,
+            "publishedAt": source.get("publishedAt") or "",
+            "practiceCandidate": True,
+            "sampleStartSeconds": start,
+            "sampleId": sample_id_value,
+            "sampleWindow": f"*{start}-{end}",
+            "queuePriority": index,
+            "queueSource": "active_practice_scan",
+        }
+        candidates.append(candidate)
+    return candidates
+
+
+def media_candidates(ops: dict[str, Any], active_scan: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     inventory = ops.get("inventory", {}).get("youtube", [])
     sampled_ids, sampled_windows = live_sample_keys(ops)
     cached = cached_media_candidates(ops)
     cached_ids = {str(item.get("sampleId")) for item in cached if item.get("sampleId")}
+    queued = active_scan_queue_candidates(ops, active_scan or {}, cached_ids)
+    queued_ids = {str(item.get("sampleId")) for item in queued if item.get("sampleId")}
     positive_starts = positive_sample_starts(ops)
 
     expansion: list[dict[str, Any]] = []
@@ -317,7 +398,7 @@ def media_candidates(ops: dict[str, Any]) -> list[dict[str, Any]]:
         for start in expanded_starts(item, positive_starts.get(str(item["id"]), [])):
             candidate = with_sample_window(item, start)
             key = (str(item.get("url") or ""), start)
-            if str(candidate["sampleId"]) not in sampled_ids and str(candidate["sampleId"]) not in cached_ids and key not in sampled_windows:
+            if str(candidate["sampleId"]) not in sampled_ids and str(candidate["sampleId"]) not in cached_ids and str(candidate["sampleId"]) not in queued_ids and key not in sampled_windows:
                 expansion.append(candidate)
 
     by_video: list[list[dict[str, Any]]] = []
@@ -333,7 +414,7 @@ def media_candidates(ops: dict[str, Any]) -> list[dict[str, Any]]:
         for start in sample_starts(item):
             candidate = with_sample_window(item, start)
             key = (str(item.get("url") or ""), start)
-            if str(candidate["sampleId"]) not in sampled_ids and str(candidate["sampleId"]) not in cached_ids and key not in sampled_windows:
+            if str(candidate["sampleId"]) not in sampled_ids and str(candidate["sampleId"]) not in cached_ids and str(candidate["sampleId"]) not in queued_ids and key not in sampled_windows:
                 windows.append(candidate)
         if windows:
             by_video.append(windows)
@@ -344,7 +425,7 @@ def media_candidates(ops: dict[str, Any]) -> list[dict[str, Any]]:
         for windows in by_video:
             if index < len(windows):
                 candidates.append(windows[index])
-    return [*cached, *expansion, *candidates]
+    return [*cached, *queued, *expansion, *candidates]
 
 
 def inventory_sort_key(item: dict[str, Any]) -> tuple[int, str, int]:
@@ -515,9 +596,22 @@ def main() -> int:
             ops = refresh_inventory(client)
         except Exception:
             ops = client.get(f"{API_BASE}/api/curtis/ops-check").json()
-        candidates = media_candidates(ops)
+        active_scan = fetch_active_scan_queue(client)
+        candidates = media_candidates(ops, active_scan)
+        queued_candidate_count = sum(
+            1 for item in candidates if item.get("queueSource") == "active_practice_scan"
+        )
         if not candidates:
-            print(json.dumps({"status": "blocked", "blocker": "no_unsynced_practice_candidates"}))
+            print(
+                json.dumps(
+                    {
+                        "status": "blocked",
+                        "blocker": "no_unsynced_practice_candidates",
+                        "activeScanPendingWindowCount": active_scan.get("pendingWindowCount"),
+                        "queuedCandidateCount": queued_candidate_count,
+                    }
+                )
+            )
             return 1
         uploaded: list[dict[str, Any]] = []
         blockers: list[dict[str, Any]] = []
@@ -534,6 +628,7 @@ def main() -> int:
                         "score": presence.get("violinSamplerScore"),
                         "violinPresence": presence.get("violinPresence"),
                         "containsViolin": presence.get("containsViolin"),
+                        "queueSource": item.get("queueSource") or "",
                     }
                 )
                 uploaded.append(
@@ -543,6 +638,7 @@ def main() -> int:
                         "window": item.get("sampleWindow") or sample_window(item),
                         "violinPresence": presence.get("violinPresence"),
                         "score": presence.get("violinSamplerScore"),
+                        "queueSource": item.get("queueSource") or "",
                     }
                 )
             except Exception as exc:
@@ -550,6 +646,7 @@ def main() -> int:
                     {
                         "video": item.get("title"),
                         "window": item.get("sampleWindow") or sample_window(item),
+                        "queueSource": item.get("queueSource") or "",
                         "detail": str(exc)[-500:],
                     }
                 )
@@ -561,6 +658,8 @@ def main() -> int:
         "blocked": blockers[:3],
         "mediaAccess": updated.get("review", {}).get("mediaAccess"),
         "samples": len(updated.get("media", {}).get("samples", [])),
+        "activeScanPendingWindowCount": active_scan.get("pendingWindowCount"),
+        "queuedCandidateCount": queued_candidate_count,
     }))
     return 0 if uploaded else 1
 

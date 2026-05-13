@@ -28,6 +28,7 @@ First tracker update & This PDF now defines the full implementation plan and bec
 2026-05-13 11:57 AM EDT code update & Backend coverage ledger, evidence-correction route, and benchmark-fixture scaffold added. Checked video time now includes sampled non-playing windows; total practice time remains measured active playing only. Live deployed coverage now reports 213 h 23 min uploaded video, 2 h checked video, 53 min 14 s measured active practice, and 211 h 23 min unchecked. Wrong score-note corrections can be stored as rejected benchmark cases. Full archive scan and long-phrase transcription remain unsolved. \\
 2026-05-13 12:33 PM EDT code update & Low-cost active-practice scan route implemented. The new scan persists active violin-playing sub-intervals from stored violin-positive media samples, keeps checked non-playing samples separate from practice time, exposes \texttt{/api/curtis/active-practice-scan}, adds an active-scan run endpoint, queues remaining strict-ledger windows for owner media capture, and feeds persisted active intervals into daily records and the coverage ledger. Local unit tests verify active sub-interval extraction, negative-sample withholding, and coverage accounting. \\
 2026-05-13 12:59 PM EDT deployed scan update & The active-scan endpoint was deployed and run against the live Curtis state. It persisted 214 active sub-intervals from 80 stored media-sample results, representing 41 min 42 s of scan-derived active audio, and queued 250 strict-ledger windows for later owner-media capture. The coverage ledger reports 1 h 57 min 24 s measured active practice from 2 h checked and a 208 h 46 min provisional archive estimate. A regression fix now caps active practice by checked source coverage and makes active-scan results supersede noisy transcription-duration evidence where scan results exist. The full 213 h 23 min archive scan and long-phrase transcription remain unsolved. \\
+2026-05-13 03:26 PM EDT queue update & The owner-media sync now consumes the active-scan pending-window queue before choosing expansion or blind sample windows. The active-scan status endpoint can expose a bounded pending-window preview, and the run endpoint returns a compact scan/coverage payload rather than the full operations document. Regression tests now verify that queued active-practice windows are selected first and that pending-window previews preserve total pending counts while limiting returned rows. This does not solve long-phrase transcription; it closes the next M1 plumbing gap so the chronological archive scan can keep advancing without Alan manually choosing windows. \\
 \bottomrule
 \end{tabularx}
 \end{table}
@@ -374,7 +375,7 @@ Acceptance for this phase is procedural: after every Curtis change that affects 
 Milestone & Target & Acceptance evidence & Status \\
 \midrule
 M0 & Paper tracker & Roadmap is included in the Curtis paper PDF and becomes the update record. & Complete in this revision. \\
-M1 & Practice time & All 213 h 23 min of strict-ledger video has active-practice coverage and per-day totals. & Active-scan route deployed; first live run persisted 214 active intervals; full chronological scan still pending. \\
+M1 & Practice time & All 213 h 23 min of strict-ledger video has active-practice coverage and per-day totals. & Active-scan route deployed; first live run persisted 214 active intervals; owner sync now prioritizes queued scan windows; full chronological scan still pending. \\
 M2 & Score truth & Scherzo-Tarantelle has verified symbolic notes and score coordinates. & Pending. \\
 M3 & One-note anchor & A displayed A from audio is matched to a verified score-side A, with no wrong-note crop. & Pending. \\
 M4 & Short sequence & Three-to-five played notes align to exact score notes and render with local audio/video. & Pending. \\
@@ -415,11 +416,14 @@ The 2026-05-13 12:33 PM EDT backend update completed the active-scan route porti
 
 The 2026-05-13 12:59 PM EDT deployed scan update completed the first live run and exposed a practice-time accounting failure mode: sparse, captured samples can make an archive-wide estimate look too certain. The implementation now records active-scan status counts, caps active seconds by checked source coverage, and treats active-scan results as the practice-time source for scanned samples instead of letting noisy transcription durations override them.
 
+The 2026-05-13 03:26 PM EDT queue update connected the active-scan queue to the owner-media sync path. The sync path now asks the deployed active-scan run endpoint for pending windows, keeps the response compact, and places those windows ahead of generic expansion or blind sampling. The pending queue remains the source of work for M1: each captured window must still be downloaded or browser-captured, locally classified for violin presence, uploaded, rescanned, and recorded before it becomes checked practice-time coverage.
+
 The remaining M1 work is continuing the low-cost media pass over every unmeasured strict-ledger video in chronological windows, then replacing the sample-biased estimate with full-archive checked intervals. The remaining M10 work is the larger benchmark suite for repeated notes, arpeggios, fast runs, score-free exercises, score-coordinate truth, accepted notation/media completeness, and practice-time accounting regressions.
 
 The next coding pass should:
 \begin{enumerate}
-    \item expand the active-practice scan beyond the 80 stored media samples into the queued chronological 90-second windows;
+    \item run owner-media sync against the active-scan queue and upload the next chronological pending windows;
+    \item rerun the active-practice scan after those uploads and record checked, active, and pending totals;
     \item keep every scan run recorded in this PDF with checked windows, active intervals, pending windows, and failures;
     \item add regression tests using real rejected score-note cases, accepted audio-note anchors, and practice-time caps;
     \item only then expand sequence matching and notation display.

@@ -5,7 +5,7 @@ import wave
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from backend.app.active_practice_scan import active_intervals_from_sample
+from backend.app.active_practice_scan import active_intervals_from_sample, active_scan_state_summary
 from backend.app.evidence_ledger import build_active_practice_coverage
 
 
@@ -227,6 +227,26 @@ class ActivePracticeScanTests(unittest.TestCase):
         self.assertEqual(coverage["checkedVideoSeconds"], 10)
         self.assertEqual(coverage["activePracticeSeconds"], 3)
         self.assertEqual(coverage["videos"][0]["activePracticeSeconds"], 3)
+
+    def test_active_scan_summary_exposes_limited_pending_queue(self):
+        state = {
+            "activePracticeScan": {
+                "version": "active_practice_scan_v1",
+                "intervals": [],
+                "sampleResults": [],
+                "pendingWindows": [
+                    {"sampleId": "v1-0", "sourceVideoId": "v1", "startSeconds": 0},
+                    {"sampleId": "v1-90", "sourceVideoId": "v1", "startSeconds": 90},
+                    {"sampleId": "v1-180", "sourceVideoId": "v1", "startSeconds": 180},
+                ],
+            }
+        }
+
+        summary = active_scan_state_summary(state, pending_limit=2)
+
+        self.assertEqual(summary["status"], "ready")
+        self.assertEqual(summary["pendingWindowCount"], 3)
+        self.assertEqual([item["sampleId"] for item in summary["pendingWindows"]], ["v1-0", "v1-90"])
 
 
 if __name__ == "__main__":

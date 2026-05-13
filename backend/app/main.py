@@ -646,16 +646,21 @@ async def active_practice_coverage() -> dict[str, Any]:
 
 
 @app.get("/api/curtis/active-practice-scan")
-async def active_practice_scan_status() -> dict[str, Any]:
-    return active_scan_state_summary(load_state())
+async def active_practice_scan_status(pending_limit: int = 50) -> dict[str, Any]:
+    return active_scan_state_summary(load_state(), pending_limit=pending_limit)
 
 
 @app.post("/api/curtis/active-practice-scan/run")
-async def active_practice_scan_run(max_samples: int = 80, max_queue: int = 250) -> dict[str, Any]:
+async def active_practice_scan_run(max_samples: int = 80, max_queue: int = 250, pending_limit: int = 50) -> dict[str, Any]:
     run = await asyncio.to_thread(run_active_practice_scan, max_samples, max_queue)
-    ops = base_ops(load_state())
-    ops["activePracticeScanRun"] = run
-    return ops
+    state = load_state()
+    return {
+        "service": SERVICE_NAME,
+        "status": run.get("status") or "complete",
+        "run": run,
+        "activePracticeScan": active_scan_state_summary(state, pending_limit=pending_limit),
+        "activePracticeCoverage": base_ops(state)["review"]["activePracticeCoverage"],
+    }
 
 
 @app.get("/api/curtis/evidence-progress")
