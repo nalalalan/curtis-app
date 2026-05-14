@@ -290,6 +290,57 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(record["heatMap"]["status"], "pending_piece_or_exercise_alignment")
         self.assertIn("score-free exercises", record["heatMap"]["limit"])
 
+    def test_score_sequence_matches_rank_distinct_phrase_candidates_before_repeated_pitch_runs(self):
+        series = detected_note_series(
+            [
+                {
+                    "transcriptionId": "repeated-pitch-run",
+                    "sampleId": "sample-repeated",
+                    "sourceWindow": "*0-5",
+                    "notes": [
+                        note("D4", 0.0, 0.2),
+                        note("D4", 0.2, 0.4),
+                        note("D4", 0.4, 0.6),
+                        note("D#4", 0.6, 0.8),
+                        note("D4", 0.8, 1.0),
+                    ],
+                },
+                {
+                    "transcriptionId": "real-phrase-run",
+                    "sampleId": "sample-phrase",
+                    "sourceWindow": "*5-10",
+                    "notes": [
+                        note("C4", 0.0, 0.2),
+                        note("D4", 0.2, 0.4),
+                        note("E4", 0.4, 0.6),
+                        note("F4", 0.6, 0.8),
+                        note("G4", 0.8, 1.0),
+                    ],
+                },
+            ],
+            max_series=None,
+        )
+        pieces = [
+            {
+                "title": "Reference candidate",
+                "score": {
+                    "referencePitchClassSequences": [
+                        {
+                            "label": "reference audio",
+                            "source": "local reference audio transcription",
+                            "values": ["D", "D", "D", "D#", "D", "C", "D", "E", "F", "G"],
+                        }
+                    ]
+                },
+            }
+        ]
+
+        matches = score_sequence_matches_for_series(series, pieces, max_matches=2)
+
+        self.assertEqual(matches[0]["detectedPitchClassSequence"], "C D E F G")
+        self.assertEqual(matches[0]["matchedNoteRun"], 5)
+        self.assertEqual(matches[1]["detectedPitchClassSequence"], "D D D D# D")
+
     def test_candidate_micro_transcription_is_withheld_until_audio_match(self):
         inventory = {
             "youtube": [

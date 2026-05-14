@@ -1,6 +1,11 @@
 import unittest
 
-from backend.app.scanner import accepted_long_phrase_count, accepted_measure_match_count, build_transcription_completion
+from backend.app.scanner import (
+    accepted_long_phrase_count,
+    accepted_measure_match_count,
+    build_transcription_completion,
+    reference_phrase_candidate_count,
+)
 
 
 class TranscriptionCompletionTests(unittest.TestCase):
@@ -217,6 +222,62 @@ class TranscriptionCompletionTests(unittest.TestCase):
 
         self.assertEqual(accepted_measure_match_count(daily_records), 1)
         self.assertEqual(accepted_long_phrase_count(daily_records), 0)
+
+    def test_reference_phrase_candidates_are_counted_without_accepting_score_evidence(self):
+        daily_records = {
+            "records": [
+                {
+                    "practiceDay": "2026-05-03",
+                    "transcription": {
+                        "scoreSequenceMatchCount": 2,
+                        "scoreLocationVerifiedCount": 0,
+                    },
+                    "matchGroups": [
+                        {
+                            "status": "reference_sequence_match",
+                            "matchedNoteRun": 7,
+                            "detectedPitchClassSequenceCompact": "D D# A# G",
+                            "scoreLocationVerified": False,
+                            "scoreLocationStatus": "exact_score_location_pending",
+                            "referenceStart": 30,
+                            "referenceEnd": 37,
+                            "score": {
+                                "assetId": "wieniawski-scherzo-tarantelle-vln",
+                                "cropStatus": "exact_score_location_pending",
+                            },
+                            "clip": {
+                                "mediaUrl": "/api/curtis/media/sample/reference-candidate",
+                                "audioUrl": "/api/curtis/media/sample/reference-candidate/clip?start=0&end=1",
+                            },
+                            "transcription": {"sampleId": "reference-candidate"},
+                        },
+                        {
+                            "status": "reference_sequence_match",
+                            "matchedNoteRun": 9,
+                            "detectedPitchClassSequenceCompact": "D D#",
+                            "scoreLocationVerified": False,
+                            "clip": {"mediaUrl": "/api/curtis/media/sample/repeated"},
+                            "transcription": {"sampleId": "repeated"},
+                        },
+                    ],
+                }
+            ]
+        }
+
+        completion = build_transcription_completion(
+            training={},
+            daily_records=daily_records,
+            repertoire_evidence={"entries": []},
+            active_practice_coverage={},
+            evidence_progress={},
+            media_samples=[],
+            transcriptions=[],
+        )
+
+        self.assertEqual(reference_phrase_candidate_count(daily_records), 1)
+        self.assertEqual(completion["referencePhraseCandidateCount"], 1)
+        self.assertEqual(completion["longPhraseAcceptedCount"], 0)
+        self.assertTrue(any(item["label"] == "Phrase candidates" and item["value"] == "1" for item in completion["implementationCurrent"]))
 
     def test_single_note_and_unverified_reference_matches_do_not_count_as_long_phrases(self):
         daily_records = {

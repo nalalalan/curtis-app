@@ -1178,6 +1178,64 @@ def symbolic_score_sequence_matches_for_run(
     return [best_match] if best_match else []
 
 
+def _match_distinct_pitch_class_count(match: dict[str, Any]) -> int:
+    sequence = str(
+        match.get("detectedPitchClassSequenceCompact")
+        or match.get("detectedPitchClassSequence")
+        or ""
+    )
+    return len({value for value in sequence.split() if value})
+
+
+def _score_sequence_match_sort_key(match: dict[str, Any]) -> tuple[int, int, int, int, int]:
+    score = match.get("score") if isinstance(match.get("score"), dict) else {}
+    exact_score = any(
+        exact_score_location_ready(value)
+        for value in (
+            match.get("scoreLocationStatus"),
+            match.get("scoreSnippetStatus"),
+            score.get("cropStatus"),
+        )
+    )
+    score_derived = bool(match.get("scoreDerivedReference"))
+    return (
+        1 if exact_score else 0,
+        1 if score_derived else 0,
+        _match_distinct_pitch_class_count(match),
+        int(match.get("matchedNoteRun") or 0),
+        -int(match.get("referenceStart") or 0),
+    )
+
+
+def _score_sequence_match_identity(match: dict[str, Any]) -> tuple[str, str, str, int, int, str]:
+    detected = match.get("detectedSeries") if isinstance(match.get("detectedSeries"), dict) else {}
+    return (
+        str(match.get("pieceTitle") or ""),
+        str(match.get("status") or ""),
+        str(detected.get("sampleId") or detected.get("transcriptionId") or ""),
+        int(match.get("referenceStart") or 0),
+        int(match.get("referenceEnd") or 0),
+        str(match.get("detectedPitchClassSequenceCompact") or match.get("detectedPitchClassSequence") or ""),
+    )
+
+
+def rank_score_sequence_matches(matches: list[dict[str, Any]], max_matches: int = 12) -> list[dict[str, Any]]:
+    strongest: dict[tuple[str, str, str, int, int, str], dict[str, Any]] = {}
+    for match in matches:
+        if not isinstance(match, dict):
+            continue
+        key = _score_sequence_match_identity(match)
+        current = strongest.get(key)
+        if current is None or _score_sequence_match_sort_key(match) > _score_sequence_match_sort_key(current):
+            strongest[key] = match
+    ranked = sorted(
+        strongest.values(),
+        key=lambda item: (_score_sequence_match_sort_key(item), -int(item.get("referenceStart") or 0)),
+        reverse=True,
+    )
+    return ranked[:max(0, int(max_matches or 0))]
+
+
 def score_sequence_matches_for_series(
     series: list[dict[str, Any]],
     pieces: list[dict[str, Any]],
@@ -1194,8 +1252,6 @@ def score_sequence_matches_for_series(
             target = piece.get("score") if isinstance(piece.get("score"), dict) else {}
             for symbolic_match in symbolic_score_sequence_matches_for_run(run, piece, target):
                 matches.append(symbolic_match)
-                if len(matches) >= max_matches:
-                    return matches
             for reference in reference_pitch_class_sequences(target):
                 reference_values = reference.get("pitchClasses") if isinstance(reference.get("pitchClasses"), list) else []
                 score_derived_reference = reference_sequence_is_score_derived(reference)
@@ -1260,9 +1316,7 @@ def score_sequence_matches_for_series(
                     }
                 if best_for_reference:
                     matches.append(best_for_reference)
-                    if len(matches) >= max_matches:
-                        return matches
-    return matches
+    return rank_score_sequence_matches(matches, max_matches=max_matches)
 
 
 def target_pitch_anchors(target: dict[str, Any]) -> list[dict[str, Any]]:

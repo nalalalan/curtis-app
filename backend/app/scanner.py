@@ -1096,6 +1096,51 @@ def match_has_local_media(match: dict[str, Any]) -> bool:
     return bool(str(transcription.get("sampleId") or "").strip())
 
 
+def match_distinct_pitch_class_count(match: dict[str, Any]) -> int:
+    sequence = str(match.get("detectedPitchClassSequenceCompact") or match.get("detectedPitchClassSequence") or "")
+    return len({value for value in sequence.split() if value})
+
+
+def reference_phrase_candidate_match(match: dict[str, Any]) -> bool:
+    if not isinstance(match, dict):
+        return False
+    if match.get("scoreLocationVerified"):
+        return False
+    status = str(match.get("status") or "").strip().lower()
+    if status not in {"reference_sequence_match", "score_sequence_match"}:
+        return False
+    if int(match.get("matchedNoteRun") or 0) < 5:
+        return False
+    if match_distinct_pitch_class_count(match) < 3:
+        return False
+    return match_has_local_media(match)
+
+
+def reference_phrase_candidate_count(daily_records: dict[str, Any]) -> int:
+    records = daily_records.get("records") if isinstance(daily_records.get("records"), list) else []
+    candidates: set[tuple[str, str, str, int, int, str]] = set()
+    for record in records:
+        practice_day = str(record.get("practiceDay") or record.get("date") or "")
+        groups = record.get("matchGroups") if isinstance(record.get("matchGroups"), list) else []
+        for match in groups:
+            if not reference_phrase_candidate_match(match):
+                continue
+            score = match.get("score") if isinstance(match.get("score"), dict) else {}
+            transcription = match.get("transcription") if isinstance(match.get("transcription"), dict) else {}
+            detected = match.get("detectedSeries") if isinstance(match.get("detectedSeries"), dict) else {}
+            candidates.add(
+                (
+                    practice_day,
+                    str(transcription.get("sampleId") or detected.get("sampleId") or ""),
+                    str(score.get("assetId") or match.get("pieceTitle") or ""),
+                    int(match.get("referenceStart") or 0),
+                    int(match.get("referenceEnd") or 0),
+                    str(match.get("detectedPitchClassSequenceCompact") or match.get("detectedPitchClassSequence") or ""),
+                )
+            )
+    return len(candidates)
+
+
 def accepted_long_phrase_match(match: dict[str, Any]) -> bool:
     if not isinstance(match, dict):
         return False
@@ -1292,6 +1337,7 @@ def build_transcription_completion(
     )
     long_phrase_count = accepted_long_phrase_count(daily_records)
     measure_match_count = accepted_measure_match_count(daily_records)
+    phrase_candidate_count = reference_phrase_candidate_count(daily_records)
 
     gates = [
         roadmap_gate(
@@ -1391,10 +1437,12 @@ def build_transcription_completion(
             "score-pattern-alignment",
             "Score or exercise-pattern alignment",
             8,
-            1.5 if score_sequence_match_count(daily_records) else 0,
-            f"{score_sequence_count} pitch-sequence groups / {score_verified_count} exact score locations",
+            (1.5 if score_sequence_match_count(daily_records) else 0)
+            + min(2.5, phrase_candidate_count * 0.5)
+            + (2 if score_verified_count else 0),
+            f"{score_sequence_count} pitch-sequence groups / {phrase_candidate_count} phrase candidates / {score_verified_count} exact score locations",
             "Pitch-sequence groups are separated from exact score evidence.",
-            "Exact score locations and score-free exercise grouping remain open.",
+            "Promote phrase candidates only after source-score or score-free exercise verification.",
         ),
         roadmap_gate(
             "repeat-heatmap",
@@ -1466,6 +1514,11 @@ def build_transcription_completion(
             "detail": "verified score/audio measure",
         },
         {
+            "label": "Phrase candidates",
+            "value": str(phrase_candidate_count),
+            "detail": "pending source-score verification",
+        },
+        {
             "label": "Scan queue",
             "value": str(pending_window_count),
             "detail": f"{active_interval_count} active intervals",
@@ -1531,8 +1584,8 @@ def build_transcription_completion(
         {
             "phase": "7",
             "label": "Score and exercise alignment",
-            "status": "partial" if score_sequence_count else "pending",
-            "evidence": f"{score_sequence_count} pitch-sequence groups / {score_verified_count} exact score locations",
+            "status": "partial" if score_sequence_count or phrase_candidate_count else "pending",
+            "evidence": f"{score_sequence_count} pitch-sequence groups / {phrase_candidate_count} phrase candidates / {score_verified_count} exact score locations",
             "target": "Accepted phrase groups paired with original score snippets or repeated exercise patterns.",
         },
         {
@@ -1567,6 +1620,7 @@ def build_transcription_completion(
         "implementationPlan": implementation_plan,
         "longPhraseAcceptedCount": long_phrase_count,
         "acceptedMeasureMatchCount": measure_match_count,
+        "referencePhraseCandidateCount": phrase_candidate_count,
         "exactScoreAlignedWindowCount": score_verified_count,
         "localScoreSourceCount": local_score_source_count,
         "symbolicScoreNoteCount": symbolic_score_note_count,
