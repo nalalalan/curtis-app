@@ -1268,6 +1268,117 @@ def build_transcription_completion(
     total_weight = sum(float(item["weight"]) for item in gates)
     completed_points = round(sum(float(item["points"]) for item in gates), 2)
     completion_percent = int(round((completed_points / total_weight) * 100)) if total_weight else 0
+    checked_label = active_practice_coverage.get("checkedVideoLabel") or "0s"
+    uploaded_label = active_practice_coverage.get("uploadedVideoLabel") or "unknown"
+    active_label = active_practice_coverage.get("activePracticeLabel") or "pending"
+    estimate_label = active_practice_coverage.get("estimatedTotalPracticeLabel") or "pending"
+    implementation_summary = (
+        "Practice-time scanning is working. Long-phrase transcription, verified score alignment, and score-coordinate heat maps are still open."
+    )
+    implementation_current = [
+        {
+            "label": "Implementation",
+            "value": f"{completion_percent}%",
+            "detail": f"{completed_points:.1f}".rstrip("0").rstrip(".") + f"/{int(total_weight)} weighted points",
+        },
+        {
+            "label": "Checked video",
+            "value": checked_label,
+            "detail": f"of {uploaded_label}",
+        },
+        {
+            "label": "Practice time",
+            "value": active_label,
+            "detail": f"{estimate_label} archive estimate",
+        },
+        {
+            "label": "Score windows",
+            "value": str(score_verified_count),
+            "detail": "exact locations accepted",
+        },
+        {
+            "label": "Long phrases",
+            "value": str(long_phrase_count),
+            "detail": "accepted",
+        },
+        {
+            "label": "Scan queue",
+            "value": str(pending_window_count),
+            "detail": f"{active_interval_count} active intervals",
+        },
+    ]
+    done_summary = [
+        "Strict-ledger videos are grouped by practice day.",
+        "Uploaded video time is separated from active violin-playing time.",
+        "Violin-positive local audio/video evidence can be stored and replayed.",
+        "Failed broad transcription is withheld from notation.",
+    ]
+    remaining_summary = [
+        "Finish chronological active-practice coverage across the full archive.",
+        "Build benchmark clips for known notes, fast runs, arpeggios, rhythm, and score boxes.",
+        "Verify symbolic score notes and score coordinates before any score crop can render.",
+        "Replace short fragments with accurate phrase-level note and rhythm extraction.",
+        "Align accepted phrases to score locations or score-free repeated exercise patterns.",
+        "Generate heat maps and Curtis-level observations only from accepted evidence.",
+    ]
+    implementation_plan = [
+        {
+            "phase": "1",
+            "label": "Full practice-time coverage",
+            "status": "partial",
+            "evidence": f"{checked_label} checked / {uploaded_label} video / {pending_window_count} queued windows",
+            "target": "Every strict-ledger window classified as playing or non-playing.",
+        },
+        {
+            "phase": "2",
+            "label": "Benchmark and correction set",
+            "status": "pending" if not benchmark_count else "partial",
+            "evidence": f"{benchmark_count} benchmark corrections / {rejected_score_count} wrong-score-note regressions",
+            "target": "Gold clips for A/D anchors, fast runs, arpeggios, repeats, rests, and score boxes.",
+        },
+        {
+            "phase": "3",
+            "label": "Verified score truth",
+            "status": "pending" if not score_verified_count else "partial",
+            "evidence": f"{score_target_count} score targets / {score_verified_count} exact score locations",
+            "target": "Parsed score notes plus coordinates; no visual crop unless the boxed note is verified.",
+        },
+        {
+            "phase": "4",
+            "label": "Accurate phrase transcription",
+            "status": "partial" if transcriptions else "pending",
+            "evidence": f"{len(transcriptions)} transcription records / {long_phrase_count} accepted long phrases",
+            "target": "10-30 second passages with notes, rests, rhythm, repeats, and audio agreement.",
+        },
+        {
+            "phase": "5",
+            "label": "Publication-quality notation",
+            "status": "partial" if transcribed_record_count else "pending",
+            "evidence": f"{transcribed_record_count} notation-ready daily records",
+            "target": "Treble-clef score rendering from accepted notes only, not hand-positioned approximations.",
+        },
+        {
+            "phase": "6",
+            "label": "Score and exercise alignment",
+            "status": "partial" if score_sequence_count else "pending",
+            "evidence": f"{score_sequence_count} pitch-sequence groups / {score_verified_count} exact score locations",
+            "target": "Accepted phrase groups paired with original score snippets or repeated exercise patterns.",
+        },
+        {
+            "phase": "7",
+            "label": "Heat maps and observations",
+            "status": "blocked" if not score_verified_count else "partial",
+            "evidence": "Score-coordinate heat maps wait for accepted phrase locations.",
+            "target": "Practice density, repetition density, problem density, and improvement layers.",
+        },
+        {
+            "phase": "8",
+            "label": "Regression lock",
+            "status": "partial" if rejected_score_count or benchmark_count else "pending",
+            "evidence": "Current tests block wrong-note score evidence and non-playing practice credit.",
+            "target": "Tests fail on mismatched audio/notation, wrong score boxes, missing media, and fake practice time.",
+        },
+    ]
     return {
         "status": "partial" if completed_points else "pending",
         "completionPercent": completion_percent,
@@ -1275,13 +1386,18 @@ def build_transcription_completion(
         "completedPoints": completed_points,
         "totalPoints": total_weight,
         "basis": "100-point implementation gate checklist for solved long-phrase transcription; not a playing-readiness score.",
+        "implementationSummary": implementation_summary,
+        "implementationCurrent": implementation_current,
+        "doneSummary": done_summary,
+        "remainingSummary": remaining_summary,
+        "implementationPlan": implementation_plan,
         "longPhraseAcceptedCount": long_phrase_count,
         "exactScoreAlignedWindowCount": score_verified_count,
         "pitchSequenceGroupCount": score_sequence_count,
-        "checkedVideoLabel": active_practice_coverage.get("checkedVideoLabel") or "",
-        "uploadedVideoLabel": active_practice_coverage.get("uploadedVideoLabel") or "",
-        "activePracticeLabel": active_practice_coverage.get("activePracticeLabel") or "",
-        "estimatedTotalPracticeLabel": active_practice_coverage.get("estimatedTotalPracticeLabel") or "",
+        "checkedVideoLabel": checked_label if checked_label != "0s" else "",
+        "uploadedVideoLabel": uploaded_label if uploaded_label != "unknown" else "",
+        "activePracticeLabel": active_label if active_label != "pending" else "",
+        "estimatedTotalPracticeLabel": estimate_label if estimate_label != "pending" else "",
         "activeIntervalCount": active_interval_count,
         "sampleResultCount": sample_result_count,
         "activeViolinSampleCount": active_sample_count,

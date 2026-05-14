@@ -2632,6 +2632,44 @@ function completionList(items, emptyText) {
   `;
 }
 
+function completionCards(items) {
+  const list = Array.isArray(items) ? items.filter((item) => item && typeof item === "object") : [];
+  if (!list.length) return "";
+  return `
+    <div class="roadmap-stats" aria-label="Current implementation state">
+      ${list.map((item) => `
+        <article>
+          <span>${escapeHtml(item.label || "")}</span>
+          <strong>${escapeHtml(String(item.value || ""))}</strong>
+          <em>${escapeHtml(item.detail || "")}</em>
+        </article>
+      `).join("")}
+    </div>
+  `;
+}
+
+function planPhaseList(items) {
+  const list = Array.isArray(items) ? items.filter((item) => item && typeof item === "object") : [];
+  if (!list.length) return "";
+  return `
+    <div class="roadmap-plan" aria-label="Implementation plan">
+      <span>Implementation Plan</span>
+      <ol class="roadmap-phase-list">
+        ${list.map((item) => `
+          <li class="roadmap-phase" data-status="${escapeHtml(item.status || "pending")}">
+            <em>${escapeHtml(item.phase || "")}</em>
+            <div>
+              <strong>${escapeHtml(item.label || "")}</strong>
+              <p>${escapeHtml(item.evidence || "")}</p>
+              <small>${escapeHtml(item.target || "")}</small>
+            </div>
+          </li>
+        `).join("")}
+      </ol>
+    </div>
+  `;
+}
+
 function renderTranscriptionCompletion() {
   if (!elements.transcriptionCompletion) return;
   if (!backend.online) {
@@ -2645,8 +2683,8 @@ function renderTranscriptionCompletion() {
   }
   const percent = Math.max(0, Math.min(100, Number(completion.completionPercent) || 0));
   const gates = Array.isArray(completion.gates) ? completion.gates : [];
-  const doneItems = Array.isArray(completion.doneItems) ? completion.doneItems : [];
-  const remainingItems = Array.isArray(completion.remainingItems) ? completion.remainingItems : [];
+  const doneItems = Array.isArray(completion.doneSummary) ? completion.doneSummary : Array.isArray(completion.doneItems) ? completion.doneItems : [];
+  const remainingItems = Array.isArray(completion.remainingSummary) ? completion.remainingSummary : Array.isArray(completion.remainingItems) ? completion.remainingItems : [];
   const completedPoints = Number(completion.completedPoints) || 0;
   const totalPoints = Number(completion.totalPoints) || 0;
   const pointSummary = totalPoints
@@ -2655,7 +2693,7 @@ function renderTranscriptionCompletion() {
   elements.transcriptionCompletion.innerHTML = `
     <div class="roadmap-score">
       <div>
-        <span>Implementation Gate</span>
+        <span>Implementation</span>
         <strong>${escapeHtml(completion.completionLabel || `${percent}%`)}</strong>
         <small>${escapeHtml(pointSummary || completion.basis || "")}</small>
       </div>
@@ -2663,33 +2701,8 @@ function renderTranscriptionCompletion() {
         <i style="width: ${percent}%"></i>
       </div>
     </div>
-    <div class="roadmap-stats" aria-label="Current transcription state">
-      <article>
-        <span>Long Phrases</span>
-        <strong>${escapeHtml(String(completion.longPhraseAcceptedCount || 0))}</strong>
-        <em>accepted</em>
-      </article>
-      <article>
-        <span>Exact Score Windows</span>
-        <strong>${escapeHtml(String(completion.exactScoreAlignedWindowCount || 0))}</strong>
-        <em>verified</em>
-      </article>
-      <article>
-        <span>Video Checked</span>
-        <strong>${escapeHtml(completion.checkedVideoLabel || "0s")}</strong>
-        <em>${escapeHtml(completion.uploadedVideoLabel ? `of ${completion.uploadedVideoLabel}` : "archive pending")}</em>
-      </article>
-      <article>
-        <span>Practice Time</span>
-        <strong>${escapeHtml(completion.estimatedTotalPracticeLabel || completion.activePracticeLabel || "pending")}</strong>
-        <em>${escapeHtml(completion.activePracticeLabel ? `${completion.activePracticeLabel} checked active` : "active scan pending")}</em>
-      </article>
-      <article>
-        <span>Scan Queue</span>
-        <strong>${escapeHtml(String(completion.pendingWindowCount || 0))}</strong>
-        <em>${escapeHtml(`${completion.activeIntervalCount || 0} active intervals`)}</em>
-      </article>
-    </div>
+    ${completion.implementationSummary ? `<p class="roadmap-summary">${escapeHtml(completion.implementationSummary)}</p>` : ""}
+    ${completionCards(completion.implementationCurrent)}
     <div class="roadmap-columns">
       <article>
         <span>Done</span>
@@ -2700,7 +2713,8 @@ function renderTranscriptionCompletion() {
         ${completionList(remainingItems, "No remaining gates.")}
       </article>
     </div>
-    <details class="roadmap-gates" open>
+    ${planPhaseList(completion.implementationPlan)}
+    <details class="roadmap-gates">
       <summary>Gate checklist</summary>
       <div class="roadmap-gate-list">
         ${gates.map((gate) => `

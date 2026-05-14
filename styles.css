@@ -3091,6 +3091,15 @@ h2 {
   box-shadow: var(--shadow);
 }
 
+.roadmap-panel .panel-head {
+  align-items: center;
+}
+
+.roadmap-panel .count-pill {
+  justify-self: end;
+  width: auto;
+}
+
 .transcription-completion {
   display: grid;
   gap: 12px;
@@ -3110,6 +3119,7 @@ h2 {
 .roadmap-score span,
 .roadmap-stats span,
 .roadmap-columns > article > span,
+.roadmap-plan > span,
 .roadmap-gate span,
 .roadmap-next span {
   display: block;
@@ -3153,9 +3163,18 @@ h2 {
   background: linear-gradient(90deg, var(--green), var(--clay));
 }
 
+.roadmap-summary {
+  margin: 0;
+  padding: 0 2px;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 660;
+  line-height: 1.35;
+}
+
 .roadmap-stats {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -3216,6 +3235,73 @@ h2 {
 
 .roadmap-columns article:nth-child(2) .roadmap-list li {
   border-left-color: rgba(166, 111, 86, .42);
+}
+
+.roadmap-plan {
+  padding: 10px;
+  border: 1px solid rgba(31, 41, 39, .1);
+  border-radius: 8px;
+  background: rgba(255, 253, 248, .68);
+}
+
+.roadmap-phase-list {
+  display: grid;
+  gap: 7px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.roadmap-phase {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 9px;
+  border: 1px solid rgba(31, 41, 39, .09);
+  border-radius: 7px;
+  background: rgba(245, 247, 242, .62);
+}
+
+.roadmap-phase em {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(31, 41, 39, .12);
+  border-radius: 999px;
+  color: var(--green);
+  background: rgba(255, 253, 248, .88);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 820;
+}
+
+.roadmap-phase strong {
+  display: block;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 760;
+  line-height: 1.16;
+}
+
+.roadmap-phase p,
+.roadmap-phase small {
+  display: block;
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.roadmap-phase[data-status="pending"] em,
+.roadmap-phase[data-status="blocked"] em {
+  color: var(--red);
+}
+
+.roadmap-phase[data-status="complete"] em {
+  color: var(--green);
 }
 
 .roadmap-gates {
@@ -3331,6 +3417,7 @@ h2 {
   .transcription-proof-ledger,
   .transcription-stats,
   .roadmap-score,
+  .roadmap-phase,
   .roadmap-columns,
   .musician-read > div {
     grid-template-columns: 1fr;

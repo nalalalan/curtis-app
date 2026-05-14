@@ -48,6 +48,9 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertEqual(completion["exactScoreAlignedWindowCount"], 0)
         self.assertIn("not a playing-readiness score", completion["basis"])
         self.assertTrue(any(item["id"] == "full-archive-coverage" for item in completion["gates"]))
+        self.assertTrue(any(item["label"] == "Full practice-time coverage" for item in completion["implementationPlan"]))
+        self.assertTrue(any("full archive" in item for item in completion["remainingSummary"]))
+        self.assertIn("Practice-time scanning is working", completion["implementationSummary"])
 
 
 if __name__ == "__main__":
