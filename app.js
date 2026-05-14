@@ -2165,7 +2165,7 @@ function exactScoreSnippetReady(group) {
     "exact_measure_verified",
     "score_location_verified",
     "measure_location_verified",
-  ].some((token) => status.includes(token));
+  ].some((token) => status.includes(compactText(token)));
 }
 
 function exactScoreMatchGroups(record) {
