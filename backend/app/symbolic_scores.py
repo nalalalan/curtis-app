@@ -83,8 +83,15 @@ def pitch_class_from_components(step: str, alter: int = 0) -> str:
 
 
 def note_name_from_components(step: str, alter: int, octave: int) -> str:
-    pitch_class = pitch_class_from_components(step, alter)
-    return f"{pitch_class}{int(octave)}" if pitch_class else ""
+    step = str(step or "").strip().upper()
+    if step not in TREBLE_NOTE_ORDER:
+        return ""
+    suffix = ""
+    if int(alter or 0) > 0:
+        suffix = "#" * int(alter or 0)
+    elif int(alter or 0) < 0:
+        suffix = "b" * abs(int(alter or 0))
+    return f"{step}{suffix}{int(octave)}"
 
 
 def midi_from_components(step: str, alter: int, octave: int) -> int | None:
@@ -308,14 +315,61 @@ def _ledger_lines(y: float, x: float) -> str:
     return "".join(lines)
 
 
-def render_symbolic_score_svg(notes: list[dict[str, Any]], *, title: str = "", label: str = "") -> str:
+def _key_signature_marks(key_signature: dict[str, Any] | None) -> tuple[str, float]:
+    if not isinstance(key_signature, dict):
+        return "", 0.0
+    accidentals = [
+        str(item or "").strip()
+        for item in key_signature.get("accidentals", [])
+        if str(item or "").strip()
+    ]
+    accidental_type = str(key_signature.get("accidentalType") or "").strip().lower()
+    if not accidentals:
+        return "", 0.0
+    treble_positions = {
+        "Bb": _staff_y("B4"),
+        "Eb": _staff_y("E5"),
+        "Ab": _staff_y("A4"),
+        "Db": _staff_y("D5"),
+        "Gb": _staff_y("G4"),
+        "Cb": _staff_y("C5"),
+        "Fb": _staff_y("F4"),
+        "F#": _staff_y("F5"),
+        "C#": _staff_y("C5"),
+        "G#": _staff_y("G5"),
+        "D#": _staff_y("D5"),
+        "A#": _staff_y("A4"),
+        "E#": _staff_y("E5"),
+        "B#": _staff_y("B4"),
+    }
+    glyph = "♭" if accidental_type == "flat" else "♯" if accidental_type == "sharp" else ""
+    if not glyph:
+        return "", 0.0
+    marks: list[str] = []
+    for index, accidental in enumerate(accidentals[:7]):
+        y = treble_positions.get(accidental)
+        if y is None:
+            continue
+        x = 96 + (index * 16)
+        marks.append(f'<text class="key-signature" x="{x}" y="{y + 7:.1f}">{escape(glyph)}</text>')
+    return "".join(marks), float(len(marks) * 16)
+
+
+def render_symbolic_score_svg(
+    notes: list[dict[str, Any]],
+    *,
+    title: str = "",
+    label: str = "",
+    key_signature: dict[str, Any] | None = None,
+) -> str:
     visible_notes = notes[:16]
-    width = max(520, 170 + (len(visible_notes) * 46))
+    key_marks, key_width = _key_signature_marks(key_signature)
+    width = max(520, int(182 + key_width + (len(visible_notes) * 46)))
     staff_lines = "".join(f'<line x1="44" x2="{width - 36}" y1="{y}" y2="{y}" />' for y in (40, 52, 64, 76, 88))
     title_markup = f'<text class="title" x="{width - 40}" y="22" text-anchor="end">{escape(title)}</text>' if title else ""
     label_markup = f'<text class="label" x="44" y="22">{escape(label)}</text>' if label else ""
     marks: list[str] = []
-    start_x = 118
+    start_x = 118 + key_width
     step_x = 46 if len(visible_notes) > 1 else 0
     for index, note in enumerate(visible_notes):
         x = start_x + (index * step_x)
@@ -339,13 +393,14 @@ def render_symbolic_score_svg(notes: list[dict[str, Any]], *, title: str = "", l
         "svg{background:#fffdf8;color:#1b2524;font-family:Georgia,'Times New Roman',serif}"
         ".staff line,.ledger{stroke:#1f2928;stroke-width:1.45;stroke-linecap:square}"
         ".note ellipse,.note line{fill:#1f2928;stroke:#1f2928;stroke-width:1.2}"
-        ".clef{font-family:serif;font-size:78px;fill:#1f2928}"
+        ".clef{font-family:'Bravura','Noto Music','Segoe UI Symbol',serif;font-size:76px;fill:#1f2928}"
+        ".key-signature{font-family:Georgia,'Times New Roman',serif;font-size:34px;font-weight:700;fill:#1f2928}"
         ".title{font-size:16px;font-weight:600}.label{font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}"
         "</style>"
     )
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} 124" role="img">'
         f"{css}{title_markup}{label_markup}<g class=\"staff\">{staff_lines}</g>"
-        f'<text class="clef" x="48" y="94">&#119070;</text>'
+        f'<text class="clef" x="48" y="88">&#119070;</text>{key_marks}'
         f"{''.join(marks)}</svg>"
     )

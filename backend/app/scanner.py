@@ -1124,6 +1124,59 @@ def accepted_long_phrase_match(match: dict[str, Any]) -> bool:
     return True
 
 
+def accepted_measure_match(match: dict[str, Any]) -> bool:
+    if not isinstance(match, dict):
+        return False
+    if not match.get("scoreLocationVerified"):
+        return False
+    status = str(match.get("status") or "").strip().lower()
+    if status != "symbolic_score_phrase_match":
+        return False
+    score = match.get("score") if isinstance(match.get("score"), dict) else {}
+    if not any(
+        exact_score_location_ready(value)
+        for value in (
+            match.get("scoreLocationStatus"),
+            match.get("scoreSnippetStatus"),
+            score.get("cropStatus"),
+        )
+    ):
+        return False
+    matched_note_run = int(match.get("matchedNoteRun") or 0)
+    minimum_note_run = max(4, int(match.get("minimumMatchedNoteRun") or 0))
+    if matched_note_run < minimum_note_run:
+        return False
+    detected = str(match.get("detectedPitchClassSequenceCompact") or match.get("detectedPitchClassSequence") or "")
+    if len({value for value in detected.split() if value}) < 3:
+        return False
+    return match_has_local_media(match)
+
+
+def accepted_measure_match_count(daily_records: dict[str, Any]) -> int:
+    records = daily_records.get("records") if isinstance(daily_records.get("records"), list) else []
+    accepted: set[tuple[str, str, str, str, int, int]] = set()
+    for record in records:
+        practice_day = str(record.get("practiceDay") or record.get("date") or "")
+        groups = record.get("matchGroups") if isinstance(record.get("matchGroups"), list) else []
+        for match in groups:
+            if not accepted_measure_match(match):
+                continue
+            score = match.get("score") if isinstance(match.get("score"), dict) else {}
+            transcription = match.get("transcription") if isinstance(match.get("transcription"), dict) else {}
+            detected = match.get("detectedSeries") if isinstance(match.get("detectedSeries"), dict) else {}
+            accepted.add(
+                (
+                    practice_day,
+                    str(transcription.get("sampleId") or detected.get("sampleId") or ""),
+                    str(score.get("assetId") or match.get("pieceTitle") or ""),
+                    str(match.get("scoreSequenceLabel") or score.get("measureLabel") or ""),
+                    int(match.get("referenceStart") or 0),
+                    int(match.get("referenceEnd") or 0),
+                )
+            )
+    return len(accepted)
+
+
 def accepted_long_phrase_count(daily_records: dict[str, Any]) -> int:
     records = daily_records.get("records") if isinstance(daily_records.get("records"), list) else []
     accepted: set[tuple[str, str, str, str, int, int]] = set()
@@ -1233,6 +1286,7 @@ def build_transcription_completion(
     repertoire_entries = repertoire_evidence.get("entries") if isinstance(repertoire_evidence.get("entries"), list) else []
     score_target_count = int(training.get("scoreReferenceTargetCount") or training.get("sourceConfirmedScoreTargetCount") or 0)
     long_phrase_count = accepted_long_phrase_count(daily_records)
+    measure_match_count = accepted_measure_match_count(daily_records)
 
     gates = [
         roadmap_gate(
@@ -1303,12 +1357,12 @@ def build_transcription_completion(
         ),
         roadmap_gate(
             "single-note-anchor",
-            "Verified single-note score anchor",
+            "Verified score/audio anchor",
             5,
             5 if score_verified_count else 0,
             f"{score_verified_count} verified score locations",
-            "No accepted one-note score crop is currently visible.",
-            "A displayed A from audio must be matched to an actual score-side A.",
+            "At least one displayed score/audio group has an exact symbolic score location.",
+            "Extend verified anchors into longer contiguous score phrases.",
         ),
         roadmap_gate(
             "note-rhythm-engine",
@@ -1351,7 +1405,7 @@ def build_transcription_completion(
             "Repertoire and Curtis-level observations",
             3,
             1 if repertoire_entries else 0,
-            f"{len(repertoire_entries)} repertoire entries / {long_phrase_count} accepted long phrases",
+            f"{len(repertoire_entries)} repertoire entries / {measure_match_count} accepted measures / {long_phrase_count} accepted long phrases",
             "Confirmed source evidence can promote repertoire without fake progress percentages.",
             "Curtis-level blockers need accepted clips, transcription events, and score or pattern locations.",
         ),
@@ -1372,6 +1426,8 @@ def build_transcription_completion(
     estimate_label = active_practice_coverage.get("estimatedTotalPracticeLabel") or "pending"
     implementation_summary = (
         "Practice-time scanning is working. The long-phrase path now has a local source score PDF and still counts only verified score/audio phrase matches."
+        if not measure_match_count
+        else "Practice-time scanning is working. The long-phrase path now has a source-backed score/audio measure match and still separates measure progress from solved long phrases."
     )
     implementation_current = [
         {
@@ -1401,8 +1457,8 @@ def build_transcription_completion(
         },
         {
             "label": "Measure target",
-            "value": "ready" if long_phrase_count else "0/1",
-            "detail": "verified score/audio phrase",
+            "value": f"{min(measure_match_count, 1)}/1",
+            "detail": "verified score/audio measure",
         },
         {
             "label": "Scan queue",
@@ -1449,8 +1505,8 @@ def build_transcription_completion(
         {
             "phase": "4",
             "label": "One-measure acceleration gate",
-            "status": "complete" if long_phrase_count else "blocked",
-            "evidence": f"{long_phrase_count} accepted long phrases / {score_verified_count} exact score locations",
+            "status": "complete" if measure_match_count else "blocked",
+            "evidence": f"{measure_match_count} accepted measures / {long_phrase_count} accepted long phrases / {score_verified_count} exact score locations",
             "target": "First accepted measure: exact symbolic score notes, local audio/video, and matching transcription.",
         },
         {
@@ -1505,6 +1561,7 @@ def build_transcription_completion(
         "remainingSummary": remaining_summary,
         "implementationPlan": implementation_plan,
         "longPhraseAcceptedCount": long_phrase_count,
+        "acceptedMeasureMatchCount": measure_match_count,
         "exactScoreAlignedWindowCount": score_verified_count,
         "localScoreSourceCount": local_score_source_count,
         "symbolicScoreNoteCount": symbolic_score_note_count,
@@ -1523,6 +1580,8 @@ def build_transcription_completion(
         "gates": gates,
         "nextAction": (
             "Convert one local source-score measure into verified symbolic notes, then run the existing phrase matcher over hidden detected series."
+            if not measure_match_count
+            else "Extend the accepted source-backed measure into longer phrases and score-coordinate heat maps."
             if not long_phrase_count
             else "Extend the accepted measure into longer phrases and score-coordinate heat maps."
         ),

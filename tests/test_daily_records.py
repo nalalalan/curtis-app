@@ -188,7 +188,7 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(record["clips"][0]["localEndSeconds"], 20)
         self.assertNotIn("reading decoration", " ".join(video["title"] for video in record["videos"]))
 
-    def test_scherzo_reference_sequence_creates_score_match_groups(self):
+    def test_scherzo_symbolic_score_sequence_creates_exact_match_groups(self):
         inventory = {
             "youtube": [
                 {
@@ -232,18 +232,21 @@ class DailyRecordTests(unittest.TestCase):
         record = next(item for item in daily["records"] if item["practiceDay"] == "2026-05-03")
 
         self.assertEqual(record["pieces"][0]["title"], "Wieniawski Scherzo-Tarantelle, Op. 16")
-        self.assertEqual(record["matchingWorkflow"]["scoreReferenceStatus"], "reference_audio_sequence_ready")
+        self.assertEqual(record["matchingWorkflow"]["scoreReferenceStatus"], "symbolic_score_sequence_ready")
         self.assertGreater(record["matchingWorkflow"]["scoreSequenceMatchCount"], 0)
-        self.assertEqual(record["matchingWorkflow"]["status"], "reference_sequence_matches_ready")
-        self.assertFalse(record["transcription"]["scoreLinked"])
+        self.assertEqual(record["matchingWorkflow"]["status"], "score_sequence_matches_ready")
+        self.assertTrue(record["transcription"]["scoreLinked"])
         self.assertTrue(record["transcription"]["referenceLinked"])
-        self.assertEqual(record["transcription"]["scoreAlignmentStatus"], "reference_sequence_match_pending_score_location")
+        self.assertEqual(record["transcription"]["scoreAlignmentStatus"], "exact_score_location_verified")
         self.assertTrue(record["matchGroups"])
-        self.assertEqual(record["matchGroups"][0]["status"], "reference_sequence_match")
+        self.assertEqual(record["matchGroups"][0]["status"], "symbolic_score_phrase_match")
         self.assertEqual(record["matchGroups"][0]["score"]["assetId"], "wieniawski-scherzo-tarantelle-vln")
         self.assertEqual(record["matchGroups"][0]["score"]["boxes"], [])
+        self.assertEqual(record["matchGroups"][0]["score"]["cropStatus"], "exact_score_location_verified")
+        self.assertTrue(record["matchGroups"][0]["score"]["imageUrl"].startswith("data:image/svg+xml;base64,"))
         self.assertFalse(record["matchGroups"][0]["rhythmRequired"])
         self.assertEqual([item["note"] for item in record["matchGroups"][0]["transcription"]["notes"]], ["D4", "A#4", "G4", "D4"])
+        self.assertEqual([item["note"] for item in record["matchGroups"][0]["scoreMatchedNotes"]], ["D5", "Bb4", "G4", "D5"])
         self.assertEqual(record["matchGroups"][0]["clip"]["localStartSeconds"], 0.0)
         self.assertEqual(record["matchGroups"][0]["clip"]["localEndSeconds"], 2.2)
 
@@ -630,7 +633,7 @@ class DailyRecordTests(unittest.TestCase):
         self.assertFalse(record["matchingWorkflow"]["rhythmRequired"])
         self.assertEqual(transcription["pdfUrl"], "/api/curtis/daily-records/2026-05-03/transcription.pdf")
         self.assertEqual(record["matchGroups"], [])
-        self.assertEqual(transcription["scoreReferenceStatus"], "reference_audio_sequence_ready")
+        self.assertEqual(transcription["scoreReferenceStatus"], "symbolic_score_sequence_ready")
         self.assertEqual(transcription["scoreSequenceMatchCount"], 0)
         self.assertEqual(len(transcription["notationSystems"]), 1)
         self.assertEqual(transcription["notationSystems"][0]["clip"]["localStartSeconds"], 3.866)
@@ -998,7 +1001,7 @@ class DailyRecordTests(unittest.TestCase):
 
         self.assertEqual(target["scoreNoteCropStatus"], "no_visual_note_verified_anchor_ready")
         self.assertEqual(audit["sourcePdfLocalReadyCount"], 1)
-        self.assertEqual(audit["symbolicScoreNoteCount"], 0)
+        self.assertEqual(audit["symbolicScoreNoteCount"], 4)
         self.assertEqual(target["scorePitchClassAnchors"], [])
         self.assertTrue(
             any(

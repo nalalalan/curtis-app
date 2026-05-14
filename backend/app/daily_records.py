@@ -1095,8 +1095,16 @@ def symbolic_score_sequence_matches_for_run(
     best_match: dict[str, Any] = {}
     for query_info in queries:
         query = query_info["values"]
+        minimum_note_run = max(
+            1,
+            int(target.get("symbolicScoreMinimumMatchedNoteRun") or SYMBOLIC_SCORE_MATCH_MIN_NOTE_RUN),
+        )
+        minimum_distinct_pitch_classes = max(
+            1,
+            int(target.get("symbolicScoreMinimumDistinctPitchClasses") or SYMBOLIC_SCORE_MATCH_MIN_DISTINCT_PITCH_CLASSES),
+        )
         candidate = longest_common_contiguous_run(query, reference_values)
-        if candidate["length"] < SYMBOLIC_SCORE_MATCH_MIN_NOTE_RUN:
+        if candidate["length"] < minimum_note_run:
             continue
         if candidate["length"] <= int(best_match.get("matchedNoteRun") or 0):
             continue
@@ -1105,13 +1113,13 @@ def symbolic_score_sequence_matches_for_run(
         r0 = int(candidate["referenceStart"])
         r1 = r0 + int(candidate["length"])
         detected_sequence = query[q0:q1]
-        if len(set(detected_sequence)) < SYMBOLIC_SCORE_MATCH_MIN_DISTINCT_PITCH_CLASSES:
+        if len(set(detected_sequence)) < minimum_distinct_pitch_classes:
             continue
         run_notes = run.get("notes") if isinstance(run.get("notes"), list) else []
         raw_indices = query_info["indices"][q0:q1]
         matched_notes = [run_notes[index] for index in raw_indices if 0 <= index < len(run_notes)]
         score_slice = score_notes[r0:r1]
-        if len(score_slice) < SYMBOLIC_SCORE_MATCH_MIN_NOTE_RUN:
+        if len(score_slice) < minimum_note_run:
             continue
         score_sequence = [str(note.get("pitchClass") or "") for note in score_slice if note.get("pitchClass")]
         measures = [str(note.get("measure") or "") for note in score_slice if note.get("measure")]
@@ -1123,13 +1131,14 @@ def symbolic_score_sequence_matches_for_run(
             score_slice,
             title=str(piece.get("title") or score.get("title") or target.get("work") or ""),
             label=label,
+            key_signature=target.get("keySignature") if isinstance(target.get("keySignature"), dict) else None,
         )
         best_match = {
             "status": "symbolic_score_phrase_match",
             "pieceTitle": piece.get("title") or score.get("title") or "",
             "matchCriterion": "symbolic_score_pitch_class_phrase",
-            "minimumMatchedNoteRun": SYMBOLIC_SCORE_MATCH_MIN_NOTE_RUN,
-            "minimumDistinctPitchClasses": SYMBOLIC_SCORE_MATCH_MIN_DISTINCT_PITCH_CLASSES,
+            "minimumMatchedNoteRun": minimum_note_run,
+            "minimumDistinctPitchClasses": minimum_distinct_pitch_classes,
             "matchedNoteRun": int(candidate["length"]),
             "referenceStart": r0,
             "referenceEnd": r1,

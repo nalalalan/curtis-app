@@ -1,6 +1,6 @@
 import unittest
 
-from backend.app.scanner import accepted_long_phrase_count, build_transcription_completion
+from backend.app.scanner import accepted_long_phrase_count, accepted_measure_match_count, build_transcription_completion
 
 
 class TranscriptionCompletionTests(unittest.TestCase):
@@ -81,6 +81,7 @@ class TranscriptionCompletionTests(unittest.TestCase):
                             "pieceTitle": "Wieniawski Scherzo-Tarantelle, Op. 16",
                             "matchedNoteRun": 5,
                             "minimumMatchedNoteRun": 5,
+                            "detectedPitchClassSequenceCompact": "D G B A E",
                             "scoreLocationVerified": True,
                             "scoreSnippetStatus": "exact_score_location_verified",
                             "scoreLocationStatus": "exact_score_location_verified",
@@ -130,7 +131,9 @@ class TranscriptionCompletionTests(unittest.TestCase):
 
         self.assertEqual(completion["exactScoreAlignedWindowCount"], 1)
         self.assertEqual(completion["longPhraseAcceptedCount"], 1)
+        self.assertEqual(completion["acceptedMeasureMatchCount"], 1)
         self.assertTrue(any(item["label"] == "Long phrases" and item["value"] == "1" for item in completion["implementationCurrent"]))
+        self.assertTrue(any(item["label"] == "Measure target" and item["value"] == "1/1" for item in completion["implementationCurrent"]))
         self.assertGreaterEqual(completion["completionExactPercent"], 45)
 
     def test_local_source_score_pdf_advances_score_truth_without_accepting_phrase(self):
@@ -178,6 +181,42 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertEqual(completion["longPhraseAcceptedCount"], 0)
         self.assertGreaterEqual(score_gate["points"], 3)
         self.assertIn("1 local PDFs", score_gate["evidence"])
+
+    def test_verified_symbolic_measure_with_media_counts_before_long_phrase(self):
+        daily_records = {
+            "records": [
+                {
+                    "practiceDay": "2026-05-03",
+                    "matchGroups": [
+                        {
+                            "status": "symbolic_score_phrase_match",
+                            "matchedNoteRun": 4,
+                            "minimumMatchedNoteRun": 4,
+                            "detectedPitchClassSequenceCompact": "D A# G D",
+                            "scoreLocationVerified": True,
+                            "scoreSnippetStatus": "exact_score_location_verified",
+                            "scoreLocationStatus": "exact_score_location_verified",
+                            "scoreSequenceLabel": "opening motif",
+                            "referenceStart": 0,
+                            "referenceEnd": 4,
+                            "score": {
+                                "assetId": "wieniawski-scherzo-tarantelle-vln",
+                                "cropStatus": "exact_score_location_verified",
+                                "measureLabel": "opening motif",
+                            },
+                            "clip": {
+                                "mediaUrl": "/api/curtis/media/sample/source-motif",
+                                "audioUrl": "/api/curtis/media/sample/source-motif/clip?start=0&end=1",
+                            },
+                            "transcription": {"sampleId": "source-motif"},
+                        }
+                    ],
+                }
+            ]
+        }
+
+        self.assertEqual(accepted_measure_match_count(daily_records), 1)
+        self.assertEqual(accepted_long_phrase_count(daily_records), 0)
 
     def test_single_note_and_unverified_reference_matches_do_not_count_as_long_phrases(self):
         daily_records = {
