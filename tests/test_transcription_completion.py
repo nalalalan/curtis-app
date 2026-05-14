@@ -57,6 +57,11 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertIn("Practice-time scanning is working", completion["implementationSummary"])
         self.assertEqual(completion["implementationCurrent"][0]["value"], completion["completionExactLabel"])
         self.assertEqual(completion["implementationCurrent"][0]["detail"], completion["completedPointsLabel"])
+        archive_gate = next(item for item in completion["gates"] if item["id"] == "full-archive-coverage")
+        self.assertIn("precisePoints", archive_gate)
+        self.assertGreater(archive_gate["precisePoints"], archive_gate["points"])
+        self.assertEqual(completion["completedPoints"], 32.614)
+        self.assertEqual(completion["completionExactLabel"], "32.614%")
 
 
 if __name__ == "__main__":

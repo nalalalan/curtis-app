@@ -1097,13 +1097,15 @@ def roadmap_gate(
     done: str,
     remaining: str,
 ) -> dict[str, Any]:
-    bounded_points = round(max(0.0, min(float(weight), float(points))), 2)
+    bounded_points = max(0.0, min(float(weight), float(points)))
+    display_points = round(bounded_points, 2)
     status = "complete" if bounded_points >= weight else "partial" if bounded_points > 0 else "pending"
     return {
         "id": gate_id,
         "label": label,
         "weight": weight,
-        "points": bounded_points,
+        "points": display_points,
+        "precisePoints": round(bounded_points, 4),
         "status": status,
         "evidence": evidence,
         "done": done,
@@ -1266,12 +1268,12 @@ def build_transcription_completion(
     ]
 
     total_weight = sum(float(item["weight"]) for item in gates)
-    completed_points = round(sum(float(item["points"]) for item in gates), 2)
-    completion_exact_percent = round((completed_points / total_weight) * 100, 2) if total_weight else 0
+    completed_points = round(sum(float(item.get("precisePoints", item["points"])) for item in gates), 3)
+    completion_exact_percent = round((completed_points / total_weight) * 100, 3) if total_weight else 0
     completion_percent = int(round(completion_exact_percent)) if total_weight else 0
-    completion_exact_label = f"{completion_exact_percent:.2f}".rstrip("0").rstrip(".") + "%"
+    completion_exact_label = f"{completion_exact_percent:.3f}".rstrip("0").rstrip(".") + "%"
     completed_points_label = (
-        f"{completed_points:.2f}".rstrip("0").rstrip(".")
+        f"{completed_points:.3f}".rstrip("0").rstrip(".")
         + f"/{int(total_weight)} weighted points"
     )
     checked_label = active_practice_coverage.get("checkedVideoLabel") or "0s"
