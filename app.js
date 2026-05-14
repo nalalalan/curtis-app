@@ -575,11 +575,13 @@ function dailyRecordList(ops) {
 
 function scoreMatchGroupCount(records) {
   const list = Array.isArray(records?.records) ? records.records : [];
-  return list.reduce((total, record) => total + sourceScoreMatchGroups(record).length, 0);
+  return list.reduce((total, record) => total + exactScoreMatchGroups(record).length + sourceScoreMatchGroups(record).length, 0);
 }
 
 function firstSourceScoreMatchDay(records) {
-  const match = (Array.isArray(records) ? records : []).find((record) => sourceScoreMatchGroups(record).length);
+  const match = (Array.isArray(records) ? records : []).find((record) => (
+    exactScoreMatchGroups(record).length || sourceScoreMatchGroups(record).length
+  ));
   return match?.practiceDay || "";
 }
 
@@ -2159,6 +2161,12 @@ function exactScoreSnippetReady(group) {
   ].some((token) => status.includes(token));
 }
 
+function exactScoreMatchGroups(record) {
+  return Array.isArray(record?.matchGroups)
+    ? record.matchGroups.filter(exactScoreSnippetReady)
+    : [];
+}
+
 function notePitchClassText(value) {
   const match = String(value || "").trim().match(/^([A-G](?:#|b)?)/);
   return match ? match[1] : "";
@@ -2209,9 +2217,7 @@ function sourceScoreMatchGroups(record) {
 }
 
 function renderScoreMatchGroups(record) {
-  const groups = Array.isArray(record?.matchGroups)
-    ? record.matchGroups.filter(exactScoreSnippetReady).slice(0, 1)
-    : [];
+  const groups = exactScoreMatchGroups(record).slice(0, 1);
   if (!groups.length) return "";
   return `
     <div class="score-match-groups" aria-label="Note matched practice groups">
