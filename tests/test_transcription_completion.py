@@ -5,6 +5,7 @@ from backend.app.scanner import (
     accepted_measure_match_count,
     build_transcription_completion,
     reference_phrase_candidate_count,
+    reference_phrase_candidate_top,
 )
 
 
@@ -236,7 +237,7 @@ class TranscriptionCompletionTests(unittest.TestCase):
                         {
                             "status": "reference_sequence_match",
                             "matchedNoteRun": 7,
-                            "detectedPitchClassSequenceCompact": "D D# A# G",
+                            "detectedPitchClassSequenceCompact": "D D D# D D A# G",
                             "scoreLocationVerified": False,
                             "scoreLocationStatus": "exact_score_location_pending",
                             "referenceStart": 30,
@@ -275,9 +276,13 @@ class TranscriptionCompletionTests(unittest.TestCase):
         )
 
         self.assertEqual(reference_phrase_candidate_count(daily_records), 1)
+        self.assertEqual(reference_phrase_candidate_top(daily_records)["sequence"], "D D D# D D A# G")
         self.assertEqual(completion["referencePhraseCandidateCount"], 1)
+        self.assertEqual(completion["referencePhraseCandidateTopSequence"], "D D D# D D A# G")
         self.assertEqual(completion["longPhraseAcceptedCount"], 0)
-        self.assertTrue(any(item["label"] == "Phrase candidates" and item["value"] == "1" for item in completion["implementationCurrent"]))
+        phrase_card = next(item for item in completion["implementationCurrent"] if item["label"] == "Phrase candidates")
+        self.assertEqual(phrase_card["value"], "1")
+        self.assertEqual(phrase_card["detail"], "pending: D D D# D D A# G")
 
     def test_single_note_and_unverified_reference_matches_do_not_count_as_long_phrases(self):
         daily_records = {

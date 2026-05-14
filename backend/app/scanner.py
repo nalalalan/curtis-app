@@ -1141,6 +1141,44 @@ def reference_phrase_candidate_count(daily_records: dict[str, Any]) -> int:
     return len(candidates)
 
 
+def reference_phrase_candidate_top(daily_records: dict[str, Any]) -> dict[str, Any]:
+    records = daily_records.get("records") if isinstance(daily_records.get("records"), list) else []
+    candidates: list[dict[str, Any]] = []
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        practice_day = str(record.get("practiceDay") or record.get("date") or "")
+        groups = record.get("matchGroups") if isinstance(record.get("matchGroups"), list) else []
+        for match in groups:
+            if not reference_phrase_candidate_match(match):
+                continue
+            sequence = str(match.get("detectedPitchClassSequenceCompact") or match.get("detectedPitchClassSequence") or "").strip()
+            if not sequence:
+                continue
+            candidates.append(
+                {
+                    "practiceDay": practice_day,
+                    "sequence": sequence,
+                    "matchedNoteRun": int(match.get("matchedNoteRun") or 0),
+                    "distinctPitchClasses": match_distinct_pitch_class_count(match),
+                    "pieceTitle": str(match.get("pieceTitle") or ""),
+                    "scoreSequenceLabel": str(match.get("scoreSequenceLabel") or ""),
+                    "status": str(match.get("status") or ""),
+                }
+            )
+    if not candidates:
+        return {}
+    return sorted(
+        candidates,
+        key=lambda item: (
+            -int(item.get("matchedNoteRun") or 0),
+            -int(item.get("distinctPitchClasses") or 0),
+            str(item.get("practiceDay") or ""),
+            str(item.get("sequence") or ""),
+        ),
+    )[0]
+
+
 def accepted_long_phrase_match(match: dict[str, Any]) -> bool:
     if not isinstance(match, dict):
         return False
@@ -1338,6 +1376,13 @@ def build_transcription_completion(
     long_phrase_count = accepted_long_phrase_count(daily_records)
     measure_match_count = accepted_measure_match_count(daily_records)
     phrase_candidate_count = reference_phrase_candidate_count(daily_records)
+    phrase_candidate_top = reference_phrase_candidate_top(daily_records)
+    phrase_candidate_sequence = str(phrase_candidate_top.get("sequence") or "")
+    phrase_candidate_detail = (
+        f"pending: {phrase_candidate_sequence}"
+        if phrase_candidate_sequence
+        else "pending source-score verification"
+    )
 
     gates = [
         roadmap_gate(
@@ -1516,7 +1561,7 @@ def build_transcription_completion(
         {
             "label": "Phrase candidates",
             "value": str(phrase_candidate_count),
-            "detail": "pending source-score verification",
+            "detail": phrase_candidate_detail,
         },
         {
             "label": "Scan queue",
@@ -1622,6 +1667,8 @@ def build_transcription_completion(
         "acceptedMeasureMatchCount": measure_match_count,
         "referencePhraseCandidateCount": phrase_candidate_count,
         "exactScoreAlignedWindowCount": score_verified_count,
+        "referencePhraseCandidateTop": phrase_candidate_top,
+        "referencePhraseCandidateTopSequence": phrase_candidate_sequence,
         "localScoreSourceCount": local_score_source_count,
         "symbolicScoreNoteCount": symbolic_score_note_count,
         "pitchSequenceGroupCount": score_sequence_count,
