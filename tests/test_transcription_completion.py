@@ -237,7 +237,8 @@ class TranscriptionCompletionTests(unittest.TestCase):
                         {
                             "status": "reference_sequence_match",
                             "matchedNoteRun": 7,
-                            "detectedPitchClassSequenceCompact": "D D D# D D A# G",
+                            "detectedPitchClassSequenceCompact": "D D# D A# G",
+                            "detectedPitchClassSequence": "D D D# D D A# G",
                             "scoreLocationVerified": False,
                             "scoreLocationStatus": "exact_score_location_pending",
                             "referenceStart": 30,

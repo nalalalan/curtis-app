@@ -1096,8 +1096,14 @@ def match_has_local_media(match: dict[str, Any]) -> bool:
     return bool(str(transcription.get("sampleId") or "").strip())
 
 
+def match_detected_pitch_sequence(match: dict[str, Any]) -> str:
+    full = str(match.get("detectedPitchClassSequence") or "").strip()
+    compact = str(match.get("detectedPitchClassSequenceCompact") or "").strip()
+    return max((full, compact), key=lambda value: len(value.split()))
+
+
 def match_distinct_pitch_class_count(match: dict[str, Any]) -> int:
-    sequence = str(match.get("detectedPitchClassSequenceCompact") or match.get("detectedPitchClassSequence") or "")
+    sequence = match_detected_pitch_sequence(match)
     return len({value for value in sequence.split() if value})
 
 
@@ -1135,7 +1141,7 @@ def reference_phrase_candidate_count(daily_records: dict[str, Any]) -> int:
                     str(score.get("assetId") or match.get("pieceTitle") or ""),
                     int(match.get("referenceStart") or 0),
                     int(match.get("referenceEnd") or 0),
-                    str(match.get("detectedPitchClassSequenceCompact") or match.get("detectedPitchClassSequence") or ""),
+                    match_detected_pitch_sequence(match),
                 )
             )
     return len(candidates)
@@ -1152,7 +1158,7 @@ def reference_phrase_candidate_top(daily_records: dict[str, Any]) -> dict[str, A
         for match in groups:
             if not reference_phrase_candidate_match(match):
                 continue
-            sequence = str(match.get("detectedPitchClassSequenceCompact") or match.get("detectedPitchClassSequence") or "").strip()
+            sequence = match_detected_pitch_sequence(match)
             if not sequence:
                 continue
             sequence_note_count = len(sequence.split())
