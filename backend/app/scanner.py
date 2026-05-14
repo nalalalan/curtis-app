@@ -1284,7 +1284,12 @@ def build_transcription_completion(
     benchmark_count = int(evidence_progress.get("benchmarkCount") or 0)
     rejected_score_count = int(evidence_progress.get("wrongScoreNoteRegressionCount") or 0)
     repertoire_entries = repertoire_evidence.get("entries") if isinstance(repertoire_evidence.get("entries"), list) else []
-    score_target_count = int(training.get("scoreReferenceTargetCount") or training.get("sourceConfirmedScoreTargetCount") or 0)
+    score_target_count = int(
+        training.get("scoreReferenceTargetCount")
+        or training.get("sourceConfirmedScoreTargetCount")
+        or training.get("referenceTargetCount")
+        or 0
+    )
     long_phrase_count = accepted_long_phrase_count(daily_records)
     measure_match_count = accepted_measure_match_count(daily_records)
 
