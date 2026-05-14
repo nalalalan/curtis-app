@@ -7,6 +7,7 @@ import httpx
 from .analyzer import run_process
 from .settings import RUNTIME_DIR
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 SCORE_ASSETS: dict[str, dict[str, str]] = {
     "haydn-94-finale-score": {
@@ -18,12 +19,44 @@ SCORE_ASSETS: dict[str, dict[str, str]] = {
         "title": "Wieniawski Scherzo-Tarantelle, Op. 16",
         "pdfUrl": "https://s9.imslp.org/files/imglnks/usimg/b/b0/IMSLP724668-PMLP17451-01._WIENIAWSKI_-_SCHERZO_TARANTELLE%2C_OP._16_%28GILSON%29_-_Solo_Part.pdf",
         "sourceUrl": "https://imslp.org/wiki/Scherzo_tarantelle%2C_Op.16_%28Wieniawski%2C_Henri%29",
+        "localPdfPath": "assets/score/wieniawski-scherzo-tarantelle-solo-imslp.pdf",
     },
 }
 
 
 def score_asset_config(asset_id: str) -> dict[str, str] | None:
     return SCORE_ASSETS.get(str(asset_id or "").strip())
+
+
+def local_score_pdf_path(config: dict[str, str]) -> Path | None:
+    raw_path = str(config.get("localPdfPath") or "").strip()
+    if not raw_path:
+        return None
+    path = Path(raw_path)
+    return path if path.is_absolute() else PROJECT_ROOT / path
+
+
+def local_score_pdf_ready(config: dict[str, str]) -> bool:
+    path = local_score_pdf_path(config)
+    return bool(path and path.exists() and path.is_file() and path.stat().st_size > 1024)
+
+
+def score_asset_source_state(asset_id: str) -> dict[str, object]:
+    safe_id = str(asset_id or "").strip()
+    config = score_asset_config(safe_id)
+    if not config:
+        return {"scoreAssetId": safe_id, "status": "unknown_score_asset", "sourcePdfLocalReady": False}
+    local_path = local_score_pdf_path(config)
+    local_ready = local_score_pdf_ready(config)
+    return {
+        "scoreAssetId": safe_id,
+        "title": config.get("title") or "",
+        "status": "local_source_pdf_ready" if local_ready else "remote_source_pdf_configured",
+        "sourcePdfLocalReady": local_ready,
+        "sourcePdfLocalPath": local_path.relative_to(PROJECT_ROOT).as_posix() if local_path and local_path.is_relative_to(PROJECT_ROOT) else str(local_path or ""),
+        "sourceUrl": config.get("sourceUrl") or "",
+        "pdfUrl": config.get("pdfUrl") or "",
+    }
 
 
 def score_page_url(asset_id: str, page: int) -> str:
@@ -43,6 +76,9 @@ def ensure_score_pdf(asset_id: str) -> Path:
     config = score_asset_config(asset_id)
     if not config:
         raise ValueError("unknown score asset")
+    local_path = local_score_pdf_path(config)
+    if local_path and local_path.exists() and local_path.stat().st_size > 1024:
+        return local_path
     target = score_asset_dir() / f"{asset_id}.pdf"
     if target.exists() and target.stat().st_size > 1024:
         return target

@@ -277,6 +277,7 @@ def wieniawski_reference_target() -> dict[str, Any]:
         "scoreSource": "IMSLP public-domain solo part",
         "scoreUrl": "https://imslp.org/wiki/Scherzo_tarantelle%2C_Op.16_%28Wieniawski%2C_Henri%29",
         "scorePdfUrl": "https://s9.imslp.org/files/imglnks/usimg/b/b0/IMSLP724668-PMLP17451-01._WIENIAWSKI_-_SCHERZO_TARANTELLE%2C_OP._16_%28GILSON%29_-_Solo_Part.pdf",
+        "scorePdfLocalPath": "assets/score/wieniawski-scherzo-tarantelle-solo-imslp.pdf",
         "scoreAssetId": "wieniawski-scherzo-tarantelle-vln",
         "scorePage": 2,
         "scoreBoxes": [
@@ -284,7 +285,7 @@ def wieniawski_reference_target() -> dict[str, Any]:
             {"x": 13, "y": 26, "width": 75, "height": 20, "label": "early repetition pattern"},
         ],
         "referenceAudio": "needed",
-        "symbolicScoreStatus": "needed_for_phrase_matches",
+        "symbolicScoreStatus": "local_source_pdf_ready_symbolic_notes_pending",
         "symbolicScoreRequirement": "Accepted score matches require parsed symbolic notes from the source score, not scanned-image note guesses.",
         "symbolicScoreMinimumMatchedNoteRun": 5,
         "symbolicScoreMinimumDistinctPitchClasses": 3,

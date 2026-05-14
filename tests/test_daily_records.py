@@ -5,6 +5,7 @@ from backend.app.daily_records import (
     build_repertoire_evidence,
     detected_note_series,
     pitch_anchor_matches_for_series,
+    score_reference_audit_for_pieces,
     score_sequence_matches_for_series,
 )
 from backend.app.corrections import wieniawski_reference_target
@@ -990,11 +991,14 @@ class DailyRecordTests(unittest.TestCase):
 
     def test_wieniawski_score_note_anchor_is_withheld_after_visual_review_failure(self):
         target = wieniawski_reference_target()
+        audit = score_reference_audit_for_pieces([{"score": target}])
         rejected_by_note = {}
         for anchor in target["rejectedScorePitchClassAnchors"]:
             rejected_by_note.setdefault(anchor["displayNote"], []).append(anchor)
 
         self.assertEqual(target["scoreNoteCropStatus"], "no_visual_note_verified_anchor_ready")
+        self.assertEqual(audit["sourcePdfLocalReadyCount"], 1)
+        self.assertEqual(audit["symbolicScoreNoteCount"], 0)
         self.assertEqual(target["scorePitchClassAnchors"], [])
         self.assertTrue(
             any(

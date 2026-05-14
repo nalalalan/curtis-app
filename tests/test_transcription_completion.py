@@ -133,6 +133,52 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertTrue(any(item["label"] == "Long phrases" and item["value"] == "1" for item in completion["implementationCurrent"]))
         self.assertGreaterEqual(completion["completionExactPercent"], 45)
 
+    def test_local_source_score_pdf_advances_score_truth_without_accepting_phrase(self):
+        completion = build_transcription_completion(
+            {"scoreReferenceTargetCount": 1},
+            {
+                "recordCount": 1,
+                "records": [
+                    {
+                        "transcription": {
+                            "scoreReferenceAudit": {
+                                "sourcePdfLocalReadyCount": 1,
+                                "symbolicScoreNoteCount": 0,
+                                "targets": [
+                                    {
+                                        "scoreAssetId": "wieniawski-scherzo-tarantelle-vln",
+                                        "sourcePdfLocalReady": True,
+                                    }
+                                ],
+                            },
+                            "scoreSequenceMatchCount": 0,
+                            "scoreLocationVerifiedCount": 0,
+                        }
+                    }
+                ],
+            },
+            {"entries": []},
+            {
+                "ledgerVideoCount": 1,
+                "uploadedVideoSeconds": 120,
+                "uploadedVideoLabel": "2m",
+                "checkedVideoSeconds": 0,
+                "checkedVideoLabel": "0s",
+                "activePracticeLabel": "pending",
+                "estimatedTotalPracticeLabel": "pending",
+                "activePracticeScan": {},
+            },
+            {},
+            [],
+            [],
+        )
+
+        score_gate = next(item for item in completion["gates"] if item["id"] == "score-truth")
+        self.assertEqual(completion["localScoreSourceCount"], 1)
+        self.assertEqual(completion["longPhraseAcceptedCount"], 0)
+        self.assertGreaterEqual(score_gate["points"], 3)
+        self.assertIn("1 local PDFs", score_gate["evidence"])
+
     def test_single_note_and_unverified_reference_matches_do_not_count_as_long_phrases(self):
         daily_records = {
             "records": [

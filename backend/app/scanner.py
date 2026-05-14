@@ -1149,6 +1149,29 @@ def accepted_long_phrase_count(daily_records: dict[str, Any]) -> int:
     return len(accepted)
 
 
+def score_reference_audit_totals(daily_records: dict[str, Any]) -> dict[str, int]:
+    records = daily_records.get("records") if isinstance(daily_records.get("records"), list) else []
+    local_source_assets: set[str] = set()
+    symbolic_note_total = 0
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        transcription = record.get("transcription") if isinstance(record.get("transcription"), dict) else {}
+        audit = transcription.get("scoreReferenceAudit") if isinstance(transcription.get("scoreReferenceAudit"), dict) else {}
+        symbolic_note_total += int(audit.get("symbolicScoreNoteCount") or 0)
+        targets = audit.get("targets") if isinstance(audit.get("targets"), list) else []
+        for target in targets:
+            if not isinstance(target, dict) or not target.get("sourcePdfLocalReady"):
+                continue
+            asset_id = str(target.get("scoreAssetId") or "").strip()
+            if asset_id:
+                local_source_assets.add(asset_id)
+    return {
+        "sourcePdfLocalReadyCount": len(local_source_assets),
+        "symbolicScoreNoteCount": symbolic_note_total,
+    }
+
+
 def roadmap_gate(
     gate_id: str,
     label: str,
@@ -1202,6 +1225,9 @@ def build_transcription_completion(
     transcribed_record_count = int(daily_records.get("transcribedRecordCount") or 0)
     score_sequence_count = score_sequence_match_count(daily_records)
     score_verified_count = score_location_verified_count(daily_records)
+    score_audit_totals = score_reference_audit_totals(daily_records)
+    local_score_source_count = int(score_audit_totals.get("sourcePdfLocalReadyCount") or 0)
+    symbolic_score_note_count = int(score_audit_totals.get("symbolicScoreNoteCount") or 0)
     benchmark_count = int(evidence_progress.get("benchmarkCount") or 0)
     rejected_score_count = int(evidence_progress.get("wrongScoreNoteRegressionCount") or 0)
     repertoire_entries = repertoire_evidence.get("entries") if isinstance(repertoire_evidence.get("entries"), list) else []
@@ -1267,8 +1293,11 @@ def build_transcription_completion(
             "score-truth",
             "Verified score library and note coordinates",
             15,
-            (1.5 if score_target_count else 0) + (4 if score_verified_count else 0),
-            f"{score_target_count} score targets / {score_verified_count} score-location-verified notes",
+            (1.5 if score_target_count else 0)
+            + (1.5 if local_score_source_count else 0)
+            + (2 if symbolic_score_note_count else 0)
+            + (4 if score_verified_count else 0),
+            f"{score_target_count} score targets / {local_score_source_count} local PDFs / {symbolic_score_note_count} symbolic notes / {score_verified_count} exact locations",
             "Source-confirmed pieces can seed score targets.",
             "Scherzo-Tarantelle needs verified symbolic notes plus rendered score coordinates.",
         ),
@@ -1342,7 +1371,7 @@ def build_transcription_completion(
     active_label = active_practice_coverage.get("activePracticeLabel") or "pending"
     estimate_label = active_practice_coverage.get("estimatedTotalPracticeLabel") or "pending"
     implementation_summary = (
-        "Practice-time scanning is working. The long-phrase acceptance path now counts verified measure-level score/audio matches only."
+        "Practice-time scanning is working. The long-phrase path now has a local source score PDF and still counts only verified score/audio phrase matches."
     )
     implementation_current = [
         {
@@ -1363,7 +1392,7 @@ def build_transcription_completion(
         {
             "label": "Score windows",
             "value": str(score_verified_count),
-            "detail": "exact locations accepted",
+            "detail": f"{local_score_source_count} local score PDFs",
         },
         {
             "label": "Long phrases",
@@ -1390,7 +1419,7 @@ def build_transcription_completion(
     remaining_summary = [
         "Finish chronological active-practice coverage across the full archive.",
         "Build benchmark clips for known notes, fast runs, arpeggios, rhythm, and score boxes.",
-        "Verify one symbolic score measure, then mine existing detected series for the first measure-level score/audio phrase.",
+        "Convert the local source score PDF into verified symbolic measures, then mine existing detected series for the first measure-level score/audio phrase.",
         "Replace short fragments with accurate phrase-level note and rhythm extraction.",
         "Align accepted phrases to score locations or score-free repeated exercise patterns.",
         "Generate heat maps and Curtis-level observations only from accepted evidence.",
@@ -1413,8 +1442,8 @@ def build_transcription_completion(
         {
             "phase": "3",
             "label": "Verified score truth",
-            "status": "pending" if not score_verified_count else "partial",
-            "evidence": f"{score_target_count} score targets / {score_verified_count} exact score locations",
+            "status": "partial" if local_score_source_count or symbolic_score_note_count or score_verified_count else "pending",
+            "evidence": f"{score_target_count} score targets / {local_score_source_count} local PDFs / {symbolic_score_note_count} symbolic notes / {score_verified_count} exact score locations",
             "target": "Parsed score notes plus coordinates; no visual crop unless the boxed note is verified.",
         },
         {
@@ -1477,6 +1506,8 @@ def build_transcription_completion(
         "implementationPlan": implementation_plan,
         "longPhraseAcceptedCount": long_phrase_count,
         "exactScoreAlignedWindowCount": score_verified_count,
+        "localScoreSourceCount": local_score_source_count,
+        "symbolicScoreNoteCount": symbolic_score_note_count,
         "pitchSequenceGroupCount": score_sequence_count,
         "checkedVideoLabel": checked_label if checked_label != "0s" else "",
         "uploadedVideoLabel": uploaded_label if uploaded_label != "unknown" else "",
@@ -1491,7 +1522,7 @@ def build_transcription_completion(
         "remainingItems": [item["remaining"] for item in gates if item["points"] < item["weight"]],
         "gates": gates,
         "nextAction": (
-            "Verify one symbolic score measure for the active piece, then run the existing phrase matcher over hidden detected series."
+            "Convert one local source-score measure into verified symbolic notes, then run the existing phrase matcher over hidden detected series."
             if not long_phrase_count
             else "Extend the accepted measure into longer phrases and score-coordinate heat maps."
         ),

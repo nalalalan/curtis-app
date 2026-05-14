@@ -8,6 +8,7 @@ from typing import Any
 from .analyzer import parse_window_start
 from .corrections import accepted_source_corrections, compact_text, source_key_from_item, youtube_video_id
 from .reference_corpus import calibration_anchor_for_item
+from .score_assets import score_asset_source_state
 from .study_packets import (
     duration_seconds_label,
     practice_ledger_videos,
@@ -825,6 +826,9 @@ def score_reference_audit_for_target(target: dict[str, Any]) -> dict[str, Any]:
     raw_score_count = raw_score_sequence_count(target)
     ignored_score_count = max(0, raw_score_count - symbolic_count)
     exact_location_count = exact_score_location_count_for_target(target, sequences)
+    score_asset_id = str(target.get("scoreAssetId") or "").strip()
+    score_source_asset = score_asset_source_state(score_asset_id) if score_asset_id else {}
+    source_pdf_local_ready = bool(score_source_asset.get("sourcePdfLocalReady"))
     if symbolic_score_note_count:
         status = "symbolic_score_ready"
     elif symbolic_count and exact_location_count:
@@ -843,6 +847,9 @@ def score_reference_audit_for_target(target: dict[str, Any]) -> dict[str, Any]:
         "status": status,
         "scoreNoteDetectionStatus": target.get("scoreNoteDetectionStatus") or "",
         "scoreLocationStatus": target.get("scoreLocationStatus") or "",
+        "scoreSourceAssetStatus": score_source_asset.get("status") or "",
+        "sourcePdfLocalReady": source_pdf_local_ready,
+        "sourcePdfLocalPath": score_source_asset.get("sourcePdfLocalPath") or "",
         "rawScoreSequenceCount": raw_score_count,
         "symbolicScoreSequenceCount": symbolic_count + (1 if symbolic_score_note_count else 0),
         "symbolicScoreNoteCount": symbolic_score_note_count,
@@ -851,7 +858,7 @@ def score_reference_audit_for_target(target: dict[str, Any]) -> dict[str, Any]:
         "referenceAudioSequenceCount": reference_audio_count,
         "ignoredScoreSequenceCount": ignored_score_count,
         "exactScoreLocationCount": exact_location_count,
-        "scoreAssetId": target.get("scoreAssetId") or "",
+        "scoreAssetId": score_asset_id,
     }
 
 
@@ -879,6 +886,13 @@ def score_reference_audit_for_pieces(pieces: list[dict[str, Any]]) -> dict[str, 
         "rawScoreSequenceCount": sum(item["rawScoreSequenceCount"] for item in audits),
         "symbolicScoreSequenceCount": sum(item["symbolicScoreSequenceCount"] for item in audits),
         "symbolicScoreNoteCount": sum(item.get("symbolicScoreNoteCount", 0) for item in audits),
+        "sourcePdfLocalReadyCount": len(
+            {
+                item.get("scoreAssetId")
+                for item in audits
+                if item.get("scoreAssetId") and item.get("sourcePdfLocalReady")
+            }
+        ),
         "referenceAudioSequenceCount": sum(item["referenceAudioSequenceCount"] for item in audits),
         "ignoredScoreSequenceCount": sum(item["ignoredScoreSequenceCount"] for item in audits),
         "exactScoreLocationCount": sum(item["exactScoreLocationCount"] for item in audits),
