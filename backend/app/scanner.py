@@ -1155,10 +1155,12 @@ def reference_phrase_candidate_top(daily_records: dict[str, Any]) -> dict[str, A
             sequence = str(match.get("detectedPitchClassSequenceCompact") or match.get("detectedPitchClassSequence") or "").strip()
             if not sequence:
                 continue
+            sequence_note_count = len(sequence.split())
             candidates.append(
                 {
                     "practiceDay": practice_day,
                     "sequence": sequence,
+                    "sequenceNoteCount": sequence_note_count,
                     "matchedNoteRun": int(match.get("matchedNoteRun") or 0),
                     "distinctPitchClasses": match_distinct_pitch_class_count(match),
                     "pieceTitle": str(match.get("pieceTitle") or ""),
@@ -1171,6 +1173,7 @@ def reference_phrase_candidate_top(daily_records: dict[str, Any]) -> dict[str, A
     return sorted(
         candidates,
         key=lambda item: (
+            -int(item.get("sequenceNoteCount") or 0),
             -int(item.get("matchedNoteRun") or 0),
             -int(item.get("distinctPitchClasses") or 0),
             str(item.get("practiceDay") or ""),

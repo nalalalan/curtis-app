@@ -284,6 +284,38 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertEqual(phrase_card["value"], "1")
         self.assertEqual(phrase_card["detail"], "pending: D D D# D D A# G")
 
+    def test_reference_phrase_candidate_top_prefers_actual_displayed_sequence_length(self):
+        daily_records = {
+            "records": [
+                {
+                    "practiceDay": "2026-05-03",
+                    "matchGroups": [
+                        {
+                            "status": "reference_sequence_match",
+                            "matchedNoteRun": 12,
+                            "detectedPitchClassSequenceCompact": "D D# D A# G",
+                            "scoreLocationVerified": False,
+                            "clip": {"mediaUrl": "/api/curtis/media/sample/shorter"},
+                            "transcription": {"sampleId": "shorter"},
+                        },
+                        {
+                            "status": "reference_sequence_match",
+                            "matchedNoteRun": 7,
+                            "detectedPitchClassSequenceCompact": "D D D# D D A# G",
+                            "scoreLocationVerified": False,
+                            "clip": {"mediaUrl": "/api/curtis/media/sample/longer"},
+                            "transcription": {"sampleId": "longer"},
+                        },
+                    ],
+                }
+            ]
+        }
+
+        top = reference_phrase_candidate_top(daily_records)
+
+        self.assertEqual(top["sequence"], "D D D# D D A# G")
+        self.assertEqual(top["sequenceNoteCount"], 7)
+
     def test_single_note_and_unverified_reference_matches_do_not_count_as_long_phrases(self):
         daily_records = {
             "records": [
