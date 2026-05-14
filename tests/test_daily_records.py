@@ -215,10 +215,10 @@ class DailyRecordTests(unittest.TestCase):
                 "noteCount": 5,
                 "notes": [
                     note("A#4", 0.0, 0.4),
-                    note("D4", 0.5, 0.9),
-                    note("C4", 1.0, 1.4),
+                    note("D5", 0.5, 0.9),
+                    note("C5", 1.0, 1.4),
                     note("A#4", 1.5, 1.9),
-                    note("D4", 2.0, 2.4),
+                    note("D5", 2.0, 2.4),
                 ],
             }
         ]
@@ -246,13 +246,14 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(record["matchGroups"][0]["scoreSequenceLabel"], "mm. 2-4")
         self.assertEqual(record["matchGroups"][0]["score"]["boxes"], [])
         self.assertEqual(record["matchGroups"][0]["score"]["cropStatus"], "exact_score_location_verified")
-        self.assertEqual(
-            record["matchGroups"][0]["score"]["imageUrl"],
-            "/assets/score/wieniawski-scherzo-tarantelle-opening-d-c-bb-d-c-bb-d-source.png",
-        )
+        self.assertTrue(record["matchGroups"][0]["scoreVisualAgreement"])
+        self.assertEqual(record["matchGroups"][0]["scoreVisualAgreementBasis"], "generated_from_exact_symbolic_score_slice")
+        self.assertFalse(record["matchGroups"][0]["score"]["actualSourceSnippetDisplayed"])
+        self.assertEqual(record["matchGroups"][0]["score"]["imageUrl"], record["matchGroups"][0]["score"]["generatedNotationImageUrl"])
         self.assertTrue(record["matchGroups"][0]["score"]["generatedNotationImageUrl"].startswith("data:image/svg+xml;base64,"))
         self.assertFalse(record["matchGroups"][0]["rhythmRequired"])
-        self.assertEqual([item["note"] for item in record["matchGroups"][0]["transcription"]["notes"]], ["A#4", "D4", "C4", "A#4", "D4"])
+        self.assertEqual([item["detectedNote"] for item in record["matchGroups"][0]["transcription"]["notes"]], ["A#4", "D5", "C5", "A#4", "D5"])
+        self.assertEqual([item["note"] for item in record["matchGroups"][0]["transcription"]["notes"]], ["Bb4", "D5", "C5", "Bb4", "D5"])
         self.assertEqual([item["note"] for item in record["matchGroups"][0]["scoreMatchedNotes"]], ["Bb4", "D5", "C5", "Bb4", "D5"])
         self.assertEqual(record["matchGroups"][0]["clip"]["localStartSeconds"], 0.0)
         self.assertEqual(record["matchGroups"][0]["clip"]["localEndSeconds"], 2.4)
@@ -260,7 +261,7 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(record["heatMap"]["fragments"][0]["status"], "score_location_verified")
         self.assertEqual(record["heatMap"]["fragments"][0]["label"], "mm. 2-4")
         self.assertEqual(record["heatMap"]["fragments"][0]["scoreNotes"], ["Bb4", "D5", "C5", "Bb4", "D5"])
-        self.assertEqual(record["heatMap"]["fragments"][0]["scoreImageUrl"], "/assets/score/wieniawski-scherzo-tarantelle-opening-d-c-bb-d-c-bb-d-source.png")
+        self.assertEqual(record["heatMap"]["fragments"][0]["scoreImageUrl"], record["matchGroups"][0]["score"]["generatedNotationImageUrl"])
         self.assertEqual(record["heatMap"]["layers"][0]["status"], "ready")
         self.assertIn("accepted clip maps to mm. 2-4", record["mainCurtisBlocker"])
         self.assertEqual(record["clips"][0]["mediaUrl"], "/api/curtis/media/sample/Njh8_zq9_DM-1")

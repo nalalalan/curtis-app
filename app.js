@@ -2148,6 +2148,7 @@ function compactPitchSequenceText(value) {
 
 function exactScoreSnippetReady(group) {
   const score = group?.score && typeof group.score === "object" ? group.score : {};
+  if (score.visualAgreement !== true && group?.scoreVisualAgreement !== true) return false;
   const status = compactText(
     score.cropStatus
     || score.status
@@ -2236,7 +2237,10 @@ function renderScoreMatchGroups(record) {
           notationSystems: [{ events, clip }],
         };
         const pieceTitle = group?.pieceTitle || recordPieceText(record);
-        const matchedNotes = group?.detectedPitchClassSequenceCompact
+        const matchedNotes = group?.scoreNotePitchSequenceLabel
+          || group?.scoreNoteSeriesLabel
+          || group?.score?.scoreNotePitchSequenceLabel
+          || group?.detectedPitchClassSequenceCompact
           || group?.scorePitchClassSequenceCompact
           || compactPitchSequenceText(group?.detectedPitchClassSequence || group?.scorePitchClassSequence || "");
         const matchLabel = [

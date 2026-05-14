@@ -233,10 +233,10 @@ class SymbolicScoreTests(unittest.TestCase):
                     "sampleId": "sample-source-motif",
                     "sourceWindow": "*0-10",
                     "notes": [
-                        note("D4", 0.0, 0.25),
-                        note("C4", 0.25, 0.5),
+                        note("D5", 0.0, 0.25),
+                        note("C5", 0.25, 0.5),
                         note("A#4", 0.5, 0.75),
-                        note("D4", 0.75, 1.0),
+                        note("D5", 0.75, 1.0),
                     ],
                 }
             ],
@@ -254,7 +254,8 @@ class SymbolicScoreTests(unittest.TestCase):
         self.assertEqual(matches[0]["detectedPitchClassSequence"], "D C A# D")
         self.assertEqual(matches[0]["scorePitchClassSequence"], "D C A# D")
         self.assertEqual([item["note"] for item in matches[0]["scoreMatchedNotes"]], ["D5", "C5", "Bb4", "D5"])
-        self.assertEqual(matches[0]["score"]["imageUrl"], "/assets/score/wieniawski-scherzo-tarantelle-opening-d-c-bb-d-c-bb-d-source.png")
+        self.assertEqual(matches[0]["scoreVisualAgreementBasis"], "generated_from_exact_symbolic_score_slice")
+        self.assertEqual(matches[0]["score"]["imageUrl"], matches[0]["score"]["generatedNotationImageUrl"])
         self.assertTrue(matches[0]["score"]["generatedNotationImageUrl"].startswith("data:image/svg+xml;base64,"))
 
     def test_wieniawski_symbolic_opening_can_accept_first_five_note_phrase(self):
@@ -289,7 +290,38 @@ class SymbolicScoreTests(unittest.TestCase):
         self.assertEqual(matches[0]["referenceStart"], 2)
         self.assertEqual(matches[0]["referenceEnd"], 7)
         self.assertEqual([item["note"] for item in matches[0]["scoreMatchedNotes"]], ["Bb4", "D5", "C5", "Bb4", "D5"])
+        self.assertEqual([item["note"] for item in matches[0]["displayDetectedNotes"]], ["Bb4", "D5", "C5", "Bb4", "D5"])
+        self.assertEqual(matches[0]["scoreNotePitchSequenceLabel"], "Bb D C Bb D")
+        self.assertEqual(matches[0]["score"]["imageUrl"], matches[0]["score"]["generatedNotationImageUrl"])
         self.assertEqual(matches[0]["score"]["measureLabel"], "mm. 2-4")
+
+    def test_wieniawski_symbolic_match_rejects_pitch_class_only_octave_mismatch(self):
+        target = wieniawski_reference_target()
+        series = detected_note_series(
+            [
+                {
+                    "transcriptionId": "wieniawski-wrong-octave",
+                    "sampleId": "sample-wrong-octave",
+                    "sourceWindow": "*0-10",
+                    "notes": [
+                        note("A#4", 0.0, 0.2),
+                        note("D4", 0.2, 0.4),
+                        note("C4", 0.4, 0.6),
+                        note("A#4", 0.6, 0.8),
+                        note("D4", 0.8, 1.0),
+                    ],
+                }
+            ],
+            max_series=None,
+        )
+
+        matches = score_sequence_matches_for_series(
+            series,
+            [{"title": "Wieniawski Scherzo-Tarantelle, Op. 16", "score": target}],
+        )
+
+        self.assertFalse(any(match["status"] == "symbolic_score_phrase_match" for match in matches))
+        self.assertFalse(any(match.get("scoreVisualAgreement") for match in matches))
 
     def test_rejected_wieniawski_d_bflat_g_d_source_sequence_no_longer_matches(self):
         target = wieniawski_reference_target()

@@ -1095,6 +1095,15 @@ def score_location_verified_count(daily_records: dict[str, Any]) -> int:
     return total
 
 
+def score_visual_agreement_count(daily_records: dict[str, Any]) -> int:
+    records = daily_records.get("records") if isinstance(daily_records.get("records"), list) else []
+    total = 0
+    for record in records:
+        groups = record.get("matchGroups") if isinstance(record.get("matchGroups"), list) else []
+        total += sum(1 for group in groups if isinstance(group, dict) and group.get("scoreVisualAgreement") is True)
+    return total
+
+
 def match_has_local_media(match: dict[str, Any]) -> bool:
     clip = match.get("clip") if isinstance(match.get("clip"), dict) else {}
     if any(str(clip.get(key) or "").strip() for key in ("mediaUrl", "audioUrl", "videoUrl", "localVideoUrl", "localAudioUrl")):
@@ -1618,6 +1627,7 @@ def build_transcription_completion(
     transcribed_record_count = int(daily_records.get("transcribedRecordCount") or 0)
     score_sequence_count = score_sequence_match_count(daily_records)
     score_verified_count = score_location_verified_count(daily_records)
+    score_visual_lock_count = score_visual_agreement_count(daily_records)
     score_audit_totals = score_reference_audit_totals(daily_records)
     local_score_source_count = int(score_audit_totals.get("sourcePdfLocalReadyCount") or 0)
     symbolic_score_note_count = int(score_audit_totals.get("symbolicScoreNoteCount") or 0)
@@ -1712,9 +1722,11 @@ def build_transcription_completion(
             "correction-benchmarks",
             "Correction and benchmark loop",
             6,
-            (1.5 if benchmark_count else 0) + (0.5 if rejected_score_count else 0),
-            f"{benchmark_count} benchmark corrections / {rejected_score_count} wrong-score-note regressions",
-            "Rejected score-note mistakes can be stored as regression evidence.",
+            (1.5 if benchmark_count else 0)
+            + (0.5 if rejected_score_count else 0)
+            + (0.75 if score_visual_lock_count else 0),
+            f"{benchmark_count} benchmark corrections / {rejected_score_count} wrong-score-note regressions / {score_visual_lock_count} score-visual locks",
+            "Rejected score-note mistakes can be stored as regression evidence, and score panels now require visual agreement with the exact matched sequence.",
             "Build a larger benchmark suite for notes, rhythm, score boxes, and full phrases.",
         ),
         roadmap_gate(
@@ -1839,7 +1851,7 @@ def build_transcription_completion(
         {
             "label": "Score windows",
             "value": str(score_verified_count),
-            "detail": f"{local_score_source_count} local score PDFs",
+            "detail": f"{score_visual_lock_count} visual locks",
         },
         {
             "label": "Score map queue",
@@ -1904,6 +1916,7 @@ def build_transcription_completion(
         "Local score-glyph candidates are queued for verification without being accepted as score evidence.",
         "Likely score noteheads now receive unaccepted staff-position pitch hypotheses before MusicXML review.",
         "Staff-level source review packets now map queued hypotheses back to the scanned score.",
+        "Score panels require exact score/transcription visual agreement before display.",
     ]
     remaining_summary = [
         "Finish chronological active-practice coverage across the full archive.",
@@ -1924,8 +1937,8 @@ def build_transcription_completion(
         {
             "phase": "2",
             "label": "Benchmark and correction set",
-            "status": "pending" if not benchmark_count else "partial",
-            "evidence": f"{benchmark_count} benchmark corrections / {rejected_score_count} wrong-score-note regressions",
+            "status": "pending" if not (benchmark_count or rejected_score_count or score_visual_lock_count) else "partial",
+            "evidence": f"{benchmark_count} benchmark corrections / {rejected_score_count} wrong-score-note regressions / {score_visual_lock_count} score-visual locks",
             "target": "Gold clips for A/D anchors, fast runs, arpeggios, repeats, rests, and score boxes.",
         },
         {
@@ -1973,8 +1986,8 @@ def build_transcription_completion(
         {
             "phase": "9",
             "label": "Regression lock",
-            "status": "partial" if rejected_score_count or benchmark_count else "pending",
-            "evidence": "Current tests block wrong-note score evidence and non-playing practice credit.",
+            "status": "partial" if rejected_score_count or benchmark_count or score_visual_lock_count else "pending",
+            "evidence": f"Current tests block wrong-note score evidence, broad score crops, and non-playing practice credit; {score_visual_lock_count} score-visual locks active.",
             "target": "Tests fail on mismatched audio/notation, wrong score boxes, missing media, and fake practice time.",
         },
     ]
@@ -2018,6 +2031,7 @@ def build_transcription_completion(
         "scoreMapNoteHypothesisCount": score_map_note_hypothesis_count,
         "scoreMapNoteHypothesisStaffCount": score_map_note_hypothesis_staff_count,
         "scoreMapReviewPacketCount": score_map_review_packet_count,
+        "scoreVisualAgreementCount": score_visual_lock_count,
         "pitchSequenceGroupCount": score_sequence_count,
         "checkedVideoLabel": checked_label if checked_label != "0s" else "",
         "uploadedVideoLabel": uploaded_label if uploaded_label != "unknown" else "",

@@ -1099,7 +1099,48 @@ def _svg_data_url(svg: str) -> str:
     return "data:image/svg+xml;base64," + base64.b64encode(svg.encode("utf-8")).decode("ascii")
 
 
-def symbolic_source_snippet_for_range(target: dict[str, Any], reference_start: int, reference_end: int) -> dict[str, Any]:
+def note_name_without_octave(value: Any) -> str:
+    match = re.match(r"^([A-G](?:#|b)?)", str(value or "").strip())
+    return match.group(1) if match else ""
+
+
+def score_note_name_sequence(notes: list[dict[str, Any]]) -> list[str]:
+    return [note_name_without_octave(note.get("note")) for note in notes if note_name_without_octave(note.get("note"))]
+
+
+def same_note_midi_sequence(detected_notes: list[dict[str, Any]], score_notes: list[dict[str, Any]]) -> bool:
+    if len(detected_notes) != len(score_notes) or not detected_notes:
+        return False
+    detected_midi = [note_midi_value(note) for note in detected_notes]
+    score_midi = [note_midi_value(note) for note in score_notes]
+    return all(value is not None for value in detected_midi) and detected_midi == score_midi
+
+
+def score_spelled_display_notes(detected_notes: list[dict[str, Any]], score_notes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if len(detected_notes) != len(score_notes):
+        return detected_notes
+    display: list[dict[str, Any]] = []
+    for detected, score_note in zip(detected_notes, score_notes):
+        note_name = str(score_note.get("note") or detected.get("note") or "").strip()
+        item = {
+            **detected,
+            "detectedNote": detected.get("note"),
+            "note": note_name,
+            "pitchClass": note_pitch_class(score_note) or note_pitch_class(detected),
+            "midi": note_midi_value(score_note),
+            "scoreSpelled": True,
+            "sourceScoreNote": note_name,
+        }
+        display.append(item)
+    return display
+
+
+def symbolic_source_snippet_for_range(
+    target: dict[str, Any],
+    reference_start: int,
+    reference_end: int,
+    score_sequence: list[str] | None = None,
+) -> dict[str, Any]:
     score_config = target.get("symbolicScore") if isinstance(target.get("symbolicScore"), dict) else {}
     snippets = score_config.get("sourceSnippets") if isinstance(score_config.get("sourceSnippets"), list) else []
     for snippet in snippets:
@@ -1113,7 +1154,20 @@ def symbolic_source_snippet_for_range(target: dict[str, Any], reference_start: i
             continue
         start = int(safe_float(snippet.get("referenceStart"), -1))
         end = int(safe_float(snippet.get("referenceEnd"), -1))
-        if start <= reference_start and end >= reference_end:
+        if start != reference_start or end != reference_end:
+            continue
+        snippet_sequence = [
+            str(value)
+            for value in (
+                snippet.get("pitchClassSequence")
+                if isinstance(snippet.get("pitchClassSequence"), list)
+                else []
+            )
+            if value
+        ]
+        if score_sequence and snippet_sequence and compact_pitch_class_sequence(snippet_sequence) != compact_pitch_class_sequence(score_sequence):
+            continue
+        if start == reference_start and end == reference_end:
             return snippet
     return {}
 
@@ -1164,7 +1218,11 @@ def symbolic_score_sequence_matches_for_run(
         score_slice = score_notes[r0:r1]
         if len(score_slice) < minimum_note_run:
             continue
+        if not same_note_midi_sequence(matched_notes, score_slice):
+            continue
+        display_notes = score_spelled_display_notes(matched_notes, score_slice)
         score_sequence = [str(note.get("pitchClass") or "") for note in score_slice if note.get("pitchClass")]
+        score_note_sequence = score_note_name_sequence(score_slice)
         measures = [str(note.get("measure") or "") for note in score_slice if note.get("measure")]
         if measures:
             label = f"m. {measures[0]}" if measures[0] == measures[-1] else f"mm. {measures[0]}-{measures[-1]}"
@@ -1177,12 +1235,19 @@ def symbolic_score_sequence_matches_for_run(
             key_signature=target.get("keySignature") if isinstance(target.get("keySignature"), dict) else None,
         )
         generated_notation_url = _svg_data_url(svg)
-        source_snippet = symbolic_source_snippet_for_range(target, r0, r1)
+        source_snippet = symbolic_source_snippet_for_range(target, r0, r1, score_sequence)
         score_image_url = str(source_snippet.get("imageUrl") or "").strip() or generated_notation_url
+        source_snippet_exact = bool(source_snippet)
         best_match = {
             "status": "symbolic_score_phrase_match",
             "pieceTitle": piece.get("title") or score.get("title") or "",
             "matchCriterion": "symbolic_score_pitch_class_phrase",
+            "scoreVisualAgreement": True,
+            "scoreVisualAgreementBasis": (
+                "exact_source_snippet_range"
+                if source_snippet_exact
+                else "generated_from_exact_symbolic_score_slice"
+            ),
             "minimumMatchedNoteRun": minimum_note_run,
             "minimumDistinctPitchClasses": minimum_distinct_pitch_classes,
             "matchedNoteRun": int(candidate["length"]),
@@ -1198,11 +1263,13 @@ def symbolic_score_sequence_matches_for_run(
             "detectedPitchClassSequence": " ".join(detected_sequence),
             "referencePitchClassSequence": " ".join(score_sequence),
             "scorePitchClassSequence": " ".join(score_sequence),
+            "scoreNoteSeriesLabel": " ".join(str(note.get("note") or "") for note in score_slice if note.get("note")),
+            "scoreNotePitchSequenceLabel": " ".join(score_note_sequence),
             "detectedPitchClassSequenceCompact": " ".join(compact_pitch_class_sequence(detected_sequence)),
             "referencePitchClassSequenceCompact": " ".join(compact_pitch_class_sequence(score_sequence)),
             "scorePitchClassSequenceCompact": " ".join(compact_pitch_class_sequence(score_sequence)),
             "matchedDetectedNotes": matched_notes,
-            "displayDetectedNotes": matched_notes if not query_info["collapsed"] else compact_notes_by_pitch_class(matched_notes),
+            "displayDetectedNotes": display_notes if not query_info["collapsed"] else compact_notes_by_pitch_class(display_notes),
             "scoreMatchedNotes": score_slice,
             "scoreSequenceLabel": label,
             "scoreSnippetStatus": "exact_score_location_verified",
@@ -1218,6 +1285,17 @@ def symbolic_score_sequence_matches_for_run(
                 "generatedNotationImageUrl": generated_notation_url,
                 "boxes": [],
                 "cropStatus": "exact_score_location_verified",
+                "visualAgreement": True,
+                "visualAgreementBasis": (
+                    "exact_source_snippet_range"
+                    if source_snippet_exact
+                    else "generated_from_exact_symbolic_score_slice"
+                ),
+                "actualSourceSnippetDisplayed": source_snippet_exact,
+                "sourceSnippetHiddenReason": "" if source_snippet_exact else "covering_source_crop_withheld_until_exact_range_crop_exists",
+                "scorePitchClassSequence": " ".join(score_sequence),
+                "scoreNotePitchSequenceLabel": " ".join(score_note_sequence),
+                "scoreNoteSeriesLabel": " ".join(str(note.get("note") or "") for note in score_slice if note.get("note")),
                 "snippetKind": "symbolic_score_phrase",
                 "sourceSnippetStatus": source_snippet.get("status") if source_snippet else "",
                 "measureLabel": label,
@@ -1330,6 +1408,12 @@ def score_sequence_matches_for_series(
                         "status": "score_sequence_match" if score_derived_reference else "reference_sequence_match",
                         "pieceTitle": piece.get("title") or "",
                         "matchCriterion": "pitch_class_sequence",
+                        "scoreVisualAgreement": bool(score_location_verified and detected_sequence == score_sequence),
+                        "scoreVisualAgreementBasis": (
+                            "exact_score_box_sequence"
+                            if score_location_verified and detected_sequence == score_sequence
+                            else ""
+                        ),
                         "minimumMatchedNoteRun": MATCH_GROUP_MIN_NOTE_RUN,
                         "minimumDistinctPitchClasses": MATCH_GROUP_MIN_DISTINCT_PITCH_CLASSES,
                         "matchedNoteRun": int(candidate["length"]),
@@ -1361,6 +1445,12 @@ def score_sequence_matches_for_series(
                             "pdfUrl": target.get("scorePdfUrl") or "",
                             "boxes": selected_boxes,
                             "cropStatus": "exact_score_location_verified" if score_location_verified else "exact_score_location_pending",
+                            "visualAgreement": bool(score_location_verified and detected_sequence == score_sequence),
+                            "visualAgreementBasis": (
+                                "exact_score_box_sequence"
+                                if score_location_verified and detected_sequence == score_sequence
+                                else ""
+                            ),
                         },
                     }
                 if best_for_reference:
@@ -2651,6 +2741,8 @@ def score_match_heat_fragments(match_groups: list[dict[str, Any]]) -> list[dict[
     for match in match_groups:
         if not isinstance(match, dict) or not match.get("scoreLocationVerified"):
             continue
+        if match.get("scoreVisualAgreement") is not True:
+            continue
         status = str(match.get("status") or "").strip()
         if status != "symbolic_score_phrase_match":
             continue
@@ -3383,7 +3475,11 @@ def build_daily_records(
                     },
                 }
             )
-        score_location_verified_count = sum(1 for match in match_groups if match.get("scoreLocationVerified"))
+        score_location_verified_count = sum(
+            1
+            for match in match_groups
+            if match.get("scoreLocationVerified") and match.get("scoreVisualAgreement") is True
+        )
         if match_groups:
             score_alignment_status = (
                 "exact_score_location_verified"

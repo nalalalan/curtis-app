@@ -300,6 +300,7 @@ def wieniawski_reference_target() -> dict[str, Any]:
                     "referenceStart": 0,
                     "referenceEnd": 7,
                     "label": "opening D-C-Bb-D-C-Bb-D",
+                    "pitchClassSequence": ["D", "C", "A#", "D", "C", "A#", "D"],
                     "imageUrl": "/assets/score/wieniawski-scherzo-tarantelle-opening-d-c-bb-d-c-bb-d-source.png",
                     "sourcePdfPage": 2,
                     "status": "source_score_phrase_verified",
