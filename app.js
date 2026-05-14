@@ -2148,7 +2148,14 @@ function compactPitchSequenceText(value) {
 
 function exactScoreSnippetReady(group) {
   const score = group?.score && typeof group.score === "object" ? group.score : {};
-  const status = compactText(score.cropStatus || score.status || group?.scoreSnippetStatus || group?.scoreAlignmentStatus || "");
+  const status = compactText(
+    score.cropStatus
+    || score.status
+    || group?.scoreSnippetStatus
+    || group?.scoreLocationStatus
+    || group?.scoreAlignmentStatus
+    || ""
+  );
   if (!status || ["pending", "estimate", "estimated", "unverified", "candidate"].some((token) => status.includes(token))) {
     return false;
   }
