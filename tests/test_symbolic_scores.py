@@ -203,12 +203,13 @@ class SymbolicScoreTests(unittest.TestCase):
         audit = symbolic_score_audit(target)
 
         self.assertEqual(audit["status"], "symbolic_score_ready")
-        self.assertEqual(audit["symbolicScoreNoteCount"], 4)
+        self.assertEqual(audit["symbolicScoreNoteCount"], 6)
+        self.assertEqual(audit["symbolicScoreSourceSnippetCount"], 1)
         self.assertEqual(
             [item["note"] for item in score["notes"]],
-            ["D5", "Bb4", "G4", "D5"],
+            ["D5", "C5", "Bb4", "D5", "C5", "Bb4"],
         )
-        self.assertEqual([item["pitchClass"] for item in score["notes"]], ["D", "A#", "G", "D"])
+        self.assertEqual([item["pitchClass"] for item in score["notes"]], ["D", "C", "A#", "D", "C", "A#"])
 
     def test_wieniawski_symbolic_measure_can_match_four_note_source_sequence(self):
         target = wieniawski_reference_target()
@@ -217,6 +218,39 @@ class SymbolicScoreTests(unittest.TestCase):
                 {
                     "transcriptionId": "wieniawski-source-motif",
                     "sampleId": "sample-source-motif",
+                    "sourceWindow": "*0-10",
+                    "notes": [
+                        note("D4", 0.0, 0.25),
+                        note("C4", 0.25, 0.5),
+                        note("A#4", 0.5, 0.75),
+                        note("D4", 0.75, 1.0),
+                    ],
+                }
+            ],
+            max_series=None,
+        )
+
+        matches = score_sequence_matches_for_series(
+            series,
+            [{"title": "Wieniawski Scherzo-Tarantelle, Op. 16", "score": target}],
+        )
+
+        self.assertEqual(matches[0]["status"], "symbolic_score_phrase_match")
+        self.assertEqual(matches[0]["minimumMatchedNoteRun"], 4)
+        self.assertEqual(matches[0]["minimumDistinctPitchClasses"], 3)
+        self.assertEqual(matches[0]["detectedPitchClassSequence"], "D C A# D")
+        self.assertEqual(matches[0]["scorePitchClassSequence"], "D C A# D")
+        self.assertEqual([item["note"] for item in matches[0]["scoreMatchedNotes"]], ["D5", "C5", "Bb4", "D5"])
+        self.assertEqual(matches[0]["score"]["imageUrl"], "/assets/score/wieniawski-scherzo-tarantelle-opening-d-c-bb-d-source.png")
+        self.assertTrue(matches[0]["score"]["generatedNotationImageUrl"].startswith("data:image/svg+xml;base64,"))
+
+    def test_rejected_wieniawski_d_bflat_g_d_source_sequence_no_longer_matches(self):
+        target = wieniawski_reference_target()
+        series = detected_note_series(
+            [
+                {
+                    "transcriptionId": "old-wrong-source-motif",
+                    "sampleId": "sample-old-wrong-source-motif",
                     "sourceWindow": "*0-10",
                     "notes": [
                         note("D4", 0.0, 0.25),
@@ -233,14 +267,8 @@ class SymbolicScoreTests(unittest.TestCase):
             series,
             [{"title": "Wieniawski Scherzo-Tarantelle, Op. 16", "score": target}],
         )
-
-        self.assertEqual(matches[0]["status"], "symbolic_score_phrase_match")
-        self.assertEqual(matches[0]["minimumMatchedNoteRun"], 4)
-        self.assertEqual(matches[0]["minimumDistinctPitchClasses"], 3)
-        self.assertEqual(matches[0]["detectedPitchClassSequence"], "D A# G D")
-        self.assertEqual(matches[0]["scorePitchClassSequence"], "D A# G D")
-        self.assertEqual([item["note"] for item in matches[0]["scoreMatchedNotes"]], ["D5", "Bb4", "G4", "D5"])
-        self.assertTrue(matches[0]["score"]["imageUrl"].startswith("data:image/svg+xml;base64,"))
+        self.assertFalse(any(match["status"] == "symbolic_score_phrase_match" for match in matches))
+        self.assertTrue(all(match.get("scoreLocationStatus") == "exact_score_location_pending" for match in matches))
 
 
 if __name__ == "__main__":

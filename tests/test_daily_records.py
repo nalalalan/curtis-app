@@ -215,8 +215,8 @@ class DailyRecordTests(unittest.TestCase):
                 "noteCount": 4,
                 "notes": [
                     note("D4", 0.0, 0.5),
-                    note("A#4", 0.6, 1.1),
-                    note("G4", 1.2, 1.7),
+                    note("C4", 0.6, 1.1),
+                    note("A#4", 1.2, 1.7),
                     note("D4", 1.8, 2.2),
                 ],
             }
@@ -243,10 +243,14 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(record["matchGroups"][0]["score"]["assetId"], "wieniawski-scherzo-tarantelle-vln")
         self.assertEqual(record["matchGroups"][0]["score"]["boxes"], [])
         self.assertEqual(record["matchGroups"][0]["score"]["cropStatus"], "exact_score_location_verified")
-        self.assertTrue(record["matchGroups"][0]["score"]["imageUrl"].startswith("data:image/svg+xml;base64,"))
+        self.assertEqual(
+            record["matchGroups"][0]["score"]["imageUrl"],
+            "/assets/score/wieniawski-scherzo-tarantelle-opening-d-c-bb-d-source.png",
+        )
+        self.assertTrue(record["matchGroups"][0]["score"]["generatedNotationImageUrl"].startswith("data:image/svg+xml;base64,"))
         self.assertFalse(record["matchGroups"][0]["rhythmRequired"])
-        self.assertEqual([item["note"] for item in record["matchGroups"][0]["transcription"]["notes"]], ["D4", "A#4", "G4", "D4"])
-        self.assertEqual([item["note"] for item in record["matchGroups"][0]["scoreMatchedNotes"]], ["D5", "Bb4", "G4", "D5"])
+        self.assertEqual([item["note"] for item in record["matchGroups"][0]["transcription"]["notes"]], ["D4", "C4", "A#4", "D4"])
+        self.assertEqual([item["note"] for item in record["matchGroups"][0]["scoreMatchedNotes"]], ["D5", "C5", "Bb4", "D5"])
         self.assertEqual(record["matchGroups"][0]["clip"]["localStartSeconds"], 0.0)
         self.assertEqual(record["matchGroups"][0]["clip"]["localEndSeconds"], 2.2)
 
@@ -1052,7 +1056,8 @@ class DailyRecordTests(unittest.TestCase):
 
         self.assertEqual(target["scoreNoteCropStatus"], "no_visual_note_verified_anchor_ready")
         self.assertEqual(audit["sourcePdfLocalReadyCount"], 1)
-        self.assertEqual(audit["symbolicScoreNoteCount"], 4)
+        self.assertEqual(audit["symbolicScoreNoteCount"], 6)
+        self.assertEqual(audit["symbolicScoreSourceSnippetCount"], 1)
         self.assertEqual(target["scorePitchClassAnchors"], [])
         self.assertTrue(
             any(

@@ -853,6 +853,7 @@ def score_reference_audit_for_target(target: dict[str, Any]) -> dict[str, Any]:
         "rawScoreSequenceCount": raw_score_count,
         "symbolicScoreSequenceCount": symbolic_count + (1 if symbolic_score_note_count else 0),
         "symbolicScoreNoteCount": symbolic_score_note_count,
+        "symbolicScoreSourceSnippetCount": int(symbolic_audit.get("symbolicScoreSourceSnippetCount") or 0),
         "symbolicScoreStatus": symbolic_audit.get("status") or "",
         "symbolicScoreSourceId": symbolic_audit.get("symbolicScoreSourceId") or "",
         "referenceAudioSequenceCount": reference_audio_count,
@@ -886,6 +887,7 @@ def score_reference_audit_for_pieces(pieces: list[dict[str, Any]]) -> dict[str, 
         "rawScoreSequenceCount": sum(item["rawScoreSequenceCount"] for item in audits),
         "symbolicScoreSequenceCount": sum(item["symbolicScoreSequenceCount"] for item in audits),
         "symbolicScoreNoteCount": sum(item.get("symbolicScoreNoteCount", 0) for item in audits),
+        "symbolicScoreSourceSnippetCount": sum(item.get("symbolicScoreSourceSnippetCount", 0) for item in audits),
         "sourcePdfLocalReadyCount": len(
             {
                 item.get("scoreAssetId")
@@ -1075,6 +1077,25 @@ def _svg_data_url(svg: str) -> str:
     return "data:image/svg+xml;base64," + base64.b64encode(svg.encode("utf-8")).decode("ascii")
 
 
+def symbolic_source_snippet_for_range(target: dict[str, Any], reference_start: int, reference_end: int) -> dict[str, Any]:
+    score_config = target.get("symbolicScore") if isinstance(target.get("symbolicScore"), dict) else {}
+    snippets = score_config.get("sourceSnippets") if isinstance(score_config.get("sourceSnippets"), list) else []
+    for snippet in snippets:
+        if not isinstance(snippet, dict):
+            continue
+        image_url = str(snippet.get("imageUrl") or "").strip()
+        if not image_url:
+            continue
+        status = str(snippet.get("status") or snippet.get("verification") or "").strip().lower()
+        if "verified" not in status:
+            continue
+        start = int(safe_float(snippet.get("referenceStart"), -1))
+        end = int(safe_float(snippet.get("referenceEnd"), -1))
+        if start <= reference_start and end >= reference_end:
+            return snippet
+    return {}
+
+
 def symbolic_score_sequence_matches_for_run(
     run: dict[str, Any],
     piece: dict[str, Any],
@@ -1133,6 +1154,9 @@ def symbolic_score_sequence_matches_for_run(
             label=label,
             key_signature=target.get("keySignature") if isinstance(target.get("keySignature"), dict) else None,
         )
+        generated_notation_url = _svg_data_url(svg)
+        source_snippet = symbolic_source_snippet_for_range(target, r0, r1)
+        score_image_url = str(source_snippet.get("imageUrl") or "").strip() or generated_notation_url
         best_match = {
             "status": "symbolic_score_phrase_match",
             "pieceTitle": piece.get("title") or score.get("title") or "",
@@ -1161,16 +1185,19 @@ def symbolic_score_sequence_matches_for_run(
             "scoreSequenceLabel": label,
             "scoreSnippetStatus": "exact_score_location_verified",
             "scoreLocationStatus": "exact_score_location_verified",
+            "scoreSourceSnippet": source_snippet,
             "score": {
                 "assetId": target.get("scoreAssetId") or score.get("sourceId") or "",
                 "page": target.get("scorePage") or 0,
                 "source": target.get("scoreSource") or "symbolic score",
                 "sourceUrl": target.get("scoreUrl") or "",
                 "pdfUrl": target.get("scorePdfUrl") or "",
-                "imageUrl": _svg_data_url(svg),
+                "imageUrl": score_image_url,
+                "generatedNotationImageUrl": generated_notation_url,
                 "boxes": [],
                 "cropStatus": "exact_score_location_verified",
                 "snippetKind": "symbolic_score_phrase",
+                "sourceSnippetStatus": source_snippet.get("status") if source_snippet else "",
                 "measureLabel": label,
                 "scoreMatchedNotes": score_slice,
             },

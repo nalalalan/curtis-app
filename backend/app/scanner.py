@@ -1297,23 +1297,44 @@ def accepted_long_phrase_count(daily_records: dict[str, Any]) -> int:
 def score_reference_audit_totals(daily_records: dict[str, Any]) -> dict[str, int]:
     records = daily_records.get("records") if isinstance(daily_records.get("records"), list) else []
     local_source_assets: set[str] = set()
-    symbolic_note_total = 0
+    symbolic_notes_by_source: dict[str, int] = {}
+    source_snippets_by_source: dict[str, int] = {}
     for record in records:
         if not isinstance(record, dict):
             continue
         transcription = record.get("transcription") if isinstance(record.get("transcription"), dict) else {}
         audit = transcription.get("scoreReferenceAudit") if isinstance(transcription.get("scoreReferenceAudit"), dict) else {}
-        symbolic_note_total += int(audit.get("symbolicScoreNoteCount") or 0)
         targets = audit.get("targets") if isinstance(audit.get("targets"), list) else []
+        if not targets and int(audit.get("symbolicScoreNoteCount") or 0):
+            source_id = str(audit.get("symbolicScoreSourceId") or f"record:{record.get('practiceDay') or len(symbolic_notes_by_source)}").strip()
+            symbolic_notes_by_source[source_id] = max(
+                symbolic_notes_by_source.get(source_id, 0),
+                int(audit.get("symbolicScoreNoteCount") or 0),
+            )
+            source_snippets_by_source[source_id] = max(
+                source_snippets_by_source.get(source_id, 0),
+                int(audit.get("symbolicScoreSourceSnippetCount") or 0),
+            )
         for target in targets:
-            if not isinstance(target, dict) or not target.get("sourcePdfLocalReady"):
+            if not isinstance(target, dict):
                 continue
             asset_id = str(target.get("scoreAssetId") or "").strip()
-            if asset_id:
+            source_id = str(target.get("symbolicScoreSourceId") or asset_id or target.get("symbolicScoreTitle") or "").strip()
+            if source_id:
+                symbolic_notes_by_source[source_id] = max(
+                    symbolic_notes_by_source.get(source_id, 0),
+                    int(target.get("symbolicScoreNoteCount") or 0),
+                )
+                source_snippets_by_source[source_id] = max(
+                    source_snippets_by_source.get(source_id, 0),
+                    int(target.get("symbolicScoreSourceSnippetCount") or 0),
+                )
+            if asset_id and target.get("sourcePdfLocalReady"):
                 local_source_assets.add(asset_id)
     return {
         "sourcePdfLocalReadyCount": len(local_source_assets),
-        "symbolicScoreNoteCount": symbolic_note_total,
+        "symbolicScoreNoteCount": sum(symbolic_notes_by_source.values()),
+        "symbolicScoreSourceSnippetCount": sum(source_snippets_by_source.values()),
     }
 
 
@@ -1373,6 +1394,7 @@ def build_transcription_completion(
     score_audit_totals = score_reference_audit_totals(daily_records)
     local_score_source_count = int(score_audit_totals.get("sourcePdfLocalReadyCount") or 0)
     symbolic_score_note_count = int(score_audit_totals.get("symbolicScoreNoteCount") or 0)
+    symbolic_score_source_snippet_count = int(score_audit_totals.get("symbolicScoreSourceSnippetCount") or 0)
     benchmark_count = int(evidence_progress.get("benchmarkCount") or 0)
     rejected_score_count = int(evidence_progress.get("wrongScoreNoteRegressionCount") or 0)
     repertoire_entries = repertoire_evidence.get("entries") if isinstance(repertoire_evidence.get("entries"), list) else []
@@ -1455,8 +1477,9 @@ def build_transcription_completion(
             (1.5 if score_target_count else 0)
             + (1.5 if local_score_source_count else 0)
             + (2 if symbolic_score_note_count else 0)
+            + (1 if symbolic_score_source_snippet_count else 0)
             + (4 if score_verified_count else 0),
-            f"{score_target_count} score targets / {local_score_source_count} local PDFs / {symbolic_score_note_count} symbolic notes / {score_verified_count} exact locations",
+            f"{score_target_count} score targets / {local_score_source_count} local PDFs / {symbolic_score_note_count} unique symbolic notes / {symbolic_score_source_snippet_count} source snippets / {score_verified_count} exact locations",
             "Source-confirmed pieces can seed score targets.",
             "Scherzo-Tarantelle needs verified symbolic notes plus rendered score coordinates.",
         ),
@@ -1611,7 +1634,7 @@ def build_transcription_completion(
             "phase": "3",
             "label": "Verified score truth",
             "status": "partial" if local_score_source_count or symbolic_score_note_count or score_verified_count else "pending",
-            "evidence": f"{score_target_count} score targets / {local_score_source_count} local PDFs / {symbolic_score_note_count} symbolic notes / {score_verified_count} exact score locations",
+            "evidence": f"{score_target_count} score targets / {local_score_source_count} local PDFs / {symbolic_score_note_count} unique symbolic notes / {symbolic_score_source_snippet_count} source snippets / {score_verified_count} exact score locations",
             "target": "Parsed score notes plus coordinates; no visual crop unless the boxed note is verified.",
         },
         {
@@ -1680,6 +1703,7 @@ def build_transcription_completion(
         "referencePhraseCandidateTopSequence": phrase_candidate_sequence,
         "localScoreSourceCount": local_score_source_count,
         "symbolicScoreNoteCount": symbolic_score_note_count,
+        "symbolicScoreSourceSnippetCount": symbolic_score_source_snippet_count,
         "pitchSequenceGroupCount": score_sequence_count,
         "checkedVideoLabel": checked_label if checked_label != "0s" else "",
         "uploadedVideoLabel": uploaded_label if uploaded_label != "unknown" else "",

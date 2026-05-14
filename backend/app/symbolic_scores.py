@@ -236,9 +236,18 @@ def _musicxml_text_from_score(score: dict[str, Any]) -> str:
 def symbolic_score_audit(target: dict[str, Any]) -> dict[str, Any]:
     score = symbolic_score_from_target(target)
     notes = score.get("notes") if isinstance(score.get("notes"), list) else []
+    score_config = target.get("symbolicScore") if isinstance(target.get("symbolicScore"), dict) else {}
+    source_snippets = [
+        item
+        for item in score_config.get("sourceSnippets", [])
+        if isinstance(item, dict)
+        and str(item.get("imageUrl") or "").strip()
+        and "verified" in str(item.get("status") or item.get("verification") or "").lower()
+    ] if isinstance(score_config.get("sourceSnippets"), list) else []
     return {
         "status": "symbolic_score_ready" if notes else "symbolic_score_missing",
         "symbolicScoreNoteCount": len(notes),
+        "symbolicScoreSourceSnippetCount": len(source_snippets),
         "symbolicScoreSourceId": score.get("sourceId") or "",
         "symbolicScoreTitle": score.get("title") or "",
         "symbolicScorePartId": score.get("partId") or "",
