@@ -229,6 +229,11 @@ function percentText(part, total) {
   return `${percent < 10 ? percent.toFixed(1) : Math.round(percent)}%`;
 }
 
+function trimDecimal(value, digits = 2) {
+  const number = Number(value) || 0;
+  return number.toFixed(digits).replace(/(\.\d*?[1-9])0+$/, "$1").replace(/\.0+$/, "");
+}
+
 function activePracticeText(records) {
   const seconds = Number(records?.totalPracticeTimeSeconds ?? records?.totalActiveViolinSeconds ?? records?.activePracticeSeconds) || 0;
   if (records?.totalPracticeTimeLabel) return records.totalPracticeTimeLabel;
@@ -1128,7 +1133,7 @@ function renderStatus() {
     elements.studyCount.textContent = `${matchCount} ${matchCount === 1 ? "match" : "matches"} / ${recordCount} days`;
   }
   const transcriptionCompletion = transcriptionCompletionState(ops);
-  setText(elements.transcriptionCompletionPill, transcriptionCompletion?.completionLabel || "0%");
+  setText(elements.transcriptionCompletionPill, transcriptionCompletion?.completionExactLabel || transcriptionCompletion?.completionLabel || "0%");
   const scannedSeconds = scannedVideoSeconds(practiceCoverage);
   const archiveSeconds = archiveVideoSeconds(practiceCoverage, totals);
   const archiveLabel = archiveVideoText(practiceCoverage, totals);
@@ -2681,23 +2686,24 @@ function renderTranscriptionCompletion() {
     elements.transcriptionCompletion.innerHTML = `<p class="empty">Transcription completion pending.</p>`;
     return;
   }
-  const percent = Math.max(0, Math.min(100, Number(completion.completionPercent) || 0));
+  const percent = Math.max(0, Math.min(100, Number(completion.completionExactPercent ?? completion.completionPercent) || 0));
+  const percentLabel = completion.completionExactLabel || completion.completionLabel || `${percent}%`;
   const gates = Array.isArray(completion.gates) ? completion.gates : [];
   const doneItems = Array.isArray(completion.doneSummary) ? completion.doneSummary : Array.isArray(completion.doneItems) ? completion.doneItems : [];
   const remainingItems = Array.isArray(completion.remainingSummary) ? completion.remainingSummary : Array.isArray(completion.remainingItems) ? completion.remainingItems : [];
   const completedPoints = Number(completion.completedPoints) || 0;
   const totalPoints = Number(completion.totalPoints) || 0;
-  const pointSummary = totalPoints
-    ? `${completedPoints.toFixed(1).replace(/\.0$/, "")}/${totalPoints.toFixed(0)} points`
-    : "";
+  const pointSummary = completion.completedPointsLabel || (totalPoints
+    ? `${trimDecimal(completedPoints)}/${trimDecimal(totalPoints)} weighted points`
+    : "");
   elements.transcriptionCompletion.innerHTML = `
     <div class="roadmap-score">
       <div>
         <span>Implementation</span>
-        <strong>${escapeHtml(completion.completionLabel || `${percent}%`)}</strong>
+        <strong>${escapeHtml(percentLabel)}</strong>
         <small>${escapeHtml(pointSummary || completion.basis || "")}</small>
       </div>
-      <div class="roadmap-meter" aria-label="Transcription completion ${escapeHtml(String(percent))}%">
+      <div class="roadmap-meter" aria-label="Transcription completion ${escapeHtml(percentLabel)}">
         <i style="width: ${percent}%"></i>
       </div>
     </div>

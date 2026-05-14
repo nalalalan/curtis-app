@@ -44,6 +44,10 @@ class TranscriptionCompletionTests(unittest.TestCase):
 
         self.assertGreater(completion["completionPercent"], 0)
         self.assertLess(completion["completionPercent"], 50)
+        self.assertGreater(completion["completionExactPercent"], 0)
+        self.assertLess(completion["completionExactPercent"], 50)
+        self.assertTrue(completion["completionExactLabel"].endswith("%"))
+        self.assertIn("weighted points", completion["completedPointsLabel"])
         self.assertEqual(completion["longPhraseAcceptedCount"], 0)
         self.assertEqual(completion["exactScoreAlignedWindowCount"], 0)
         self.assertIn("not a playing-readiness score", completion["basis"])
@@ -51,6 +55,8 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertTrue(any(item["label"] == "Full practice-time coverage" for item in completion["implementationPlan"]))
         self.assertTrue(any("full archive" in item for item in completion["remainingSummary"]))
         self.assertIn("Practice-time scanning is working", completion["implementationSummary"])
+        self.assertEqual(completion["implementationCurrent"][0]["value"], completion["completionExactLabel"])
+        self.assertEqual(completion["implementationCurrent"][0]["detail"], completion["completedPointsLabel"])
 
 
 if __name__ == "__main__":

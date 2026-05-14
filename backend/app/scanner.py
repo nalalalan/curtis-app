@@ -1267,7 +1267,13 @@ def build_transcription_completion(
 
     total_weight = sum(float(item["weight"]) for item in gates)
     completed_points = round(sum(float(item["points"]) for item in gates), 2)
-    completion_percent = int(round((completed_points / total_weight) * 100)) if total_weight else 0
+    completion_exact_percent = round((completed_points / total_weight) * 100, 2) if total_weight else 0
+    completion_percent = int(round(completion_exact_percent)) if total_weight else 0
+    completion_exact_label = f"{completion_exact_percent:.2f}".rstrip("0").rstrip(".") + "%"
+    completed_points_label = (
+        f"{completed_points:.2f}".rstrip("0").rstrip(".")
+        + f"/{int(total_weight)} weighted points"
+    )
     checked_label = active_practice_coverage.get("checkedVideoLabel") or "0s"
     uploaded_label = active_practice_coverage.get("uploadedVideoLabel") or "unknown"
     active_label = active_practice_coverage.get("activePracticeLabel") or "pending"
@@ -1278,8 +1284,8 @@ def build_transcription_completion(
     implementation_current = [
         {
             "label": "Implementation",
-            "value": f"{completion_percent}%",
-            "detail": f"{completed_points:.1f}".rstrip("0").rstrip(".") + f"/{int(total_weight)} weighted points",
+            "value": completion_exact_label,
+            "detail": completed_points_label,
         },
         {
             "label": "Checked video",
@@ -1383,7 +1389,10 @@ def build_transcription_completion(
         "status": "partial" if completed_points else "pending",
         "completionPercent": completion_percent,
         "completionLabel": f"{completion_percent}%",
+        "completionExactPercent": completion_exact_percent,
+        "completionExactLabel": completion_exact_label,
         "completedPoints": completed_points,
+        "completedPointsLabel": completed_points_label,
         "totalPoints": total_weight,
         "basis": "100-point implementation gate checklist for solved long-phrase transcription; not a playing-readiness score.",
         "implementationSummary": implementation_summary,
