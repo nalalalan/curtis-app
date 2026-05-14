@@ -212,12 +212,13 @@ class DailyRecordTests(unittest.TestCase):
                 "tempoBpm": 72,
                 "quality": {"windowMode": "detected_active_sections"},
                 "durationSeconds": 4.0,
-                "noteCount": 4,
+                "noteCount": 5,
                 "notes": [
-                    note("D4", 0.0, 0.5),
-                    note("C4", 0.6, 1.1),
-                    note("A#4", 1.2, 1.7),
-                    note("D4", 1.8, 2.2),
+                    note("A#4", 0.0, 0.4),
+                    note("D4", 0.5, 0.9),
+                    note("C4", 1.0, 1.4),
+                    note("A#4", 1.5, 1.9),
+                    note("D4", 2.0, 2.4),
                 ],
             }
         ]
@@ -241,18 +242,20 @@ class DailyRecordTests(unittest.TestCase):
         self.assertTrue(record["matchGroups"])
         self.assertEqual(record["matchGroups"][0]["status"], "symbolic_score_phrase_match")
         self.assertEqual(record["matchGroups"][0]["score"]["assetId"], "wieniawski-scherzo-tarantelle-vln")
+        self.assertEqual(record["matchGroups"][0]["matchedNoteRun"], 5)
+        self.assertEqual(record["matchGroups"][0]["scoreSequenceLabel"], "mm. 2-4")
         self.assertEqual(record["matchGroups"][0]["score"]["boxes"], [])
         self.assertEqual(record["matchGroups"][0]["score"]["cropStatus"], "exact_score_location_verified")
         self.assertEqual(
             record["matchGroups"][0]["score"]["imageUrl"],
-            "/assets/score/wieniawski-scherzo-tarantelle-opening-d-c-bb-d-source.png",
+            "/assets/score/wieniawski-scherzo-tarantelle-opening-d-c-bb-d-c-bb-d-source.png",
         )
         self.assertTrue(record["matchGroups"][0]["score"]["generatedNotationImageUrl"].startswith("data:image/svg+xml;base64,"))
         self.assertFalse(record["matchGroups"][0]["rhythmRequired"])
-        self.assertEqual([item["note"] for item in record["matchGroups"][0]["transcription"]["notes"]], ["D4", "C4", "A#4", "D4"])
-        self.assertEqual([item["note"] for item in record["matchGroups"][0]["scoreMatchedNotes"]], ["D5", "C5", "Bb4", "D5"])
+        self.assertEqual([item["note"] for item in record["matchGroups"][0]["transcription"]["notes"]], ["A#4", "D4", "C4", "A#4", "D4"])
+        self.assertEqual([item["note"] for item in record["matchGroups"][0]["scoreMatchedNotes"]], ["Bb4", "D5", "C5", "Bb4", "D5"])
         self.assertEqual(record["matchGroups"][0]["clip"]["localStartSeconds"], 0.0)
-        self.assertEqual(record["matchGroups"][0]["clip"]["localEndSeconds"], 2.2)
+        self.assertEqual(record["matchGroups"][0]["clip"]["localEndSeconds"], 2.4)
 
     def test_score_free_exercise_days_are_not_forced_into_score_matching(self):
         inventory = {
@@ -1056,7 +1059,7 @@ class DailyRecordTests(unittest.TestCase):
 
         self.assertEqual(target["scoreNoteCropStatus"], "no_visual_note_verified_anchor_ready")
         self.assertEqual(audit["sourcePdfLocalReadyCount"], 1)
-        self.assertEqual(audit["symbolicScoreNoteCount"], 6)
+        self.assertEqual(audit["symbolicScoreNoteCount"], 7)
         self.assertEqual(audit["symbolicScoreSourceSnippetCount"], 1)
         self.assertEqual(target["scorePitchClassAnchors"], [])
         self.assertTrue(

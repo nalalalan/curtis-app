@@ -3304,7 +3304,7 @@ def build_daily_records(
                 else "reference_sequence_match_pending_score_location"
             )
             score_or_pattern_limit = (
-                "Exact score location verified for the displayed note match."
+                "Exact score phrase verified."
                 if score_location_verified_count
                 else "Played notes matched a reference sequence; exact score-note and measure alignment remains pending."
             )

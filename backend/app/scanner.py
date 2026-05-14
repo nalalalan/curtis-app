@@ -1496,7 +1496,10 @@ def build_transcription_completion(
             "note-rhythm-engine",
             "Accurate note and rhythm extraction",
             18,
-            (1 if transcriptions else 0) + (1 if transcribed_record_count else 0) + (1 if audio_record_count else 0),
+            (1 if transcriptions else 0)
+            + (1 if transcribed_record_count else 0)
+            + (1 if audio_record_count else 0)
+            + min(2, long_phrase_count * 2),
             f"{len(transcriptions)} transcription records / {transcribed_record_count} notation-ready daily records / {audio_record_count} audio-evidence records",
             "Short audio-checked fragments exist; failed broad transcription stays hidden.",
             "Fast runs, arpeggios, repeated notes, rests, rhythm, and full active windows remain unsolved.",
@@ -1505,7 +1508,7 @@ def build_transcription_completion(
             "notation-rendering",
             "Professional notation rendering",
             6,
-            1 if transcribed_record_count else 0,
+            (1 if transcribed_record_count else 0) + (1.5 if long_phrase_count else 0),
             f"{transcribed_record_count} notation-ready daily records",
             "Notation is gated so failed transcription is not displayed as accepted evidence.",
             "Replace fragile hand-built notation with publication-quality rendering for accepted phrases.",
@@ -1516,7 +1519,9 @@ def build_transcription_completion(
             8,
             (1.5 if score_sequence_match_count(daily_records) else 0)
             + min(2.5, phrase_candidate_count * 0.5)
-            + (2 if score_verified_count else 0),
+            + (2 if score_verified_count else 0)
+            + (1 if measure_match_count else 0)
+            + min(2, long_phrase_count * 2),
             f"{score_sequence_count} pitch-sequence groups / {phrase_candidate_count} phrase candidates / {score_verified_count} exact score locations",
             "Pitch-sequence groups are separated from exact score evidence.",
             "Promote phrase candidates only after source-score or score-free exercise verification.",
@@ -1534,7 +1539,7 @@ def build_transcription_completion(
             "repertoire-observation",
             "Repertoire and Curtis-level observations",
             3,
-            1 if repertoire_entries else 0,
+            (1 if repertoire_entries else 0) + (0.5 if long_phrase_count else 0),
             f"{len(repertoire_entries)} repertoire entries / {measure_match_count} accepted measures / {long_phrase_count} accepted long phrases",
             "Confirmed source evidence can promote repertoire without fake progress percentages.",
             "Curtis-level blockers need accepted clips, transcription events, and score or pattern locations.",
@@ -1557,6 +1562,8 @@ def build_transcription_completion(
     implementation_summary = (
         "Practice-time scanning is working. The long-phrase path now has a local source score PDF and still counts only verified score/audio phrase matches."
         if not measure_match_count
+        else "Practice-time scanning is working. The long-phrase path now has its first source-backed score/audio phrase and still treats full long-phrase transcription as incomplete."
+        if long_phrase_count
         else "Practice-time scanning is working. The long-phrase path now has a source-backed score/audio measure match and still separates measure progress from solved long phrases."
     )
     implementation_current = [
@@ -1722,7 +1729,7 @@ def build_transcription_completion(
             if not measure_match_count
             else "Extend the accepted source-backed measure into longer phrases and score-coordinate heat maps."
             if not long_phrase_count
-            else "Extend the accepted measure into longer phrases and score-coordinate heat maps."
+            else "Extend the accepted phrase into longer source-backed passages and score-coordinate heat maps."
         ),
     }
 

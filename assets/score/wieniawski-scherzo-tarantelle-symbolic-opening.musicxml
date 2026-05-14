@@ -9,7 +9,7 @@
     </score-part>
   </part-list>
   <part id="P1">
-    <measure number="2-3 opening source phrase">
+    <measure number="2">
       <attributes>
         <divisions>8</divisions>
         <key>
@@ -50,6 +50,8 @@
         <duration>2</duration>
         <type>eighth</type>
       </note>
+    </measure>
+    <measure number="3">
       <note>
         <pitch>
           <step>D</step>
@@ -71,6 +73,16 @@
           <step>B</step>
           <alter>-1</alter>
           <octave>4</octave>
+        </pitch>
+        <duration>2</duration>
+        <type>eighth</type>
+      </note>
+    </measure>
+    <measure number="4">
+      <note>
+        <pitch>
+          <step>D</step>
+          <octave>5</octave>
         </pitch>
         <duration>2</duration>
         <type>eighth</type>
