@@ -5,7 +5,7 @@ This section is the working plan for making Curtis able to produce long, trustwo
 
 \subsection{Current tracker state}
 
-The tracker was refreshed through the 2026-05-14 12:35 AM EDT live state. The system has a real media ledger, a deployed active-practice scan route, a working owner-sync path for captured media, a visible 100-point transcription-completion tracker with precise weighted progress, stored user-correction benchmarks, and a conservative evidence gate, but long-phrase transcription is not solved. The existing trusted musical output is limited to short audio-checked note fragments. The system has no accepted exact score-aligned Scherzo-Tarantelle window, and the previously displayed single-note score crops are rejected because the highlighted score-side note did not match the displayed note label.
+The tracker was refreshed through the 2026-05-14 03:00 AM EDT live state. The system has a real media ledger, a deployed active-practice scan route, a working owner-sync path for captured media, a visible 100-point transcription-completion tracker with precise weighted progress, stored user-correction benchmarks, and a conservative evidence gate, but long-phrase transcription is not solved. The existing trusted musical output is limited to short audio-checked note fragments. The system has no accepted exact score-aligned Scherzo-Tarantelle window, and the previously displayed single-note score crops are rejected because the highlighted score-side note did not match the displayed note label.
 
 \begin{table}[htbp]
 \centering
@@ -21,8 +21,8 @@ Tracker item & Baseline state \\
 Goal & Produce compact daily evidence groups: original score snippet, generated transcription, local audio, local video, heat-map context, and specific observation. \\
 Current accepted transcription & Short audio-checked D4/A4 fragments only; not a full phrase and not a score-location match. \\
 Current accepted score match & 0 exact score-aligned snippets. \\
-Current archive coverage & 213 h 23 min uploaded practice video across 46 strict-ledger videos and 39 practice days; 2 h 28 min checked; 2 h 18 min measured active violin; full chronological coverage still pending. \\
-Current estimate & 198 h 18 min total active practice estimated from checked windows; provisional and sample-biased until the full chronological scan covers the archive. \\
+Current archive coverage & 213 h 23 min uploaded practice video across 46 strict-ledger videos and 39 practice days; 2 h 31 min checked; 2 h 21 min measured active violin; full chronological coverage still pending. \\
+Current estimate & 198 h 36 min total active practice estimated from checked windows; provisional and sample-biased until the full chronological scan covers the archive. \\
 Current user burden to remove & Alan is still forced to inspect whether a note is real, whether a score box points to the correct pitch, whether audio matches notation, and whether practice time means playing rather than uploaded duration. \\
 First tracker update & This PDF now defines the full implementation plan and becomes the required progress record for future Curtis work. \\
 \bottomrule
@@ -48,6 +48,7 @@ First tracker update & This PDF now defines the full implementation plan and bec
 \paragraph{2026-05-13 11:55 PM EDT scan update} Queue-only owner sync consumed \texttt{violin 1} windows \texttt{*1530-1620} and \texttt{*1620-1710}. The first was classified as \texttt{not\_violin\_or\_unclear}; the second was classified as \texttt{violin\_positive}. The follow-up active scan selected both samples, recorded 6 new active sub-intervals, and reports 100 sample results, 88 active-violin samples, 12 checked non-violin samples, 300 active sub-intervals, 2 h 22 min checked video, 2 h 12 min measured active practice, and a 197 h 40 min provisional archive estimate. The next chronological pending window is \texttt{violin 1} at \texttt{*1710-1800}. Exact weighted implementation progress is now 31.134 percent. Exact score windows and accepted long phrases remain at 0.
 \paragraph{2026-05-14 12:09 AM EDT scan update} Queue-only owner sync consumed \texttt{violin 1} windows \texttt{*1710-1800} and \texttt{*1800-1890}. Both were classified as \texttt{violin\_positive}. The follow-up active scan selected both samples, recorded 13 new active sub-intervals, and reports 102 sample results, 90 active-violin samples, 12 checked non-violin samples, 313 active sub-intervals, 2 h 25 min checked video, 2 h 15 min measured active practice, and a 197 h 59 min provisional archive estimate. The next chronological pending window is \texttt{violin 1} at \texttt{*1890-1980}. Exact weighted implementation progress is now 31.136 percent. Exact score windows and accepted long phrases remain at 0.
 \paragraph{2026-05-14 12:35 AM EDT scan update} Queue-only owner sync consumed \texttt{violin 1} windows \texttt{*1890-1980} and \texttt{*1980-2070}. Both were classified as \texttt{violin\_positive}. The follow-up active scan selected both samples, recorded 9 new active sub-intervals, and reports 104 sample results, 92 active-violin samples, 12 checked non-violin samples, 322 active sub-intervals, 2 h 28 min checked video, 2 h 18 min measured active practice, and a 198 h 18 min provisional archive estimate. The next chronological pending window is \texttt{violin 1} at \texttt{*2070-2160}. Exact weighted implementation progress is now 31.139 percent. Exact score windows and accepted long phrases remain at 0.
+\paragraph{2026-05-14 03:00 AM EDT scan update} Queue-only owner sync consumed \texttt{violin 1} windows \texttt{*2070-2160} and \texttt{*2160-2250}. Both were classified as \texttt{violin\_positive}. The follow-up active scan folded both samples into the checked ledger and reports 106 sample results, 94 active-violin samples, 12 checked non-violin samples, 331 active sub-intervals, 2 h 31 min checked video, 2 h 21 min measured active practice, and a 198 h 36 min provisional archive estimate. The next chronological pending window is \texttt{violin 1} at \texttt{*2250-2340}. Exact weighted implementation progress is now 31.142 percent. Exact score windows and accepted long phrases remain at 0.
 
 \subsection{Definition of solved}
 
@@ -391,7 +392,7 @@ Acceptance for this phase is procedural: after every Curtis change that affects 
 Milestone & Target & Acceptance evidence & Status \\
 \midrule
 M0 & Paper tracker & Roadmap is included in the Curtis paper PDF and becomes the update record. & Complete in this revision. \\
-M1 & Practice time & All 213 h 23 min of strict-ledger video has active-practice coverage and per-day totals. & Active-scan route deployed; live state now has 322 active intervals from 104 sample results, 2 h 28 min checked video, 2 h 18 min measured active practice, and 250 queued windows; full chronological scan still pending. \\
+M1 & Practice time & All 213 h 23 min of strict-ledger video has active-practice coverage and per-day totals. & Active-scan route deployed; live state now has 331 active intervals from 106 sample results, 2 h 31 min checked video, 2 h 21 min measured active practice, and 250 queued windows; full chronological scan still pending. \\
 M2 & Score truth & Scherzo-Tarantelle has verified symbolic notes and score coordinates. & Pending. \\
 M3 & One-note anchor & A displayed A from audio is matched to a verified score-side A, with no wrong-note crop. & Pending. \\
 M4 & Short sequence & Three-to-five played notes align to exact score notes and render with local audio/video. & Pending. \\
@@ -462,11 +463,13 @@ The 2026-05-14 12:09 AM EDT implementation pass continued M1. The queue-only syn
 
 The 2026-05-14 12:35 AM EDT implementation pass continued M1. The queue-only sync consumed \texttt{violin 1} windows \texttt{*1890-1980} and \texttt{*1980-2070}; both became violin-positive source evidence. The deployed active-practice scan folded both into the checked ledger. Live state now reports 31.139 percent exact weighted implementation completion, 2 h 28 min checked video out of 213 h 23 min, 2 h 18 min measured active practice, 104 sample results, 92 active-violin samples, 12 checked non-violin samples, 322 active intervals, and 250 queued windows. This is real practice-time coverage progress only. Curtis still has 0 accepted exact score windows and 0 accepted long phrases.
 
+The 2026-05-14 03:00 AM EDT implementation pass continued M1. The queue-only sync consumed \texttt{violin 1} windows \texttt{*2070-2160} and \texttt{*2160-2250}; both became violin-positive source evidence. The deployed active-practice scan folded both into the checked ledger. Live state now reports 31.142 percent exact weighted implementation completion, 2 h 31 min checked video out of 213 h 23 min, 2 h 21 min measured active practice, 106 sample results, 94 active-violin samples, 12 checked non-violin samples, 331 active intervals, and 250 queued windows. This is real practice-time coverage progress only. Curtis still has 0 accepted exact score windows and 0 accepted long phrases.
+
 The remaining M1 work is continuing the low-cost media pass over every unmeasured strict-ledger video in chronological windows, then replacing the sample-biased estimate with full-archive checked intervals. The remaining M10 work is the larger benchmark suite for repeated notes, arpeggios, fast runs, score-free exercises, score-coordinate truth, accepted notation/media completeness, and practice-time accounting regressions.
 
 The next coding pass should:
 \begin{enumerate}
-    \item keep running queue-only owner-media sync against the active-scan queue, starting with \texttt{violin 1} at \texttt{*2070-2160};
+    \item keep running queue-only owner-media sync against the active-scan queue, starting with \texttt{violin 1} at \texttt{*2250-2340};
     \item rerun the active-practice scan after those uploads and record checked, active, and pending totals;
     \item keep every scan run recorded in this PDF with checked windows, active intervals, pending windows, and failures;
     \item add regression tests using real rejected score-note cases, accepted audio-note anchors, and practice-time caps;
