@@ -297,6 +297,12 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertEqual(completion["referencePhraseCandidateTopSequence"], "D D D# D D A# G")
         self.assertEqual(completion["sourceVerificationTargetCount"], 1)
         self.assertEqual(completion["sourceVerificationTargetTopSequence"], "D D D# D D A# G")
+        self.assertEqual(completion["sourceVerificationTargetCheckedCount"], 1)
+        self.assertEqual(completion["sourceVerificationTargetVerifiedCount"], 0)
+        self.assertTrue(completion["sourceVerificationTargetTopChecked"])
+        self.assertFalse(completion["sourceVerificationTargetTopVerified"])
+        self.assertEqual(completion["sourceVerificationTargetTopStatus"], "source_score_sequence_not_found")
+        self.assertEqual(completion["sourceVerificationTargetTopBestSourceOverlap"], 1)
         self.assertEqual(completion["longPhraseAcceptedCount"], 0)
         phrase_card = next(item for item in completion["implementationCurrent"] if item["label"] == "Phrase candidates")
         self.assertEqual(phrase_card["value"], "1")
@@ -304,8 +310,14 @@ class TranscriptionCompletionTests(unittest.TestCase):
         source_card = next(item for item in completion["implementationCurrent"] if item["label"] == "Source target")
         self.assertEqual(source_card["value"], "7")
         self.assertEqual(source_card["detail"], "D D D# D D A# G")
+        check_card = next(item for item in completion["implementationCurrent"] if item["label"] == "Target check")
+        self.assertEqual(check_card["value"], "0/1")
+        self.assertEqual(check_card["detail"], "1/7 source overlap")
         self.assertEqual(completion["sourceVerificationTargets"][0]["status"], "source_verification_required")
         self.assertIn("not accepted score evidence", completion["sourceVerificationTargets"][0]["limit"])
+        self.assertEqual(completion["sourceVerificationTargets"][0]["sourceScoreCheckStatus"], "source_score_sequence_not_found")
+        self.assertEqual(completion["sourceVerificationTargets"][0]["sourceScoreBestOverlap"], 1)
+        self.assertEqual(completion["sourceVerificationTargets"][0]["sourceScoreReferenceSequence"], "D C A# D C A# D")
 
     def test_source_verification_targets_require_long_local_unverified_runs(self):
         daily_records = {
