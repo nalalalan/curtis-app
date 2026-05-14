@@ -286,6 +286,7 @@ def score_map_candidate_audit(target: dict[str, Any]) -> dict[str, Any]:
     data = _read_json_path(path_value)
     glyphs = data.get("candidateGlyphs") if isinstance(data.get("candidateGlyphs"), list) else []
     note_hypotheses = data.get("noteHypotheses") if isinstance(data.get("noteHypotheses"), list) else []
+    review_packets = data.get("reviewPackets") if isinstance(data.get("reviewPackets"), list) else []
     staff_groups = data.get("staffGroups") if isinstance(data.get("staffGroups"), list) else []
     accepted = bool(data.get("acceptedEvidence"))
     count = int(data.get("candidateGlyphCount") or len(glyphs) or 0)
@@ -303,6 +304,7 @@ def score_map_candidate_audit(target: dict[str, Any]) -> dict[str, Any]:
         "scoreMapNoteHypothesisCount": note_hypothesis_count,
         "scoreMapNoteHypothesisStaffCount": note_hypothesis_staff_count,
         "scoreMapNoteHypothesisSequencePreview": str(data.get("noteHypothesisSequencePreview") or ""),
+        "scoreMapReviewPacketCount": int(data.get("reviewPacketCount") or len(review_packets) or 0),
         "scoreMapCandidatesAccepted": accepted,
         "scoreMapCandidatePath": path_value,
         "scoreMapCandidateSourcePage": data.get("sourcePdfPage") or 0,

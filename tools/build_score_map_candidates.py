@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw
 from scipy import ndimage
 
 
@@ -51,6 +51,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--source-title", default="", help="Human title for the source score.")
     parser.add_argument("--dpi", type=int, default=300, help="Render DPI.")
     parser.add_argument("--key-fifths", type=int, default=-2, help="Key signature fifths for pitch hypotheses.")
+    parser.add_argument(
+        "--review-output-dir",
+        default="",
+        help="Optional directory for staff-level source-review packet images.",
+    )
     return parser.parse_args()
 
 
@@ -129,6 +134,37 @@ def staff_groups_from_runs(runs: list[tuple[int, int, float]]) -> list[dict[str,
             }
         )
     return groups
+
+
+def merged_staff_groups(binary: np.ndarray) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    for threshold_fraction in (0.1, 0.12, 0.15, 0.2):
+        candidates.extend(staff_groups_from_runs(row_line_runs(binary, threshold_fraction)))
+    candidates.sort(key=lambda item: float(item["lineCenters"][0]))
+    merged: list[dict[str, Any]] = []
+    for candidate in candidates:
+        candidate_top = float(candidate["lineCenters"][0])
+        duplicate_index = next(
+            (
+                index
+                for index, existing in enumerate(merged)
+                if abs(candidate_top - float(existing["lineCenters"][0])) < max(35.0, float(existing["lineGap"]) * 1.6)
+            ),
+            None,
+        )
+        if duplicate_index is None:
+            merged.append(candidate)
+            continue
+        existing = merged[duplicate_index]
+        existing_gap = float(existing["lineGap"])
+        candidate_gap = float(candidate["lineGap"])
+        existing_gap_error = abs(existing_gap - round(existing_gap))
+        candidate_gap_error = abs(candidate_gap - round(candidate_gap))
+        if candidate_gap_error < existing_gap_error:
+            merged[duplicate_index] = candidate
+    for index, staff in enumerate(sorted(merged, key=lambda item: float(item["lineCenters"][0])), start=1):
+        staff["staffId"] = index
+    return merged
 
 
 def candidate_glyphs_for_staff(binary: np.ndarray, staff: dict[str, Any]) -> list[dict[str, Any]]:
@@ -244,6 +280,69 @@ def note_hypotheses_from_glyphs(glyphs: list[dict[str, Any]], key_fifths: int) -
     return hypotheses
 
 
+def web_path_for(path: Path) -> str:
+    try:
+        relative = path.resolve().relative_to(PROJECT_ROOT.resolve())
+    except ValueError:
+        return ""
+    return "/" + relative.as_posix()
+
+
+def review_packets_for_staffs(
+    image: Image.Image,
+    staff_groups: list[dict[str, Any]],
+    note_hypotheses: list[dict[str, Any]],
+    output_dir_value: str,
+    source_asset_id: str,
+    source_page: int,
+) -> list[dict[str, Any]]:
+    if not output_dir_value:
+        return []
+    output_dir = resolve_path(output_dir_value)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    packets: list[dict[str, Any]] = []
+    image_rgb = image.convert("RGB")
+    image_width, image_height = image_rgb.size
+    for staff in staff_groups:
+        staff_id = int(staff["staffId"])
+        line_centers = [float(value) for value in staff["lineCenters"]]
+        line_gap = float(staff["lineGap"])
+        top = max(0, int(line_centers[0] - line_gap * 4.5))
+        bottom = min(image_height, int(line_centers[-1] + line_gap * 5.0))
+        crop = image_rgb.crop((0, top, image_width, bottom))
+        draw = ImageDraw.Draw(crop)
+        packet_hypotheses = [
+            item
+            for item in note_hypotheses
+            if isinstance(item, dict) and int(item.get("staffId") or 0) == staff_id
+        ]
+        for index, hypothesis in enumerate(packet_hypotheses, start=1):
+            bbox = hypothesis.get("bbox") if isinstance(hypothesis.get("bbox"), dict) else {}
+            x0 = int(bbox.get("x") or 0)
+            y0 = int(bbox.get("y") or 0) - top
+            x1 = x0 + int(bbox.get("width") or 0)
+            y1 = y0 + int(bbox.get("height") or 0)
+            draw.rectangle((x0 - 3, y0 - 3, x1 + 3, y1 + 3), outline=(150, 51, 42), width=3)
+            label = f"{index}:{hypothesis.get('pitchClassHypothesis') or ''}"
+            draw.rectangle((x0 - 3, max(0, y0 - 22), x0 + 8 * len(label) + 8, max(18, y0 - 3)), fill=(255, 255, 255))
+            draw.text((x0, max(0, y0 - 20)), label, fill=(22, 32, 29))
+        safe_asset = source_asset_id or "score"
+        output_path = output_dir / f"{safe_asset}-page{source_page}-staff{staff_id}-review.png"
+        crop.save(output_path)
+        packets.append(
+            {
+                "staffId": staff_id,
+                "sourcePdfPage": source_page,
+                "localPath": str(output_path.relative_to(PROJECT_ROOT)),
+                "imageUrl": web_path_for(output_path),
+                "noteHypothesisCount": len(packet_hypotheses),
+                "status": "source_review_packet_ready",
+                "limit": "Review packet only; boxed hypotheses are not accepted score evidence until source-reviewed into MusicXML.",
+            }
+        )
+    return packets
+
+
 def build_candidate_map(args: argparse.Namespace) -> dict[str, Any]:
     pdf_path = resolve_path(args.pdf)
     if not pdf_path.exists():
@@ -253,7 +352,7 @@ def build_candidate_map(args: argparse.Namespace) -> dict[str, Any]:
         image = Image.open(rendered_path).convert("L")
         array = np.array(image)
         binary = array < 180
-        staff_groups = staff_groups_from_runs(row_line_runs(binary))
+        staff_groups = merged_staff_groups(binary)
         glyphs: list[dict[str, Any]] = []
         for staff in staff_groups:
             staff_glyphs = candidate_glyphs_for_staff(binary, staff)
@@ -266,8 +365,16 @@ def build_candidate_map(args: argparse.Namespace) -> dict[str, Any]:
             for item in note_hypotheses
             if str(item.get("pitchClassHypothesis") or "").strip()
         ][:80]
+        review_packets = review_packets_for_staffs(
+            image,
+            staff_groups,
+            note_hypotheses,
+            args.review_output_dir,
+            args.source_asset_id,
+            args.page,
+        )
         return {
-            "schema": "curtis_score_map_candidates_v2",
+            "schema": "curtis_score_map_candidates_v3",
             "status": "candidate_not_accepted",
             "acceptedEvidence": False,
             "sourceAssetId": args.source_asset_id,
@@ -277,7 +384,7 @@ def build_candidate_map(args: argparse.Namespace) -> dict[str, Any]:
             "dpi": args.dpi,
             "keyFifths": args.key_fifths,
             "generatedAt": datetime.now(timezone.utc).isoformat(),
-            "extractionMethod": "staff-line-connected-glyph-and-notehead-hypothesis-queue-v2",
+            "extractionMethod": "staff-line-connected-glyph-notehead-hypothesis-review-packet-queue-v3",
             "verificationLimit": (
                 "These are unverified score glyph coordinates from the local score page. "
                 "Notehead hypotheses use staff position and key signature only. They must be "
@@ -289,12 +396,14 @@ def build_candidate_map(args: argparse.Namespace) -> dict[str, Any]:
             "noteHypothesisCount": len(note_hypotheses),
             "noteHypothesisStaffCount": note_hypothesis_staves,
             "noteHypothesisSequencePreview": " ".join(sequence_preview),
+            "reviewPacketCount": len(review_packets),
             "staffGroups": staff_groups,
             "candidateGlyphs": glyphs,
             "noteHypotheses": note_hypotheses,
+            "reviewPackets": review_packets,
             "nextVerificationStep": (
-                "Review the notehead hypotheses against the local IMSLP PDF, convert verified notes into "
-                "MusicXML, then run source-target matching against verified symbolic notes only."
+                "Use the staff-level review packets to review notehead hypotheses against the local IMSLP PDF, "
+                "convert verified notes into MusicXML, then run source-target matching against verified symbolic notes only."
             ),
         }
     finally:
@@ -313,7 +422,7 @@ def main() -> None:
     print(
         f"Wrote {data['candidateGlyphCount']} unaccepted score glyph candidates "
         f"and {data['noteHypothesisCount']} unaccepted note hypotheses "
-        f"across {data['staffCount']} staves to {output}"
+        f"across {data['staffCount']} staves with {data['reviewPacketCount']} review packets to {output}"
     )
 
 

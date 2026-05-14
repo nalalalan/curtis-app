@@ -10,6 +10,8 @@ node_modules/
 !assets/
 !assets/score/
 !assets/score/*.png
+!assets/score/review/
+!assets/score/review/*.png
 .runtime/
 verification/
 __pycache__/

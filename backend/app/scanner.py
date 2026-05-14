@@ -1268,6 +1268,7 @@ def source_target_score_check(match: dict[str, Any], sequence: str) -> dict[str,
         "sourceScoreCandidateStaffCount": int(candidate_audit.get("scoreMapCandidateStaffCount") or 0),
         "sourceScoreNoteHypothesisCount": int(candidate_audit.get("scoreMapNoteHypothesisCount") or 0),
         "sourceScoreNoteHypothesisStaffCount": int(candidate_audit.get("scoreMapNoteHypothesisStaffCount") or 0),
+        "sourceScoreReviewPacketCount": int(candidate_audit.get("scoreMapReviewPacketCount") or 0),
         "sourceScoreCandidateStatus": str(candidate_audit.get("status") or ""),
         "sourceScoreReferenceSequence": " ".join(source_values),
         "sourceScoreBestOverlapSequence": " ".join(source_values[reference_start:reference_end]),
@@ -1479,6 +1480,7 @@ def score_reference_audit_totals(daily_records: dict[str, Any]) -> dict[str, int
     score_map_candidate_staves_by_source: dict[str, int] = {}
     score_map_note_hypotheses_by_source: dict[str, int] = {}
     score_map_note_hypothesis_staves_by_source: dict[str, int] = {}
+    score_map_review_packets_by_source: dict[str, int] = {}
     for record in records:
         if not isinstance(record, dict):
             continue
@@ -1511,6 +1513,10 @@ def score_reference_audit_totals(daily_records: dict[str, Any]) -> dict[str, int
                 score_map_note_hypothesis_staves_by_source.get(source_id, 0),
                 int(audit.get("scoreMapNoteHypothesisStaffCount") or 0),
             )
+            score_map_review_packets_by_source[source_id] = max(
+                score_map_review_packets_by_source.get(source_id, 0),
+                int(audit.get("scoreMapReviewPacketCount") or 0),
+            )
         for target in targets:
             if not isinstance(target, dict):
                 continue
@@ -1541,6 +1547,10 @@ def score_reference_audit_totals(daily_records: dict[str, Any]) -> dict[str, int
                     score_map_note_hypothesis_staves_by_source.get(source_id, 0),
                     int(target.get("scoreMapNoteHypothesisStaffCount") or 0),
                 )
+                score_map_review_packets_by_source[source_id] = max(
+                    score_map_review_packets_by_source.get(source_id, 0),
+                    int(target.get("scoreMapReviewPacketCount") or 0),
+                )
             if asset_id and target.get("sourcePdfLocalReady"):
                 local_source_assets.add(asset_id)
     return {
@@ -1551,6 +1561,7 @@ def score_reference_audit_totals(daily_records: dict[str, Any]) -> dict[str, int
         "scoreMapCandidateStaffCount": sum(score_map_candidate_staves_by_source.values()),
         "scoreMapNoteHypothesisCount": sum(score_map_note_hypotheses_by_source.values()),
         "scoreMapNoteHypothesisStaffCount": sum(score_map_note_hypothesis_staves_by_source.values()),
+        "scoreMapReviewPacketCount": sum(score_map_review_packets_by_source.values()),
     }
 
 
@@ -1615,6 +1626,7 @@ def build_transcription_completion(
     score_map_candidate_staff_count = int(score_audit_totals.get("scoreMapCandidateStaffCount") or 0)
     score_map_note_hypothesis_count = int(score_audit_totals.get("scoreMapNoteHypothesisCount") or 0)
     score_map_note_hypothesis_staff_count = int(score_audit_totals.get("scoreMapNoteHypothesisStaffCount") or 0)
+    score_map_review_packet_count = int(score_audit_totals.get("scoreMapReviewPacketCount") or 0)
     benchmark_count = int(evidence_progress.get("benchmarkCount") or 0)
     rejected_score_count = int(evidence_progress.get("wrongScoreNoteRegressionCount") or 0)
     repertoire_entries = repertoire_evidence.get("entries") if isinstance(repertoire_evidence.get("entries"), list) else []
@@ -1715,11 +1727,12 @@ def build_transcription_completion(
             + (1 if symbolic_score_source_snippet_count else 0)
             + (1 if score_map_candidate_glyph_count else 0)
             + (1.5 if score_map_note_hypothesis_count else 0)
+            + (2.5 if score_map_review_packet_count else 0)
             + (1 if source_target_checked else 0)
             + (4 if score_verified_count else 0),
-            f"{score_target_count} score targets / {local_score_source_count} local PDFs / {symbolic_score_note_count} verified symbolic notes / {score_map_candidate_glyph_count} unaccepted score glyph candidates / {score_map_note_hypothesis_count} unaccepted note hypotheses / {source_target_checked} source checks / {score_verified_count} exact locations",
-            "Source-confirmed pieces can seed score targets, pending source targets are checked before promotion, and local score glyphs now produce unaccepted notehead hypotheses for faster MusicXML review.",
-            "Scherzo-Tarantelle note hypotheses still need source review into verified MusicXML notes and rendered score coordinates.",
+            f"{score_target_count} score targets / {local_score_source_count} local PDFs / {symbolic_score_note_count} verified symbolic notes / {score_map_candidate_glyph_count} unaccepted score glyph candidates / {score_map_note_hypothesis_count} unaccepted note hypotheses / {score_map_review_packet_count} review packets / {source_target_checked} source checks / {score_verified_count} exact locations",
+            "Source-confirmed pieces can seed score targets, pending source targets are checked before promotion, and local score glyphs now produce staff-level review packets for faster MusicXML review.",
+            "Scherzo-Tarantelle review packets still need source review into verified MusicXML notes and rendered score coordinates.",
         ),
         roadmap_gate(
             "single-note-anchor",
@@ -1803,7 +1816,7 @@ def build_transcription_completion(
     implementation_summary = (
         "Practice-time scanning is working. The long-phrase path now has a local source score PDF and still counts only verified score/audio phrase matches."
         if not measure_match_count
-        else "Practice-time scanning is working. The long-phrase path now turns its first source-backed score/audio phrase into score-coordinate heat-map evidence, isolates source-verification targets, queues score glyphs for MusicXML review, and still treats full long-phrase transcription as incomplete."
+        else "Practice-time scanning is working. The long-phrase path now turns its first source-backed score/audio phrase into score-coordinate heat-map evidence, isolates source-verification targets, and builds staff review packets for MusicXML verification while still treating full long-phrase transcription as incomplete."
         if long_phrase_count
         else "Practice-time scanning is working. The long-phrase path now has a source-backed score/audio measure match and still separates measure progress from solved long phrases."
     )
@@ -1837,6 +1850,11 @@ def build_transcription_completion(
             "label": "Score note queue",
             "value": str(score_map_note_hypothesis_count),
             "detail": f"{score_map_note_hypothesis_staff_count} staves pending",
+        },
+        {
+            "label": "Score review packets",
+            "value": str(score_map_review_packet_count),
+            "detail": f"{score_map_note_hypothesis_count} notes queued",
         },
         {
             "label": "Long phrases",
@@ -1885,11 +1903,12 @@ def build_transcription_completion(
         "Failed broad transcription is withheld from notation.",
         "Local score-glyph candidates are queued for verification without being accepted as score evidence.",
         "Likely score noteheads now receive unaccepted staff-position pitch hypotheses before MusicXML review.",
+        "Staff-level source review packets now map queued hypotheses back to the scanned score.",
     ]
     remaining_summary = [
         "Finish chronological active-practice coverage across the full archive.",
         "Build benchmark clips for known notes, fast runs, arpeggios, rhythm, and score boxes.",
-        "Convert queued score-note hypotheses into verified MusicXML notes before promoting source targets from reference-audio candidates to accepted score evidence.",
+        "Use review packets to convert queued score-note hypotheses into verified MusicXML notes before promoting source targets from reference-audio candidates to accepted score evidence.",
         "Replace short fragments with accurate phrase-level note and rhythm extraction.",
         "Align accepted phrases to score locations or score-free repeated exercise patterns.",
         "Generate heat maps and Curtis-level observations only from accepted evidence.",
@@ -1913,7 +1932,7 @@ def build_transcription_completion(
             "phase": "3",
             "label": "Verified score truth",
             "status": "partial" if local_score_source_count or symbolic_score_note_count or score_verified_count else "pending",
-            "evidence": f"{score_target_count} score targets / {local_score_source_count} local PDFs / {symbolic_score_note_count} verified symbolic notes / {symbolic_score_source_snippet_count} source snippets / {score_map_candidate_glyph_count} candidate glyphs / {score_map_note_hypothesis_count} note hypotheses / {source_target_checked} source checks / {score_verified_count} exact score locations",
+            "evidence": f"{score_target_count} score targets / {local_score_source_count} local PDFs / {symbolic_score_note_count} verified symbolic notes / {symbolic_score_source_snippet_count} source snippets / {score_map_candidate_glyph_count} candidate glyphs / {score_map_note_hypothesis_count} note hypotheses / {score_map_review_packet_count} review packets / {source_target_checked} source checks / {score_verified_count} exact score locations",
             "target": "Parsed score notes plus coordinates; candidate glyphs stay unaccepted until source verification converts them into MusicXML.",
         },
         {
@@ -1998,6 +2017,7 @@ def build_transcription_completion(
         "scoreMapCandidateStaffCount": score_map_candidate_staff_count,
         "scoreMapNoteHypothesisCount": score_map_note_hypothesis_count,
         "scoreMapNoteHypothesisStaffCount": score_map_note_hypothesis_staff_count,
+        "scoreMapReviewPacketCount": score_map_review_packet_count,
         "pitchSequenceGroupCount": score_sequence_count,
         "checkedVideoLabel": checked_label if checked_label != "0s" else "",
         "uploadedVideoLabel": uploaded_label if uploaded_label != "unknown" else "",
@@ -2017,7 +2037,7 @@ def build_transcription_completion(
             else "Extend the accepted source-backed measure into longer phrases and score-coordinate heat maps."
             if not long_phrase_count
             else (
-                f"Verify queued IMSLP score-note hypotheses into MusicXML before promoting {source_target_sequence}; current source overlap is {source_target_best_overlap}/{source_target_note_count}."
+                f"Use IMSLP staff review packets to verify score-note hypotheses into MusicXML before promoting {source_target_sequence}; current source overlap is {source_target_best_overlap}/{source_target_note_count}."
                 if source_target_checked and not source_target_verified and source_target_sequence
                 else f"Verify the {source_target_note_count}-note source target {source_target_sequence} against the local IMSLP score, then promote only if the score notes and crop match."
             )
