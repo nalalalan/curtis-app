@@ -41,7 +41,7 @@ from .settings import (
     SERVICE_NAME,
 )
 from .state import append_run, load_state, save_state, utc_now
-from .daily_records import build_daily_records, build_repertoire_evidence
+from .daily_records import build_daily_records, build_repertoire_evidence, exact_score_location_ready
 from .evidence_ledger import build_active_practice_coverage, build_evidence_progress
 from .study_packets import build_practice_study, build_practice_totals
 
@@ -1088,6 +1088,67 @@ def score_location_verified_count(daily_records: dict[str, Any]) -> int:
     return total
 
 
+def match_has_local_media(match: dict[str, Any]) -> bool:
+    clip = match.get("clip") if isinstance(match.get("clip"), dict) else {}
+    if any(str(clip.get(key) or "").strip() for key in ("mediaUrl", "audioUrl", "videoUrl", "localVideoUrl", "localAudioUrl")):
+        return True
+    transcription = match.get("transcription") if isinstance(match.get("transcription"), dict) else {}
+    return bool(str(transcription.get("sampleId") or "").strip())
+
+
+def accepted_long_phrase_match(match: dict[str, Any]) -> bool:
+    if not isinstance(match, dict):
+        return False
+    if not match.get("scoreLocationVerified"):
+        return False
+    score = match.get("score") if isinstance(match.get("score"), dict) else {}
+    if not any(
+        exact_score_location_ready(value)
+        for value in (
+            match.get("scoreLocationStatus"),
+            match.get("scoreSnippetStatus"),
+            score.get("cropStatus"),
+            match.get("status"),
+        )
+    ):
+        return False
+    matched_note_run = int(match.get("matchedNoteRun") or 0)
+    minimum_note_run = max(5, int(match.get("minimumMatchedNoteRun") or 0))
+    if matched_note_run < minimum_note_run:
+        return False
+    if not match_has_local_media(match):
+        return False
+    status = str(match.get("status") or "").strip().lower()
+    if "pitch_anchor" in status:
+        return False
+    return True
+
+
+def accepted_long_phrase_count(daily_records: dict[str, Any]) -> int:
+    records = daily_records.get("records") if isinstance(daily_records.get("records"), list) else []
+    accepted: set[tuple[str, str, str, str, int, int]] = set()
+    for record in records:
+        practice_day = str(record.get("practiceDay") or record.get("date") or "")
+        groups = record.get("matchGroups") if isinstance(record.get("matchGroups"), list) else []
+        for match in groups:
+            if not accepted_long_phrase_match(match):
+                continue
+            score = match.get("score") if isinstance(match.get("score"), dict) else {}
+            transcription = match.get("transcription") if isinstance(match.get("transcription"), dict) else {}
+            detected = match.get("detectedSeries") if isinstance(match.get("detectedSeries"), dict) else {}
+            accepted.add(
+                (
+                    practice_day,
+                    str(transcription.get("sampleId") or detected.get("sampleId") or ""),
+                    str(score.get("assetId") or match.get("pieceTitle") or ""),
+                    str(match.get("scoreSequenceLabel") or score.get("measureLabel") or ""),
+                    int(match.get("referenceStart") or 0),
+                    int(match.get("referenceEnd") or 0),
+                )
+            )
+    return len(accepted)
+
+
 def roadmap_gate(
     gate_id: str,
     label: str,
@@ -1145,7 +1206,7 @@ def build_transcription_completion(
     rejected_score_count = int(evidence_progress.get("wrongScoreNoteRegressionCount") or 0)
     repertoire_entries = repertoire_evidence.get("entries") if isinstance(repertoire_evidence.get("entries"), list) else []
     score_target_count = int(training.get("scoreReferenceTargetCount") or training.get("sourceConfirmedScoreTargetCount") or 0)
-    long_phrase_count = 0
+    long_phrase_count = accepted_long_phrase_count(daily_records)
 
     gates = [
         roadmap_gate(
@@ -1281,7 +1342,7 @@ def build_transcription_completion(
     active_label = active_practice_coverage.get("activePracticeLabel") or "pending"
     estimate_label = active_practice_coverage.get("estimatedTotalPracticeLabel") or "pending"
     implementation_summary = (
-        "Practice-time scanning is working. Long-phrase transcription, verified score alignment, and score-coordinate heat maps are still open."
+        "Practice-time scanning is working. The long-phrase acceptance path now counts verified measure-level score/audio matches only."
     )
     implementation_current = [
         {
@@ -1310,6 +1371,11 @@ def build_transcription_completion(
             "detail": "accepted",
         },
         {
+            "label": "Measure target",
+            "value": "ready" if long_phrase_count else "0/1",
+            "detail": "verified score/audio phrase",
+        },
+        {
             "label": "Scan queue",
             "value": str(pending_window_count),
             "detail": f"{active_interval_count} active intervals",
@@ -1324,7 +1390,7 @@ def build_transcription_completion(
     remaining_summary = [
         "Finish chronological active-practice coverage across the full archive.",
         "Build benchmark clips for known notes, fast runs, arpeggios, rhythm, and score boxes.",
-        "Verify symbolic score notes and score coordinates before any score crop can render.",
+        "Verify one symbolic score measure, then mine existing detected series for the first measure-level score/audio phrase.",
         "Replace short fragments with accurate phrase-level note and rhythm extraction.",
         "Align accepted phrases to score locations or score-free repeated exercise patterns.",
         "Generate heat maps and Curtis-level observations only from accepted evidence.",
@@ -1353,34 +1419,41 @@ def build_transcription_completion(
         },
         {
             "phase": "4",
+            "label": "One-measure acceleration gate",
+            "status": "complete" if long_phrase_count else "blocked",
+            "evidence": f"{long_phrase_count} accepted long phrases / {score_verified_count} exact score locations",
+            "target": "First accepted measure: exact symbolic score notes, local audio/video, and matching transcription.",
+        },
+        {
+            "phase": "5",
             "label": "Accurate phrase transcription",
             "status": "partial" if transcriptions else "pending",
             "evidence": f"{len(transcriptions)} transcription records / {long_phrase_count} accepted long phrases",
             "target": "10-30 second passages with notes, rests, rhythm, repeats, and audio agreement.",
         },
         {
-            "phase": "5",
+            "phase": "6",
             "label": "Publication-quality notation",
             "status": "partial" if transcribed_record_count else "pending",
             "evidence": f"{transcribed_record_count} notation-ready daily records",
             "target": "Treble-clef score rendering from accepted notes only, not hand-positioned approximations.",
         },
         {
-            "phase": "6",
+            "phase": "7",
             "label": "Score and exercise alignment",
             "status": "partial" if score_sequence_count else "pending",
             "evidence": f"{score_sequence_count} pitch-sequence groups / {score_verified_count} exact score locations",
             "target": "Accepted phrase groups paired with original score snippets or repeated exercise patterns.",
         },
         {
-            "phase": "7",
+            "phase": "8",
             "label": "Heat maps and observations",
             "status": "blocked" if not score_verified_count else "partial",
             "evidence": "Score-coordinate heat maps wait for accepted phrase locations.",
             "target": "Practice density, repetition density, problem density, and improvement layers.",
         },
         {
-            "phase": "8",
+            "phase": "9",
             "label": "Regression lock",
             "status": "partial" if rejected_score_count or benchmark_count else "pending",
             "evidence": "Current tests block wrong-note score evidence and non-playing practice credit.",
@@ -1418,9 +1491,9 @@ def build_transcription_completion(
         "remainingItems": [item["remaining"] for item in gates if item["points"] < item["weight"]],
         "gates": gates,
         "nextAction": (
-            "Queue-only owner sync from the active-scan pending list, then rerun active-practice scan."
-            if pending_window_count
-            else "Expand accepted phrase transcription only after active coverage and score truth gates advance."
+            "Verify one symbolic score measure for the active piece, then run the existing phrase matcher over hidden detected series."
+            if not long_phrase_count
+            else "Extend the accepted measure into longer phrases and score-coordinate heat maps."
         ),
     }
 
