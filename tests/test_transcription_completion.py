@@ -106,6 +106,15 @@ class TranscriptionCompletionTests(unittest.TestCase):
                             "transcription": {"sampleId": "sample-phrase"},
                         }
                     ],
+                    "heatMap": {
+                        "fragments": [
+                            {
+                                "status": "score_location_verified",
+                                "label": "m. 12",
+                                "scoreImageUrl": "/assets/score/m12.png",
+                            }
+                        ]
+                    },
                 }
             ],
         }
@@ -138,8 +147,10 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertEqual(completion["exactScoreAlignedWindowCount"], 1)
         self.assertEqual(completion["longPhraseAcceptedCount"], 1)
         self.assertEqual(completion["acceptedMeasureMatchCount"], 1)
+        self.assertEqual(completion["scoreHeatmapFragmentCount"], 1)
         self.assertTrue(any(item["label"] == "Long phrases" and item["value"] == "1" for item in completion["implementationCurrent"]))
         self.assertTrue(any(item["label"] == "Measure target" and item["value"] == "1/1" for item in completion["implementationCurrent"]))
+        self.assertTrue(any(item["label"] == "Score heat map" and item["value"] == "1" for item in completion["implementationCurrent"]))
         self.assertGreaterEqual(completion["completionExactPercent"], 45)
 
     def test_local_source_score_pdf_advances_score_truth_without_accepting_phrase(self):

@@ -1294,6 +1294,24 @@ def accepted_long_phrase_count(daily_records: dict[str, Any]) -> int:
     return len(accepted)
 
 
+def score_heatmap_fragment_count(daily_records: dict[str, Any]) -> int:
+    records = daily_records.get("records") if isinstance(daily_records.get("records"), list) else []
+    accepted: set[tuple[str, str, str]] = set()
+    for record in records:
+        practice_day = str(record.get("practiceDay") or record.get("date") or "")
+        heat_map = record.get("heatMap") if isinstance(record.get("heatMap"), dict) else {}
+        fragments = heat_map.get("fragments") if isinstance(heat_map.get("fragments"), list) else []
+        for fragment in fragments:
+            if not isinstance(fragment, dict) or fragment.get("status") != "score_location_verified":
+                continue
+            label = str(fragment.get("label") or "").strip()
+            score_image = str(fragment.get("scoreImageUrl") or "").strip()
+            if not label or not score_image:
+                continue
+            accepted.add((practice_day, label, score_image))
+    return len(accepted)
+
+
 def score_reference_audit_totals(daily_records: dict[str, Any]) -> dict[str, int]:
     records = daily_records.get("records") if isinstance(daily_records.get("records"), list) else []
     local_source_assets: set[str] = set()
@@ -1406,6 +1424,7 @@ def build_transcription_completion(
     )
     long_phrase_count = accepted_long_phrase_count(daily_records)
     measure_match_count = accepted_measure_match_count(daily_records)
+    score_heatmap_count = score_heatmap_fragment_count(daily_records)
     phrase_candidate_count = reference_phrase_candidate_count(daily_records)
     phrase_candidate_top = reference_phrase_candidate_top(daily_records)
     phrase_candidate_sequence = str(phrase_candidate_top.get("sequence") or "")
@@ -1530,10 +1549,12 @@ def build_transcription_completion(
             "repeat-heatmap",
             "Repeat grouping and heat maps",
             3,
-            0.5 if score_sequence_count else 0,
-            "Heat-map scaffolds exist, but score-coordinate heat maps are not accepted.",
-            "Display density, repetition, problem, and improvement layers on verified score or pattern coordinates.",
-            "Score-coordinate heat maps require accepted phrase locations first.",
+            (0.5 if score_sequence_count else 0)
+            + (1.0 if score_heatmap_count else 0)
+            + min(1.5, long_phrase_count * 1.5),
+            f"{score_heatmap_count} score-coordinate heat-map fragments / {score_sequence_count} pitch-sequence groups",
+            "Verified score matches now become score-coordinate heat-map fragments.",
+            "Extend heat maps from one accepted phrase to repeated attempts, problem density, and improvement layers.",
         ),
         roadmap_gate(
             "repertoire-observation",
@@ -1562,7 +1583,7 @@ def build_transcription_completion(
     implementation_summary = (
         "Practice-time scanning is working. The long-phrase path now has a local source score PDF and still counts only verified score/audio phrase matches."
         if not measure_match_count
-        else "Practice-time scanning is working. The long-phrase path now has its first source-backed score/audio phrase and still treats full long-phrase transcription as incomplete."
+        else "Practice-time scanning is working. The long-phrase path now turns its first source-backed score/audio phrase into score-coordinate heat-map evidence and still treats full long-phrase transcription as incomplete."
         if long_phrase_count
         else "Practice-time scanning is working. The long-phrase path now has a source-backed score/audio measure match and still separates measure progress from solved long phrases."
     )
@@ -1596,6 +1617,11 @@ def build_transcription_completion(
             "label": "Measure target",
             "value": f"{min(measure_match_count, 1)}/1",
             "detail": "verified score/audio measure",
+        },
+        {
+            "label": "Score heat map",
+            "value": str(score_heatmap_count),
+            "detail": "verified fragments",
         },
         {
             "label": "Phrase candidates",
@@ -1675,8 +1701,8 @@ def build_transcription_completion(
         {
             "phase": "8",
             "label": "Heat maps and observations",
-            "status": "blocked" if not score_verified_count else "partial",
-            "evidence": "Score-coordinate heat maps wait for accepted phrase locations.",
+            "status": "partial" if score_heatmap_count else "blocked" if not score_verified_count else "partial",
+            "evidence": f"{score_heatmap_count} score-coordinate heat-map fragments",
             "target": "Practice density, repetition density, problem density, and improvement layers.",
         },
         {
@@ -1704,6 +1730,7 @@ def build_transcription_completion(
         "implementationPlan": implementation_plan,
         "longPhraseAcceptedCount": long_phrase_count,
         "acceptedMeasureMatchCount": measure_match_count,
+        "scoreHeatmapFragmentCount": score_heatmap_count,
         "referencePhraseCandidateCount": phrase_candidate_count,
         "exactScoreAlignedWindowCount": score_verified_count,
         "referencePhraseCandidateTop": phrase_candidate_top,
@@ -1729,7 +1756,7 @@ def build_transcription_completion(
             if not measure_match_count
             else "Extend the accepted source-backed measure into longer phrases and score-coordinate heat maps."
             if not long_phrase_count
-            else "Extend the accepted phrase into longer source-backed passages and score-coordinate heat maps."
+            else "Extend the accepted score-coordinate phrase into longer passages, repeated attempts, and problem-density layers."
         ),
     }
 

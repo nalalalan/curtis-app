@@ -256,6 +256,14 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual([item["note"] for item in record["matchGroups"][0]["scoreMatchedNotes"]], ["Bb4", "D5", "C5", "Bb4", "D5"])
         self.assertEqual(record["matchGroups"][0]["clip"]["localStartSeconds"], 0.0)
         self.assertEqual(record["matchGroups"][0]["clip"]["localEndSeconds"], 2.4)
+        self.assertEqual(record["heatMap"]["status"], "exact_score_location_verified")
+        self.assertEqual(record["heatMap"]["fragments"][0]["status"], "score_location_verified")
+        self.assertEqual(record["heatMap"]["fragments"][0]["label"], "mm. 2-4")
+        self.assertEqual(record["heatMap"]["fragments"][0]["scoreNotes"], ["Bb4", "D5", "C5", "Bb4", "D5"])
+        self.assertEqual(record["heatMap"]["fragments"][0]["scoreImageUrl"], "/assets/score/wieniawski-scherzo-tarantelle-opening-d-c-bb-d-c-bb-d-source.png")
+        self.assertEqual(record["heatMap"]["layers"][0]["status"], "ready")
+        self.assertIn("accepted clip maps to mm. 2-4", record["mainCurtisBlocker"])
+        self.assertEqual(record["clips"][0]["mediaUrl"], "/api/curtis/media/sample/Njh8_zq9_DM-1")
 
     def test_score_free_exercise_days_are_not_forced_into_score_matching(self):
         inventory = {

@@ -2455,6 +2455,24 @@ def problem_observations(
     if heat_fragments:
         fragment = heat_fragments[0]
         count = int(fragment.get("count") or 0)
+        if fragment.get("status") == "score_location_verified":
+            notes = " ".join(fragment.get("scoreNotes") or []) if isinstance(fragment.get("scoreNotes"), list) else ""
+            observations.append(
+                {
+                    "passage": fragment.get("label") or "score phrase",
+                    "category": "score alignment",
+                    "frequency": f"{count} matched clip{'s' if count != 1 else ''}",
+                    "trend": "not enough attempts to trend",
+                    "problem": (
+                        f"The accepted clip maps to {fragment.get('label') or 'the verified score phrase'}"
+                        + (f" with score notes {notes}." if notes else ".")
+                    ),
+                    "evidence": primary_clip,
+                    "transcriptionSnippet": notation[:24],
+                    "confidence": "score_location_verified",
+                    "curtisReadinessIssue": "This is accepted passage evidence, but the passage is still too short to claim long-phrase readiness.",
+                }
+            )
         if count >= 2:
             observations.append(
                 {
@@ -2604,6 +2622,59 @@ def heat_map_layers(heat_fragments: list[dict[str, Any]], notation: list[dict[st
             "items": [],
         },
     ]
+
+
+def score_match_heat_fragments(match_groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    grouped: dict[tuple[str, str, str], dict[str, Any]] = {}
+    for match in match_groups:
+        if not isinstance(match, dict) or not match.get("scoreLocationVerified"):
+            continue
+        status = str(match.get("status") or "").strip()
+        if status != "symbolic_score_phrase_match":
+            continue
+        score = match.get("score") if isinstance(match.get("score"), dict) else {}
+        clip = match.get("clip") if isinstance(match.get("clip"), dict) else {}
+        label = str(match.get("scoreSequenceLabel") or score.get("measureLabel") or "score phrase").strip()
+        piece = str(match.get("pieceTitle") or score.get("title") or "").strip()
+        score_image = str(score.get("imageUrl") or "").strip()
+        key = (piece, label, score_image)
+        entry = grouped.setdefault(
+            key,
+            {
+                "label": label,
+                "pieceTitle": piece,
+                "count": 0,
+                "seconds": 0.0,
+                "density": 1,
+                "intensity": 1,
+                "status": "score_location_verified",
+                "coordinateType": "score_phrase",
+                "scoreImageUrl": score_image,
+                "scoreNotes": [],
+                "detectedPitchClasses": "",
+                "matchedNoteRun": 0,
+                "clip": {},
+            },
+        )
+        entry["count"] = int(entry.get("count") or 0) + 1
+        entry["seconds"] = round(float(entry.get("seconds") or 0.0) + float(clip.get("durationSeconds") or 0.0), 3)
+        entry["matchedNoteRun"] = max(int(entry.get("matchedNoteRun") or 0), int(match.get("matchedNoteRun") or 0))
+        score_notes = [
+            str(note.get("note") or "").strip()
+            for note in (match.get("scoreMatchedNotes") if isinstance(match.get("scoreMatchedNotes"), list) else [])
+            if isinstance(note, dict) and str(note.get("note") or "").strip()
+        ]
+        if score_notes and not entry.get("scoreNotes"):
+            entry["scoreNotes"] = score_notes
+        detected = str(match.get("detectedPitchClassSequenceCompact") or match.get("detectedPitchClassSequence") or "").strip()
+        if detected and not entry.get("detectedPitchClasses"):
+            entry["detectedPitchClasses"] = detected
+        if clip and not entry.get("clip"):
+            entry["clip"] = clip
+    return sorted(
+        grouped.values(),
+        key=lambda item: (-int(item.get("count") or 0), -int(item.get("matchedNoteRun") or 0), str(item.get("label") or "")),
+    )
 
 
 def clips_for_day(
@@ -3254,12 +3325,6 @@ def build_daily_records(
             if active_seconds and not confirmed
             else "Heat map waits for practice locations to align to actual score sections."
         )
-        observations = (
-            problem_observations(notation, heat_fragments, clips, day_transcriptions, active_status)[:6]
-            if has_verified_transcription
-            else transcription_quality_observations(quality, [], clips)[:2]
-        )
-        blocker = main_curtis_blocker(observations)
         match_groups = []
         for match in score_sequence_matches:
             matched_series = matched_series_for_group(match)
@@ -3311,6 +3376,23 @@ def build_daily_records(
         elif pitch_anchor_groups:
             score_alignment_status = "pitch_anchor_match_pending_score_location"
             score_or_pattern_limit = "A played pitch exists in the confirmed target; exact sequence and measure alignment remain pending."
+        score_heat_fragments = score_match_heat_fragments(match_groups)
+        if score_heat_fragments:
+            heat_fragments = score_heat_fragments
+            score_clips = [
+                item.get("clip")
+                for item in score_heat_fragments
+                if isinstance(item.get("clip"), dict) and item.get("clip")
+            ]
+            if score_clips:
+                clips = [*score_clips, *clips[: max(0, MAX_CLIPS_PER_DAY - len(score_clips))]]
+            day_repeat_groups = repeat_groups(heat_fragments, day_transcriptions)
+        observations = (
+            problem_observations(notation, heat_fragments, clips, day_transcriptions, active_status)[:6]
+            if has_verified_transcription or score_heat_fragments
+            else transcription_quality_observations(quality, [], clips)[:2]
+        )
+        blocker = main_curtis_blocker(observations)
         matching_workflow = {
             "status": (
                 "score_sequence_matches_ready"
