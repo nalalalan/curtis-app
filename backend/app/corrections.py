@@ -305,6 +305,16 @@ def wieniawski_reference_target() -> dict[str, Any]:
                     "sourcePdfPage": 2,
                     "status": "source_score_phrase_verified",
                     "verification": "actual_score_crop_from_local_imslp_pdf_page_2",
+                },
+                {
+                    "referenceStart": 2,
+                    "referenceEnd": 7,
+                    "label": "opening Bb-D-C-Bb-D",
+                    "pitchClassSequence": ["A#", "D", "C", "A#", "D"],
+                    "imageUrl": "/assets/score/wieniawski-scherzo-tarantelle-opening-bb-d-c-bb-d-source.png",
+                    "sourcePdfPage": 2,
+                    "status": "source_score_phrase_verified",
+                    "verification": "actual_score_crop_from_local_imslp_pdf_page_2_exact_phrase_range",
                 }
             ],
         },

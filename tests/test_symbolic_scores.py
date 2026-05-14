@@ -126,10 +126,11 @@ class SymbolicScoreTests(unittest.TestCase):
         self.assertEqual(matches[0]["minimumDistinctPitchClasses"], 3)
         self.assertEqual(matches[0]["detectedPitchClassSequence"], "D G B A E")
         self.assertEqual(matches[0]["scorePitchClassSequence"], "D G B A E")
-        self.assertTrue(matches[0]["scoreLocationVerified"])
-        self.assertEqual(matches[0]["score"]["cropStatus"], "exact_score_location_verified")
+        self.assertFalse(matches[0]["scoreLocationVerified"])
+        self.assertEqual(matches[0]["score"]["cropStatus"], "actual_source_snippet_pending")
         self.assertEqual(matches[0]["score"]["measureLabel"], "m. 1")
-        self.assertTrue(matches[0]["score"]["imageUrl"].startswith("data:image/svg+xml;base64,"))
+        self.assertEqual(matches[0]["score"]["imageUrl"], "")
+        self.assertTrue(matches[0]["score"]["generatedNotationImageUrl"].startswith("data:image/svg+xml;base64,"))
         self.assertEqual([item["note"] for item in matches[0]["scoreMatchedNotes"]], ["D4", "G4", "B4", "A4", "E5"])
 
     def test_symbolic_phrase_match_rejects_repeated_single_pitch_and_wrong_order(self):
@@ -210,7 +211,7 @@ class SymbolicScoreTests(unittest.TestCase):
 
         self.assertEqual(audit["status"], "symbolic_score_ready")
         self.assertEqual(audit["symbolicScoreNoteCount"], 7)
-        self.assertEqual(audit["symbolicScoreSourceSnippetCount"], 1)
+        self.assertEqual(audit["symbolicScoreSourceSnippetCount"], 2)
         self.assertEqual(candidate_audit["status"], "score_map_candidates_ready")
         self.assertGreaterEqual(candidate_audit["scoreMapCandidateGlyphCount"], 1)
         self.assertGreaterEqual(candidate_audit["scoreMapCandidateStaffCount"], 1)
@@ -254,8 +255,9 @@ class SymbolicScoreTests(unittest.TestCase):
         self.assertEqual(matches[0]["detectedPitchClassSequence"], "D C A# D")
         self.assertEqual(matches[0]["scorePitchClassSequence"], "D C A# D")
         self.assertEqual([item["note"] for item in matches[0]["scoreMatchedNotes"]], ["D5", "C5", "Bb4", "D5"])
-        self.assertEqual(matches[0]["scoreVisualAgreementBasis"], "generated_from_exact_symbolic_score_slice")
-        self.assertEqual(matches[0]["score"]["imageUrl"], matches[0]["score"]["generatedNotationImageUrl"])
+        self.assertFalse(matches[0]["scoreVisualAgreement"])
+        self.assertEqual(matches[0]["scoreVisualAgreementBasis"], "actual_source_snippet_required")
+        self.assertEqual(matches[0]["score"]["imageUrl"], "")
         self.assertTrue(matches[0]["score"]["generatedNotationImageUrl"].startswith("data:image/svg+xml;base64,"))
 
     def test_wieniawski_symbolic_opening_can_accept_first_five_note_phrase(self):
@@ -292,7 +294,14 @@ class SymbolicScoreTests(unittest.TestCase):
         self.assertEqual([item["note"] for item in matches[0]["scoreMatchedNotes"]], ["Bb4", "D5", "C5", "Bb4", "D5"])
         self.assertEqual([item["note"] for item in matches[0]["displayDetectedNotes"]], ["Bb4", "D5", "C5", "Bb4", "D5"])
         self.assertEqual(matches[0]["scoreNotePitchSequenceLabel"], "Bb D C Bb D")
-        self.assertEqual(matches[0]["score"]["imageUrl"], matches[0]["score"]["generatedNotationImageUrl"])
+        self.assertTrue(matches[0]["scoreVisualAgreement"])
+        self.assertEqual(matches[0]["scoreVisualAgreementBasis"], "exact_actual_source_snippet_range")
+        self.assertTrue(matches[0]["score"]["actualSourceSnippetDisplayed"])
+        self.assertEqual(
+            matches[0]["score"]["imageUrl"],
+            "/assets/score/wieniawski-scherzo-tarantelle-opening-bb-d-c-bb-d-source.png",
+        )
+        self.assertTrue(matches[0]["score"]["generatedNotationImageUrl"].startswith("data:image/svg+xml;base64,"))
         self.assertEqual(matches[0]["score"]["measureLabel"], "mm. 2-4")
 
     def test_wieniawski_symbolic_match_rejects_pitch_class_only_octave_mismatch(self):

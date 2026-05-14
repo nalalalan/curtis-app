@@ -247,9 +247,12 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(record["matchGroups"][0]["score"]["boxes"], [])
         self.assertEqual(record["matchGroups"][0]["score"]["cropStatus"], "exact_score_location_verified")
         self.assertTrue(record["matchGroups"][0]["scoreVisualAgreement"])
-        self.assertEqual(record["matchGroups"][0]["scoreVisualAgreementBasis"], "generated_from_exact_symbolic_score_slice")
-        self.assertFalse(record["matchGroups"][0]["score"]["actualSourceSnippetDisplayed"])
-        self.assertEqual(record["matchGroups"][0]["score"]["imageUrl"], record["matchGroups"][0]["score"]["generatedNotationImageUrl"])
+        self.assertEqual(record["matchGroups"][0]["scoreVisualAgreementBasis"], "exact_actual_source_snippet_range")
+        self.assertTrue(record["matchGroups"][0]["score"]["actualSourceSnippetDisplayed"])
+        self.assertEqual(
+            record["matchGroups"][0]["score"]["imageUrl"],
+            "/assets/score/wieniawski-scherzo-tarantelle-opening-bb-d-c-bb-d-source.png",
+        )
         self.assertTrue(record["matchGroups"][0]["score"]["generatedNotationImageUrl"].startswith("data:image/svg+xml;base64,"))
         self.assertFalse(record["matchGroups"][0]["rhythmRequired"])
         self.assertEqual([item["detectedNote"] for item in record["matchGroups"][0]["transcription"]["notes"]], ["A#4", "D5", "C5", "A#4", "D5"])
@@ -261,7 +264,7 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(record["heatMap"]["fragments"][0]["status"], "score_location_verified")
         self.assertEqual(record["heatMap"]["fragments"][0]["label"], "mm. 2-4")
         self.assertEqual(record["heatMap"]["fragments"][0]["scoreNotes"], ["Bb4", "D5", "C5", "Bb4", "D5"])
-        self.assertEqual(record["heatMap"]["fragments"][0]["scoreImageUrl"], record["matchGroups"][0]["score"]["generatedNotationImageUrl"])
+        self.assertEqual(record["heatMap"]["fragments"][0]["scoreImageUrl"], record["matchGroups"][0]["score"]["imageUrl"])
         self.assertEqual(record["heatMap"]["layers"][0]["status"], "ready")
         self.assertIn("accepted clip maps to mm. 2-4", record["mainCurtisBlocker"])
         self.assertEqual(record["clips"][0]["mediaUrl"], "/api/curtis/media/sample/Njh8_zq9_DM-1")
@@ -1069,7 +1072,7 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(target["scoreNoteCropStatus"], "no_visual_note_verified_anchor_ready")
         self.assertEqual(audit["sourcePdfLocalReadyCount"], 1)
         self.assertEqual(audit["symbolicScoreNoteCount"], 7)
-        self.assertEqual(audit["symbolicScoreSourceSnippetCount"], 1)
+        self.assertEqual(audit["symbolicScoreSourceSnippetCount"], 2)
         self.assertGreaterEqual(audit["scoreMapCandidateGlyphCount"], 1)
         self.assertGreaterEqual(audit["scoreMapCandidateStaffCount"], 1)
         self.assertGreaterEqual(audit["scoreMapNoteHypothesisCount"], 1)

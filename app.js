@@ -2006,9 +2006,10 @@ function renderSingleMatchedPracticePair(record, clip, transcription, system) {
     ? system.events
     : Array.isArray(transcription?.events) ? transcription.events : [];
   const notes = events.filter((event) => event?.kind === "note").map((event) => event.note).filter(Boolean);
-  const seconds = Number(events[0]?.durationSeconds || notationClip?.durationSeconds || transcription?.microVerifiedSeconds || 0);
+  const eventSeconds = events.reduce((sum, event) => sum + Number(event?.durationSeconds || 0), 0);
+  const seconds = Number(notationClip?.durationSeconds || transcription?.microVerifiedSeconds || eventSeconds || 0);
   const label = [
-    notes.length ? notes.slice(0, 4).join(" ") : "detected note",
+    notes.length ? notes.slice(0, 8).join(" ") : "detected note",
     seconds ? `${seconds.toFixed(seconds < 1 ? 3 : 1)}s` : ""
   ].filter(Boolean).join(" / ");
   return `
@@ -2149,6 +2150,9 @@ function compactPitchSequenceText(value) {
 function exactScoreSnippetReady(group) {
   const score = group?.score && typeof group.score === "object" ? group.score : {};
   if (score.visualAgreement !== true && group?.scoreVisualAgreement !== true) return false;
+  if (score.actualSourceSnippetDisplayed !== true && group?.scoreActualPieceAgreement !== true) return false;
+  const imageUrl = String(score.imageUrl || "").trim();
+  if (!imageUrl || imageUrl.startsWith("data:")) return false;
   const status = compactText(
     score.cropStatus
     || score.status

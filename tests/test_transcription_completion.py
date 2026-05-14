@@ -91,6 +91,8 @@ class TranscriptionCompletionTests(unittest.TestCase):
                             "minimumMatchedNoteRun": 5,
                             "detectedPitchClassSequenceCompact": "D G B A E",
                             "scoreLocationVerified": True,
+                            "scoreVisualAgreement": True,
+                            "scoreActualPieceAgreement": True,
                             "scoreSnippetStatus": "exact_score_location_verified",
                             "scoreLocationStatus": "exact_score_location_verified",
                             "scoreSequenceLabel": "m. 12",
@@ -100,6 +102,8 @@ class TranscriptionCompletionTests(unittest.TestCase):
                                 "assetId": "wieniawski-scherzo-tarantelle-vln",
                                 "cropStatus": "exact_score_location_verified",
                                 "measureLabel": "m. 12",
+                                "imageUrl": "/assets/score/m12.png",
+                                "actualSourceSnippetDisplayed": True,
                             },
                             "clip": {
                                 "mediaUrl": "/api/curtis/media/sample/sample-phrase",
@@ -150,6 +154,7 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertEqual(completion["longPhraseAcceptedCount"], 1)
         self.assertEqual(completion["acceptedMeasureMatchCount"], 1)
         self.assertEqual(completion["scoreHeatmapFragmentCount"], 1)
+        self.assertEqual(completion["actualSourceScoreSnippetCount"], 1)
         self.assertTrue(any(item["label"] == "Long phrases" and item["value"] == "1" for item in completion["implementationCurrent"]))
         self.assertTrue(any(item["label"] == "Measure target" and item["value"] == "1/1" for item in completion["implementationCurrent"]))
         self.assertTrue(any(item["label"] == "Score heat map" and item["value"] == "1" for item in completion["implementationCurrent"]))
@@ -213,6 +218,8 @@ class TranscriptionCompletionTests(unittest.TestCase):
                             "minimumMatchedNoteRun": 4,
                             "detectedPitchClassSequenceCompact": "D A# G D",
                             "scoreLocationVerified": True,
+                            "scoreVisualAgreement": True,
+                            "scoreActualPieceAgreement": True,
                             "scoreSnippetStatus": "exact_score_location_verified",
                             "scoreLocationStatus": "exact_score_location_verified",
                             "scoreSequenceLabel": "opening motif",
@@ -222,6 +229,8 @@ class TranscriptionCompletionTests(unittest.TestCase):
                                 "assetId": "wieniawski-scherzo-tarantelle-vln",
                                 "cropStatus": "exact_score_location_verified",
                                 "measureLabel": "opening motif",
+                                "imageUrl": "/assets/score/opening.png",
+                                "actualSourceSnippetDisplayed": True,
                             },
                             "clip": {
                                 "mediaUrl": "/api/curtis/media/sample/source-motif",

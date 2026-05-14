@@ -1236,18 +1236,17 @@ def symbolic_score_sequence_matches_for_run(
         )
         generated_notation_url = _svg_data_url(svg)
         source_snippet = symbolic_source_snippet_for_range(target, r0, r1, score_sequence)
-        score_image_url = str(source_snippet.get("imageUrl") or "").strip() or generated_notation_url
         source_snippet_exact = bool(source_snippet)
+        score_image_url = str(source_snippet.get("imageUrl") or "").strip() if source_snippet_exact else ""
+        visual_agreement_basis = "exact_actual_source_snippet_range" if source_snippet_exact else "actual_source_snippet_required"
+        score_location_status = "exact_score_location_verified" if source_snippet_exact else "actual_source_snippet_pending"
         best_match = {
             "status": "symbolic_score_phrase_match",
             "pieceTitle": piece.get("title") or score.get("title") or "",
             "matchCriterion": "symbolic_score_pitch_class_phrase",
-            "scoreVisualAgreement": True,
-            "scoreVisualAgreementBasis": (
-                "exact_source_snippet_range"
-                if source_snippet_exact
-                else "generated_from_exact_symbolic_score_slice"
-            ),
+            "scoreVisualAgreement": source_snippet_exact,
+            "scoreVisualAgreementBasis": visual_agreement_basis,
+            "scoreActualPieceAgreement": source_snippet_exact,
             "minimumMatchedNoteRun": minimum_note_run,
             "minimumDistinctPitchClasses": minimum_distinct_pitch_classes,
             "matchedNoteRun": int(candidate["length"]),
@@ -1257,7 +1256,7 @@ def symbolic_score_sequence_matches_for_run(
             "referenceSequenceKind": "symbolic_score_notes",
             "referenceSequenceSource": target.get("scoreSource") or score.get("sourceId") or "",
             "scoreDerivedReference": True,
-            "scoreLocationVerified": True,
+            "scoreLocationVerified": source_snippet_exact,
             "rhythmRequired": False,
             "detectedSeries": run,
             "detectedPitchClassSequence": " ".join(detected_sequence),
@@ -1272,8 +1271,8 @@ def symbolic_score_sequence_matches_for_run(
             "displayDetectedNotes": display_notes if not query_info["collapsed"] else compact_notes_by_pitch_class(display_notes),
             "scoreMatchedNotes": score_slice,
             "scoreSequenceLabel": label,
-            "scoreSnippetStatus": "exact_score_location_verified",
-            "scoreLocationStatus": "exact_score_location_verified",
+            "scoreSnippetStatus": score_location_status,
+            "scoreLocationStatus": score_location_status,
             "scoreSourceSnippet": source_snippet,
             "score": {
                 "assetId": target.get("scoreAssetId") or score.get("sourceId") or "",
@@ -1284,15 +1283,12 @@ def symbolic_score_sequence_matches_for_run(
                 "imageUrl": score_image_url,
                 "generatedNotationImageUrl": generated_notation_url,
                 "boxes": [],
-                "cropStatus": "exact_score_location_verified",
-                "visualAgreement": True,
-                "visualAgreementBasis": (
-                    "exact_source_snippet_range"
-                    if source_snippet_exact
-                    else "generated_from_exact_symbolic_score_slice"
-                ),
+                "cropStatus": score_location_status,
+                "visualAgreement": source_snippet_exact,
+                "visualAgreementBasis": visual_agreement_basis,
+                "actualPieceAgreement": source_snippet_exact,
                 "actualSourceSnippetDisplayed": source_snippet_exact,
-                "sourceSnippetHiddenReason": "" if source_snippet_exact else "covering_source_crop_withheld_until_exact_range_crop_exists",
+                "sourceSnippetHiddenReason": "" if source_snippet_exact else "actual_source_snippet_required_before_score_display",
                 "scorePitchClassSequence": " ".join(score_sequence),
                 "scoreNotePitchSequenceLabel": " ".join(score_note_sequence),
                 "scoreNoteSeriesLabel": " ".join(str(note.get("note") or "") for note in score_slice if note.get("note")),
