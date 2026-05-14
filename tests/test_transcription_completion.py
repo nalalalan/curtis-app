@@ -6,6 +6,8 @@ from backend.app.scanner import (
     build_transcription_completion,
     reference_phrase_candidate_count,
     reference_phrase_candidate_top,
+    source_verification_target_count,
+    source_verification_target_top,
 )
 
 
@@ -289,12 +291,57 @@ class TranscriptionCompletionTests(unittest.TestCase):
 
         self.assertEqual(reference_phrase_candidate_count(daily_records), 1)
         self.assertEqual(reference_phrase_candidate_top(daily_records)["sequence"], "D D D# D D A# G")
+        self.assertEqual(source_verification_target_count(daily_records), 1)
+        self.assertEqual(source_verification_target_top(daily_records)["sequence"], "D D D# D D A# G")
         self.assertEqual(completion["referencePhraseCandidateCount"], 1)
         self.assertEqual(completion["referencePhraseCandidateTopSequence"], "D D D# D D A# G")
+        self.assertEqual(completion["sourceVerificationTargetCount"], 1)
+        self.assertEqual(completion["sourceVerificationTargetTopSequence"], "D D D# D D A# G")
         self.assertEqual(completion["longPhraseAcceptedCount"], 0)
         phrase_card = next(item for item in completion["implementationCurrent"] if item["label"] == "Phrase candidates")
         self.assertEqual(phrase_card["value"], "1")
         self.assertEqual(phrase_card["detail"], "pending: D D D# D D A# G")
+        source_card = next(item for item in completion["implementationCurrent"] if item["label"] == "Source target")
+        self.assertEqual(source_card["value"], "7")
+        self.assertEqual(source_card["detail"], "D D D# D D A# G")
+        self.assertEqual(completion["sourceVerificationTargets"][0]["status"], "source_verification_required")
+        self.assertIn("not accepted score evidence", completion["sourceVerificationTargets"][0]["limit"])
+
+    def test_source_verification_targets_require_long_local_unverified_runs(self):
+        daily_records = {
+            "records": [
+                {
+                    "practiceDay": "2026-05-03",
+                    "matchGroups": [
+                        {
+                            "status": "reference_sequence_match",
+                            "matchedNoteRun": 7,
+                            "detectedPitchClassSequenceCompact": "D D D# D D A# G",
+                            "scoreLocationVerified": True,
+                            "clip": {"mediaUrl": "/api/curtis/media/sample/already-accepted"},
+                            "transcription": {"sampleId": "already-accepted"},
+                        },
+                        {
+                            "status": "reference_sequence_match",
+                            "matchedNoteRun": 7,
+                            "detectedPitchClassSequenceCompact": "D D D# D D A# G",
+                            "scoreLocationVerified": False,
+                            "transcription": {},
+                        },
+                        {
+                            "status": "reference_sequence_match",
+                            "matchedNoteRun": 6,
+                            "detectedPitchClassSequenceCompact": "D D# D A# G C",
+                            "scoreLocationVerified": False,
+                            "clip": {"mediaUrl": "/api/curtis/media/sample/too-short"},
+                            "transcription": {"sampleId": "too-short"},
+                        },
+                    ],
+                }
+            ]
+        }
+
+        self.assertEqual(source_verification_target_count(daily_records), 0)
 
     def test_reference_phrase_candidate_top_prefers_actual_displayed_sequence_length(self):
         daily_records = {

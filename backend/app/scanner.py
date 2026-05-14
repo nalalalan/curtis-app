@@ -1188,6 +1188,77 @@ def reference_phrase_candidate_top(daily_records: dict[str, Any]) -> dict[str, A
     )[0]
 
 
+def source_verification_target_match(match: dict[str, Any]) -> bool:
+    if not reference_phrase_candidate_match(match):
+        return False
+    if int(match.get("matchedNoteRun") or 0) < 7:
+        return False
+    sequence = match_detected_pitch_sequence(match)
+    return len(sequence.split()) >= 7
+
+
+def source_verification_targets(daily_records: dict[str, Any], limit: int = 5) -> list[dict[str, Any]]:
+    records = daily_records.get("records") if isinstance(daily_records.get("records"), list) else []
+    candidates: dict[tuple[str, str, str, int, int, str], dict[str, Any]] = {}
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        practice_day = str(record.get("practiceDay") or record.get("date") or "")
+        groups = record.get("matchGroups") if isinstance(record.get("matchGroups"), list) else []
+        for match in groups:
+            if not source_verification_target_match(match):
+                continue
+            score = match.get("score") if isinstance(match.get("score"), dict) else {}
+            transcription = match.get("transcription") if isinstance(match.get("transcription"), dict) else {}
+            detected = match.get("detectedSeries") if isinstance(match.get("detectedSeries"), dict) else {}
+            clip = match.get("clip") if isinstance(match.get("clip"), dict) else {}
+            sequence = match_detected_pitch_sequence(match)
+            key = (
+                practice_day,
+                str(transcription.get("sampleId") or detected.get("sampleId") or ""),
+                str(score.get("assetId") or match.get("pieceTitle") or ""),
+                int(match.get("referenceStart") or 0),
+                int(match.get("referenceEnd") or 0),
+                sequence,
+            )
+            candidates[key] = {
+                "practiceDay": practice_day,
+                "sequence": sequence,
+                "sequenceNoteCount": len(sequence.split()),
+                "matchedNoteRun": int(match.get("matchedNoteRun") or 0),
+                "distinctPitchClasses": match_distinct_pitch_class_count(match),
+                "pieceTitle": str(match.get("pieceTitle") or ""),
+                "scoreSequenceLabel": str(match.get("scoreSequenceLabel") or ""),
+                "clipSampleId": str(transcription.get("sampleId") or detected.get("sampleId") or ""),
+                "clipStartSeconds": clip.get("startSeconds"),
+                "clipEndSeconds": clip.get("endSeconds"),
+                "referenceStart": int(match.get("referenceStart") or 0),
+                "referenceEnd": int(match.get("referenceEnd") or 0),
+                "status": "source_verification_required",
+                "limit": "Reference-audio phrase target only; not accepted score evidence until local score notes and coordinates are verified.",
+            }
+    sorted_candidates = sorted(
+        candidates.values(),
+        key=lambda item: (
+            -int(item.get("sequenceNoteCount") or 0),
+            -int(item.get("matchedNoteRun") or 0),
+            -int(item.get("distinctPitchClasses") or 0),
+            str(item.get("practiceDay") or ""),
+            str(item.get("sequence") or ""),
+        ),
+    )
+    return sorted_candidates[: max(0, int(limit))]
+
+
+def source_verification_target_count(daily_records: dict[str, Any]) -> int:
+    return len(source_verification_targets(daily_records, limit=1000))
+
+
+def source_verification_target_top(daily_records: dict[str, Any]) -> dict[str, Any]:
+    targets = source_verification_targets(daily_records, limit=1)
+    return targets[0] if targets else {}
+
+
 def accepted_long_phrase_match(match: dict[str, Any]) -> bool:
     if not isinstance(match, dict):
         return False
@@ -1428,10 +1499,20 @@ def build_transcription_completion(
     phrase_candidate_count = reference_phrase_candidate_count(daily_records)
     phrase_candidate_top = reference_phrase_candidate_top(daily_records)
     phrase_candidate_sequence = str(phrase_candidate_top.get("sequence") or "")
+    source_target_count = source_verification_target_count(daily_records)
+    source_targets = source_verification_targets(daily_records)
+    source_target_top = source_targets[0] if source_targets else {}
+    source_target_sequence = str(source_target_top.get("sequence") or "")
+    source_target_note_count = int(source_target_top.get("sequenceNoteCount") or 0)
     phrase_candidate_detail = (
         f"pending: {phrase_candidate_sequence}"
         if phrase_candidate_sequence
         else "pending source-score verification"
+    )
+    source_target_detail = (
+        source_target_sequence
+        if source_target_sequence
+        else "none"
     )
 
     gates = [
@@ -1538,10 +1619,11 @@ def build_transcription_completion(
             8,
             (1.5 if score_sequence_match_count(daily_records) else 0)
             + min(2.5, phrase_candidate_count * 0.5)
+            + (1 if source_target_note_count >= 7 else 0)
             + (2 if score_verified_count else 0)
             + (1 if measure_match_count else 0)
             + min(2, long_phrase_count * 2),
-            f"{score_sequence_count} pitch-sequence groups / {phrase_candidate_count} phrase candidates / {score_verified_count} exact score locations",
+            f"{score_sequence_count} pitch-sequence groups / {phrase_candidate_count} phrase candidates / {source_target_count} source targets / {score_verified_count} exact score locations",
             "Pitch-sequence groups are separated from exact score evidence.",
             "Promote phrase candidates only after source-score or score-free exercise verification.",
         ),
@@ -1583,7 +1665,7 @@ def build_transcription_completion(
     implementation_summary = (
         "Practice-time scanning is working. The long-phrase path now has a local source score PDF and still counts only verified score/audio phrase matches."
         if not measure_match_count
-        else "Practice-time scanning is working. The long-phrase path now turns its first source-backed score/audio phrase into score-coordinate heat-map evidence and still treats full long-phrase transcription as incomplete."
+        else "Practice-time scanning is working. The long-phrase path now turns its first source-backed score/audio phrase into score-coordinate heat-map evidence, isolates the next longer source-verification target, and still treats full long-phrase transcription as incomplete."
         if long_phrase_count
         else "Practice-time scanning is working. The long-phrase path now has a source-backed score/audio measure match and still separates measure progress from solved long phrases."
     )
@@ -1629,6 +1711,11 @@ def build_transcription_completion(
             "detail": phrase_candidate_detail,
         },
         {
+            "label": "Source target",
+            "value": str(source_target_note_count),
+            "detail": source_target_detail,
+        },
+        {
             "label": "Scan queue",
             "value": str(pending_window_count),
             "detail": f"{active_interval_count} active intervals",
@@ -1643,7 +1730,7 @@ def build_transcription_completion(
     remaining_summary = [
         "Finish chronological active-practice coverage across the full archive.",
         "Build benchmark clips for known notes, fast runs, arpeggios, rhythm, and score boxes.",
-        "Convert the local source score PDF into verified symbolic measures, then mine existing detected series for the first measure-level score/audio phrase.",
+        "Verify the longest source target against local score notes and coordinates before promoting it from reference-audio candidate to accepted score evidence.",
         "Replace short fragments with accurate phrase-level note and rhythm extraction.",
         "Align accepted phrases to score locations or score-free repeated exercise patterns.",
         "Generate heat maps and Curtis-level observations only from accepted evidence.",
@@ -1695,7 +1782,7 @@ def build_transcription_completion(
             "phase": "7",
             "label": "Score and exercise alignment",
             "status": "partial" if score_sequence_count or phrase_candidate_count else "pending",
-            "evidence": f"{score_sequence_count} pitch-sequence groups / {phrase_candidate_count} phrase candidates / {score_verified_count} exact score locations",
+            "evidence": f"{score_sequence_count} pitch-sequence groups / {phrase_candidate_count} phrase candidates / {source_target_count} source targets / {score_verified_count} exact score locations",
             "target": "Accepted phrase groups paired with original score snippets or repeated exercise patterns.",
         },
         {
@@ -1732,6 +1819,10 @@ def build_transcription_completion(
         "acceptedMeasureMatchCount": measure_match_count,
         "scoreHeatmapFragmentCount": score_heatmap_count,
         "referencePhraseCandidateCount": phrase_candidate_count,
+        "sourceVerificationTargetCount": source_target_count,
+        "sourceVerificationTargets": source_targets,
+        "sourceVerificationTargetTop": source_target_top,
+        "sourceVerificationTargetTopSequence": source_target_sequence,
         "exactScoreAlignedWindowCount": score_verified_count,
         "referencePhraseCandidateTop": phrase_candidate_top,
         "referencePhraseCandidateTopSequence": phrase_candidate_sequence,
@@ -1756,6 +1847,8 @@ def build_transcription_completion(
             if not measure_match_count
             else "Extend the accepted source-backed measure into longer phrases and score-coordinate heat maps."
             if not long_phrase_count
+            else f"Verify the {source_target_note_count}-note source target {source_target_sequence} against the local IMSLP score, then promote only if the score notes and crop match."
+            if source_target_sequence
             else "Extend the accepted score-coordinate phrase into longer passages, repeated attempts, and problem-density layers."
         ),
     }
