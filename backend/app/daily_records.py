@@ -14,7 +14,12 @@ from .study_packets import (
     practice_ledger_videos,
     source_matches,
 )
-from .symbolic_scores import render_symbolic_score_svg, symbolic_score_audit, symbolic_score_from_target
+from .symbolic_scores import (
+    render_symbolic_score_svg,
+    score_map_candidate_audit,
+    symbolic_score_audit,
+    symbolic_score_from_target,
+)
 from .transcription import TRANSCRIPTION_PIPELINE_VERSION
 
 
@@ -816,7 +821,9 @@ def score_reference_audit_for_target(target: dict[str, Any]) -> dict[str, Any]:
         target = {}
     sequences = reference_pitch_class_sequences(target)
     symbolic_audit = symbolic_score_audit(target)
+    candidate_audit = score_map_candidate_audit(target)
     symbolic_score_note_count = int(symbolic_audit.get("symbolicScoreNoteCount") or 0)
+    score_map_candidate_glyph_count = int(candidate_audit.get("scoreMapCandidateGlyphCount") or 0)
     symbolic_count = sum(1 for sequence in sequences if reference_sequence_is_score_derived(sequence))
     reference_audio_count = sum(
         1
@@ -856,6 +863,11 @@ def score_reference_audit_for_target(target: dict[str, Any]) -> dict[str, Any]:
         "symbolicScoreSourceSnippetCount": int(symbolic_audit.get("symbolicScoreSourceSnippetCount") or 0),
         "symbolicScoreStatus": symbolic_audit.get("status") or "",
         "symbolicScoreSourceId": symbolic_audit.get("symbolicScoreSourceId") or "",
+        "scoreMapCandidateStatus": candidate_audit.get("status") or "",
+        "scoreMapCandidateGlyphCount": score_map_candidate_glyph_count,
+        "scoreMapCandidateStaffCount": int(candidate_audit.get("scoreMapCandidateStaffCount") or 0),
+        "scoreMapCandidatesAccepted": bool(candidate_audit.get("scoreMapCandidatesAccepted")),
+        "scoreMapCandidatePath": candidate_audit.get("scoreMapCandidatePath") or "",
         "referenceAudioSequenceCount": reference_audio_count,
         "ignoredScoreSequenceCount": ignored_score_count,
         "exactScoreLocationCount": exact_location_count,
@@ -888,6 +900,8 @@ def score_reference_audit_for_pieces(pieces: list[dict[str, Any]]) -> dict[str, 
         "symbolicScoreSequenceCount": sum(item["symbolicScoreSequenceCount"] for item in audits),
         "symbolicScoreNoteCount": sum(item.get("symbolicScoreNoteCount", 0) for item in audits),
         "symbolicScoreSourceSnippetCount": sum(item.get("symbolicScoreSourceSnippetCount", 0) for item in audits),
+        "scoreMapCandidateGlyphCount": sum(item.get("scoreMapCandidateGlyphCount", 0) for item in audits),
+        "scoreMapCandidateStaffCount": sum(item.get("scoreMapCandidateStaffCount", 0) for item in audits),
         "sourcePdfLocalReadyCount": len(
             {
                 item.get("scoreAssetId")

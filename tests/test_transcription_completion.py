@@ -318,6 +318,7 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertEqual(completion["sourceVerificationTargets"][0]["sourceScoreCheckStatus"], "source_score_sequence_not_found")
         self.assertEqual(completion["sourceVerificationTargets"][0]["sourceScoreBestOverlap"], 1)
         self.assertEqual(completion["sourceVerificationTargets"][0]["sourceScoreReferenceSequence"], "D C A# D C A# D")
+        self.assertGreaterEqual(completion["sourceVerificationTargets"][0]["sourceScoreCandidateGlyphCount"], 1)
 
     def test_source_verification_targets_require_local_unverified_source_runs(self):
         daily_records = {

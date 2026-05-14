@@ -290,8 +290,10 @@ def wieniawski_reference_target() -> dict[str, Any]:
             "title": "Wieniawski Scherzo-Tarantelle, Op. 16",
             "partId": "P1",
             "musicXmlPath": "assets/score/wieniawski-scherzo-tarantelle-symbolic-opening.musicxml",
+            "candidateMapPath": "assets/score/wieniawski-scherzo-tarantelle-page2-score-map-candidates.json",
             "source": "Manually verified symbolic excerpt from the local IMSLP solo-violin PDF, page 2. The visible opening phrase is D-C-Bb-D-C-Bb-D; the previous D-Bb-G-D source sequence is rejected.",
             "sourcePdfLocalPath": "assets/score/wieniawski-scherzo-tarantelle-solo-imslp.pdf",
+            "candidateMapStatus": "unaccepted_score_glyph_verification_queue",
             "verification": "source_score_note_sequence_verified_before_matching",
             "sourceSnippets": [
                 {

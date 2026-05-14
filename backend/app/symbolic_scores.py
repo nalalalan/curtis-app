@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from html import escape
 from pathlib import Path
 from typing import Any
@@ -225,6 +226,18 @@ def _read_musicxml_path(path_value: str) -> str:
         return ""
 
 
+def _read_json_path(path_value: str) -> dict[str, Any]:
+    raw_path = Path(path_value)
+    path = raw_path if raw_path.is_absolute() else PROJECT_ROOT / raw_path
+    if not path.exists() or not path.is_file():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
 def _musicxml_text_from_score(score: dict[str, Any]) -> str:
     inline = str(score.get("musicXml") or score.get("musicXML") or score.get("xml") or "").strip()
     if inline:
@@ -251,6 +264,40 @@ def symbolic_score_audit(target: dict[str, Any]) -> dict[str, Any]:
         "symbolicScoreSourceId": score.get("sourceId") or "",
         "symbolicScoreTitle": score.get("title") or "",
         "symbolicScorePartId": score.get("partId") or "",
+    }
+
+
+def score_map_candidate_audit(target: dict[str, Any]) -> dict[str, Any]:
+    score_config = target.get("symbolicScore") if isinstance(target.get("symbolicScore"), dict) else {}
+    path_value = str(
+        score_config.get("candidateMapPath")
+        or score_config.get("scoreMapCandidatePath")
+        or target.get("scoreMapCandidatePath")
+        or ""
+    ).strip()
+    if not path_value:
+        return {
+            "status": "score_map_candidates_missing",
+            "scoreMapCandidateGlyphCount": 0,
+            "scoreMapCandidateStaffCount": 0,
+            "scoreMapCandidatesAccepted": False,
+            "scoreMapCandidatePath": "",
+        }
+    data = _read_json_path(path_value)
+    glyphs = data.get("candidateGlyphs") if isinstance(data.get("candidateGlyphs"), list) else []
+    staff_groups = data.get("staffGroups") if isinstance(data.get("staffGroups"), list) else []
+    accepted = bool(data.get("acceptedEvidence"))
+    count = int(data.get("candidateGlyphCount") or len(glyphs) or 0)
+    staff_count = int(data.get("staffCount") or len(staff_groups) or 0)
+    return {
+        "status": "score_map_candidates_ready" if count else "score_map_candidates_empty",
+        "scoreMapCandidateGlyphCount": count,
+        "scoreMapCandidateStaffCount": staff_count,
+        "scoreMapCandidatesAccepted": accepted,
+        "scoreMapCandidatePath": path_value,
+        "scoreMapCandidateSourcePage": data.get("sourcePdfPage") or 0,
+        "scoreMapCandidateExtractionMethod": str(data.get("extractionMethod") or ""),
+        "scoreMapCandidateLimit": str(data.get("verificationLimit") or ""),
     }
 
 

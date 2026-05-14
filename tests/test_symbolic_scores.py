@@ -4,7 +4,12 @@ from tempfile import TemporaryDirectory
 
 from backend.app.daily_records import detected_note_series, score_reference_audit_for_pieces, score_sequence_matches_for_series
 from backend.app.corrections import wieniawski_reference_target
-from backend.app.symbolic_scores import parse_musicxml_score, symbolic_score_audit, symbolic_score_from_target
+from backend.app.symbolic_scores import (
+    parse_musicxml_score,
+    score_map_candidate_audit,
+    symbolic_score_audit,
+    symbolic_score_from_target,
+)
 
 
 NOTE_CLASS = {
@@ -201,10 +206,15 @@ class SymbolicScoreTests(unittest.TestCase):
         target = wieniawski_reference_target()
         score = symbolic_score_from_target(target)
         audit = symbolic_score_audit(target)
+        candidate_audit = score_map_candidate_audit(target)
 
         self.assertEqual(audit["status"], "symbolic_score_ready")
         self.assertEqual(audit["symbolicScoreNoteCount"], 7)
         self.assertEqual(audit["symbolicScoreSourceSnippetCount"], 1)
+        self.assertEqual(candidate_audit["status"], "score_map_candidates_ready")
+        self.assertGreaterEqual(candidate_audit["scoreMapCandidateGlyphCount"], 1)
+        self.assertGreaterEqual(candidate_audit["scoreMapCandidateStaffCount"], 1)
+        self.assertFalse(candidate_audit["scoreMapCandidatesAccepted"])
         self.assertEqual(
             [item["note"] for item in score["notes"]],
             ["D5", "C5", "Bb4", "D5", "C5", "Bb4", "D5"],

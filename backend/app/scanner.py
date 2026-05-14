@@ -45,7 +45,12 @@ from .state import append_run, load_state, save_state, utc_now
 from .daily_records import build_daily_records, build_repertoire_evidence, exact_score_location_ready
 from .evidence_ledger import build_active_practice_coverage, build_evidence_progress
 from .study_packets import build_practice_study, build_practice_totals
-from .symbolic_scores import longest_common_contiguous_run, normalize_pitch_class, symbolic_score_from_target
+from .symbolic_scores import (
+    longest_common_contiguous_run,
+    normalize_pitch_class,
+    score_map_candidate_audit,
+    symbolic_score_from_target,
+)
 
 DEFAULT_YOUTUBE_SOURCE = "https://www.youtube.com/@nalalan"
 MEDIA_REVIEW_PENDING_BLOCKERS = {"youtube_data_api_returns_metadata_not_video_media"}
@@ -1222,6 +1227,7 @@ def source_reference_target_for_match(match: dict[str, Any]) -> dict[str, Any]:
 def source_target_score_check(match: dict[str, Any], sequence: str) -> dict[str, Any]:
     target = source_reference_target_for_match(match)
     score = symbolic_score_from_target(target) if target else {}
+    candidate_audit = score_map_candidate_audit(target) if target else {}
     notes = score.get("notes") if isinstance(score.get("notes"), list) else []
     source_values = [normalize_pitch_class(note.get("pitchClass")) for note in notes if isinstance(note, dict)]
     source_values = [value for value in source_values if value]
@@ -1258,6 +1264,9 @@ def source_target_score_check(match: dict[str, Any], sequence: str) -> dict[str,
         "sourceScoreReferenceLength": len(source_values),
         "sourceScoreSourceId": str(score.get("sourceId") or score_config.get("sourceId") or ""),
         "sourceScoreTitle": str(score.get("title") or target.get("work") or ""),
+        "sourceScoreCandidateGlyphCount": int(candidate_audit.get("scoreMapCandidateGlyphCount") or 0),
+        "sourceScoreCandidateStaffCount": int(candidate_audit.get("scoreMapCandidateStaffCount") or 0),
+        "sourceScoreCandidateStatus": str(candidate_audit.get("status") or ""),
         "sourceScoreReferenceSequence": " ".join(source_values),
         "sourceScoreBestOverlapSequence": " ".join(source_values[reference_start:reference_end]),
         "sourceScoreLimit": (
@@ -1464,6 +1473,8 @@ def score_reference_audit_totals(daily_records: dict[str, Any]) -> dict[str, int
     local_source_assets: set[str] = set()
     symbolic_notes_by_source: dict[str, int] = {}
     source_snippets_by_source: dict[str, int] = {}
+    score_map_candidates_by_source: dict[str, int] = {}
+    score_map_candidate_staves_by_source: dict[str, int] = {}
     for record in records:
         if not isinstance(record, dict):
             continue
@@ -1480,6 +1491,14 @@ def score_reference_audit_totals(daily_records: dict[str, Any]) -> dict[str, int
                 source_snippets_by_source.get(source_id, 0),
                 int(audit.get("symbolicScoreSourceSnippetCount") or 0),
             )
+            score_map_candidates_by_source[source_id] = max(
+                score_map_candidates_by_source.get(source_id, 0),
+                int(audit.get("scoreMapCandidateGlyphCount") or 0),
+            )
+            score_map_candidate_staves_by_source[source_id] = max(
+                score_map_candidate_staves_by_source.get(source_id, 0),
+                int(audit.get("scoreMapCandidateStaffCount") or 0),
+            )
         for target in targets:
             if not isinstance(target, dict):
                 continue
@@ -1494,12 +1513,22 @@ def score_reference_audit_totals(daily_records: dict[str, Any]) -> dict[str, int
                     source_snippets_by_source.get(source_id, 0),
                     int(target.get("symbolicScoreSourceSnippetCount") or 0),
                 )
+                score_map_candidates_by_source[source_id] = max(
+                    score_map_candidates_by_source.get(source_id, 0),
+                    int(target.get("scoreMapCandidateGlyphCount") or 0),
+                )
+                score_map_candidate_staves_by_source[source_id] = max(
+                    score_map_candidate_staves_by_source.get(source_id, 0),
+                    int(target.get("scoreMapCandidateStaffCount") or 0),
+                )
             if asset_id and target.get("sourcePdfLocalReady"):
                 local_source_assets.add(asset_id)
     return {
         "sourcePdfLocalReadyCount": len(local_source_assets),
         "symbolicScoreNoteCount": sum(symbolic_notes_by_source.values()),
         "symbolicScoreSourceSnippetCount": sum(source_snippets_by_source.values()),
+        "scoreMapCandidateGlyphCount": sum(score_map_candidates_by_source.values()),
+        "scoreMapCandidateStaffCount": sum(score_map_candidate_staves_by_source.values()),
     }
 
 
@@ -1560,6 +1589,8 @@ def build_transcription_completion(
     local_score_source_count = int(score_audit_totals.get("sourcePdfLocalReadyCount") or 0)
     symbolic_score_note_count = int(score_audit_totals.get("symbolicScoreNoteCount") or 0)
     symbolic_score_source_snippet_count = int(score_audit_totals.get("symbolicScoreSourceSnippetCount") or 0)
+    score_map_candidate_glyph_count = int(score_audit_totals.get("scoreMapCandidateGlyphCount") or 0)
+    score_map_candidate_staff_count = int(score_audit_totals.get("scoreMapCandidateStaffCount") or 0)
     benchmark_count = int(evidence_progress.get("benchmarkCount") or 0)
     rejected_score_count = int(evidence_progress.get("wrongScoreNoteRegressionCount") or 0)
     repertoire_entries = repertoire_evidence.get("entries") if isinstance(repertoire_evidence.get("entries"), list) else []
@@ -1658,11 +1689,12 @@ def build_transcription_completion(
             + (1.5 if local_score_source_count else 0)
             + (2 if symbolic_score_note_count else 0)
             + (1 if symbolic_score_source_snippet_count else 0)
+            + (1 if score_map_candidate_glyph_count else 0)
             + (1 if source_target_checked else 0)
             + (4 if score_verified_count else 0),
-            f"{score_target_count} score targets / {local_score_source_count} local PDFs / {symbolic_score_note_count} unique symbolic notes / {symbolic_score_source_snippet_count} source snippets / {source_target_checked} source checks / {score_verified_count} exact locations",
-            "Source-confirmed pieces can seed score targets, and pending source targets are checked before promotion.",
-            "Scherzo-Tarantelle needs a longer verified symbolic score map plus rendered score coordinates.",
+            f"{score_target_count} score targets / {local_score_source_count} local PDFs / {symbolic_score_note_count} verified symbolic notes / {score_map_candidate_glyph_count} unaccepted score glyph candidates / {source_target_checked} source checks / {score_verified_count} exact locations",
+            "Source-confirmed pieces can seed score targets, pending source targets are checked before promotion, and local score glyphs are queued for verification.",
+            "Scherzo-Tarantelle candidate glyphs still need verified MusicXML notes and rendered score coordinates.",
         ),
         roadmap_gate(
             "single-note-anchor",
@@ -1746,7 +1778,7 @@ def build_transcription_completion(
     implementation_summary = (
         "Practice-time scanning is working. The long-phrase path now has a local source score PDF and still counts only verified score/audio phrase matches."
         if not measure_match_count
-        else "Practice-time scanning is working. The long-phrase path now turns its first source-backed score/audio phrase into score-coordinate heat-map evidence, isolates the next longer source-verification target, and still treats full long-phrase transcription as incomplete."
+        else "Practice-time scanning is working. The long-phrase path now turns its first source-backed score/audio phrase into score-coordinate heat-map evidence, isolates source-verification targets, queues score glyphs for MusicXML review, and still treats full long-phrase transcription as incomplete."
         if long_phrase_count
         else "Practice-time scanning is working. The long-phrase path now has a source-backed score/audio measure match and still separates measure progress from solved long phrases."
     )
@@ -1770,6 +1802,11 @@ def build_transcription_completion(
             "label": "Score windows",
             "value": str(score_verified_count),
             "detail": f"{local_score_source_count} local score PDFs",
+        },
+        {
+            "label": "Score map queue",
+            "value": str(score_map_candidate_glyph_count),
+            "detail": f"{score_map_candidate_staff_count} staves pending",
         },
         {
             "label": "Long phrases",
@@ -1816,11 +1853,12 @@ def build_transcription_completion(
         "Uploaded video time is separated from active violin-playing time.",
         "Violin-positive local audio/video evidence can be stored and replayed.",
         "Failed broad transcription is withheld from notation.",
+        "Local score-glyph candidates are queued for verification without being accepted as score evidence.",
     ]
     remaining_summary = [
         "Finish chronological active-practice coverage across the full archive.",
         "Build benchmark clips for known notes, fast runs, arpeggios, rhythm, and score boxes.",
-        "Verify the longest source target against local score notes and coordinates before promoting it from reference-audio candidate to accepted score evidence.",
+        "Convert queued score glyphs into verified MusicXML notes before promoting source targets from reference-audio candidates to accepted score evidence.",
         "Replace short fragments with accurate phrase-level note and rhythm extraction.",
         "Align accepted phrases to score locations or score-free repeated exercise patterns.",
         "Generate heat maps and Curtis-level observations only from accepted evidence.",
@@ -1844,8 +1882,8 @@ def build_transcription_completion(
             "phase": "3",
             "label": "Verified score truth",
             "status": "partial" if local_score_source_count or symbolic_score_note_count or score_verified_count else "pending",
-            "evidence": f"{score_target_count} score targets / {local_score_source_count} local PDFs / {symbolic_score_note_count} unique symbolic notes / {symbolic_score_source_snippet_count} source snippets / {source_target_checked} source checks / {score_verified_count} exact score locations",
-            "target": "Parsed score notes plus coordinates; no visual crop or source target promotion unless the score sequence is verified.",
+            "evidence": f"{score_target_count} score targets / {local_score_source_count} local PDFs / {symbolic_score_note_count} verified symbolic notes / {symbolic_score_source_snippet_count} source snippets / {score_map_candidate_glyph_count} candidate glyphs / {source_target_checked} source checks / {score_verified_count} exact score locations",
+            "target": "Parsed score notes plus coordinates; candidate glyphs stay unaccepted until source verification converts them into MusicXML.",
         },
         {
             "phase": "4",
@@ -1925,6 +1963,8 @@ def build_transcription_completion(
         "localScoreSourceCount": local_score_source_count,
         "symbolicScoreNoteCount": symbolic_score_note_count,
         "symbolicScoreSourceSnippetCount": symbolic_score_source_snippet_count,
+        "scoreMapCandidateGlyphCount": score_map_candidate_glyph_count,
+        "scoreMapCandidateStaffCount": score_map_candidate_staff_count,
         "pitchSequenceGroupCount": score_sequence_count,
         "checkedVideoLabel": checked_label if checked_label != "0s" else "",
         "uploadedVideoLabel": uploaded_label if uploaded_label != "unknown" else "",
@@ -1944,7 +1984,7 @@ def build_transcription_completion(
             else "Extend the accepted source-backed measure into longer phrases and score-coordinate heat maps."
             if not long_phrase_count
             else (
-                f"Extend the verified IMSLP symbolic score map before promoting {source_target_sequence}; current source overlap is {source_target_best_overlap}/{source_target_note_count}."
+                f"Verify queued IMSLP score glyphs into MusicXML before promoting {source_target_sequence}; current source overlap is {source_target_best_overlap}/{source_target_note_count}."
                 if source_target_checked and not source_target_verified and source_target_sequence
                 else f"Verify the {source_target_note_count}-note source target {source_target_sequence} against the local IMSLP score, then promote only if the score notes and crop match."
             )
