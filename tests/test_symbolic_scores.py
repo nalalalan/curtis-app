@@ -214,6 +214,8 @@ class SymbolicScoreTests(unittest.TestCase):
         self.assertEqual(candidate_audit["status"], "score_map_candidates_ready")
         self.assertGreaterEqual(candidate_audit["scoreMapCandidateGlyphCount"], 1)
         self.assertGreaterEqual(candidate_audit["scoreMapCandidateStaffCount"], 1)
+        self.assertGreaterEqual(candidate_audit["scoreMapNoteHypothesisCount"], 1)
+        self.assertGreaterEqual(candidate_audit["scoreMapNoteHypothesisStaffCount"], 1)
         self.assertFalse(candidate_audit["scoreMapCandidatesAccepted"])
         self.assertEqual(
             [item["note"] for item in score["notes"]],

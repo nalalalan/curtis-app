@@ -285,14 +285,24 @@ def score_map_candidate_audit(target: dict[str, Any]) -> dict[str, Any]:
         }
     data = _read_json_path(path_value)
     glyphs = data.get("candidateGlyphs") if isinstance(data.get("candidateGlyphs"), list) else []
+    note_hypotheses = data.get("noteHypotheses") if isinstance(data.get("noteHypotheses"), list) else []
     staff_groups = data.get("staffGroups") if isinstance(data.get("staffGroups"), list) else []
     accepted = bool(data.get("acceptedEvidence"))
     count = int(data.get("candidateGlyphCount") or len(glyphs) or 0)
     staff_count = int(data.get("staffCount") or len(staff_groups) or 0)
+    note_hypothesis_count = int(data.get("noteHypothesisCount") or len(note_hypotheses) or 0)
+    note_hypothesis_staff_count = int(
+        data.get("noteHypothesisStaffCount")
+        or len({item.get("staffId") for item in note_hypotheses if isinstance(item, dict)})
+        or 0
+    )
     return {
         "status": "score_map_candidates_ready" if count else "score_map_candidates_empty",
         "scoreMapCandidateGlyphCount": count,
         "scoreMapCandidateStaffCount": staff_count,
+        "scoreMapNoteHypothesisCount": note_hypothesis_count,
+        "scoreMapNoteHypothesisStaffCount": note_hypothesis_staff_count,
+        "scoreMapNoteHypothesisSequencePreview": str(data.get("noteHypothesisSequencePreview") or ""),
         "scoreMapCandidatesAccepted": accepted,
         "scoreMapCandidatePath": path_value,
         "scoreMapCandidateSourcePage": data.get("sourcePdfPage") or 0,

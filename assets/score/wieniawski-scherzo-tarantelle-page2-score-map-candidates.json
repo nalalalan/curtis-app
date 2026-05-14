@@ -1,17 +1,21 @@
 {
-  "schema": "curtis_score_map_candidates_v1",
+  "schema": "curtis_score_map_candidates_v2",
   "status": "candidate_not_accepted",
   "acceptedEvidence": false,
   "sourceAssetId": "wieniawski-scherzo-tarantelle-vln",
-  "sourceTitle": "Wieniawski Scherzo-Tarantelle, Op. 16 solo violin",
+  "sourceTitle": "Wieniawski Scherzo-Tarantelle, Op. 16",
   "sourcePdfLocalPath": "assets\\score\\wieniawski-scherzo-tarantelle-solo-imslp.pdf",
   "sourcePdfPage": 2,
   "dpi": 300,
-  "generatedAt": "2026-05-14T19:45:44.769756+00:00",
-  "extractionMethod": "staff-line-and-connected-glyph-queue-v1",
-  "verificationLimit": "These are unverified score glyph coordinates from the local score page. They must be manually or symbolically verified before any pitch label, score crop, or audio match can be shown as accepted Curtis evidence.",
+  "keyFifths": -2,
+  "generatedAt": "2026-05-14T20:20:51.751271+00:00",
+  "extractionMethod": "staff-line-connected-glyph-and-notehead-hypothesis-queue-v2",
+  "verificationLimit": "These are unverified score glyph coordinates from the local score page. Notehead hypotheses use staff position and key signature only. They must be source-reviewed into MusicXML before any pitch label, score crop, or audio match can be shown as accepted Curtis evidence.",
   "staffCount": 7,
   "candidateGlyphCount": 779,
+  "noteHypothesisCount": 172,
+  "noteHypothesisStaffCount": 7,
+  "noteHypothesisSequencePreview": "D# C D# D# D# D# A G G A# D# D# C D# D# D# D# A C A A F A A A F F A A# G D# A A# A# D# A A# C D# C G G G D# F C A D# D# C F D# C F G F D# C D# D# C D# C A C G G D# D# C D# D# D# C A F A F G A",
   "staffGroups": [
     {
       "staffId": 1,
@@ -13343,5 +13347,3447 @@
       "status": "unverified_source_glyph"
     }
   ],
-  "nextVerificationStep": "Review glyph clusters against the local IMSLP PDF, convert verified notes into MusicXML, then run source-target matching against verified symbolic notes only."
+  "noteHypotheses": [
+    {
+      "hypothesisId": "s1-g31-note",
+      "glyphId": "s1-g31",
+      "staffId": 1,
+      "bbox": {
+        "x": 580,
+        "y": 797,
+        "width": 27,
+        "height": 17
+      },
+      "center": {
+        "x": 593.5,
+        "y": 805.5
+      },
+      "staffStepEstimate": 7,
+      "writtenNoteHypothesis": "Eb5",
+      "pitchClassHypothesis": "D#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s1-g56-note",
+      "glyphId": "s1-g56",
+      "staffId": 1,
+      "bbox": {
+        "x": 627,
+        "y": 817,
+        "width": 26,
+        "height": 17
+      },
+      "center": {
+        "x": 640.0,
+        "y": 825.5
+      },
+      "staffStepEstimate": 5,
+      "writtenNoteHypothesis": "C5",
+      "pitchClassHypothesis": "C",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s1-g32-note",
+      "glyphId": "s1-g32",
+      "staffId": 1,
+      "bbox": {
+        "x": 676,
+        "y": 797,
+        "width": 27,
+        "height": 17
+      },
+      "center": {
+        "x": 689.5,
+        "y": 805.5
+      },
+      "staffStepEstimate": 7,
+      "writtenNoteHypothesis": "Eb5",
+      "pitchClassHypothesis": "D#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s1-g34-note",
+      "glyphId": "s1-g34",
+      "staffId": 1,
+      "bbox": {
+        "x": 764,
+        "y": 797,
+        "width": 26,
+        "height": 17
+      },
+      "center": {
+        "x": 777.0,
+        "y": 805.5
+      },
+      "staffStepEstimate": 7,
+      "writtenNoteHypothesis": "Eb5",
+      "pitchClassHypothesis": "D#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s1-g37-note",
+      "glyphId": "s1-g37",
+      "staffId": 1,
+      "bbox": {
+        "x": 915,
+        "y": 797,
+        "width": 19,
+        "height": 17
+      },
+      "center": {
+        "x": 924.5,
+        "y": 805.5
+      },
+      "staffStepEstimate": 7,
+      "writtenNoteHypothesis": "Eb5",
+      "pitchClassHypothesis": "D#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s1-g54-note",
+      "glyphId": "s1-g54",
+      "staffId": 1,
+      "bbox": {
+        "x": 941,
+        "y": 804,
+        "width": 25,
+        "height": 10
+      },
+      "center": {
+        "x": 953.5,
+        "y": 809.0
+      },
+      "staffStepEstimate": 7,
+      "writtenNoteHypothesis": "Eb5",
+      "pitchClassHypothesis": "D#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s1-g95-note",
+      "glyphId": "s1-g95",
+      "staffId": 1,
+      "bbox": {
+        "x": 1073,
+        "y": 837,
+        "width": 39,
+        "height": 21
+      },
+      "center": {
+        "x": 1092.5,
+        "y": 847.5
+      },
+      "staffStepEstimate": 3,
+      "writtenNoteHypothesis": "A4",
+      "pitchClassHypothesis": "A",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s1-g25-note",
+      "glyphId": "s1-g25",
+      "staffId": 1,
+      "bbox": {
+        "x": 1211,
+        "y": 771,
+        "width": 28,
+        "height": 23
+      },
+      "center": {
+        "x": 1225.0,
+        "y": 782.5
+      },
+      "staffStepEstimate": 9,
+      "writtenNoteHypothesis": "G5",
+      "pitchClassHypothesis": "G",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s1-g27-note",
+      "glyphId": "s1-g27",
+      "staffId": 1,
+      "bbox": {
+        "x": 1281,
+        "y": 773,
+        "width": 27,
+        "height": 21
+      },
+      "center": {
+        "x": 1294.5,
+        "y": 783.5
+      },
+      "staffStepEstimate": 9,
+      "writtenNoteHypothesis": "G5",
+      "pitchClassHypothesis": "G",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s1-g12-note",
+      "glyphId": "s1-g12",
+      "staffId": 1,
+      "bbox": {
+        "x": 1505,
+        "y": 751,
+        "width": 15,
+        "height": 22
+      },
+      "center": {
+        "x": 1512.5,
+        "y": 762.0
+      },
+      "staffStepEstimate": 11,
+      "writtenNoteHypothesis": "Bb5",
+      "pitchClassHypothesis": "A#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s1-g48-note",
+      "glyphId": "s1-g48",
+      "staffId": 1,
+      "bbox": {
+        "x": 1500,
+        "y": 797,
+        "width": 27,
+        "height": 17
+      },
+      "center": {
+        "x": 1513.5,
+        "y": 805.5
+      },
+      "staffStepEstimate": 7,
+      "writtenNoteHypothesis": "Eb5",
+      "pitchClassHypothesis": "D#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s1-g49-note",
+      "glyphId": "s1-g49",
+      "staffId": 1,
+      "bbox": {
+        "x": 1538,
+        "y": 797,
+        "width": 27,
+        "height": 17
+      },
+      "center": {
+        "x": 1551.5,
+        "y": 805.5
+      },
+      "staffStepEstimate": 7,
+      "writtenNoteHypothesis": "Eb5",
+      "pitchClassHypothesis": "D#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s1-g73-note",
+      "glyphId": "s1-g73",
+      "staffId": 1,
+      "bbox": {
+        "x": 1572,
+        "y": 817,
+        "width": 36,
+        "height": 17
+      },
+      "center": {
+        "x": 1590.0,
+        "y": 825.5
+      },
+      "staffStepEstimate": 5,
+      "writtenNoteHypothesis": "C5",
+      "pitchClassHypothesis": "C",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s1-g53-note",
+      "glyphId": "s1-g53",
+      "staffId": 1,
+      "bbox": {
+        "x": 1579,
+        "y": 803,
+        "width": 28,
+        "height": 11
+      },
+      "center": {
+        "x": 1593.0,
+        "y": 808.5
+      },
+      "staffStepEstimate": 7,
+      "writtenNoteHypothesis": "Eb5",
+      "pitchClassHypothesis": "D#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s1-g50-note",
+      "glyphId": "s1-g50",
+      "staffId": 1,
+      "bbox": {
+        "x": 1620,
+        "y": 797,
+        "width": 28,
+        "height": 17
+      },
+      "center": {
+        "x": 1634.0,
+        "y": 805.5
+      },
+      "staffStepEstimate": 7,
+      "writtenNoteHypothesis": "Eb5",
+      "pitchClassHypothesis": "D#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s1-g51-note",
+      "glyphId": "s1-g51",
+      "staffId": 1,
+      "bbox": {
+        "x": 1657,
+        "y": 797,
+        "width": 39,
+        "height": 17
+      },
+      "center": {
+        "x": 1676.5,
+        "y": 805.5
+      },
+      "staffStepEstimate": 7,
+      "writtenNoteHypothesis": "Eb5",
+      "pitchClassHypothesis": "D#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s1-g52-note",
+      "glyphId": "s1-g52",
+      "staffId": 1,
+      "bbox": {
+        "x": 1738,
+        "y": 797,
+        "width": 27,
+        "height": 17
+      },
+      "center": {
+        "x": 1751.5,
+        "y": 805.5
+      },
+      "staffStepEstimate": 7,
+      "writtenNoteHypothesis": "Eb5",
+      "pitchClassHypothesis": "D#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s1-g103-note",
+      "glyphId": "s1-g103",
+      "staffId": 1,
+      "bbox": {
+        "x": 1768,
+        "y": 837,
+        "width": 37,
+        "height": 21
+      },
+      "center": {
+        "x": 1786.5,
+        "y": 847.5
+      },
+      "staffStepEstimate": 3,
+      "writtenNoteHypothesis": "A4",
+      "pitchClassHypothesis": "A",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s1-g77-note",
+      "glyphId": "s1-g77",
+      "staffId": 1,
+      "bbox": {
+        "x": 1776,
+        "y": 817,
+        "width": 28,
+        "height": 17
+      },
+      "center": {
+        "x": 1790.0,
+        "y": 825.5
+      },
+      "staffStepEstimate": 5,
+      "writtenNoteHypothesis": "C5",
+      "pitchClassHypothesis": "C",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s1-g109-note",
+      "glyphId": "s1-g109",
+      "staffId": 1,
+      "bbox": {
+        "x": 1812,
+        "y": 838,
+        "width": 28,
+        "height": 20
+      },
+      "center": {
+        "x": 1826.0,
+        "y": 848.0
+      },
+      "staffStepEstimate": 3,
+      "writtenNoteHypothesis": "A4",
+      "pitchClassHypothesis": "A",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s1-g104-note",
+      "glyphId": "s1-g104",
+      "staffId": 1,
+      "bbox": {
+        "x": 1848,
+        "y": 837,
+        "width": 20,
+        "height": 21
+      },
+      "center": {
+        "x": 1858.0,
+        "y": 847.5
+      },
+      "staffStepEstimate": 3,
+      "writtenNoteHypothesis": "A4",
+      "pitchClassHypothesis": "A",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s1-g121-note",
+      "glyphId": "s1-g121",
+      "staffId": 1,
+      "bbox": {
+        "x": 1873,
+        "y": 861,
+        "width": 31,
+        "height": 17
+      },
+      "center": {
+        "x": 1888.5,
+        "y": 869.5
+      },
+      "staffStepEstimate": 1,
+      "writtenNoteHypothesis": "F4",
+      "pitchClassHypothesis": "F",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s1-g105-note",
+      "glyphId": "s1-g105",
+      "staffId": 1,
+      "bbox": {
+        "x": 1922,
+        "y": 837,
+        "width": 28,
+        "height": 21
+      },
+      "center": {
+        "x": 1936.0,
+        "y": 847.5
+      },
+      "staffStepEstimate": 3,
+      "writtenNoteHypothesis": "A4",
+      "pitchClassHypothesis": "A",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s1-g106-note",
+      "glyphId": "s1-g106",
+      "staffId": 1,
+      "bbox": {
+        "x": 1962,
+        "y": 837,
+        "width": 26,
+        "height": 21
+      },
+      "center": {
+        "x": 1975.0,
+        "y": 847.5
+      },
+      "staffStepEstimate": 3,
+      "writtenNoteHypothesis": "A4",
+      "pitchClassHypothesis": "A",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s1-g107-note",
+      "glyphId": "s1-g107",
+      "staffId": 1,
+      "bbox": {
+        "x": 2034,
+        "y": 837,
+        "width": 27,
+        "height": 21
+      },
+      "center": {
+        "x": 2047.5,
+        "y": 847.5
+      },
+      "staffStepEstimate": 3,
+      "writtenNoteHypothesis": "A4",
+      "pitchClassHypothesis": "A",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s1-g126-note",
+      "glyphId": "s1-g126",
+      "staffId": 1,
+      "bbox": {
+        "x": 2070,
+        "y": 861,
+        "width": 29,
+        "height": 17
+      },
+      "center": {
+        "x": 2084.5,
+        "y": 869.5
+      },
+      "staffStepEstimate": 1,
+      "writtenNoteHypothesis": "F4",
+      "pitchClassHypothesis": "F",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s1-g130-note",
+      "glyphId": "s1-g130",
+      "staffId": 1,
+      "bbox": {
+        "x": 2207,
+        "y": 867,
+        "width": 29,
+        "height": 11
+      },
+      "center": {
+        "x": 2221.5,
+        "y": 872.5
+      },
+      "staffStepEstimate": 1,
+      "writtenNoteHypothesis": "F4",
+      "pitchClassHypothesis": "F",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s2-g64-note",
+      "glyphId": "s2-g64",
+      "staffId": 2,
+      "bbox": {
+        "x": 1525,
+        "y": 1152,
+        "width": 23,
+        "height": 17
+      },
+      "center": {
+        "x": 1536.5,
+        "y": 1160.5
+      },
+      "staffStepEstimate": 3,
+      "writtenNoteHypothesis": "A4",
+      "pitchClassHypothesis": "A",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s2-g92-note",
+      "glyphId": "s2-g92",
+      "staffId": 2,
+      "bbox": {
+        "x": 1568,
+        "y": 1216,
+        "width": 19,
+        "height": 23
+      },
+      "center": {
+        "x": 1577.5,
+        "y": 1227.5
+      },
+      "staffStepEstimate": -3,
+      "writtenNoteHypothesis": "Bb3",
+      "pitchClassHypothesis": "A#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s2-g18-note",
+      "glyphId": "s2-g18",
+      "staffId": 2,
+      "bbox": {
+        "x": 1568,
+        "y": 1083,
+        "width": 28,
+        "height": 22
+      },
+      "center": {
+        "x": 1582.0,
+        "y": 1094.0
+      },
+      "staffStepEstimate": 9,
+      "writtenNoteHypothesis": "G5",
+      "pitchClassHypothesis": "G",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s2-g27-note",
+      "glyphId": "s2-g27",
+      "staffId": 2,
+      "bbox": {
+        "x": 1607,
+        "y": 1108,
+        "width": 28,
+        "height": 21
+      },
+      "center": {
+        "x": 1621.0,
+        "y": 1118.5
+      },
+      "staffStepEstimate": 7,
+      "writtenNoteHypothesis": "Eb5",
+      "pitchClassHypothesis": "D#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s2-g66-note",
+      "glyphId": "s2-g66",
+      "staffId": 2,
+      "bbox": {
+        "x": 1650,
+        "y": 1152,
+        "width": 27,
+        "height": 17
+      },
+      "center": {
+        "x": 1663.5,
+        "y": 1160.5
+      },
+      "staffStepEstimate": 3,
+      "writtenNoteHypothesis": "A4",
+      "pitchClassHypothesis": "A",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s2-g57-note",
+      "glyphId": "s2-g57",
+      "staffId": 2,
+      "bbox": {
+        "x": 1653,
+        "y": 1138,
+        "width": 28,
+        "height": 11
+      },
+      "center": {
+        "x": 1667.0,
+        "y": 1143.5
+      },
+      "staffStepEstimate": 4,
+      "writtenNoteHypothesis": "Bb4",
+      "pitchClassHypothesis": "A#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s2-g91-note",
+      "glyphId": "s2-g91",
+      "staffId": 2,
+      "bbox": {
+        "x": 1772,
+        "y": 1214,
+        "width": 21,
+        "height": 24
+      },
+      "center": {
+        "x": 1782.5,
+        "y": 1226.0
+      },
+      "staffStepEstimate": -3,
+      "writtenNoteHypothesis": "Bb3",
+      "pitchClassHypothesis": "A#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s2-g30-note",
+      "glyphId": "s2-g30",
+      "staffId": 2,
+      "bbox": {
+        "x": 1769,
+        "y": 1108,
+        "width": 36,
+        "height": 21
+      },
+      "center": {
+        "x": 1787.0,
+        "y": 1118.5
+      },
+      "staffStepEstimate": 7,
+      "writtenNoteHypothesis": "Eb5",
+      "pitchClassHypothesis": "D#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s2-g70-note",
+      "glyphId": "s2-g70",
+      "staffId": 2,
+      "bbox": {
+        "x": 1819,
+        "y": 1152,
+        "width": 27,
+        "height": 17
+      },
+      "center": {
+        "x": 1832.5,
+        "y": 1160.5
+      },
+      "staffStepEstimate": 3,
+      "writtenNoteHypothesis": "A4",
+      "pitchClassHypothesis": "A",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s2-g58-note",
+      "glyphId": "s2-g58",
+      "staffId": 2,
+      "bbox": {
+        "x": 1822,
+        "y": 1138,
+        "width": 27,
+        "height": 11
+      },
+      "center": {
+        "x": 1835.5,
+        "y": 1143.5
+      },
+      "staffStepEstimate": 4,
+      "writtenNoteHypothesis": "Bb4",
+      "pitchClassHypothesis": "A#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s2-g50-note",
+      "glyphId": "s2-g50",
+      "staffId": 2,
+      "bbox": {
+        "x": 1888,
+        "y": 1132,
+        "width": 24,
+        "height": 17
+      },
+      "center": {
+        "x": 1900.0,
+        "y": 1140.5
+      },
+      "staffStepEstimate": 5,
+      "writtenNoteHypothesis": "C5",
+      "pitchClassHypothesis": "C",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s2-g33-note",
+      "glyphId": "s2-g33",
+      "staffId": 2,
+      "bbox": {
+        "x": 1894,
+        "y": 1108,
+        "width": 20,
+        "height": 21
+      },
+      "center": {
+        "x": 1904.0,
+        "y": 1118.5
+      },
+      "staffStepEstimate": 7,
+      "writtenNoteHypothesis": "Eb5",
+      "pitchClassHypothesis": "D#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s2-g51-note",
+      "glyphId": "s2-g51",
+      "staffId": 2,
+      "bbox": {
+        "x": 1914,
+        "y": 1132,
+        "width": 28,
+        "height": 17
+      },
+      "center": {
+        "x": 1928.0,
+        "y": 1140.5
+      },
+      "staffStepEstimate": 5,
+      "writtenNoteHypothesis": "C5",
+      "pitchClassHypothesis": "C",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s2-g15-note",
+      "glyphId": "s2-g15",
+      "staffId": 2,
+      "bbox": {
+        "x": 2031,
+        "y": 1082,
+        "width": 34,
+        "height": 23
+      },
+      "center": {
+        "x": 2048.0,
+        "y": 1093.5
+      },
+      "staffStepEstimate": 9,
+      "writtenNoteHypothesis": "G5",
+      "pitchClassHypothesis": "G",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s2-g16-note",
+      "glyphId": "s2-g16",
+      "staffId": 2,
+      "bbox": {
+        "x": 2115,
+        "y": 1082,
+        "width": 37,
+        "height": 23
+      },
+      "center": {
+        "x": 2133.5,
+        "y": 1093.5
+      },
+      "staffStepEstimate": 9,
+      "writtenNoteHypothesis": "G5",
+      "pitchClassHypothesis": "G",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s2-g17-note",
+      "glyphId": "s2-g17",
+      "staffId": 2,
+      "bbox": {
+        "x": 2206,
+        "y": 1082,
+        "width": 35,
+        "height": 23
+      },
+      "center": {
+        "x": 2223.5,
+        "y": 1093.5
+      },
+      "staffStepEstimate": 9,
+      "writtenNoteHypothesis": "G5",
+      "pitchClassHypothesis": "G",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s2-g37-note",
+      "glyphId": "s2-g37",
+      "staffId": 2,
+      "bbox": {
+        "x": 2376,
+        "y": 1108,
+        "width": 27,
+        "height": 21
+      },
+      "center": {
+        "x": 2389.5,
+        "y": 1118.5
+      },
+      "staffStepEstimate": 7,
+      "writtenNoteHypothesis": "Eb5",
+      "pitchClassHypothesis": "D#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s3-g133-note",
+      "glyphId": "s3-g133",
+      "staffId": 3,
+      "bbox": {
+        "x": 415,
+        "y": 1491,
+        "width": 24,
+        "height": 15
+      },
+      "center": {
+        "x": 427.0,
+        "y": 1498.5
+      },
+      "staffStepEstimate": 1,
+      "writtenNoteHypothesis": "F4",
+      "pitchClassHypothesis": "F",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s3-g67-note",
+      "glyphId": "s3-g67",
+      "staffId": 3,
+      "bbox": {
+        "x": 569,
+        "y": 1447,
+        "width": 37,
+        "height": 17
+      },
+      "center": {
+        "x": 587.5,
+        "y": 1455.5
+      },
+      "staffStepEstimate": 5,
+      "writtenNoteHypothesis": "C5",
+      "pitchClassHypothesis": "C",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s3-g106-note",
+      "glyphId": "s3-g106",
+      "staffId": 3,
+      "bbox": {
+        "x": 571,
+        "y": 1467,
+        "width": 36,
+        "height": 21
+      },
+      "center": {
+        "x": 589.0,
+        "y": 1477.5
+      },
+      "staffStepEstimate": 3,
+      "writtenNoteHypothesis": "A4",
+      "pitchClassHypothesis": "A",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s3-g36-note",
+      "glyphId": "s3-g36",
+      "staffId": 3,
+      "bbox": {
+        "x": 577,
+        "y": 1426,
+        "width": 26,
+        "height": 18
+      },
+      "center": {
+        "x": 590.0,
+        "y": 1435.0
+      },
+      "staffStepEstimate": 7,
+      "writtenNoteHypothesis": "Eb5",
+      "pitchClassHypothesis": "D#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s3-g37-note",
+      "glyphId": "s3-g37",
+      "staffId": 3,
+      "bbox": {
+        "x": 644,
+        "y": 1426,
+        "width": 28,
+        "height": 18
+      },
+      "center": {
+        "x": 658.0,
+        "y": 1435.0
+      },
+      "staffStepEstimate": 7,
+      "writtenNoteHypothesis": "Eb5",
+      "pitchClassHypothesis": "D#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s3-g69-note",
+      "glyphId": "s3-g69",
+      "staffId": 3,
+      "bbox": {
+        "x": 690,
+        "y": 1447,
+        "width": 29,
+        "height": 17
+      },
+      "center": {
+        "x": 704.5,
+        "y": 1455.5
+      },
+      "staffStepEstimate": 5,
+      "writtenNoteHypothesis": "C5",
+      "pitchClassHypothesis": "C",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s3-g136-note",
+      "glyphId": "s3-g136",
+      "staffId": 3,
+      "bbox": {
+        "x": 733,
+        "y": 1491,
+        "width": 25,
+        "height": 15
+      },
+      "center": {
+        "x": 745.5,
+        "y": 1498.5
+      },
+      "staffStepEstimate": 1,
+      "writtenNoteHypothesis": "F4",
+      "pitchClassHypothesis": "F",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s3-g38-note",
+      "glyphId": "s3-g38",
+      "staffId": 3,
+      "bbox": {
+        "x": 821,
+        "y": 1426,
+        "width": 33,
+        "height": 18
+      },
+      "center": {
+        "x": 837.5,
+        "y": 1435.0
+      },
+      "staffStepEstimate": 7,
+      "writtenNoteHypothesis": "Eb5",
+      "pitchClassHypothesis": "D#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s3-g71-note",
+      "glyphId": "s3-g71",
+      "staffId": 3,
+      "bbox": {
+        "x": 859,
+        "y": 1447,
+        "width": 36,
+        "height": 17
+      },
+      "center": {
+        "x": 877.0,
+        "y": 1455.5
+      },
+      "staffStepEstimate": 5,
+      "writtenNoteHypothesis": "C5",
+      "pitchClassHypothesis": "C",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s3-g138-note",
+      "glyphId": "s3-g138",
+      "staffId": 3,
+      "bbox": {
+        "x": 904,
+        "y": 1491,
+        "width": 25,
+        "height": 15
+      },
+      "center": {
+        "x": 916.5,
+        "y": 1498.5
+      },
+      "staffStepEstimate": 1,
+      "writtenNoteHypothesis": "F4",
+      "pitchClassHypothesis": "F",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s3-g27-note",
+      "glyphId": "s3-g27",
+      "staffId": 3,
+      "bbox": {
+        "x": 952,
+        "y": 1401,
+        "width": 28,
+        "height": 22
+      },
+      "center": {
+        "x": 966.0,
+        "y": 1412.0
+      },
+      "staffStepEstimate": 9,
+      "writtenNoteHypothesis": "G5",
+      "pitchClassHypothesis": "G",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s3-g140-note",
+      "glyphId": "s3-g140",
+      "staffId": 3,
+      "bbox": {
+        "x": 1043,
+        "y": 1491,
+        "width": 27,
+        "height": 15
+      },
+      "center": {
+        "x": 1056.5,
+        "y": 1498.5
+      },
+      "staffStepEstimate": 1,
+      "writtenNoteHypothesis": "F4",
+      "pitchClassHypothesis": "F",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s3-g41-note",
+      "glyphId": "s3-g41",
+      "staffId": 3,
+      "bbox": {
+        "x": 1125,
+        "y": 1426,
+        "width": 33,
+        "height": 18
+      },
+      "center": {
+        "x": 1141.5,
+        "y": 1435.0
+      },
+      "staffStepEstimate": 7,
+      "writtenNoteHypothesis": "Eb5",
+      "pitchClassHypothesis": "D#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s3-g76-note",
+      "glyphId": "s3-g76",
+      "staffId": 3,
+      "bbox": {
+        "x": 1174,
+        "y": 1447,
+        "width": 32,
+        "height": 17
+      },
+      "center": {
+        "x": 1190.0,
+        "y": 1455.5
+      },
+      "staffStepEstimate": 5,
+      "writtenNoteHypothesis": "C5",
+      "pitchClassHypothesis": "C",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s3-g42-note",
+      "glyphId": "s3-g42",
+      "staffId": 3,
+      "bbox": {
+        "x": 1216,
+        "y": 1426,
+        "width": 33,
+        "height": 18
+      },
+      "center": {
+        "x": 1232.5,
+        "y": 1435.0
+      },
+      "staffStepEstimate": 7,
+      "writtenNoteHypothesis": "Eb5",
+      "pitchClassHypothesis": "D#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s3-g44-note",
+      "glyphId": "s3-g44",
+      "staffId": 3,
+      "bbox": {
+        "x": 1314,
+        "y": 1426,
+        "width": 28,
+        "height": 18
+      },
+      "center": {
+        "x": 1328.0,
+        "y": 1435.0
+      },
+      "staffStepEstimate": 7,
+      "writtenNoteHypothesis": "Eb5",
+      "pitchClassHypothesis": "D#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s3-g82-note",
+      "glyphId": "s3-g82",
+      "staffId": 3,
+      "bbox": {
+        "x": 1470,
+        "y": 1447,
+        "width": 20,
+        "height": 17
+      },
+      "center": {
+        "x": 1480.0,
+        "y": 1455.5
+      },
+      "staffStepEstimate": 5,
+      "writtenNoteHypothesis": "C5",
+      "pitchClassHypothesis": "C",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s3-g47-note",
+      "glyphId": "s3-g47",
+      "staffId": 3,
+      "bbox": {
+        "x": 1471,
+        "y": 1426,
+        "width": 19,
+        "height": 16
+      },
+      "center": {
+        "x": 1480.5,
+        "y": 1434.0
+      },
+      "staffStepEstimate": 7,
+      "writtenNoteHypothesis": "Eb5",
+      "pitchClassHypothesis": "D#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s3-g83-note",
+      "glyphId": "s3-g83",
+      "staffId": 3,
+      "bbox": {
+        "x": 1488,
+        "y": 1447,
+        "width": 30,
+        "height": 17
+      },
+      "center": {
+        "x": 1503.0,
+        "y": 1455.5
+      },
+      "staffStepEstimate": 5,
+      "writtenNoteHypothesis": "C5",
+      "pitchClassHypothesis": "C",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s3-g113-note",
+      "glyphId": "s3-g113",
+      "staffId": 3,
+      "bbox": {
+        "x": 1627,
+        "y": 1467,
+        "width": 33,
+        "height": 21
+      },
+      "center": {
+        "x": 1643.5,
+        "y": 1477.5
+      },
+      "staffStepEstimate": 3,
+      "writtenNoteHypothesis": "A4",
+      "pitchClassHypothesis": "A",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s3-g101-note",
+      "glyphId": "s3-g101",
+      "staffId": 3,
+      "bbox": {
+        "x": 1632,
+        "y": 1453,
+        "width": 27,
+        "height": 11
+      },
+      "center": {
+        "x": 1645.5,
+        "y": 1458.5
+      },
+      "staffStepEstimate": 5,
+      "writtenNoteHypothesis": "C5",
+      "pitchClassHypothesis": "C",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s3-g29-note",
+      "glyphId": "s3-g29",
+      "staffId": 3,
+      "bbox": {
+        "x": 1764,
+        "y": 1402,
+        "width": 26,
+        "height": 21
+      },
+      "center": {
+        "x": 1777.0,
+        "y": 1412.5
+      },
+      "staffStepEstimate": 9,
+      "writtenNoteHypothesis": "G5",
+      "pitchClassHypothesis": "G",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s3-g28-note",
+      "glyphId": "s3-g28",
+      "staffId": 3,
+      "bbox": {
+        "x": 1840,
+        "y": 1401,
+        "width": 28,
+        "height": 22
+      },
+      "center": {
+        "x": 1854.0,
+        "y": 1412.0
+      },
+      "staffStepEstimate": 9,
+      "writtenNoteHypothesis": "G5",
+      "pitchClassHypothesis": "G",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s3-g57-note",
+      "glyphId": "s3-g57",
+      "staffId": 3,
+      "bbox": {
+        "x": 2042,
+        "y": 1426,
+        "width": 38,
+        "height": 18
+      },
+      "center": {
+        "x": 2061.0,
+        "y": 1435.0
+      },
+      "staffStepEstimate": 7,
+      "writtenNoteHypothesis": "Eb5",
+      "pitchClassHypothesis": "D#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s3-g58-note",
+      "glyphId": "s3-g58",
+      "staffId": 3,
+      "bbox": {
+        "x": 2093,
+        "y": 1426,
+        "width": 31,
+        "height": 18
+      },
+      "center": {
+        "x": 2108.5,
+        "y": 1435.0
+      },
+      "staffStepEstimate": 7,
+      "writtenNoteHypothesis": "Eb5",
+      "pitchClassHypothesis": "D#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s3-g94-note",
+      "glyphId": "s3-g94",
+      "staffId": 3,
+      "bbox": {
+        "x": 2135,
+        "y": 1447,
+        "width": 36,
+        "height": 17
+      },
+      "center": {
+        "x": 2153.0,
+        "y": 1455.5
+      },
+      "staffStepEstimate": 5,
+      "writtenNoteHypothesis": "C5",
+      "pitchClassHypothesis": "C",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s3-g59-note",
+      "glyphId": "s3-g59",
+      "staffId": 3,
+      "bbox": {
+        "x": 2188,
+        "y": 1426,
+        "width": 32,
+        "height": 18
+      },
+      "center": {
+        "x": 2204.0,
+        "y": 1435.0
+      },
+      "staffStepEstimate": 7,
+      "writtenNoteHypothesis": "Eb5",
+      "pitchClassHypothesis": "D#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s3-g60-note",
+      "glyphId": "s3-g60",
+      "staffId": 3,
+      "bbox": {
+        "x": 2231,
+        "y": 1426,
+        "width": 39,
+        "height": 18
+      },
+      "center": {
+        "x": 2250.5,
+        "y": 1435.0
+      },
+      "staffStepEstimate": 7,
+      "writtenNoteHypothesis": "Eb5",
+      "pitchClassHypothesis": "D#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s3-g61-note",
+      "glyphId": "s3-g61",
+      "staffId": 3,
+      "bbox": {
+        "x": 2304,
+        "y": 1426,
+        "width": 37,
+        "height": 18
+      },
+      "center": {
+        "x": 2322.5,
+        "y": 1435.0
+      },
+      "staffStepEstimate": 7,
+      "writtenNoteHypothesis": "Eb5",
+      "pitchClassHypothesis": "D#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s3-g98-note",
+      "glyphId": "s3-g98",
+      "staffId": 3,
+      "bbox": {
+        "x": 2355,
+        "y": 1447,
+        "width": 29,
+        "height": 17
+      },
+      "center": {
+        "x": 2369.5,
+        "y": 1455.5
+      },
+      "staffStepEstimate": 5,
+      "writtenNoteHypothesis": "C5",
+      "pitchClassHypothesis": "C",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s3-g126-note",
+      "glyphId": "s3-g126",
+      "staffId": 3,
+      "bbox": {
+        "x": 2396,
+        "y": 1467,
+        "width": 28,
+        "height": 21
+      },
+      "center": {
+        "x": 2410.0,
+        "y": 1477.5
+      },
+      "staffStepEstimate": 3,
+      "writtenNoteHypothesis": "A4",
+      "pitchClassHypothesis": "A",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s3-g157-note",
+      "glyphId": "s3-g157",
+      "staffId": 3,
+      "bbox": {
+        "x": 2435,
+        "y": 1491,
+        "width": 19,
+        "height": 15
+      },
+      "center": {
+        "x": 2444.5,
+        "y": 1498.5
+      },
+      "staffStepEstimate": 1,
+      "writtenNoteHypothesis": "F4",
+      "pitchClassHypothesis": "F",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s3-g127-note",
+      "glyphId": "s3-g127",
+      "staffId": 3,
+      "bbox": {
+        "x": 2436,
+        "y": 1467,
+        "width": 19,
+        "height": 21
+      },
+      "center": {
+        "x": 2445.5,
+        "y": 1477.5
+      },
+      "staffStepEstimate": 3,
+      "writtenNoteHypothesis": "A4",
+      "pitchClassHypothesis": "A",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s3-g158-note",
+      "glyphId": "s3-g158",
+      "staffId": 3,
+      "bbox": {
+        "x": 2461,
+        "y": 1491,
+        "width": 25,
+        "height": 15
+      },
+      "center": {
+        "x": 2473.5,
+        "y": 1498.5
+      },
+      "staffStepEstimate": 1,
+      "writtenNoteHypothesis": "F4",
+      "pitchClassHypothesis": "F",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s3-g130-note",
+      "glyphId": "s3-g130",
+      "staffId": 3,
+      "bbox": {
+        "x": 2463,
+        "y": 1477,
+        "width": 26,
+        "height": 11
+      },
+      "center": {
+        "x": 2476.0,
+        "y": 1482.5
+      },
+      "staffStepEstimate": 2,
+      "writtenNoteHypothesis": "G4",
+      "pitchClassHypothesis": "G",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s3-g128-note",
+      "glyphId": "s3-g128",
+      "staffId": 3,
+      "bbox": {
+        "x": 2505,
+        "y": 1467,
+        "width": 26,
+        "height": 21
+      },
+      "center": {
+        "x": 2518.0,
+        "y": 1477.5
+      },
+      "staffStepEstimate": 3,
+      "writtenNoteHypothesis": "A4",
+      "pitchClassHypothesis": "A",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s3-g129-note",
+      "glyphId": "s3-g129",
+      "staffId": 3,
+      "bbox": {
+        "x": 2542,
+        "y": 1467,
+        "width": 31,
+        "height": 21
+      },
+      "center": {
+        "x": 2557.5,
+        "y": 1477.5
+      },
+      "staffStepEstimate": 3,
+      "writtenNoteHypothesis": "A4",
+      "pitchClassHypothesis": "A",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s4-g6-note",
+      "glyphId": "s4-g6",
+      "staffId": 4,
+      "bbox": {
+        "x": 570,
+        "y": 1706,
+        "width": 45,
+        "height": 23
+      },
+      "center": {
+        "x": 592.5,
+        "y": 1717.5
+      },
+      "staffStepEstimate": 9,
+      "writtenNoteHypothesis": "G5",
+      "pitchClassHypothesis": "G",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s4-g4-note",
+      "glyphId": "s4-g4",
+      "staffId": 4,
+      "bbox": {
+        "x": 617,
+        "y": 1694,
+        "width": 19,
+        "height": 23
+      },
+      "center": {
+        "x": 626.5,
+        "y": 1705.5
+      },
+      "staffStepEstimate": 10,
+      "writtenNoteHypothesis": "A5",
+      "pitchClassHypothesis": "A",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s4-g18-note",
+      "glyphId": "s4-g18",
+      "staffId": 4,
+      "bbox": {
+        "x": 657,
+        "y": 1752,
+        "width": 24,
+        "height": 11
+      },
+      "center": {
+        "x": 669.0,
+        "y": 1757.5
+      },
+      "staffStepEstimate": 5,
+      "writtenNoteHypothesis": "C5",
+      "pitchClassHypothesis": "C",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s4-g62-note",
+      "glyphId": "s4-g62",
+      "staffId": 4,
+      "bbox": {
+        "x": 1205,
+        "y": 1810,
+        "width": 24,
+        "height": 10
+      },
+      "center": {
+        "x": 1217.0,
+        "y": 1815.0
+      },
+      "staffStepEstimate": -1,
+      "writtenNoteHypothesis": "D4",
+      "pitchClassHypothesis": "D",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s4-g63-note",
+      "glyphId": "s4-g63",
+      "staffId": 4,
+      "bbox": {
+        "x": 1249,
+        "y": 1810,
+        "width": 26,
+        "height": 22
+      },
+      "center": {
+        "x": 1262.0,
+        "y": 1821.0
+      },
+      "staffStepEstimate": -1,
+      "writtenNoteHypothesis": "D4",
+      "pitchClassHypothesis": "D",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s4-g65-note",
+      "glyphId": "s4-g65",
+      "staffId": 4,
+      "bbox": {
+        "x": 1340,
+        "y": 1810,
+        "width": 26,
+        "height": 22
+      },
+      "center": {
+        "x": 1353.0,
+        "y": 1821.0
+      },
+      "staffStepEstimate": -1,
+      "writtenNoteHypothesis": "D4",
+      "pitchClassHypothesis": "D",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s4-g66-note",
+      "glyphId": "s4-g66",
+      "staffId": 4,
+      "bbox": {
+        "x": 1379,
+        "y": 1810,
+        "width": 26,
+        "height": 11
+      },
+      "center": {
+        "x": 1392.0,
+        "y": 1815.5
+      },
+      "staffStepEstimate": -1,
+      "writtenNoteHypothesis": "D4",
+      "pitchClassHypothesis": "D",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s4-g44-note",
+      "glyphId": "s4-g44",
+      "staffId": 4,
+      "bbox": {
+        "x": 1381,
+        "y": 1792,
+        "width": 25,
+        "height": 15
+      },
+      "center": {
+        "x": 1393.5,
+        "y": 1799.5
+      },
+      "staffStepEstimate": 1,
+      "writtenNoteHypothesis": "F4",
+      "pitchClassHypothesis": "F",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s4-g46-note",
+      "glyphId": "s4-g46",
+      "staffId": 4,
+      "bbox": {
+        "x": 1508,
+        "y": 1792,
+        "width": 25,
+        "height": 15
+      },
+      "center": {
+        "x": 1520.5,
+        "y": 1799.5
+      },
+      "staffStepEstimate": 1,
+      "writtenNoteHypothesis": "F4",
+      "pitchClassHypothesis": "F",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s4-g47-note",
+      "glyphId": "s4-g47",
+      "staffId": 4,
+      "bbox": {
+        "x": 1548,
+        "y": 1792,
+        "width": 26,
+        "height": 15
+      },
+      "center": {
+        "x": 1561.0,
+        "y": 1799.5
+      },
+      "staffStepEstimate": 1,
+      "writtenNoteHypothesis": "F4",
+      "pitchClassHypothesis": "F",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s4-g67-note",
+      "glyphId": "s4-g67",
+      "staffId": 4,
+      "bbox": {
+        "x": 1591,
+        "y": 1810,
+        "width": 28,
+        "height": 11
+      },
+      "center": {
+        "x": 1605.0,
+        "y": 1815.5
+      },
+      "staffStepEstimate": -1,
+      "writtenNoteHypothesis": "D4",
+      "pitchClassHypothesis": "D",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s4-g48-note",
+      "glyphId": "s4-g48",
+      "staffId": 4,
+      "bbox": {
+        "x": 1595,
+        "y": 1792,
+        "width": 25,
+        "height": 15
+      },
+      "center": {
+        "x": 1607.5,
+        "y": 1799.5
+      },
+      "staffStepEstimate": 1,
+      "writtenNoteHypothesis": "F4",
+      "pitchClassHypothesis": "F",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s4-g27-note",
+      "glyphId": "s4-g27",
+      "staffId": 4,
+      "bbox": {
+        "x": 2245,
+        "y": 1759,
+        "width": 24,
+        "height": 10
+      },
+      "center": {
+        "x": 2257.0,
+        "y": 1764.0
+      },
+      "staffStepEstimate": 5,
+      "writtenNoteHypothesis": "C5",
+      "pitchClassHypothesis": "C",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s4-g7-note",
+      "glyphId": "s4-g7",
+      "staffId": 4,
+      "bbox": {
+        "x": 2325,
+        "y": 1709,
+        "width": 28,
+        "height": 20
+      },
+      "center": {
+        "x": 2339.0,
+        "y": 1719.0
+      },
+      "staffStepEstimate": 9,
+      "writtenNoteHypothesis": "G5",
+      "pitchClassHypothesis": "G",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s5-g52-note",
+      "glyphId": "s5-g52",
+      "staffId": 5,
+      "bbox": {
+        "x": 396,
+        "y": 2052,
+        "width": 31,
+        "height": 15
+      },
+      "center": {
+        "x": 411.5,
+        "y": 2059.5
+      },
+      "staffStepEstimate": 3,
+      "writtenNoteHypothesis": "A4",
+      "pitchClassHypothesis": "A",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s5-g25-note",
+      "glyphId": "s5-g25",
+      "staffId": 5,
+      "bbox": {
+        "x": 572,
+        "y": 1984,
+        "width": 27,
+        "height": 21
+      },
+      "center": {
+        "x": 585.5,
+        "y": 1994.5
+      },
+      "staffStepEstimate": 9,
+      "writtenNoteHypothesis": "G5",
+      "pitchClassHypothesis": "G",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s5-g54-note",
+      "glyphId": "s5-g54",
+      "staffId": 5,
+      "bbox": {
+        "x": 618,
+        "y": 2052,
+        "width": 24,
+        "height": 15
+      },
+      "center": {
+        "x": 630.0,
+        "y": 2059.5
+      },
+      "staffStepEstimate": 3,
+      "writtenNoteHypothesis": "A4",
+      "pitchClassHypothesis": "A",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s5-g21-note",
+      "glyphId": "s5-g21",
+      "staffId": 5,
+      "bbox": {
+        "x": 627,
+        "y": 1980,
+        "width": 43,
+        "height": 25
+      },
+      "center": {
+        "x": 648.5,
+        "y": 1992.5
+      },
+      "staffStepEstimate": 9,
+      "writtenNoteHypothesis": "G5",
+      "pitchClassHypothesis": "G",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s5-g24-note",
+      "glyphId": "s5-g24",
+      "staffId": 5,
+      "bbox": {
+        "x": 658,
+        "y": 1983,
+        "width": 35,
+        "height": 22
+      },
+      "center": {
+        "x": 675.5,
+        "y": 1994.0
+      },
+      "staffStepEstimate": 9,
+      "writtenNoteHypothesis": "G5",
+      "pitchClassHypothesis": "G",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s5-g22-note",
+      "glyphId": "s5-g22",
+      "staffId": 5,
+      "bbox": {
+        "x": 1010,
+        "y": 1981,
+        "width": 37,
+        "height": 24
+      },
+      "center": {
+        "x": 1028.5,
+        "y": 1993.0
+      },
+      "staffStepEstimate": 9,
+      "writtenNoteHypothesis": "G5",
+      "pitchClassHypothesis": "G",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s5-g23-note",
+      "glyphId": "s5-g23",
+      "staffId": 5,
+      "bbox": {
+        "x": 1097,
+        "y": 1981,
+        "width": 38,
+        "height": 24
+      },
+      "center": {
+        "x": 1116.0,
+        "y": 1993.0
+      },
+      "staffStepEstimate": 9,
+      "writtenNoteHypothesis": "G5",
+      "pitchClassHypothesis": "G",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s5-g40-note",
+      "glyphId": "s5-g40",
+      "staffId": 5,
+      "bbox": {
+        "x": 1569,
+        "y": 2018,
+        "width": 25,
+        "height": 11
+      },
+      "center": {
+        "x": 1581.5,
+        "y": 2023.5
+      },
+      "staffStepEstimate": 6,
+      "writtenNoteHypothesis": "D5",
+      "pitchClassHypothesis": "D",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s5-g36-note",
+      "glyphId": "s5-g36",
+      "staffId": 5,
+      "bbox": {
+        "x": 1606,
+        "y": 2008,
+        "width": 31,
+        "height": 21
+      },
+      "center": {
+        "x": 1621.5,
+        "y": 2018.5
+      },
+      "staffStepEstimate": 7,
+      "writtenNoteHypothesis": "Eb5",
+      "pitchClassHypothesis": "D#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s5-g37-note",
+      "glyphId": "s5-g37",
+      "staffId": 5,
+      "bbox": {
+        "x": 1644,
+        "y": 2008,
+        "width": 42,
+        "height": 21
+      },
+      "center": {
+        "x": 1665.0,
+        "y": 2018.5
+      },
+      "staffStepEstimate": 7,
+      "writtenNoteHypothesis": "Eb5",
+      "pitchClassHypothesis": "D#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s5-g73-note",
+      "glyphId": "s5-g73",
+      "staffId": 5,
+      "bbox": {
+        "x": 1787,
+        "y": 2092,
+        "width": 25,
+        "height": 11
+      },
+      "center": {
+        "x": 1799.5,
+        "y": 2097.5
+      },
+      "staffStepEstimate": -1,
+      "writtenNoteHypothesis": "D4",
+      "pitchClassHypothesis": "D",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s5-g38-note",
+      "glyphId": "s5-g38",
+      "staffId": 5,
+      "bbox": {
+        "x": 2448,
+        "y": 2009,
+        "width": 28,
+        "height": 20
+      },
+      "center": {
+        "x": 2462.0,
+        "y": 2019.0
+      },
+      "staffStepEstimate": 7,
+      "writtenNoteHypothesis": "Eb5",
+      "pitchClassHypothesis": "D#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s6-g91-note",
+      "glyphId": "s6-g91",
+      "staffId": 6,
+      "bbox": {
+        "x": 396,
+        "y": 2350,
+        "width": 28,
+        "height": 16
+      },
+      "center": {
+        "x": 410.0,
+        "y": 2358.0
+      },
+      "staffStepEstimate": 1,
+      "writtenNoteHypothesis": "F4",
+      "pitchClassHypothesis": "F",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s6-g57-note",
+      "glyphId": "s6-g57",
+      "staffId": 6,
+      "bbox": {
+        "x": 570,
+        "y": 2306,
+        "width": 27,
+        "height": 21
+      },
+      "center": {
+        "x": 583.5,
+        "y": 2316.5
+      },
+      "staffStepEstimate": 5,
+      "writtenNoteHypothesis": "C5",
+      "pitchClassHypothesis": "C",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s6-g75-note",
+      "glyphId": "s6-g75",
+      "staffId": 6,
+      "bbox": {
+        "x": 606,
+        "y": 2330,
+        "width": 29,
+        "height": 17
+      },
+      "center": {
+        "x": 620.5,
+        "y": 2338.5
+      },
+      "staffStepEstimate": 3,
+      "writtenNoteHypothesis": "A4",
+      "pitchClassHypothesis": "A",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s6-g93-note",
+      "glyphId": "s6-g93",
+      "staffId": 6,
+      "bbox": {
+        "x": 649,
+        "y": 2350,
+        "width": 27,
+        "height": 16
+      },
+      "center": {
+        "x": 662.5,
+        "y": 2358.0
+      },
+      "staffStepEstimate": 1,
+      "writtenNoteHypothesis": "F4",
+      "pitchClassHypothesis": "F",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s6-g30-note",
+      "glyphId": "s6-g30",
+      "staffId": 6,
+      "bbox": {
+        "x": 704,
+        "y": 2286,
+        "width": 27,
+        "height": 17
+      },
+      "center": {
+        "x": 717.5,
+        "y": 2294.5
+      },
+      "staffStepEstimate": 7,
+      "writtenNoteHypothesis": "Eb5",
+      "pitchClassHypothesis": "D#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s6-g77-note",
+      "glyphId": "s6-g77",
+      "staffId": 6,
+      "bbox": {
+        "x": 746,
+        "y": 2330,
+        "width": 26,
+        "height": 17
+      },
+      "center": {
+        "x": 759.0,
+        "y": 2338.5
+      },
+      "staffStepEstimate": 3,
+      "writtenNoteHypothesis": "A4",
+      "pitchClassHypothesis": "A",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s6-g95-note",
+      "glyphId": "s6-g95",
+      "staffId": 6,
+      "bbox": {
+        "x": 790,
+        "y": 2350,
+        "width": 25,
+        "height": 16
+      },
+      "center": {
+        "x": 802.5,
+        "y": 2358.0
+      },
+      "staffStepEstimate": 1,
+      "writtenNoteHypothesis": "F4",
+      "pitchClassHypothesis": "F",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s6-g31-note",
+      "glyphId": "s6-g31",
+      "staffId": 6,
+      "bbox": {
+        "x": 857,
+        "y": 2286,
+        "width": 40,
+        "height": 17
+      },
+      "center": {
+        "x": 877.0,
+        "y": 2294.5
+      },
+      "staffStepEstimate": 7,
+      "writtenNoteHypothesis": "Eb5",
+      "pitchClassHypothesis": "D#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s6-g113-note",
+      "glyphId": "s6-g113",
+      "staffId": 6,
+      "bbox": {
+        "x": 867,
+        "y": 2413,
+        "width": 20,
+        "height": 24
+      },
+      "center": {
+        "x": 877.0,
+        "y": 2425.0
+      },
+      "staffStepEstimate": -6,
+      "writtenNoteHypothesis": "F3",
+      "pitchClassHypothesis": "F",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s6-g79-note",
+      "glyphId": "s6-g79",
+      "staffId": 6,
+      "bbox": {
+        "x": 901,
+        "y": 2330,
+        "width": 32,
+        "height": 17
+      },
+      "center": {
+        "x": 917.0,
+        "y": 2338.5
+      },
+      "staffStepEstimate": 3,
+      "writtenNoteHypothesis": "A4",
+      "pitchClassHypothesis": "A",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s6-g33-note",
+      "glyphId": "s6-g33",
+      "staffId": 6,
+      "bbox": {
+        "x": 947,
+        "y": 2286,
+        "width": 34,
+        "height": 17
+      },
+      "center": {
+        "x": 964.0,
+        "y": 2294.5
+      },
+      "staffStepEstimate": 7,
+      "writtenNoteHypothesis": "Eb5",
+      "pitchClassHypothesis": "D#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s6-g24-note",
+      "glyphId": "s6-g24",
+      "staffId": 6,
+      "bbox": {
+        "x": 952,
+        "y": 2271,
+        "width": 31,
+        "height": 12
+      },
+      "center": {
+        "x": 967.5,
+        "y": 2277.0
+      },
+      "staffStepEstimate": 9,
+      "writtenNoteHypothesis": "G5",
+      "pitchClassHypothesis": "G",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s6-g111-note",
+      "glyphId": "s6-g111",
+      "staffId": 6,
+      "bbox": {
+        "x": 995,
+        "y": 2410,
+        "width": 20,
+        "height": 23
+      },
+      "center": {
+        "x": 1005.0,
+        "y": 2421.5
+      },
+      "staffStepEstimate": -5,
+      "writtenNoteHypothesis": "G3",
+      "pitchClassHypothesis": "G",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s6-g13-note",
+      "glyphId": "s6-g13",
+      "staffId": 6,
+      "bbox": {
+        "x": 986,
+        "y": 2251,
+        "width": 40,
+        "height": 27
+      },
+      "center": {
+        "x": 1006.0,
+        "y": 2264.5
+      },
+      "staffStepEstimate": 10,
+      "writtenNoteHypothesis": "A5",
+      "pitchClassHypothesis": "A",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s6-g17-note",
+      "glyphId": "s6-g17",
+      "staffId": 6,
+      "bbox": {
+        "x": 1148,
+        "y": 2260,
+        "width": 35,
+        "height": 23
+      },
+      "center": {
+        "x": 1165.5,
+        "y": 2271.5
+      },
+      "staffStepEstimate": 9,
+      "writtenNoteHypothesis": "G5",
+      "pitchClassHypothesis": "G",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s6-g112-note",
+      "glyphId": "s6-g112",
+      "staffId": 6,
+      "bbox": {
+        "x": 1160,
+        "y": 2412,
+        "width": 20,
+        "height": 23
+      },
+      "center": {
+        "x": 1170.0,
+        "y": 2423.5
+      },
+      "staffStepEstimate": -5,
+      "writtenNoteHypothesis": "G3",
+      "pitchClassHypothesis": "G",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s6-g18-note",
+      "glyphId": "s6-g18",
+      "staffId": 6,
+      "bbox": {
+        "x": 1240,
+        "y": 2260,
+        "width": 31,
+        "height": 23
+      },
+      "center": {
+        "x": 1255.5,
+        "y": 2271.5
+      },
+      "staffStepEstimate": 9,
+      "writtenNoteHypothesis": "G5",
+      "pitchClassHypothesis": "G",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s6-g39-note",
+      "glyphId": "s6-g39",
+      "staffId": 6,
+      "bbox": {
+        "x": 1281,
+        "y": 2286,
+        "width": 32,
+        "height": 17
+      },
+      "center": {
+        "x": 1297.0,
+        "y": 2294.5
+      },
+      "staffStepEstimate": 7,
+      "writtenNoteHypothesis": "Eb5",
+      "pitchClassHypothesis": "D#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s6-g101-note",
+      "glyphId": "s6-g101",
+      "staffId": 6,
+      "bbox": {
+        "x": 1327,
+        "y": 2350,
+        "width": 25,
+        "height": 16
+      },
+      "center": {
+        "x": 1339.5,
+        "y": 2358.0
+      },
+      "staffStepEstimate": 1,
+      "writtenNoteHypothesis": "F4",
+      "pitchClassHypothesis": "F",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s6-g89-note",
+      "glyphId": "s6-g89",
+      "staffId": 6,
+      "bbox": {
+        "x": 1329,
+        "y": 2336,
+        "width": 25,
+        "height": 11
+      },
+      "center": {
+        "x": 1341.5,
+        "y": 2341.5
+      },
+      "staffStepEstimate": 2,
+      "writtenNoteHypothesis": "G4",
+      "pitchClassHypothesis": "G",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s6-g41-note",
+      "glyphId": "s6-g41",
+      "staffId": 6,
+      "bbox": {
+        "x": 1370,
+        "y": 2286,
+        "width": 36,
+        "height": 17
+      },
+      "center": {
+        "x": 1388.0,
+        "y": 2294.5
+      },
+      "staffStepEstimate": 7,
+      "writtenNoteHypothesis": "Eb5",
+      "pitchClassHypothesis": "D#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s6-g42-note",
+      "glyphId": "s6-g42",
+      "staffId": 6,
+      "bbox": {
+        "x": 1458,
+        "y": 2286,
+        "width": 27,
+        "height": 17
+      },
+      "center": {
+        "x": 1471.5,
+        "y": 2294.5
+      },
+      "staffStepEstimate": 7,
+      "writtenNoteHypothesis": "Eb5",
+      "pitchClassHypothesis": "D#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s6-g19-note",
+      "glyphId": "s6-g19",
+      "staffId": 6,
+      "bbox": {
+        "x": 1528,
+        "y": 2262,
+        "width": 27,
+        "height": 21
+      },
+      "center": {
+        "x": 1541.5,
+        "y": 2272.5
+      },
+      "staffStepEstimate": 9,
+      "writtenNoteHypothesis": "G5",
+      "pitchClassHypothesis": "G",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s6-g8-note",
+      "glyphId": "s6-g8",
+      "staffId": 6,
+      "bbox": {
+        "x": 1693,
+        "y": 2234,
+        "width": 18,
+        "height": 23
+      },
+      "center": {
+        "x": 1702.0,
+        "y": 2245.5
+      },
+      "staffStepEstimate": 12,
+      "writtenNoteHypothesis": "C6",
+      "pitchClassHypothesis": "C",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s6-g72-note",
+      "glyphId": "s6-g72",
+      "staffId": 6,
+      "bbox": {
+        "x": 1857,
+        "y": 2307,
+        "width": 26,
+        "height": 20
+      },
+      "center": {
+        "x": 1870.0,
+        "y": 2317.0
+      },
+      "staffStepEstimate": 5,
+      "writtenNoteHypothesis": "C5",
+      "pitchClassHypothesis": "C",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s6-g70-note",
+      "glyphId": "s6-g70",
+      "staffId": 6,
+      "bbox": {
+        "x": 1887,
+        "y": 2306,
+        "width": 37,
+        "height": 21
+      },
+      "center": {
+        "x": 1905.5,
+        "y": 2316.5
+      },
+      "staffStepEstimate": 5,
+      "writtenNoteHypothesis": "C5",
+      "pitchClassHypothesis": "C",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s6-g53-note",
+      "glyphId": "s6-g53",
+      "staffId": 6,
+      "bbox": {
+        "x": 1895,
+        "y": 2293,
+        "width": 25,
+        "height": 10
+      },
+      "center": {
+        "x": 1907.5,
+        "y": 2298.0
+      },
+      "staffStepEstimate": 7,
+      "writtenNoteHypothesis": "Eb5",
+      "pitchClassHypothesis": "D#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s6-g50-note",
+      "glyphId": "s6-g50",
+      "staffId": 6,
+      "bbox": {
+        "x": 1935,
+        "y": 2286,
+        "width": 28,
+        "height": 17
+      },
+      "center": {
+        "x": 1949.0,
+        "y": 2294.5
+      },
+      "staffStepEstimate": 7,
+      "writtenNoteHypothesis": "Eb5",
+      "pitchClassHypothesis": "D#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s6-g106-note",
+      "glyphId": "s6-g106",
+      "staffId": 6,
+      "bbox": {
+        "x": 2108,
+        "y": 2350,
+        "width": 26,
+        "height": 16
+      },
+      "center": {
+        "x": 2121.0,
+        "y": 2358.0
+      },
+      "staffStepEstimate": 1,
+      "writtenNoteHypothesis": "F4",
+      "pitchClassHypothesis": "F",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s6-g109-note",
+      "glyphId": "s6-g109",
+      "staffId": 6,
+      "bbox": {
+        "x": 2552,
+        "y": 2350,
+        "width": 39,
+        "height": 16
+      },
+      "center": {
+        "x": 2571.5,
+        "y": 2358.0
+      },
+      "staffStepEstimate": 1,
+      "writtenNoteHypothesis": "F4",
+      "pitchClassHypothesis": "F",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s7-g62-note",
+      "glyphId": "s7-g62",
+      "staffId": 7,
+      "bbox": {
+        "x": 386,
+        "y": 2670,
+        "width": 21,
+        "height": 17
+      },
+      "center": {
+        "x": 396.5,
+        "y": 2678.5
+      },
+      "staffStepEstimate": 3,
+      "writtenNoteHypothesis": "A4",
+      "pitchClassHypothesis": "A",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s7-g42-note",
+      "glyphId": "s7-g42",
+      "staffId": 7,
+      "bbox": {
+        "x": 396,
+        "y": 2650,
+        "width": 29,
+        "height": 17
+      },
+      "center": {
+        "x": 410.5,
+        "y": 2658.5
+      },
+      "staffStepEstimate": 5,
+      "writtenNoteHypothesis": "C5",
+      "pitchClassHypothesis": "C",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s7-g28-note",
+      "glyphId": "s7-g28",
+      "staffId": 7,
+      "bbox": {
+        "x": 409,
+        "y": 2630,
+        "width": 28,
+        "height": 17
+      },
+      "center": {
+        "x": 423.0,
+        "y": 2638.5
+      },
+      "staffStepEstimate": 7,
+      "writtenNoteHypothesis": "Eb5",
+      "pitchClassHypothesis": "D#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s7-g63-note",
+      "glyphId": "s7-g63",
+      "staffId": 7,
+      "bbox": {
+        "x": 406,
+        "y": 2670,
+        "width": 40,
+        "height": 17
+      },
+      "center": {
+        "x": 426.0,
+        "y": 2678.5
+      },
+      "staffStepEstimate": 3,
+      "writtenNoteHypothesis": "A4",
+      "pitchClassHypothesis": "A",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s7-g43-note",
+      "glyphId": "s7-g43",
+      "staffId": 7,
+      "bbox": {
+        "x": 467,
+        "y": 2650,
+        "width": 20,
+        "height": 17
+      },
+      "center": {
+        "x": 477.0,
+        "y": 2658.5
+      },
+      "staffStepEstimate": 5,
+      "writtenNoteHypothesis": "C5",
+      "pitchClassHypothesis": "C",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s7-g1-note",
+      "glyphId": "s7-g1",
+      "staffId": 7,
+      "bbox": {
+        "x": 569,
+        "y": 2569,
+        "width": 21,
+        "height": 23
+      },
+      "center": {
+        "x": 579.5,
+        "y": 2580.5
+      },
+      "staffStepEstimate": 13,
+      "writtenNoteHypothesis": "D6",
+      "pitchClassHypothesis": "D",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s7-g16-note",
+      "glyphId": "s7-g16",
+      "staffId": 7,
+      "bbox": {
+        "x": 573,
+        "y": 2598,
+        "width": 17,
+        "height": 22
+      },
+      "center": {
+        "x": 581.5,
+        "y": 2609.0
+      },
+      "staffStepEstimate": 10,
+      "writtenNoteHypothesis": "A5",
+      "pitchClassHypothesis": "A",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s7-g87-note",
+      "glyphId": "s7-g87",
+      "staffId": 7,
+      "bbox": {
+        "x": 570,
+        "y": 2690,
+        "width": 25,
+        "height": 11
+      },
+      "center": {
+        "x": 582.5,
+        "y": 2695.5
+      },
+      "staffStepEstimate": 1,
+      "writtenNoteHypothesis": "F4",
+      "pitchClassHypothesis": "F",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s7-g65-note",
+      "glyphId": "s7-g65",
+      "staffId": 7,
+      "bbox": {
+        "x": 572,
+        "y": 2670,
+        "width": 25,
+        "height": 17
+      },
+      "center": {
+        "x": 584.5,
+        "y": 2678.5
+      },
+      "staffStepEstimate": 3,
+      "writtenNoteHypothesis": "A4",
+      "pitchClassHypothesis": "A",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s7-g67-note",
+      "glyphId": "s7-g67",
+      "staffId": 7,
+      "bbox": {
+        "x": 701,
+        "y": 2670,
+        "width": 28,
+        "height": 17
+      },
+      "center": {
+        "x": 715.0,
+        "y": 2678.5
+      },
+      "staffStepEstimate": 3,
+      "writtenNoteHypothesis": "A4",
+      "pitchClassHypothesis": "A",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s7-g120-note",
+      "glyphId": "s7-g120",
+      "staffId": 7,
+      "bbox": {
+        "x": 843,
+        "y": 2715,
+        "width": 41,
+        "height": 28
+      },
+      "center": {
+        "x": 863.5,
+        "y": 2729.0
+      },
+      "staffStepEstimate": -2,
+      "writtenNoteHypothesis": "C4",
+      "pitchClassHypothesis": "C",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s7-g96-note",
+      "glyphId": "s7-g96",
+      "staffId": 7,
+      "bbox": {
+        "x": 898,
+        "y": 2710,
+        "width": 26,
+        "height": 21
+      },
+      "center": {
+        "x": 911.0,
+        "y": 2720.5
+      },
+      "staffStepEstimate": -1,
+      "writtenNoteHypothesis": "D4",
+      "pitchClassHypothesis": "D",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s7-g98-note",
+      "glyphId": "s7-g98",
+      "staffId": 7,
+      "bbox": {
+        "x": 953,
+        "y": 2710,
+        "width": 24,
+        "height": 10
+      },
+      "center": {
+        "x": 965.0,
+        "y": 2715.0
+      },
+      "staffStepEstimate": -1,
+      "writtenNoteHypothesis": "D4",
+      "pitchClassHypothesis": "D",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s7-g99-note",
+      "glyphId": "s7-g99",
+      "staffId": 7,
+      "bbox": {
+        "x": 1035,
+        "y": 2710,
+        "width": 26,
+        "height": 20
+      },
+      "center": {
+        "x": 1048.0,
+        "y": 2720.0
+      },
+      "staffStepEstimate": -1,
+      "writtenNoteHypothesis": "D4",
+      "pitchClassHypothesis": "D",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s7-g23-note",
+      "glyphId": "s7-g23",
+      "staffId": 7,
+      "bbox": {
+        "x": 1174,
+        "y": 2605,
+        "width": 30,
+        "height": 22
+      },
+      "center": {
+        "x": 1189.0,
+        "y": 2616.0
+      },
+      "staffStepEstimate": 9,
+      "writtenNoteHypothesis": "G5",
+      "pitchClassHypothesis": "G",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s7-g45-note",
+      "glyphId": "s7-g45",
+      "staffId": 7,
+      "bbox": {
+        "x": 1176,
+        "y": 2650,
+        "width": 29,
+        "height": 17
+      },
+      "center": {
+        "x": 1190.5,
+        "y": 2658.5
+      },
+      "staffStepEstimate": 5,
+      "writtenNoteHypothesis": "C5",
+      "pitchClassHypothesis": "C",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s7-g69-note",
+      "glyphId": "s7-g69",
+      "staffId": 7,
+      "bbox": {
+        "x": 1177,
+        "y": 2670,
+        "width": 27,
+        "height": 17
+      },
+      "center": {
+        "x": 1190.5,
+        "y": 2678.5
+      },
+      "staffStepEstimate": 3,
+      "writtenNoteHypothesis": "A4",
+      "pitchClassHypothesis": "A",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s7-g24-note",
+      "glyphId": "s7-g24",
+      "staffId": 7,
+      "bbox": {
+        "x": 1237,
+        "y": 2606,
+        "width": 26,
+        "height": 21
+      },
+      "center": {
+        "x": 1250.0,
+        "y": 2616.5
+      },
+      "staffStepEstimate": 9,
+      "writtenNoteHypothesis": "G5",
+      "pitchClassHypothesis": "G",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s7-g70-note",
+      "glyphId": "s7-g70",
+      "staffId": 7,
+      "bbox": {
+        "x": 1238,
+        "y": 2670,
+        "width": 33,
+        "height": 17
+      },
+      "center": {
+        "x": 1254.5,
+        "y": 2678.5
+      },
+      "staffStepEstimate": 3,
+      "writtenNoteHypothesis": "A4",
+      "pitchClassHypothesis": "A",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s7-g106-note",
+      "glyphId": "s7-g106",
+      "staffId": 7,
+      "bbox": {
+        "x": 1441,
+        "y": 2710,
+        "width": 29,
+        "height": 23
+      },
+      "center": {
+        "x": 1455.5,
+        "y": 2721.5
+      },
+      "staffStepEstimate": -1,
+      "writtenNoteHypothesis": "D4",
+      "pitchClassHypothesis": "D",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s7-g107-note",
+      "glyphId": "s7-g107",
+      "staffId": 7,
+      "bbox": {
+        "x": 1485,
+        "y": 2710,
+        "width": 26,
+        "height": 11
+      },
+      "center": {
+        "x": 1498.0,
+        "y": 2715.5
+      },
+      "staffStepEstimate": -1,
+      "writtenNoteHypothesis": "D4",
+      "pitchClassHypothesis": "D",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s7-g108-note",
+      "glyphId": "s7-g108",
+      "staffId": 7,
+      "bbox": {
+        "x": 1564,
+        "y": 2710,
+        "width": 26,
+        "height": 22
+      },
+      "center": {
+        "x": 1577.0,
+        "y": 2721.0
+      },
+      "staffStepEstimate": -1,
+      "writtenNoteHypothesis": "D4",
+      "pitchClassHypothesis": "D",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s7-g34-note",
+      "glyphId": "s7-g34",
+      "staffId": 7,
+      "bbox": {
+        "x": 1680,
+        "y": 2630,
+        "width": 21,
+        "height": 17
+      },
+      "center": {
+        "x": 1690.5,
+        "y": 2638.5
+      },
+      "staffStepEstimate": 7,
+      "writtenNoteHypothesis": "Eb5",
+      "pitchClassHypothesis": "D#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s7-g50-note",
+      "glyphId": "s7-g50",
+      "staffId": 7,
+      "bbox": {
+        "x": 1706,
+        "y": 2650,
+        "width": 27,
+        "height": 17
+      },
+      "center": {
+        "x": 1719.5,
+        "y": 2658.5
+      },
+      "staffStepEstimate": 5,
+      "writtenNoteHypothesis": "C5",
+      "pitchClassHypothesis": "C",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s7-g35-note",
+      "glyphId": "s7-g35",
+      "staffId": 7,
+      "bbox": {
+        "x": 1709,
+        "y": 2630,
+        "width": 24,
+        "height": 17
+      },
+      "center": {
+        "x": 1721.0,
+        "y": 2638.5
+      },
+      "staffStepEstimate": 7,
+      "writtenNoteHypothesis": "Eb5",
+      "pitchClassHypothesis": "D#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s7-g36-note",
+      "glyphId": "s7-g36",
+      "staffId": 7,
+      "bbox": {
+        "x": 1773,
+        "y": 2630,
+        "width": 27,
+        "height": 17
+      },
+      "center": {
+        "x": 1786.5,
+        "y": 2638.5
+      },
+      "staffStepEstimate": 7,
+      "writtenNoteHypothesis": "Eb5",
+      "pitchClassHypothesis": "D#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s7-g51-note",
+      "glyphId": "s7-g51",
+      "staffId": 7,
+      "bbox": {
+        "x": 1773,
+        "y": 2650,
+        "width": 27,
+        "height": 17
+      },
+      "center": {
+        "x": 1786.5,
+        "y": 2658.5
+      },
+      "staffStepEstimate": 5,
+      "writtenNoteHypothesis": "C5",
+      "pitchClassHypothesis": "C",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s7-g114-note",
+      "glyphId": "s7-g114",
+      "staffId": 7,
+      "bbox": {
+        "x": 1919,
+        "y": 2710,
+        "width": 29,
+        "height": 12
+      },
+      "center": {
+        "x": 1933.5,
+        "y": 2716.0
+      },
+      "staffStepEstimate": -1,
+      "writtenNoteHypothesis": "D4",
+      "pitchClassHypothesis": "D",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s7-g12-note",
+      "glyphId": "s7-g12",
+      "staffId": 7,
+      "bbox": {
+        "x": 1937,
+        "y": 2585,
+        "width": 20,
+        "height": 20
+      },
+      "center": {
+        "x": 1947.0,
+        "y": 2595.0
+      },
+      "staffStepEstimate": 11,
+      "writtenNoteHypothesis": "Bb5",
+      "pitchClassHypothesis": "A#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s7-g115-note",
+      "glyphId": "s7-g115",
+      "staffId": 7,
+      "bbox": {
+        "x": 2128,
+        "y": 2710,
+        "width": 21,
+        "height": 24
+      },
+      "center": {
+        "x": 2138.5,
+        "y": 2722.0
+      },
+      "staffStepEstimate": -1,
+      "writtenNoteHypothesis": "D4",
+      "pitchClassHypothesis": "D",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s7-g19-note",
+      "glyphId": "s7-g19",
+      "staffId": 7,
+      "bbox": {
+        "x": 2153,
+        "y": 2599,
+        "width": 22,
+        "height": 24
+      },
+      "center": {
+        "x": 2164.0,
+        "y": 2611.0
+      },
+      "staffStepEstimate": 10,
+      "writtenNoteHypothesis": "A5",
+      "pitchClassHypothesis": "A",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s7-g116-note",
+      "glyphId": "s7-g116",
+      "staffId": 7,
+      "bbox": {
+        "x": 2151,
+        "y": 2710,
+        "width": 26,
+        "height": 22
+      },
+      "center": {
+        "x": 2164.0,
+        "y": 2721.0
+      },
+      "staffStepEstimate": -1,
+      "writtenNoteHypothesis": "D4",
+      "pitchClassHypothesis": "D",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s7-g39-note",
+      "glyphId": "s7-g39",
+      "staffId": 7,
+      "bbox": {
+        "x": 2217,
+        "y": 2630,
+        "width": 25,
+        "height": 17
+      },
+      "center": {
+        "x": 2229.5,
+        "y": 2638.5
+      },
+      "staffStepEstimate": 7,
+      "writtenNoteHypothesis": "Eb5",
+      "pitchClassHypothesis": "D#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s7-g13-note",
+      "glyphId": "s7-g13",
+      "staffId": 7,
+      "bbox": {
+        "x": 2449,
+        "y": 2586,
+        "width": 16,
+        "height": 21
+      },
+      "center": {
+        "x": 2457.0,
+        "y": 2596.5
+      },
+      "staffStepEstimate": 11,
+      "writtenNoteHypothesis": "Bb5",
+      "pitchClassHypothesis": "A#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    },
+    {
+      "hypothesisId": "s7-g14-note",
+      "glyphId": "s7-g14",
+      "staffId": 7,
+      "bbox": {
+        "x": 2468,
+        "y": 2586,
+        "width": 19,
+        "height": 21
+      },
+      "center": {
+        "x": 2477.5,
+        "y": 2596.5
+      },
+      "staffStepEstimate": 11,
+      "writtenNoteHypothesis": "Bb5",
+      "pitchClassHypothesis": "A#",
+      "status": "unverified_notehead_hypothesis",
+      "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML."
+    }
+  ],
+  "nextVerificationStep": "Review the notehead hypotheses against the local IMSLP PDF, convert verified notes into MusicXML, then run source-target matching against verified symbolic notes only."
 }

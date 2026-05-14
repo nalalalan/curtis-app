@@ -1071,6 +1071,8 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(audit["symbolicScoreSourceSnippetCount"], 1)
         self.assertGreaterEqual(audit["scoreMapCandidateGlyphCount"], 1)
         self.assertGreaterEqual(audit["scoreMapCandidateStaffCount"], 1)
+        self.assertGreaterEqual(audit["scoreMapNoteHypothesisCount"], 1)
+        self.assertGreaterEqual(audit["scoreMapNoteHypothesisStaffCount"], 1)
         self.assertTrue(
             target["symbolicScore"]["candidateMapPath"].endswith(
                 "wieniawski-scherzo-tarantelle-page2-score-map-candidates.json"

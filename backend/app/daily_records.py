@@ -824,6 +824,7 @@ def score_reference_audit_for_target(target: dict[str, Any]) -> dict[str, Any]:
     candidate_audit = score_map_candidate_audit(target)
     symbolic_score_note_count = int(symbolic_audit.get("symbolicScoreNoteCount") or 0)
     score_map_candidate_glyph_count = int(candidate_audit.get("scoreMapCandidateGlyphCount") or 0)
+    score_map_note_hypothesis_count = int(candidate_audit.get("scoreMapNoteHypothesisCount") or 0)
     symbolic_count = sum(1 for sequence in sequences if reference_sequence_is_score_derived(sequence))
     reference_audio_count = sum(
         1
@@ -866,6 +867,8 @@ def score_reference_audit_for_target(target: dict[str, Any]) -> dict[str, Any]:
         "scoreMapCandidateStatus": candidate_audit.get("status") or "",
         "scoreMapCandidateGlyphCount": score_map_candidate_glyph_count,
         "scoreMapCandidateStaffCount": int(candidate_audit.get("scoreMapCandidateStaffCount") or 0),
+        "scoreMapNoteHypothesisCount": score_map_note_hypothesis_count,
+        "scoreMapNoteHypothesisStaffCount": int(candidate_audit.get("scoreMapNoteHypothesisStaffCount") or 0),
         "scoreMapCandidatesAccepted": bool(candidate_audit.get("scoreMapCandidatesAccepted")),
         "scoreMapCandidatePath": candidate_audit.get("scoreMapCandidatePath") or "",
         "referenceAudioSequenceCount": reference_audio_count,
@@ -902,6 +905,8 @@ def score_reference_audit_for_pieces(pieces: list[dict[str, Any]]) -> dict[str, 
         "symbolicScoreSourceSnippetCount": sum(item.get("symbolicScoreSourceSnippetCount", 0) for item in audits),
         "scoreMapCandidateGlyphCount": sum(item.get("scoreMapCandidateGlyphCount", 0) for item in audits),
         "scoreMapCandidateStaffCount": sum(item.get("scoreMapCandidateStaffCount", 0) for item in audits),
+        "scoreMapNoteHypothesisCount": sum(item.get("scoreMapNoteHypothesisCount", 0) for item in audits),
+        "scoreMapNoteHypothesisStaffCount": sum(item.get("scoreMapNoteHypothesisStaffCount", 0) for item in audits),
         "sourcePdfLocalReadyCount": len(
             {
                 item.get("scoreAssetId")

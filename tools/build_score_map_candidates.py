@@ -15,6 +15,29 @@ from scipy import ndimage
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+TREBLE_STEPS = ["E", "F", "G", "A", "B", "C", "D"]
+PITCH_CLASS_VALUES = {
+    "C": 0,
+    "C#": 1,
+    "Db": 1,
+    "D": 2,
+    "D#": 3,
+    "Eb": 3,
+    "E": 4,
+    "F": 5,
+    "F#": 6,
+    "Gb": 6,
+    "G": 7,
+    "G#": 8,
+    "Ab": 8,
+    "A": 9,
+    "A#": 10,
+    "Bb": 10,
+    "B": 11,
+}
+PITCH_CLASS_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+FLAT_KEY_STEPS = {"B", "E", "A", "D", "G", "C", "F"}
+SHARP_KEY_STEPS = {"F", "C", "G", "D", "A", "E", "B"}
 
 
 def parse_args() -> argparse.Namespace:
@@ -27,6 +50,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--source-asset-id", default="", help="Curtis score asset id.")
     parser.add_argument("--source-title", default="", help="Human title for the source score.")
     parser.add_argument("--dpi", type=int, default=300, help="Render DPI.")
+    parser.add_argument("--key-fifths", type=int, default=-2, help="Key signature fifths for pitch hypotheses.")
     return parser.parse_args()
 
 
@@ -159,6 +183,67 @@ def candidate_glyphs_for_staff(binary: np.ndarray, staff: dict[str, Any]) -> lis
     return glyphs
 
 
+def note_name_for_staff_step(staff_step: int, key_fifths: int) -> tuple[str, str]:
+    octave = 4 + ((staff_step + 2) // 7)
+    step = TREBLE_STEPS[staff_step % len(TREBLE_STEPS)]
+    accidental = ""
+    if key_fifths < 0:
+        flats = list("BEADGCF")[: min(7, abs(key_fifths))]
+        if step in flats:
+            accidental = "b"
+    elif key_fifths > 0:
+        sharps = list("FCGDAEB")[: min(7, key_fifths)]
+        if step in sharps:
+            accidental = "#"
+    note_name = f"{step}{accidental}{octave}"
+    pitch_key = f"{step}{accidental}"
+    pitch_value = PITCH_CLASS_VALUES.get(pitch_key)
+    pitch_class = PITCH_CLASS_NAMES[pitch_value] if pitch_value is not None else ""
+    return note_name, pitch_class
+
+
+def likely_notehead_glyph(glyph: dict[str, Any]) -> bool:
+    bbox = glyph.get("bbox") if isinstance(glyph.get("bbox"), dict) else {}
+    width = int(bbox.get("width") or 0)
+    height = int(bbox.get("height") or 0)
+    area = int(glyph.get("area") or 0)
+    if not (10 <= width <= 48 and 10 <= height <= 30):
+        return False
+    if not (160 <= area <= 700):
+        return False
+    aspect = width / max(1, height)
+    if not (0.65 <= aspect <= 2.8):
+        return False
+    return True
+
+
+def note_hypotheses_from_glyphs(glyphs: list[dict[str, Any]], key_fifths: int) -> list[dict[str, Any]]:
+    hypotheses: list[dict[str, Any]] = []
+    for glyph in glyphs:
+        if not likely_notehead_glyph(glyph):
+            continue
+        staff_step = int(glyph.get("staffStepEstimate") or 0)
+        note_name, pitch_class = note_name_for_staff_step(staff_step, key_fifths)
+        if not note_name or not pitch_class:
+            continue
+        hypotheses.append(
+            {
+                "hypothesisId": f"{glyph['glyphId']}-note",
+                "glyphId": glyph["glyphId"],
+                "staffId": glyph["staffId"],
+                "bbox": glyph["bbox"],
+                "center": glyph["center"],
+                "staffStepEstimate": staff_step,
+                "writtenNoteHypothesis": note_name,
+                "pitchClassHypothesis": pitch_class,
+                "status": "unverified_notehead_hypothesis",
+                "limit": "Staff-position pitch label only; not accepted score evidence until source-reviewed into MusicXML.",
+            }
+        )
+    hypotheses.sort(key=lambda item: (item["staffId"], item["center"]["x"], item["center"]["y"]))
+    return hypotheses
+
+
 def build_candidate_map(args: argparse.Namespace) -> dict[str, Any]:
     pdf_path = resolve_path(args.pdf)
     if not pdf_path.exists():
@@ -174,8 +259,15 @@ def build_candidate_map(args: argparse.Namespace) -> dict[str, Any]:
             staff_glyphs = candidate_glyphs_for_staff(binary, staff)
             staff["candidateGlyphCount"] = len(staff_glyphs)
             glyphs.extend(staff_glyphs)
+        note_hypotheses = note_hypotheses_from_glyphs(glyphs, args.key_fifths)
+        note_hypothesis_staves = len({item["staffId"] for item in note_hypotheses})
+        sequence_preview = [
+            str(item["pitchClassHypothesis"])
+            for item in note_hypotheses
+            if str(item.get("pitchClassHypothesis") or "").strip()
+        ][:80]
         return {
-            "schema": "curtis_score_map_candidates_v1",
+            "schema": "curtis_score_map_candidates_v2",
             "status": "candidate_not_accepted",
             "acceptedEvidence": False,
             "sourceAssetId": args.source_asset_id,
@@ -183,20 +275,26 @@ def build_candidate_map(args: argparse.Namespace) -> dict[str, Any]:
             "sourcePdfLocalPath": str(args.pdf),
             "sourcePdfPage": args.page,
             "dpi": args.dpi,
+            "keyFifths": args.key_fifths,
             "generatedAt": datetime.now(timezone.utc).isoformat(),
-            "extractionMethod": "staff-line-and-connected-glyph-queue-v1",
+            "extractionMethod": "staff-line-connected-glyph-and-notehead-hypothesis-queue-v2",
             "verificationLimit": (
                 "These are unverified score glyph coordinates from the local score page. "
-                "They must be manually or symbolically verified before any pitch label, score crop, "
-                "or audio match can be shown as accepted Curtis evidence."
+                "Notehead hypotheses use staff position and key signature only. They must be "
+                "source-reviewed into MusicXML before any pitch label, score crop, or audio match "
+                "can be shown as accepted Curtis evidence."
             ),
             "staffCount": len(staff_groups),
             "candidateGlyphCount": len(glyphs),
+            "noteHypothesisCount": len(note_hypotheses),
+            "noteHypothesisStaffCount": note_hypothesis_staves,
+            "noteHypothesisSequencePreview": " ".join(sequence_preview),
             "staffGroups": staff_groups,
             "candidateGlyphs": glyphs,
+            "noteHypotheses": note_hypotheses,
             "nextVerificationStep": (
-                "Review glyph clusters against the local IMSLP PDF, convert verified notes into MusicXML, "
-                "then run source-target matching against verified symbolic notes only."
+                "Review the notehead hypotheses against the local IMSLP PDF, convert verified notes into "
+                "MusicXML, then run source-target matching against verified symbolic notes only."
             ),
         }
     finally:
@@ -214,6 +312,7 @@ def main() -> None:
     output.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     print(
         f"Wrote {data['candidateGlyphCount']} unaccepted score glyph candidates "
+        f"and {data['noteHypothesisCount']} unaccepted note hypotheses "
         f"across {data['staffCount']} staves to {output}"
     )
 
