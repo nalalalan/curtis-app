@@ -319,7 +319,7 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertEqual(completion["sourceVerificationTargets"][0]["sourceScoreBestOverlap"], 1)
         self.assertEqual(completion["sourceVerificationTargets"][0]["sourceScoreReferenceSequence"], "D C A# D C A# D")
 
-    def test_source_verification_targets_require_long_local_unverified_runs(self):
+    def test_source_verification_targets_require_local_unverified_source_runs(self):
         daily_records = {
             "records": [
                 {
@@ -342,8 +342,8 @@ class TranscriptionCompletionTests(unittest.TestCase):
                         },
                         {
                             "status": "reference_sequence_match",
-                            "matchedNoteRun": 6,
-                            "detectedPitchClassSequenceCompact": "D D# D A# G C",
+                            "matchedNoteRun": 3,
+                            "detectedPitchClassSequenceCompact": "D D# A",
                             "scoreLocationVerified": False,
                             "clip": {"mediaUrl": "/api/curtis/media/sample/too-short"},
                             "transcription": {"sampleId": "too-short"},
@@ -354,6 +354,35 @@ class TranscriptionCompletionTests(unittest.TestCase):
         }
 
         self.assertEqual(source_verification_target_count(daily_records), 0)
+
+    def test_source_verification_targets_check_measure_sized_candidates_against_symbolic_score(self):
+        daily_records = {
+            "records": [
+                {
+                    "practiceDay": "2026-05-03",
+                    "matchGroups": [
+                        {
+                            "status": "reference_sequence_match",
+                            "matchedNoteRun": 4,
+                            "detectedPitchClassSequence": "D C G A",
+                            "detectedPitchClassSequenceCompact": "D C G A",
+                            "scoreLocationVerified": False,
+                            "score": {"assetId": "wieniawski-scherzo-tarantelle-vln"},
+                            "clip": {"mediaUrl": "/api/curtis/media/sample/measure-target"},
+                            "transcription": {"sampleId": "measure-target"},
+                        }
+                    ],
+                }
+            ]
+        }
+
+        target = source_verification_target_top(daily_records)
+
+        self.assertEqual(target["sequence"], "D C G A")
+        self.assertTrue(target["sourceScoreChecked"])
+        self.assertFalse(target["sourceScoreVerified"])
+        self.assertEqual(target["sourceScoreBestOverlap"], 2)
+        self.assertEqual(target["sourceScoreBestOverlapSequence"], "D C")
 
     def test_reference_phrase_candidate_top_prefers_actual_displayed_sequence_length(self):
         daily_records = {

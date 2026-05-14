@@ -1191,12 +1191,21 @@ def reference_phrase_candidate_top(daily_records: dict[str, Any]) -> dict[str, A
 
 
 def source_verification_target_match(match: dict[str, Any]) -> bool:
-    if not reference_phrase_candidate_match(match):
+    if not isinstance(match, dict):
         return False
-    if int(match.get("matchedNoteRun") or 0) < 7:
+    if match.get("scoreLocationVerified"):
+        return False
+    status = str(match.get("status") or "").strip().lower()
+    if status not in {"reference_sequence_match", "score_sequence_match"}:
+        return False
+    if not match_has_local_media(match):
+        return False
+    if int(match.get("matchedNoteRun") or 0) < 4:
+        return False
+    if match_distinct_pitch_class_count(match) < 3:
         return False
     sequence = match_detected_pitch_sequence(match)
-    return len(sequence.split()) >= 7
+    return len(sequence.split()) >= 4
 
 
 def source_reference_target_for_match(match: dict[str, Any]) -> dict[str, Any]:
