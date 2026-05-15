@@ -417,7 +417,7 @@ def _key_signature_marks(key_signature: dict[str, Any] | None) -> tuple[str, flo
         "E#": _staff_y("E5"),
         "B#": _staff_y("B4"),
     }
-    glyph = "♭" if accidental_type == "flat" else "♯" if accidental_type == "sharp" else ""
+    glyph = "&#9837;" if accidental_type == "flat" else "&#9839;" if accidental_type == "sharp" else ""
     if not glyph:
         return "", 0.0
     marks: list[str] = []
@@ -426,7 +426,7 @@ def _key_signature_marks(key_signature: dict[str, Any] | None) -> tuple[str, flo
         if y is None:
             continue
         x = 96 + (index * 16)
-        marks.append(f'<text class="key-signature" x="{x}" y="{y + 7:.1f}">{escape(glyph)}</text>')
+        marks.append(f'<text class="key-signature" x="{x}" y="{y + 2:.1f}">{glyph}</text>')
     return "".join(marks), float(len(marks) * 16)
 
 
@@ -468,7 +468,7 @@ def render_symbolic_score_svg(
         "svg{background:#fffdf8;color:#1b2524;font-family:Georgia,'Times New Roman',serif}"
         ".staff line,.ledger{stroke:#1f2928;stroke-width:1.45;stroke-linecap:square}"
         ".note ellipse,.note line{fill:#1f2928;stroke:#1f2928;stroke-width:1.2}"
-        ".clef{font-family:'Bravura','Noto Music','Segoe UI Symbol',serif;font-size:76px;fill:#1f2928}"
+        ".clef{font-family:'Bravura','Noto Music','Segoe UI Symbol',serif;font-size:68px;fill:#1f2928}"
         ".key-signature{font-family:Georgia,'Times New Roman',serif;font-size:34px;font-weight:700;fill:#1f2928}"
         ".title{font-size:16px;font-weight:600}.label{font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}"
         "</style>"
@@ -476,6 +476,6 @@ def render_symbolic_score_svg(
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} 124" role="img">'
         f"{css}{title_markup}{label_markup}<g class=\"staff\">{staff_lines}</g>"
-        f'<text class="clef" x="48" y="88">&#119070;</text>{key_marks}'
+        f'<text class="clef" x="48" y="80">&#119070;</text>{key_marks}'
         f"{''.join(marks)}</svg>"
     )

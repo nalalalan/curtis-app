@@ -1972,7 +1972,7 @@ def build_transcription_completion(
     implementation_summary = (
         "Practice-time scanning is working. The long-phrase path now has a local source score PDF and still counts only verified score/audio phrase matches."
         if not measure_match_count
-        else "Practice-time scanning is working. The long-phrase path has source-verification targets and staff review packets, but accepted score/audio phrase evidence is currently zero after the mismatched score crop was demoted."
+        else "Practice-time scanning is working. The long-phrase path now has one accepted source-score/audio phrase; the remaining work is expanding that verified lane into longer phrases and full-session coverage."
         if long_phrase_count
         else "Practice-time scanning is working. The long-phrase path now has a source-backed score/audio measure match and still separates measure progress from solved long phrases."
     )

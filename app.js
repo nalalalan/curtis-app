@@ -1418,7 +1418,7 @@ function renderKeySignatureMarks(signature) {
   };
   const positions = normalized.accidentalType === "flat" ? flatPositions : sharpPositions;
   const glyph = normalized.accidentalType === "flat" ? "&#9837;" : "&#9839;";
-  const baselineOffset = normalized.accidentalType === "flat" ? 3 : 4;
+  const baselineOffset = normalized.accidentalType === "flat" ? 1 : 3;
   const marks = normalized.accidentals
     .map((item, index) => {
       const letter = String(item || "").trim().charAt(0).toUpperCase();
@@ -1437,7 +1437,7 @@ function renderKeySignatureMarks(signature) {
 }
 
 function renderTrebleClef() {
-  return `<text class="treble-clef" x="24" y="76">&#119070;</text>`;
+  return `<text class="treble-clef" x="24" y="70">&#119070;</text>`;
 }
 
 function renderLedgerLines(y, x) {
