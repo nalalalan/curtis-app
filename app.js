@@ -98,6 +98,7 @@ async function apiFetch(path, options = {}) {
   try {
     const response = await fetch(`${apiBase()}${path}`, {
       ...options,
+      cache: "no-store",
       headers: {
         "Content-Type": "application/json",
         ...(options.headers || {})
