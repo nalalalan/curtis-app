@@ -575,13 +575,11 @@ function dailyRecordList(ops) {
 
 function scoreMatchGroupCount(records) {
   const list = Array.isArray(records?.records) ? records.records : [];
-  return list.reduce((total, record) => total + exactScoreMatchGroups(record).length + sourceScoreMatchGroups(record).length, 0);
+  return list.reduce((total, record) => total + exactScoreMatchGroups(record).length, 0);
 }
 
 function firstSourceScoreMatchDay(records) {
-  const match = (Array.isArray(records) ? records : []).find((record) => (
-    exactScoreMatchGroups(record).length || sourceScoreMatchGroups(record).length
-  ));
+  const match = (Array.isArray(records) ? records : []).find((record) => exactScoreMatchGroups(record).length);
   return match?.practiceDay || "";
 }
 
@@ -1735,10 +1733,11 @@ function renderHeatMap(record) {
 }
 
 function recordStatusLabel(record) {
+  if (exactScoreMatchGroups(record).length) return "match";
   if (record?.matchingWorkflow?.status === "score_sequence_matches_ready") return "note match";
   if (record?.matchingWorkflow?.status === "reference_sequence_matches_ready") return "matching";
   if (record?.matchingWorkflow?.status === "pitch_anchor_matches_ready") {
-    return sourceScoreMatchGroups(record).length ? "score note" : "matching";
+    return "matching";
   }
   if (record?.transcription?.reliability === "audio_matched_fragment") return "detected note";
   if (record?.transcription?.reliability === "audio_verified_micro") return "audio-checked transcription";
@@ -1759,6 +1758,7 @@ function recordStatusLabel(record) {
 }
 
 function recordStatusTone(record) {
+  if (exactScoreMatchGroups(record).length) return "verified";
   if (
     record?.matchingWorkflow?.status === "score_sequence_matches_ready"
     || record?.matchingWorkflow?.status === "reference_sequence_matches_ready"
@@ -2285,7 +2285,7 @@ function renderScoreMatchGroups(record) {
   const groups = exactScoreMatchGroups(record).slice(0, 1);
   if (!groups.length) return "";
   return `
-    <div class="score-match-groups" aria-label="Note matched practice groups">
+    <div class="score-match-groups" aria-label="Accepted score transcription media match">
       ${groups.map((group, index) => {
         const clip = group?.clip || {};
         const events = matchGroupNotationEvents(group);
@@ -2309,14 +2309,14 @@ function renderScoreMatchGroups(record) {
         return `
           <article class="score-match-group note-match-group">
             <div class="score-match-head">
-              <span>Match ${index + 1}</span>
+              <span>Match</span>
               <strong>${escapeHtml(shortText(matchLabel, 86))}</strong>
             </div>
             <div class="score-match-grid${showScoreSnippet ? "" : " note-match-grid"}">
               ${showScoreSnippet ? `<section class="score-reference-panel">
                 <div class="score-heat-header">
                   <span>Score</span>
-                  <strong>${escapeHtml(shortText(pieceTitle, 56))}</strong>
+                  <strong>${escapeHtml(shortText(pieceTitle, 42))}</strong>
                 </div>
                 ${renderScoreImage({ score: group?.score || {} }, true)}
               </section>` : ""}
@@ -2555,12 +2555,8 @@ function renderLeadTranscription(record) {
 }
 
 function renderDailyRecord(record, index = 0, defaultOpenDay = "") {
-  const playableClip = primaryNotationClip(record) || primaryPlayableClip(record);
-  const scoreSnippet = scoreSnippetForRecord(record);
   const transcription = record?.transcription || {};
-  const displayNotation = transcription?.displayNotation !== false && transcription?.transcriptionReady === true;
-  const sourceScoreMatches = renderPitchAnchorGroups(record);
-  const scoreMatches = sourceScoreMatches ? "" : renderScoreMatchGroups(record);
+  const scoreMatches = renderScoreMatchGroups(record);
   const openTarget = new URLSearchParams(window.location.search).get("open") || "";
   const openForReview = openTarget
     ? (openTarget === "first" ? index === 0 : openTarget === record.practiceDay)
@@ -2579,11 +2575,8 @@ function renderDailyRecord(record, index = 0, defaultOpenDay = "") {
         <em data-tone="${escapeHtml(recordStatusTone(record))}">${escapeHtml(recordStatusLabel(record))}</em>
       </summary>
       <div class="record-card-body record-essentials-body">
-        ${sourceScoreMatches}
         ${scoreMatches}
-        ${(!sourceScoreMatches && !scoreMatches) ? (displayNotation
-          ? renderMatchedPracticePair(record, playableClip, transcription)
-          : renderPendingPracticePair(record)) : ""}
+        ${scoreMatches ? "" : renderPendingPracticePair(record)}
         ${renderTranscriptionRunLink(record, transcription)}
       </div>
     </details>
@@ -2622,68 +2615,26 @@ function renderPieces() {
     return;
   }
   if (!list.length) {
-    elements.pieceList.innerHTML = `<p class="empty">Confirmed repertoire evidence pending transcription or source confirmation.</p>`;
+    elements.pieceList.innerHTML = `<p class="empty">No confirmed repertoire evidence.</p>`;
     return;
   }
   elements.pieceList.innerHTML = list.slice(0, 8).map((piece, index) => {
-    const evidence = Array.isArray(piece.evidence) ? piece.evidence.slice(0, 2) : [];
-    const leadEvidence = evidence[0] || {};
-    const leadObservation = Array.isArray(piece.observations) ? piece.observations[0] : null;
+    const evidence = Array.isArray(piece.evidence) ? piece.evidence : [];
+    const days = Array.isArray(piece.recentPracticeDays) ? piece.recentPracticeDays.filter(Boolean).slice(0, 4) : [];
+    const status = piece.status || "confirmed";
     return `
-    <details class="piece-row evidence-piece">
-      <summary class="piece-summary">
-        <span>${escapeHtml(piece.status || "confirmed")}</span>
+    <article class="piece-row evidence-piece">
+      <div>
+        <span>${escapeHtml(status)}</span>
         <strong>${escapeHtml(piece.title || "Piece")}</strong>
-        <em>${escapeHtml(piece.totalActiveViolinLabel || "practice pending")}</em>
-        <small class="row-evidence-line">${escapeHtml(pieceEvidenceLine(piece, evidence))}</small>
-      </summary>
-      <div class="piece-card-body">
-        <div class="piece-evidence-copy">
-        <p>${escapeHtml(shortTranscriptionText(piece.reason || "Confirmed from daily practice evidence.", 150))}</p>
-        <div class="blocker-line repertoire-blocker">
-          <span>Current blocker</span>
-          <strong>${escapeHtml(transcriptionDisplayText(piece.mainCurtisBlocker || "Specific blocker pending."))}</strong>
-        </div>
-        <small class="piece-meta-line">Progress: ${escapeHtml(piece.currentProgressLabel || piece.progressStatus || "not scored")}</small>
-        ${renderPieceEvidenceLedger(piece, evidence)}
-        ${renderObservations(piece.observations)}
-        ${renderHeatMap(piece)}
-        ${index === 0 ? renderClipFrame(leadEvidence?.clip, "Repertoire evidence") : ""}
-        ${index === 0 ? renderClipEvidencePair({
-          clip: leadEvidence?.clip,
-          observation: leadObservation,
-          repeatGroup: null,
-          notationEvents: leadEvidence?.transcriptionSnippet,
-          pieceTitle: piece.title,
-          keySignature: leadEvidence?.score?.keySignature,
-          notationReady: leadEvidence?.displayNotation === true || leadEvidence?.transcriptionReady === true
-        }) : ""}
-        <div class="evidence-list">
-          ${evidence.map((item, itemIndex) => {
-            const clip = item.clip || {};
-            const clipUrl = timedUrl(clip.url || "", Number(clip.startSeconds) || 0);
-            return `
-              <div class="evidence-row">
-                <a href="${escapeHtml(clipUrl)}">${escapeHtml([item.practiceDay, clipWindowLabel(clip)].filter(Boolean).join(" / "))}</a>
-                <span>${escapeHtml(item.confidence || "confirmed")}</span>
-                <small>${escapeHtml(shortTranscriptionText(item.reason || "Confirmed source evidence.", 130))}</small>
-                ${(item.displayNotation === true || item.transcriptionReady === true) && Array.isArray(item.transcriptionSnippet) && item.transcriptionSnippet.length
-                  ? renderNotationSheet(item.transcriptionSnippet, {
-                    keySignature: item?.score?.keySignature || {},
-                    systemLabel: "Matched snippet",
-                    qualityLimit: "Matched notation linked to this evidence.",
-                    maxNotes: 24
-                  })
-                  : ""}
-                ${itemIndex === 0 ? renderEvidenceScore(item) : ""}
-              </div>
-            `;
-          }).join("")}
-        </div>
-        ${piece.totalUploadedVideoLabel ? `<small class="piece-meta-line">Uploaded video evidence: ${escapeHtml(piece.totalUploadedVideoLabel)}</small>` : ""}
+        <p>${escapeHtml([
+          days.length ? days.join(" / ") : "recent days pending",
+          evidence.length ? `${evidence.length} evidence rows` : "evidence pending",
+          piece.currentProgressLabel || piece.progressStatus || "progress pending",
+        ].join(" / "))}</p>
       </div>
-      </div>
-    </details>
+      <em>${escapeHtml(piece.totalActiveViolinLabel || "practice pending")}</em>
+    </article>
   `;
   }).join("");
 }
@@ -2787,23 +2738,26 @@ function renderTranscriptionCompletion() {
   }
   const completion = transcriptionCompletionState(backend.ops);
   if (!completion) {
-    elements.transcriptionCompletion.innerHTML = `<p class="empty">Transcription completion pending.</p>`;
+    elements.transcriptionCompletion.innerHTML = `<p class="empty">Transcription progress pending.</p>`;
     return;
   }
   const percent = Math.max(0, Math.min(100, Number(completion.completionExactPercent ?? completion.completionPercent) || 0));
   const percentLabel = completion.completionExactLabel || completion.completionLabel || `${percent}%`;
-  const gates = Array.isArray(completion.gates) ? completion.gates : [];
-  const doneItems = Array.isArray(completion.doneSummary) ? completion.doneSummary : Array.isArray(completion.doneItems) ? completion.doneItems : [];
-  const remainingItems = Array.isArray(completion.remainingSummary) ? completion.remainingSummary : Array.isArray(completion.remainingItems) ? completion.remainingItems : [];
   const completedPoints = Number(completion.completedPoints) || 0;
   const totalPoints = Number(completion.totalPoints) || 0;
   const pointSummary = completion.completedPointsLabel || (totalPoints
     ? `${trimDecimal(completedPoints)}/${trimDecimal(totalPoints)} weighted points`
     : "");
+  const rows = [
+    ["Checked", completion.checkedVideoLabel || "pending"],
+    ["Practice", completion.activePracticeLabel || "pending"],
+    ["Measure", `${Number(completion.acceptedMeasureMatchCount) || 0} accepted`],
+    ["Phrase", `${Number(completion.longPhraseAcceptedCount) || 0} accepted`],
+  ];
   elements.transcriptionCompletion.innerHTML = `
     <div class="roadmap-score">
       <div>
-        <span>Implementation</span>
+        <span>Completion</span>
         <strong>${escapeHtml(percentLabel)}</strong>
         <small>${escapeHtml(pointSummary || completion.basis || "")}</small>
       </div>
@@ -2811,39 +2765,17 @@ function renderTranscriptionCompletion() {
         <i style="width: ${percent}%"></i>
       </div>
     </div>
-    ${completion.implementationSummary ? `<p class="roadmap-summary">${escapeHtml(completion.implementationSummary)}</p>` : ""}
-    ${completionCards(completion.implementationCurrent)}
-    ${truthWorkbenchStrip(completion.truthWorkbench)}
-    <div class="roadmap-columns">
-      <article>
-        <span>Done</span>
-        ${completionList(doneItems, "No completed gates yet.")}
-      </article>
-      <article>
-        <span>Still Needed</span>
-        ${completionList(remainingItems, "No remaining gates.")}
-      </article>
+    <div class="roadmap-stats" aria-label="Transcription essentials">
+      ${rows.map(([label, value]) => `
+        <article>
+          <span>${escapeHtml(label)}</span>
+          <strong>${escapeHtml(value)}</strong>
+        </article>
+      `).join("")}
     </div>
-    ${planPhaseList(completion.implementationPlan)}
-    <details class="roadmap-gates">
-      <summary>Gate checklist</summary>
-      <div class="roadmap-gate-list">
-        ${gates.map((gate) => `
-          <article class="roadmap-gate" data-status="${escapeHtml(gate.status || "pending")}">
-            <div>
-              <span>${escapeHtml(gate.status || "pending")}</span>
-              <strong>${escapeHtml(gate.label || "Gate")}</strong>
-              <small>${escapeHtml(gate.evidence || "")}</small>
-            </div>
-            <em>${escapeHtml(compactPointLabel(gate))}</em>
-            <p>${escapeHtml(gate.remaining || "")}</p>
-          </article>
-        `).join("")}
-      </div>
-    </details>
     <div class="roadmap-next">
       <span>Next</span>
-      <strong>${escapeHtml(completion.nextAction || "Next scan pending.")}</strong>
+      <strong>${escapeHtml(shortText(completion.nextAction || "pending", 110))}</strong>
     </div>
   `;
 }

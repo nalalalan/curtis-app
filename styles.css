@@ -3852,3 +3852,615 @@ h2 {
     justify-items: start;
   }
 }
+
+/* Boring evidence ledger override. */
+:root {
+  --bg: #f4f4f1;
+  --surface: #fffefa;
+  --surface-soft: #f7f7f3;
+  --ink: #1f2422;
+  --muted: #69706c;
+  --line: #ddddd6;
+  --blue: #354c59;
+  --green: #5f6f66;
+  --gold: #7a6a4d;
+  --red: #76534e;
+  --clay: #78665d;
+  --shadow: none;
+  --soft-shadow: none;
+}
+
+body {
+  background: var(--bg);
+}
+
+.topbar {
+  min-height: 54px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(255, 254, 250, .94);
+  backdrop-filter: none;
+}
+
+.brand-mark {
+  width: 31px;
+  height: 31px;
+  flex-basis: 31px;
+  filter: none;
+}
+
+.ao-home,
+.topbar nav a.ao-home {
+  width: 34px;
+  height: 34px;
+  flex-basis: 34px;
+}
+
+.ao-home img {
+  width: 31px;
+  height: 31px;
+}
+
+.topbar nav a,
+button {
+  min-height: 31px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: transparent;
+  font-size: 12px;
+}
+
+.shell,
+.curtis-shell,
+.two-section-shell {
+  max-width: 1180px;
+  padding-top: 18px;
+}
+
+.paper-strip,
+.panel,
+.identity,
+.system-band,
+.paper-hero,
+.paper-status article,
+.paper-viewer {
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  box-shadow: none;
+}
+
+.paper-strip {
+  gap: 12px;
+  margin-bottom: 10px;
+  padding: 14px 16px;
+}
+
+.paper-copy strong {
+  font-size: clamp(20px, 2vw, 27px);
+  line-height: 1.08;
+}
+
+.paper-copy p,
+.subtitle {
+  display: none;
+}
+
+.paper-actions {
+  gap: 6px;
+}
+
+.paper-button {
+  min-height: 34px;
+  padding: 8px 13px;
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+.study-panel,
+.piece-panel,
+.roadmap-panel,
+.today-panel,
+.highlight-panel,
+.day-panel {
+  margin-bottom: 10px;
+  border-top: 0;
+}
+
+.panel {
+  padding: 14px;
+}
+
+.panel-head {
+  align-items: center;
+  margin-bottom: 9px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid var(--line);
+}
+
+.label,
+.paper-copy span {
+  margin-bottom: 3px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 760;
+}
+
+h2 {
+  font-size: 17px;
+  line-height: 1.1;
+}
+
+.count-pill {
+  min-height: 30px;
+  padding: 7px 10px;
+  border-color: var(--line);
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.evidence-summary {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  margin: 0 0 8px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface-soft);
+}
+
+.evidence-summary article {
+  min-height: 66px;
+  padding: 10px 12px;
+  border-right: 1px solid var(--line);
+}
+
+.evidence-summary article:last-child {
+  border-right: 0;
+}
+
+.evidence-summary strong,
+.evidence-summary article:first-child strong,
+.evidence-summary article:nth-child(2) strong,
+.evidence-summary article:nth-child(3) strong {
+  margin: 3px 0;
+  color: var(--ink);
+  font-size: 20px;
+  line-height: 1.02;
+}
+
+.evidence-summary span,
+.evidence-summary em,
+.record-card span,
+.record-card small,
+.piece-row span,
+.score-match-head span,
+.matched-notation-head span,
+.embedded-media-header span,
+.score-heat-header span,
+.roadmap-score span,
+.roadmap-stats span,
+.roadmap-next span {
+  color: var(--muted);
+}
+
+.study-list,
+.piece-list {
+  gap: 7px;
+}
+
+.record-card {
+  grid-template-columns: 112px minmax(0, 1fr);
+  border-color: var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+}
+
+.record-card::before {
+  align-items: center;
+  padding: 10px 8px;
+  border-right: 1px solid var(--line);
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 13px;
+  letter-spacing: 0;
+}
+
+.record-summary {
+  min-height: 66px;
+  padding: 10px 12px;
+}
+
+.record-title-block {
+  gap: 3px;
+}
+
+.record-title-block strong,
+.record-card .record-summary strong {
+  color: var(--ink);
+  font-size: 18px;
+  line-height: 1.12;
+}
+
+.record-title-block span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.record-summary em {
+  min-height: 28px;
+  margin-right: 28px;
+  padding: 0 9px;
+  border-color: var(--line);
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.record-summary em[data-tone="verified"] {
+  border-color: var(--line);
+  background: transparent;
+  color: var(--ink);
+}
+
+.record-summary::after,
+.piece-summary::after {
+  width: 22px;
+  height: 22px;
+  border-color: var(--line);
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.record-card[open] .record-summary {
+  border-bottom: 1px solid var(--line);
+}
+
+.record-essentials-body {
+  padding: 10px 12px;
+}
+
+.score-match-groups {
+  gap: 0;
+}
+
+.score-match-group {
+  gap: 7px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.score-match-head {
+  min-height: 22px;
+  padding: 0;
+}
+
+.score-match-head strong,
+.matched-notation-head strong {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 740;
+}
+
+.score-match-grid,
+.score-match-grid.pitch-anchor-grid {
+  grid-template-columns: minmax(180px, 280px) minmax(0, 1fr);
+  gap: 10px;
+}
+
+.score-reference-panel,
+.score-anchor-panel,
+.matched-notation-panel {
+  gap: 5px;
+}
+
+.score-reference-panel .score-heat-header,
+.embedded-media-header,
+.matched-notation-head {
+  min-height: 18px;
+}
+
+.score-reference-panel .score-image,
+.score-reference-panel .score-image-crop,
+.score-anchor-image {
+  min-height: 96px;
+  border-color: var(--line);
+  border-radius: 6px;
+}
+
+.score-reference-panel .score-image img {
+  max-height: 118px;
+}
+
+.score-image-crop {
+  aspect-ratio: 2.65 / 1;
+  background: #fff;
+}
+
+.score-image-crop::after {
+  inset: 6px;
+  border-width: 1px;
+  border-color: rgba(120, 102, 93, .6);
+}
+
+.matched-practice-pair {
+  grid-template-columns: minmax(150px, 220px) minmax(0, 1fr);
+  gap: 10px;
+}
+
+.matched-practice-pair .embedded-media {
+  max-width: 220px;
+  gap: 5px;
+  padding: 6px;
+  border-color: var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.embedded-media-header strong,
+.score-heat-header strong {
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 720;
+}
+
+.matched-practice-pair .embedded-media video {
+  max-height: 96px;
+  border-radius: 5px;
+}
+
+.matched-practice-pair .embedded-media audio {
+  height: 28px;
+}
+
+.matched-notation-panel .notation-sheet svg {
+  height: 96px;
+}
+
+.notation-sheet {
+  border-color: var(--line);
+  border-radius: 6px;
+  background: #fff;
+}
+
+.notation-sheet svg {
+  min-width: 0;
+}
+
+.notation-sheet .treble-clef {
+  font-family: "CurtisBravura", "Bravura", "Noto Music", "Segoe UI Symbol", "Apple Symbols", serif;
+  font-size: 62px;
+}
+
+.staff-lines line {
+  stroke: rgba(31, 36, 34, .62);
+  stroke-width: .9;
+}
+
+.piece-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+}
+
+.piece-row strong {
+  margin: 2px 0 3px;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 730;
+}
+
+.piece-row p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 620;
+  line-height: 1.25;
+}
+
+.piece-row > em,
+.piece-summary em {
+  min-height: 28px;
+  border-color: var(--line);
+  background: transparent;
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.piece-label-form {
+  max-width: 520px;
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.piece-label-form input {
+  min-height: 34px;
+  border-radius: 6px;
+}
+
+.transcription-pdf-link {
+  min-height: 28px;
+  margin-top: 7px;
+  border-color: var(--line);
+  background: transparent;
+  color: var(--muted);
+}
+
+.roadmap-panel {
+  margin-top: 10px;
+}
+
+.transcription-completion {
+  gap: 8px;
+}
+
+.roadmap-score {
+  grid-template-columns: minmax(170px, .26fr) minmax(0, 1fr);
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.roadmap-score strong {
+  color: var(--ink);
+  font-size: 24px;
+}
+
+.roadmap-score small {
+  font-size: 11px;
+}
+
+.roadmap-meter {
+  height: 8px;
+  border-color: var(--line);
+  background: var(--surface-soft);
+}
+
+.roadmap-meter i {
+  background: var(--ink);
+}
+
+.roadmap-stats {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.roadmap-stats article,
+.roadmap-next {
+  min-height: 0;
+  padding: 9px 10px;
+  border-color: var(--line);
+  border-radius: 6px;
+  background: var(--surface-soft);
+}
+
+.roadmap-stats strong,
+.roadmap-next strong {
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.18;
+}
+
+.empty {
+  padding: 12px;
+  border-color: var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+}
+
+@media (max-width: 820px) {
+  .evidence-summary,
+  .score-match-grid,
+  .score-match-grid.pitch-anchor-grid,
+  .matched-practice-pair,
+  .roadmap-score,
+  .roadmap-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .evidence-summary article {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .evidence-summary article:last-child {
+    border-bottom: 0;
+  }
+
+  .matched-practice-pair .embedded-media {
+    max-width: 240px;
+  }
+}
+
+@media (max-width: 620px) {
+  .shell,
+  .curtis-shell,
+  .two-section-shell {
+    width: 100%;
+    max-width: 430px;
+    padding: 12px 10px 34px;
+  }
+
+  .topbar {
+    padding: 9px 10px;
+  }
+
+  .paper-strip {
+    grid-template-columns: 1fr;
+  }
+
+  .paper-copy strong {
+    font-size: 22px;
+  }
+
+  .paper-button {
+    width: fit-content;
+    justify-self: start;
+  }
+
+  .record-card {
+    grid-template-columns: 74px minmax(0, 1fr);
+  }
+
+  .record-card::before {
+    padding: 10px 5px;
+    font-size: 10px;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+  }
+
+  .record-summary {
+    min-height: 62px;
+    padding: 9px 10px;
+  }
+
+  .record-title-block strong,
+  .record-card .record-summary strong {
+    font-size: 15px;
+  }
+
+  .record-title-block span {
+    font-size: 11px;
+  }
+
+  .record-summary em {
+    display: none;
+  }
+
+  .record-essentials-body {
+    padding: 9px 10px;
+  }
+
+  .matched-practice-pair .embedded-media {
+    width: min(100%, 230px);
+    max-width: 230px;
+  }
+
+  .matched-practice-pair .embedded-media video {
+    max-height: 112px;
+  }
+
+  .matched-notation-head strong {
+    max-width: 62%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .piece-row {
+    grid-template-columns: 1fr;
+  }
+
+  .piece-row > em {
+    justify-self: start;
+  }
+}
