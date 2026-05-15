@@ -318,11 +318,15 @@ def wieniawski_reference_target() -> dict[str, Any]:
                     "pitchClassSequence": ["A#", "D", "C", "A#", "D"],
                     "imageUrl": "/assets/score/wieniawski-scherzo-tarantelle-opening-bb-d-c-bb-d-exact-source.png",
                     "sourcePdfPage": 2,
-                    "status": "source_score_phrase_verified",
-                    "verification": "actual_source_score_crop_and_symbolic_sequence_agree_exact_notes",
-                    "visualRangeAgreement": True,
-                    "visibleScoreNoteSequenceVerified": True,
-                    "visibleScoreExactNoteSequenceVerified": True,
+                    "status": "source_score_phrase_review_rejected",
+                    "verification": "visible_noteheads_and_box_centers_failed_review",
+                    "visualRangeAgreement": False,
+                    "visibleScoreNoteSequenceVerified": False,
+                    "visibleScoreExactNoteSequenceVerified": False,
+                    "scoreBoxCenterAgreement": False,
+                    "audioTranscriptionAgreement": False,
+                    "transcriptionScoreAgreement": False,
+                    "truthEvidenceAccepted": False,
                     "sourceCropKind": "actual_source_score_exact_note_range",
                     "scoreSpellingSequence": ["Bb", "D", "C", "Bb", "D"],
                     "visibleScoreNoteSequence": ["Bb", "D", "C", "Bb", "D"],
@@ -338,7 +342,8 @@ def wieniawski_reference_target() -> dict[str, Any]:
                             {"note": "D5", "x": 1289, "y": 493},
                         ],
                     },
-                    "verificationLimit": "This accepts only the boxed five-note source range. It does not certify any other score crop or longer phrase.",
+                    "rejectionReason": "Alan's review showed the displayed source-score crop and boxes did not match the transcription closely enough to count as accepted evidence.",
+                    "verificationLimit": "This remains a rejected review fixture until notehead centers, score notes, transcription notes, and paired audio all agree.",
                 }
             ],
         },
@@ -347,7 +352,7 @@ def wieniawski_reference_target() -> dict[str, Any]:
         "symbolicScoreMinimumMatchedNoteRun": 4,
         "symbolicScoreMinimumDistinctPitchClasses": 3,
         "scoreNoteDetectionStatus": "source_symbolic_excerpt_ready",
-        "scoreLocationStatus": "one_actual_source_phrase_verified",
+        "scoreLocationStatus": "actual_source_phrase_review_pending",
         "scorePitchClassAnchors": [],
         "rejectedScorePitchClassAnchors": [
             {
@@ -370,7 +375,7 @@ def wieniawski_reference_target() -> dict[str, Any]:
                 "reason": "The previous A5 crop was reported as G5, not A5, and remains rejected.",
             },
         ],
-        "scoreNoteCropStatus": "one_actual_source_phrase_verified",
+        "scoreNoteCropStatus": "actual_source_phrase_review_pending",
         "referencePitchClassSequences": [
             {
                 "label": "Scherzo-Tarantelle reference audio pitch trace, first 180 seconds",

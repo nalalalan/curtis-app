@@ -258,6 +258,10 @@ def symbolic_score_audit(target: dict[str, Any]) -> dict[str, Any]:
         and item.get("visualRangeAgreement") is True
         and item.get("visibleScoreNoteSequenceVerified") is True
         and item.get("visibleScoreExactNoteSequenceVerified") is True
+        and item.get("scoreBoxCenterAgreement") is True
+        and item.get("audioTranscriptionAgreement") is True
+        and item.get("transcriptionScoreAgreement") is True
+        and item.get("truthEvidenceAccepted") is True
         and "verified" in str(item.get("status") or item.get("verification") or "").lower()
     ] if isinstance(score_config.get("sourceSnippets"), list) else []
     return {

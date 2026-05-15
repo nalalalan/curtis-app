@@ -1168,6 +1168,14 @@ def symbolic_source_snippet_for_range(
             continue
         if snippet.get("visibleScoreExactNoteSequenceVerified") is not True:
             continue
+        if snippet.get("scoreBoxCenterAgreement") is not True:
+            continue
+        if snippet.get("audioTranscriptionAgreement") is not True:
+            continue
+        if snippet.get("transcriptionScoreAgreement") is not True:
+            continue
+        if snippet.get("truthEvidenceAccepted") is not True:
+            continue
         snippet_sequence = [
             str(value)
             for value in (
@@ -1309,6 +1317,10 @@ def symbolic_score_sequence_matches_for_run(
             "scoreVisibleExactNoteSequenceVerified": bool(source_snippet.get("visibleScoreExactNoteSequenceVerified")) if source_snippet else False,
             "scoreSpellingAgreement": source_snippet_exact,
             "scoreActualPieceAgreement": source_snippet_exact,
+            "scoreBoxCenterAgreement": bool(source_snippet.get("scoreBoxCenterAgreement")) if source_snippet else False,
+            "audioTranscriptionAgreement": bool(source_snippet.get("audioTranscriptionAgreement")) if source_snippet else False,
+            "transcriptionScoreAgreement": bool(source_snippet.get("transcriptionScoreAgreement")) if source_snippet else False,
+            "truthEvidenceAccepted": bool(source_snippet.get("truthEvidenceAccepted")) if source_snippet else False,
             "minimumMatchedNoteRun": minimum_note_run,
             "minimumDistinctPitchClasses": minimum_distinct_pitch_classes,
             "matchedNoteRun": int(candidate["length"]),
@@ -1356,6 +1368,10 @@ def symbolic_score_sequence_matches_for_run(
                 "scoreSpellingAgreement": source_snippet_exact,
                 "actualPieceAgreement": source_snippet_exact,
                 "actualSourceSnippetDisplayed": source_snippet_exact,
+                "scoreBoxCenterAgreement": bool(source_snippet.get("scoreBoxCenterAgreement")) if source_snippet else False,
+                "audioTranscriptionAgreement": bool(source_snippet.get("audioTranscriptionAgreement")) if source_snippet else False,
+                "transcriptionScoreAgreement": bool(source_snippet.get("transcriptionScoreAgreement")) if source_snippet else False,
+                "truthEvidenceAccepted": bool(source_snippet.get("truthEvidenceAccepted")) if source_snippet else False,
                 "sourceSnippetHiddenReason": "" if source_snippet_exact else "actual_source_snippet_required_before_score_display",
                 "scorePitchClassSequence": " ".join(score_sequence),
                 "scoreNotePitchSequenceLabel": " ".join(score_note_sequence),

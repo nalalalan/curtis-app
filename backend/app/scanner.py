@@ -1090,8 +1090,14 @@ def score_location_verified_count(daily_records: dict[str, Any]) -> int:
     records = daily_records.get("records") if isinstance(daily_records.get("records"), list) else []
     total = 0
     for record in records:
-        transcription = record.get("transcription") if isinstance(record.get("transcription"), dict) else {}
-        total += int(transcription.get("scoreLocationVerifiedCount") or 0)
+        groups = record.get("matchGroups") if isinstance(record.get("matchGroups"), list) else []
+        total += sum(
+            1
+            for group in groups
+            if isinstance(group, dict)
+            and group.get("scoreLocationVerified")
+            and actual_source_score_snippet_ready(group)
+        )
     return total
 
 
@@ -1123,6 +1129,14 @@ def actual_source_score_snippet_ready(match: dict[str, Any]) -> bool:
     ):
         return False
     if score.get("scoreSpellingAgreement") is not True or match.get("scoreSpellingAgreement") is not True:
+        return False
+    if score.get("scoreBoxCenterAgreement") is not True and match.get("scoreBoxCenterAgreement") is not True:
+        return False
+    if score.get("audioTranscriptionAgreement") is not True and match.get("audioTranscriptionAgreement") is not True:
+        return False
+    if score.get("transcriptionScoreAgreement") is not True and match.get("transcriptionScoreAgreement") is not True:
+        return False
+    if score.get("truthEvidenceAccepted") is not True and match.get("truthEvidenceAccepted") is not True:
         return False
     return bool(match.get("scoreVisualAgreement") is True)
 

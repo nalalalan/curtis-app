@@ -1418,13 +1418,14 @@ function renderKeySignatureMarks(signature) {
   };
   const positions = normalized.accidentalType === "flat" ? flatPositions : sharpPositions;
   const glyph = normalized.accidentalType === "flat" ? "&#9837;" : "&#9839;";
+  const baselineOffset = normalized.accidentalType === "flat" ? 3 : 4;
   const marks = normalized.accidentals
     .map((item, index) => {
       const letter = String(item || "").trim().charAt(0).toUpperCase();
       const y = positions[letter];
       if (!Number.isFinite(y)) return "";
       const x = 63 + (index * 16);
-      return `<text class="key-signature-mark" x="${x}" y="${(y + 8).toFixed(1)}">${glyph}</text>`;
+      return `<text class="key-signature-mark" x="${x}" y="${(y + baselineOffset).toFixed(1)}">${glyph}</text>`;
     })
     .filter(Boolean)
     .join("");
@@ -1436,7 +1437,7 @@ function renderKeySignatureMarks(signature) {
 }
 
 function renderTrebleClef() {
-  return `<text class="treble-clef" x="24" y="83">&#119070;</text>`;
+  return `<text class="treble-clef" x="24" y="76">&#119070;</text>`;
 }
 
 function renderLedgerLines(y, x) {
@@ -2187,6 +2188,10 @@ function compactPitchSequenceText(value) {
   return compact.join(" ");
 }
 
+function exactEvidenceFlag(group, score, names) {
+  return names.some((name) => group?.[name] === true || score?.[name] === true);
+}
+
 function exactScoreSnippetReady(group) {
   const score = group?.score && typeof group.score === "object" ? group.score : {};
   if (score.visualAgreement !== true && group?.scoreVisualAgreement !== true) return false;
@@ -2195,6 +2200,10 @@ function exactScoreSnippetReady(group) {
   if (score.visibleScoreNoteSequenceVerified !== true || group?.scoreVisibleNoteSequenceVerified !== true) return false;
   if (score.visibleScoreExactNoteSequenceVerified !== true || group?.scoreVisibleExactNoteSequenceVerified !== true) return false;
   if (score.scoreSpellingAgreement !== true || group?.scoreSpellingAgreement !== true) return false;
+  if (!exactEvidenceFlag(group, score, ["scoreBoxCenterAgreement", "scoreNoteBoxCenterAgreement", "visibleScoreBoxCenterAgreement"])) return false;
+  if (!exactEvidenceFlag(group, score, ["audioTranscriptionAgreement", "audioTranscriptionExactAgreement", "clipTranscriptionAgreement"])) return false;
+  if (!exactEvidenceFlag(group, score, ["transcriptionScoreAgreement", "transcriptionScoreExactAgreement", "scoreTranscriptionAgreement"])) return false;
+  if (!exactEvidenceFlag(group, score, ["truthEvidenceAccepted", "acceptedTruthEvidence", "manualEvidenceAccepted"])) return false;
   const imageUrl = String(score.imageUrl || "").trim();
   if (!imageUrl || imageUrl.startsWith("data:")) return false;
   const status = compactText(

@@ -113,6 +113,10 @@ class TranscriptionCompletionTests(unittest.TestCase):
                                 "visibleScoreNoteSequenceVerified": True,
                                 "visibleScoreExactNoteSequenceVerified": True,
                                 "scoreSpellingAgreement": True,
+                                "scoreBoxCenterAgreement": True,
+                                "audioTranscriptionAgreement": True,
+                                "transcriptionScoreAgreement": True,
+                                "truthEvidenceAccepted": True,
                             },
                             "clip": {
                                 "mediaUrl": "/api/curtis/media/sample/sample-phrase",
@@ -248,6 +252,10 @@ class TranscriptionCompletionTests(unittest.TestCase):
                                 "visibleScoreNoteSequenceVerified": True,
                                 "visibleScoreExactNoteSequenceVerified": True,
                                 "scoreSpellingAgreement": True,
+                                "scoreBoxCenterAgreement": True,
+                                "audioTranscriptionAgreement": True,
+                                "transcriptionScoreAgreement": True,
+                                "truthEvidenceAccepted": True,
                             },
                             "clip": {
                                 "mediaUrl": "/api/curtis/media/sample/source-motif",

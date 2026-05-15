@@ -211,7 +211,7 @@ class SymbolicScoreTests(unittest.TestCase):
 
         self.assertEqual(audit["status"], "symbolic_score_ready")
         self.assertEqual(audit["symbolicScoreNoteCount"], 7)
-        self.assertEqual(audit["symbolicScoreSourceSnippetCount"], 1)
+        self.assertEqual(audit["symbolicScoreSourceSnippetCount"], 0)
         self.assertEqual(candidate_audit["status"], "score_map_candidates_ready")
         self.assertGreaterEqual(candidate_audit["scoreMapCandidateGlyphCount"], 1)
         self.assertGreaterEqual(candidate_audit["scoreMapCandidateStaffCount"], 1)
@@ -260,7 +260,7 @@ class SymbolicScoreTests(unittest.TestCase):
         self.assertEqual(matches[0]["score"]["imageUrl"], "")
         self.assertTrue(matches[0]["score"]["generatedNotationImageUrl"].startswith("data:image/svg+xml;base64,"))
 
-    def test_wieniawski_symbolic_opening_accepts_exact_source_crop(self):
+    def test_wieniawski_symbolic_opening_keeps_rejected_source_crop_pending(self):
         target = wieniawski_reference_target()
         series = detected_note_series(
             [
@@ -295,20 +295,18 @@ class SymbolicScoreTests(unittest.TestCase):
         self.assertEqual([item["note"] for item in matches[0]["displayDetectedNotes"]], ["Bb4", "D5", "C5", "Bb4", "D5"])
         self.assertEqual(matches[0]["scoreNotePitchSequenceLabel"], "Bb D C Bb D")
         self.assertEqual(matches[0]["scoreExactNoteSequenceLabel"], "Bb4 D5 C5 Bb4 D5")
-        self.assertTrue(matches[0]["scoreVisualAgreement"])
-        self.assertEqual(matches[0]["scoreVisualAgreementBasis"], "exact_actual_source_snippet_range")
-        self.assertTrue(matches[0]["scoreVisualRangeAgreement"])
-        self.assertTrue(matches[0]["scoreVisibleExactNoteSequenceVerified"])
-        self.assertTrue(matches[0]["scoreSpellingAgreement"])
-        self.assertTrue(matches[0]["score"]["actualSourceSnippetDisplayed"])
-        self.assertTrue(matches[0]["score"]["visualRangeAgreement"])
-        self.assertTrue(matches[0]["score"]["visibleScoreExactNoteSequenceVerified"])
-        self.assertTrue(matches[0]["score"]["scoreSpellingAgreement"])
+        self.assertFalse(matches[0]["scoreVisualAgreement"])
+        self.assertEqual(matches[0]["scoreVisualAgreementBasis"], "actual_source_snippet_required")
+        self.assertFalse(matches[0]["scoreVisualRangeAgreement"])
+        self.assertFalse(matches[0]["scoreVisibleExactNoteSequenceVerified"])
+        self.assertFalse(matches[0]["scoreSpellingAgreement"])
+        self.assertFalse(matches[0]["score"]["actualSourceSnippetDisplayed"])
+        self.assertFalse(matches[0]["score"]["visualRangeAgreement"])
+        self.assertFalse(matches[0]["score"]["visibleScoreExactNoteSequenceVerified"])
+        self.assertFalse(matches[0]["score"]["scoreSpellingAgreement"])
         self.assertEqual(matches[0]["score"]["keySignature"]["accidentals"], ["Bb", "Eb"])
-        self.assertEqual(
-            matches[0]["score"]["imageUrl"],
-            "/assets/score/wieniawski-scherzo-tarantelle-opening-bb-d-c-bb-d-exact-source.png",
-        )
+        self.assertEqual(matches[0]["score"]["imageUrl"], "")
+        self.assertEqual(matches[0]["score"]["cropStatus"], "actual_source_snippet_pending")
         self.assertTrue(matches[0]["score"]["generatedNotationImageUrl"].startswith("data:image/svg+xml;base64,"))
         self.assertEqual(matches[0]["score"]["measureLabel"], "mm. 2-4")
 

@@ -2351,9 +2351,9 @@ h2 {
 
 .notation-sheet .key-signature-mark {
   fill: var(--ink);
-  font-family: "Segoe UI Symbol", "Noto Music", Georgia, "Times New Roman", serif;
+  font-family: "CurtisBravura", "Bravura", "Noto Music", "Segoe UI Symbol", "Apple Symbols", Georgia, "Times New Roman", serif;
   font-size: 22px;
-  font-weight: 760;
+  font-weight: 400;
 }
 
 .staff-lines line {
@@ -4232,6 +4232,12 @@ h2 {
 .notation-sheet .treble-clef {
   font-family: "CurtisBravura", "Bravura", "Noto Music", "Segoe UI Symbol", "Apple Symbols", serif;
   font-size: 62px;
+}
+
+.notation-sheet .key-signature-mark {
+  font-family: "CurtisBravura", "Bravura", "Noto Music", "Segoe UI Symbol", "Apple Symbols", serif;
+  font-size: 22px;
+  font-weight: 400;
 }
 
 .staff-lines line {
