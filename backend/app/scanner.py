@@ -1113,6 +1113,10 @@ def actual_source_score_snippet_ready(match: dict[str, Any]) -> bool:
         return False
     if score.get("actualSourceSnippetDisplayed") is not True and match.get("scoreActualPieceAgreement") is not True:
         return False
+    if score.get("visualRangeAgreement") is not True or match.get("scoreVisualRangeAgreement") is not True:
+        return False
+    if score.get("scoreSpellingAgreement") is not True or match.get("scoreSpellingAgreement") is not True:
+        return False
     return bool(match.get("scoreVisualAgreement") is True)
 
 

@@ -1396,7 +1396,45 @@ function normalizedKeySignature(signature) {
 }
 
 function renderKeySignatureMarks(signature) {
-  return { svg: "", width: 0, label: "" };
+  const normalized = normalizedKeySignature(signature || {});
+  if (!normalized.accidentals.length || normalized.accidentalType === "none") {
+    return { svg: "", width: 0, label: "" };
+  }
+  const flatPositions = {
+    B: staffNoteY("B4"),
+    E: staffNoteY("E5"),
+    A: staffNoteY("A4"),
+    D: staffNoteY("D5"),
+    G: staffNoteY("G4"),
+    C: staffNoteY("C5"),
+    F: staffNoteY("F4"),
+  };
+  const sharpPositions = {
+    F: staffNoteY("F5"),
+    C: staffNoteY("C5"),
+    G: staffNoteY("G5"),
+    D: staffNoteY("D5"),
+    A: staffNoteY("A4"),
+    E: staffNoteY("E5"),
+    B: staffNoteY("B4"),
+  };
+  const positions = normalized.accidentalType === "flat" ? flatPositions : sharpPositions;
+  const glyph = normalized.accidentalType === "flat" ? "&#9837;" : "&#9839;";
+  const marks = normalized.accidentals
+    .map((item, index) => {
+      const letter = String(item || "").trim().charAt(0).toUpperCase();
+      const y = positions[letter];
+      if (!Number.isFinite(y)) return "";
+      const x = 63 + (index * 16);
+      return `<text class="key-signature-mark" x="${x}" y="${(y + 8).toFixed(1)}">${glyph}</text>`;
+    })
+    .filter(Boolean)
+    .join("");
+  return {
+    svg: marks ? `<g class="key-signature" aria-label="${escapeHtml(normalized.label)}">${marks}</g>` : "",
+    width: marks ? 18 + (normalized.accidentals.length * 16) : 0,
+    label: normalized.label,
+  };
 }
 
 function renderTrebleClef() {
@@ -2002,6 +2040,7 @@ function matchedNotationSystem(transcription) {
 function renderSingleMatchedPracticePair(record, clip, transcription, system) {
   const notationClip = system?.clip || clip || primaryNotationClip(record) || primaryPlayableClip(record);
   const mediaClip = notationClip ? { ...notationClip, type: "audio_matched_fragment", label: "detected note" } : notationClip;
+  const notationKeySignature = system?.keySignature || transcription?.keySignature || {};
   const events = Array.isArray(system?.events) && system.events.length
     ? system.events
     : Array.isArray(transcription?.events) ? transcription.events : [];
@@ -2021,7 +2060,7 @@ function renderSingleMatchedPracticePair(record, clip, transcription, system) {
           <strong>${escapeHtml(label || "detected")}</strong>
         </div>
         ${renderNotationSheet(events, {
-          keySignature: {},
+          keySignature: notationKeySignature,
           maxNotes: 24
         })}
       </section>
@@ -2043,7 +2082,8 @@ function renderMatchedPracticePair(record, clip, transcription) {
 
 function matchGroupNotationEvents(group) {
   const transcription = group?.transcription && typeof group.transcription === "object" ? group.transcription : {};
-  const notes = Array.isArray(transcription.notes) ? transcription.notes : [];
+  const displayed = Array.isArray(group?.displayDetectedNotes) ? group.displayDetectedNotes : [];
+  const notes = displayed.length ? displayed : Array.isArray(transcription.notes) ? transcription.notes : [];
   return notes
     .filter((note) => note && note.note)
     .slice(0, 32)
@@ -2151,6 +2191,8 @@ function exactScoreSnippetReady(group) {
   const score = group?.score && typeof group.score === "object" ? group.score : {};
   if (score.visualAgreement !== true && group?.scoreVisualAgreement !== true) return false;
   if (score.actualSourceSnippetDisplayed !== true && group?.scoreActualPieceAgreement !== true) return false;
+  if (score.visualRangeAgreement !== true || group?.scoreVisualRangeAgreement !== true) return false;
+  if (score.scoreSpellingAgreement !== true || group?.scoreSpellingAgreement !== true) return false;
   const imageUrl = String(score.imageUrl || "").trim();
   if (!imageUrl || imageUrl.startsWith("data:")) return false;
   const status = compactText(
@@ -2238,6 +2280,7 @@ function renderScoreMatchGroups(record) {
         const events = matchGroupNotationEvents(group);
         const transcription = {
           ...(group?.transcription || {}),
+          keySignature: group?.score?.keySignature || group?.keySignature || record?.transcription?.keySignature || {},
           notationSystems: [{ events, clip }],
         };
         const pieceTitle = group?.pieceTitle || recordPieceText(record);
@@ -2266,7 +2309,7 @@ function renderScoreMatchGroups(record) {
                 </div>
                 ${renderScoreImage({ score: group?.score || {} }, true)}
               </section>` : ""}
-              ${renderSingleMatchedPracticePair(record, clip, transcription, { events, clip })}
+              ${renderSingleMatchedPracticePair(record, clip, transcription, { events, clip, keySignature: transcription.keySignature })}
             </div>
           </article>
         `;

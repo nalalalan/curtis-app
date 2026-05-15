@@ -248,7 +248,12 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(record["matchGroups"][0]["score"]["cropStatus"], "exact_score_location_verified")
         self.assertTrue(record["matchGroups"][0]["scoreVisualAgreement"])
         self.assertEqual(record["matchGroups"][0]["scoreVisualAgreementBasis"], "exact_actual_source_snippet_range")
+        self.assertTrue(record["matchGroups"][0]["scoreVisualRangeAgreement"])
+        self.assertTrue(record["matchGroups"][0]["scoreSpellingAgreement"])
         self.assertTrue(record["matchGroups"][0]["score"]["actualSourceSnippetDisplayed"])
+        self.assertTrue(record["matchGroups"][0]["score"]["visualRangeAgreement"])
+        self.assertTrue(record["matchGroups"][0]["score"]["scoreSpellingAgreement"])
+        self.assertEqual(record["matchGroups"][0]["score"]["keySignature"]["accidentals"], ["Bb", "Eb"])
         self.assertEqual(
             record["matchGroups"][0]["score"]["imageUrl"],
             "/assets/score/wieniawski-scherzo-tarantelle-opening-bb-d-c-bb-d-source.png",

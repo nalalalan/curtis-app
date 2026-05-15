@@ -296,7 +296,12 @@ class SymbolicScoreTests(unittest.TestCase):
         self.assertEqual(matches[0]["scoreNotePitchSequenceLabel"], "Bb D C Bb D")
         self.assertTrue(matches[0]["scoreVisualAgreement"])
         self.assertEqual(matches[0]["scoreVisualAgreementBasis"], "exact_actual_source_snippet_range")
+        self.assertTrue(matches[0]["scoreVisualRangeAgreement"])
+        self.assertTrue(matches[0]["scoreSpellingAgreement"])
         self.assertTrue(matches[0]["score"]["actualSourceSnippetDisplayed"])
+        self.assertTrue(matches[0]["score"]["visualRangeAgreement"])
+        self.assertTrue(matches[0]["score"]["scoreSpellingAgreement"])
+        self.assertEqual(matches[0]["score"]["keySignature"]["accidentals"], ["Bb", "Eb"])
         self.assertEqual(
             matches[0]["score"]["imageUrl"],
             "/assets/score/wieniawski-scherzo-tarantelle-opening-bb-d-c-bb-d-source.png",

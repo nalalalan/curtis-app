@@ -305,6 +305,9 @@ def wieniawski_reference_target() -> dict[str, Any]:
                     "sourcePdfPage": 2,
                     "status": "source_score_phrase_verified",
                     "verification": "actual_score_crop_from_local_imslp_pdf_page_2",
+                    "visualRangeAgreement": True,
+                    "sourceCropKind": "actual_source_score_exact_range",
+                    "scoreSpellingSequence": ["D", "C", "Bb", "D", "C", "Bb", "D"],
                 },
                 {
                     "referenceStart": 2,
@@ -315,6 +318,9 @@ def wieniawski_reference_target() -> dict[str, Any]:
                     "sourcePdfPage": 2,
                     "status": "source_score_phrase_verified",
                     "verification": "actual_score_crop_from_local_imslp_pdf_page_2_exact_phrase_range",
+                    "visualRangeAgreement": True,
+                    "sourceCropKind": "actual_source_score_exact_range",
+                    "scoreSpellingSequence": ["Bb", "D", "C", "Bb", "D"],
                 }
             ],
         },

@@ -1156,6 +1156,8 @@ def symbolic_source_snippet_for_range(
         end = int(safe_float(snippet.get("referenceEnd"), -1))
         if start != reference_start or end != reference_end:
             continue
+        if snippet.get("visualRangeAgreement") is not True:
+            continue
         snippet_sequence = [
             str(value)
             for value in (
@@ -1240,12 +1242,15 @@ def symbolic_score_sequence_matches_for_run(
         score_image_url = str(source_snippet.get("imageUrl") or "").strip() if source_snippet_exact else ""
         visual_agreement_basis = "exact_actual_source_snippet_range" if source_snippet_exact else "actual_source_snippet_required"
         score_location_status = "exact_score_location_verified" if source_snippet_exact else "actual_source_snippet_pending"
+        key_signature = target.get("keySignature") if isinstance(target.get("keySignature"), dict) else {}
         best_match = {
             "status": "symbolic_score_phrase_match",
             "pieceTitle": piece.get("title") or score.get("title") or "",
             "matchCriterion": "symbolic_score_pitch_class_phrase",
             "scoreVisualAgreement": source_snippet_exact,
             "scoreVisualAgreementBasis": visual_agreement_basis,
+            "scoreVisualRangeAgreement": source_snippet_exact,
+            "scoreSpellingAgreement": source_snippet_exact,
             "scoreActualPieceAgreement": source_snippet_exact,
             "minimumMatchedNoteRun": minimum_note_run,
             "minimumDistinctPitchClasses": minimum_distinct_pitch_classes,
@@ -1280,12 +1285,15 @@ def symbolic_score_sequence_matches_for_run(
                 "source": target.get("scoreSource") or "symbolic score",
                 "sourceUrl": target.get("scoreUrl") or "",
                 "pdfUrl": target.get("scorePdfUrl") or "",
+                "keySignature": key_signature,
                 "imageUrl": score_image_url,
                 "generatedNotationImageUrl": generated_notation_url,
                 "boxes": [],
                 "cropStatus": score_location_status,
                 "visualAgreement": source_snippet_exact,
                 "visualAgreementBasis": visual_agreement_basis,
+                "visualRangeAgreement": source_snippet_exact,
+                "scoreSpellingAgreement": source_snippet_exact,
                 "actualPieceAgreement": source_snippet_exact,
                 "actualSourceSnippetDisplayed": source_snippet_exact,
                 "sourceSnippetHiddenReason": "" if source_snippet_exact else "actual_source_snippet_required_before_score_display",
