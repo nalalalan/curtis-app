@@ -2258,6 +2258,15 @@ function sourceScoreAnchorReady(group) {
     || score.scoreNoteVerified === true
   );
   if (!visualNoteVerified) return false;
+  const exactNoteVerified = (
+    snippet.exactNoteVerified === true
+    || snippet.visibleScoreNoteSequenceVerified === true
+    || group?.exactNoteVerified === true
+    || group?.visibleScoreNoteSequenceVerified === true
+    || score.exactNoteVerified === true
+    || score.visibleScoreNoteSequenceVerified === true
+  );
+  if (!exactNoteVerified) return false;
   const scoreNote = exactNoteText(snippet.note || group?.scorePitchClassSequenceCompact || group?.scorePitchClassSequence);
   const detectedNote = exactNoteText(detectedMatchNoteLabel(group) || group?.detectedPitchClassSequenceCompact || group?.detectedPitchClassSequence);
   if (scoreNote && detectedNote && scoreNote !== detectedNote) return false;

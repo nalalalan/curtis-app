@@ -1496,20 +1496,31 @@ def target_pitch_anchors(target: dict[str, Any]) -> list[dict[str, Any]]:
     raw_anchors = target.get("scorePitchClassAnchors") if isinstance(target.get("scorePitchClassAnchors"), list) else []
     for item in raw_anchors:
         if isinstance(item, dict):
+            exact_note_verified = (
+                item.get("exactNoteVerified") is True
+                or item.get("scoreExactNoteVerified") is True
+                or item.get("visibleScoreNoteSequenceVerified") is True
+            )
             visual_note_verified = (
-                item.get("visualNoteVerified") is True
-                or item.get("scoreNoteVerified") is True
-                or item.get("verified") is True
+                exact_note_verified
+                and (
+                    item.get("visualNoteVerified") is True
+                    or item.get("scoreNoteVerified") is True
+                    or item.get("verified") is True
+                )
             )
             if not visual_note_verified:
                 continue
             pitch_class = note_pitch_class(item.get("pitchClass") or item.get("note") or item.get("value"))
             if not pitch_class:
                 continue
+            display_note = item.get("displayNote") or f"{pitch_class}4"
+            if note_midi_value({"note": display_note}) is None:
+                continue
             anchors.append(
                 {
                     "pitchClass": pitch_class,
-                    "displayNote": item.get("displayNote") or f"{pitch_class}4",
+                    "displayNote": display_note,
                     "label": item.get("label") or f"{pitch_class} score anchor",
                     "source": item.get("source") or "source-confirmed score pitch anchor",
                     "sourceUrl": item.get("sourceUrl") or target.get("scoreUrl") or "",
@@ -1522,6 +1533,7 @@ def target_pitch_anchors(target: dict[str, Any]) -> list[dict[str, Any]]:
                     "scoreDerivedReference": True,
                     "status": item.get("status") or "source_confirmed_pitch_anchor",
                     "visualNoteVerified": True,
+                    "exactNoteVerified": True,
                 }
             )
     deduped: list[dict[str, Any]] = []
@@ -1614,6 +1626,8 @@ def pitch_anchor_matches_for_series(
                         "noteLocation": anchor.get("noteLocation") or "",
                         "visualNoteVerified": bool(anchor.get("visualNoteVerified")),
                         "scoreNoteVerified": bool(anchor.get("visualNoteVerified")),
+                        "exactNoteVerified": bool(anchor.get("exactNoteVerified")),
+                        "visibleScoreNoteSequenceVerified": bool(anchor.get("exactNoteVerified")),
                     }
                     if anchor.get("snippetImageUrl")
                     else {}
@@ -1652,6 +1666,7 @@ def pitch_anchor_matches_for_series(
                                 "snippetImageUrl": anchor.get("snippetImageUrl") or "",
                                 "scoreLocationVerified": False,
                                 "visualNoteVerified": bool(anchor.get("visualNoteVerified")),
+                                "exactNoteVerified": bool(anchor.get("exactNoteVerified")),
                             }
                         ],
                         "scoreAnchorSnippet": score_anchor_snippet,

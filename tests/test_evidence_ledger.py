@@ -155,6 +155,9 @@ class EvidenceLedgerTests(unittest.TestCase):
         self.assertEqual(result["truthItem"]["status"], "accepted_truth")
         self.assertTrue(result["truthItem"]["gateState"]["acceptedEvidenceReady"])
         self.assertTrue(result["truthItem"]["gateState"]["audioScoreAgreement"])
+        self.assertTrue(result["truthItem"]["gateState"]["exactNoteSequenceAgreement"])
+        self.assertEqual(result["truthItem"]["acceptedMidiSequence"], "69 74")
+        self.assertEqual(result["truthItem"]["scoreMidiSequence"], "69 74")
         self.assertEqual(progress["truthItemCount"], 1)
         self.assertEqual(progress["acceptedEvidenceReadyCount"], 1)
         self.assertEqual(progress["scoreReadyTruthCount"], 1)
@@ -169,6 +172,36 @@ class EvidenceLedgerTests(unittest.TestCase):
                     "sampleId": "sample-a",
                     "acceptedNotes": ["A4"],
                     "scoreNotes": ["B4"],
+                    "scoreLocation": "m. 2",
+                    "scoreImageUrl": "/assets/score/m2.png",
+                },
+            )
+
+    def test_truth_item_rejects_same_pitch_class_different_octave_score_sequence(self):
+        with self.assertRaises(ValueError):
+            record_truth_item(
+                {},
+                {
+                    "type": "audio_score_match",
+                    "status": "accepted_truth",
+                    "sampleId": "sample-a",
+                    "acceptedNotes": ["A4"],
+                    "scoreNotes": ["A5"],
+                    "scoreLocation": "m. 2",
+                    "scoreImageUrl": "/assets/score/m2.png",
+                },
+            )
+
+    def test_truth_item_rejects_score_truth_without_octave(self):
+        with self.assertRaises(ValueError):
+            record_truth_item(
+                {},
+                {
+                    "type": "audio_score_match",
+                    "status": "accepted_truth",
+                    "sampleId": "sample-a",
+                    "acceptedNotes": ["A4"],
+                    "scoreNotes": ["A"],
                     "scoreLocation": "m. 2",
                     "scoreImageUrl": "/assets/score/m2.png",
                 },

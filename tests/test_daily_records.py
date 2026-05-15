@@ -984,6 +984,7 @@ class DailyRecordTests(unittest.TestCase):
                                 "snippetStatus": "source_score_pitch_anchor",
                                 "noteLocation": "highlighted A4",
                                 "visualNoteVerified": True,
+                                "exactNoteVerified": True,
                             },
                         ],
                     },
@@ -1001,6 +1002,8 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(anchors[0]["scoreAnchorSnippet"]["pitchClass"], "A")
         self.assertEqual(anchors[0]["scoreAnchorSnippet"]["status"], "source_score_pitch_anchor")
         self.assertTrue(anchors[0]["scoreAnchorSnippet"]["visualNoteVerified"])
+        self.assertTrue(anchors[0]["scoreAnchorSnippet"]["exactNoteVerified"])
+        self.assertTrue(anchors[0]["scoreAnchorSnippet"]["visibleScoreNoteSequenceVerified"])
         self.assertEqual(anchors[0]["score"]["imageUrl"], "/assets/score/test-a.png")
         self.assertEqual(anchors[0]["score"]["boxes"], [])
         self.assertFalse(anchors[0]["scoreLocationVerified"])
@@ -1042,6 +1045,44 @@ class DailyRecordTests(unittest.TestCase):
 
         self.assertEqual(anchors, [])
 
+    def test_visual_pitch_anchor_without_exact_note_review_is_not_renderable(self):
+        series = detected_note_series(
+            [
+                {
+                    "transcriptionId": "anchor-run",
+                    "sampleId": "sample-1",
+                    "sourceTitle": "test",
+                    "sourceUrl": "https://www.youtube.com/watch?v=test",
+                    "sourceWindow": "*10-20",
+                    "status": "transcribed",
+                    "notes": [note("A4", 0.25, 0.45)],
+                }
+            ],
+            max_series=None,
+        )
+        anchors = pitch_anchor_matches_for_series(
+            series,
+            [
+                {
+                    "title": "Visual-only score crop",
+                    "score": {
+                        "scoreAssetId": "test-score",
+                        "scorePitchClassAnchors": [
+                            {
+                                "pitchClass": "A",
+                                "displayNote": "A4",
+                                "snippetImageUrl": "/assets/score/a-crop.png",
+                                "snippetStatus": "source_score_pitch_anchor",
+                                "visualNoteVerified": True,
+                            },
+                        ],
+                    },
+                }
+            ],
+        )
+
+        self.assertEqual(anchors, [])
+
     def test_exact_verified_score_anchor_does_not_accept_same_pitch_class_different_octave(self):
         target = {
             "scorePitchClassAnchors": [
@@ -1050,6 +1091,7 @@ class DailyRecordTests(unittest.TestCase):
                     "displayNote": "A4",
                     "snippetImageUrl": "/assets/score/test-a4.png",
                     "visualNoteVerified": True,
+                    "exactNoteVerified": True,
                 }
             ]
         }

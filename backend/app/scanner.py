@@ -1456,7 +1456,7 @@ def build_truth_workbench(
         "benchmarkCount": int(evidence_progress.get("benchmarkCount") or len(benchmarks) or 0),
         "rejectedScoreCorrectionCount": len(rejected_score_corrections),
         "queuedItems": queued_items[: max(0, int(limit))],
-        "acceptanceRule": "Accepted score evidence needs local media, accepted audio notes, verified source-score notes, matching pitch sequence, and verified score coordinates.",
+        "acceptanceRule": "Accepted score evidence needs local media, accepted audio notes, verified source-score notes, exact note-and-octave agreement, and verified score coordinates.",
         "nextAction": (
             "Convert queued score-note hypotheses into verified MusicXML, then store accepted or rejected truth items for each audio-score phrase."
             if source_targets

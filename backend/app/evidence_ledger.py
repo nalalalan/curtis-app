@@ -93,6 +93,61 @@ def _same_pitch_sequence(left: list[str], right: list[str]) -> bool:
     return bool(left_pitches and right_pitches and left_pitches == right_pitches)
 
 
+NOTE_CLASS_BY_NAME = {
+    "C": 0,
+    "C#": 1,
+    "DB": 1,
+    "D": 2,
+    "D#": 3,
+    "EB": 3,
+    "E": 4,
+    "F": 5,
+    "F#": 6,
+    "GB": 6,
+    "G": 7,
+    "G#": 8,
+    "AB": 8,
+    "A": 9,
+    "A#": 10,
+    "BB": 10,
+    "B": 11,
+}
+
+
+def _note_midi_value(value: Any) -> int | None:
+    raw = _clean(value).upper().replace("\u266d", "B").replace("\u266f", "#").replace("FLAT", "B").replace("SHARP", "#")
+    if len(raw) < 2:
+        return None
+    octave_raw = raw[-1]
+    if not octave_raw.isdigit():
+        return None
+    pitch = raw[:-1]
+    pitch_class = NOTE_CLASS_BY_NAME.get(pitch)
+    if pitch_class is None:
+        return None
+    octave = int(octave_raw)
+    midi = (octave + 1) * 12 + pitch_class
+    return midi if 0 <= midi <= 127 else None
+
+
+def _midi_sequence(notes: list[str]) -> list[int]:
+    return [midi for midi in (_note_midi_value(note) for note in notes) if midi is not None]
+
+
+def _all_notes_have_midi(notes: list[str]) -> bool:
+    return bool(notes) and len(_midi_sequence(notes)) == len(notes)
+
+
+def _same_exact_note_sequence(left: list[str], right: list[str]) -> bool:
+    if _all_notes_have_midi(left) and _all_notes_have_midi(right):
+        return _midi_sequence(left) == _midi_sequence(right)
+    return _same_pitch_sequence(left, right)
+
+
+def _score_truth_requires_exact_notes(item_type: str) -> bool:
+    return item_type in {"score_note", "score_phrase", "audio_score_match"}
+
+
 def _interval_from_item(item: dict[str, Any], fallback_duration: int = 0) -> tuple[int, int]:
     start, end = window_bounds(item)
     if end <= start and fallback_duration:
@@ -462,7 +517,12 @@ def normalize_truth_item(raw: dict[str, Any]) -> dict[str, Any]:
             accepted_notes = detected_notes
         if not accepted_notes:
             raise ValueError("Accepted truth items require accepted notes.")
-        if score_notes and not _same_pitch_sequence(accepted_notes, score_notes):
+        if score_notes and _score_truth_requires_exact_notes(item_type):
+            if not _all_notes_have_midi(accepted_notes) or not _all_notes_have_midi(score_notes):
+                raise ValueError("Accepted score truth items require exact note names with octave.")
+            if not _same_exact_note_sequence(accepted_notes, score_notes):
+                raise ValueError("Accepted truth item cannot mismatch audio and score note sequence.")
+        elif score_notes and not _same_exact_note_sequence(accepted_notes, score_notes):
             raise ValueError("Accepted truth item cannot mismatch audio and score note sequence.")
 
     start_seconds = _safe_float(raw.get("startSeconds") or raw.get("sourceStartSeconds"))
@@ -484,14 +544,26 @@ def normalize_truth_item(raw: dict[str, Any]) -> dict[str, Any]:
     )
     audio_note_verified = status == "accepted_truth" and bool(accepted_notes)
     score_note_verified = status == "accepted_truth" and bool(score_notes) and score_coordinate_verified
-    audio_score_agreement = bool(score_notes and accepted_notes and _same_pitch_sequence(accepted_notes, score_notes))
+    audio_score_agreement = bool(score_notes and accepted_notes and _same_exact_note_sequence(accepted_notes, score_notes))
+    exact_note_sequence_agreement = bool(
+        score_notes
+        and accepted_notes
+        and _all_notes_have_midi(accepted_notes)
+        and _all_notes_have_midi(score_notes)
+        and _midi_sequence(accepted_notes) == _midi_sequence(score_notes)
+    )
+    score_exact_note_sequence_ready = (
+        not _score_truth_requires_exact_notes(item_type)
+        or not score_notes
+        or exact_note_sequence_agreement
+    )
     accepted_evidence_ready = bool(
         status == "accepted_truth"
         and local_media_available
         and audio_note_verified
         and (
             item_type not in {"score_note", "score_phrase", "audio_score_match"}
-            or (score_note_verified and audio_score_agreement)
+            or (score_note_verified and audio_score_agreement and score_exact_note_sequence_ready)
         )
     )
 
@@ -516,7 +588,11 @@ def normalize_truth_item(raw: dict[str, Any]) -> dict[str, Any]:
         "detectedPitchClassSequence": " ".join(_pitch_class_sequence(detected_notes)),
         "acceptedPitchClassSequence": " ".join(_pitch_class_sequence(accepted_notes)),
         "scorePitchClassSequence": " ".join(_pitch_class_sequence(score_notes)),
+        "detectedMidiSequence": " ".join(str(value) for value in _midi_sequence(detected_notes)),
+        "acceptedMidiSequence": " ".join(str(value) for value in _midi_sequence(accepted_notes)),
+        "scoreMidiSequence": " ".join(str(value) for value in _midi_sequence(score_notes)),
         "sequenceAgreement": audio_score_agreement,
+        "exactNoteSequenceAgreement": exact_note_sequence_agreement,
         "reason": _clean(raw.get("reason") or raw.get("note")),
         "createdAt": _clean(raw.get("createdAt")) or utc_now(),
         "gateState": {
@@ -524,10 +600,12 @@ def normalize_truth_item(raw: dict[str, Any]) -> dict[str, Any]:
             "audioNoteSequenceVerified": audio_note_verified,
             "scoreNoteSequenceVerified": score_note_verified,
             "audioScoreAgreement": audio_score_agreement,
+            "exactNoteSequenceAgreement": exact_note_sequence_agreement,
+            "scoreExactNoteSequenceReady": score_exact_note_sequence_ready,
             "scoreCoordinateVerified": score_coordinate_verified,
             "acceptedEvidenceReady": accepted_evidence_ready,
         },
-        "limit": "Truth items feed regression and acceptance gates; they do not display as score evidence until all gateState fields required for the item type pass.",
+        "limit": "Truth items feed regression and acceptance gates; score evidence requires local media, exact audio/score note-and-octave agreement, and verified score coordinates.",
     }
     item["itemId"] = _clean(raw.get("itemId")) or _stable_id("truth", item)
     return item
