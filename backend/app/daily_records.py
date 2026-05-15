@@ -1140,6 +1140,7 @@ def symbolic_source_snippet_for_range(
     reference_start: int,
     reference_end: int,
     score_sequence: list[str] | None = None,
+    score_note_sequence: list[str] | None = None,
 ) -> dict[str, Any]:
     score_config = target.get("symbolicScore") if isinstance(target.get("symbolicScore"), dict) else {}
     snippets = score_config.get("sourceSnippets") if isinstance(score_config.get("sourceSnippets"), list) else []
@@ -1158,6 +1159,8 @@ def symbolic_source_snippet_for_range(
             continue
         if snippet.get("visualRangeAgreement") is not True:
             continue
+        if snippet.get("visibleScoreNoteSequenceVerified") is not True:
+            continue
         snippet_sequence = [
             str(value)
             for value in (
@@ -1168,6 +1171,30 @@ def symbolic_source_snippet_for_range(
             if value
         ]
         if score_sequence and snippet_sequence and compact_pitch_class_sequence(snippet_sequence) != compact_pitch_class_sequence(score_sequence):
+            continue
+        score_spelling_sequence = [
+            str(value)
+            for value in (
+                snippet.get("scoreSpellingSequence")
+                if isinstance(snippet.get("scoreSpellingSequence"), list)
+                else []
+            )
+            if value
+        ]
+        if score_note_sequence and score_spelling_sequence:
+            score_pitch_names = [re.sub(r"\d+$", "", str(value)) for value in score_note_sequence]
+            if score_spelling_sequence != score_pitch_names:
+                continue
+        visible_sequence = [
+            str(value)
+            for value in (
+                snippet.get("visibleScoreNoteSequence")
+                if isinstance(snippet.get("visibleScoreNoteSequence"), list)
+                else []
+            )
+            if value
+        ]
+        if score_note_sequence and visible_sequence and visible_sequence != score_note_sequence:
             continue
         if start == reference_start and end == reference_end:
             return snippet
@@ -1237,7 +1264,7 @@ def symbolic_score_sequence_matches_for_run(
             key_signature=target.get("keySignature") if isinstance(target.get("keySignature"), dict) else None,
         )
         generated_notation_url = _svg_data_url(svg)
-        source_snippet = symbolic_source_snippet_for_range(target, r0, r1, score_sequence)
+        source_snippet = symbolic_source_snippet_for_range(target, r0, r1, score_sequence, score_note_sequence)
         source_snippet_exact = bool(source_snippet)
         score_image_url = str(source_snippet.get("imageUrl") or "").strip() if source_snippet_exact else ""
         visual_agreement_basis = "exact_actual_source_snippet_range" if source_snippet_exact else "actual_source_snippet_required"

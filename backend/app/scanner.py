@@ -1757,7 +1757,7 @@ def build_transcription_completion(
             + (0.75 if score_visual_lock_count else 0)
             + (0.75 if actual_source_score_snippet_lock_count else 0),
             f"{benchmark_count} benchmark corrections / {rejected_score_count} wrong-score-note regressions / {score_visual_lock_count} score-visual locks / {actual_source_score_snippet_lock_count} actual-source score locks",
-            "Rejected score-note mistakes can be stored as regression evidence, and score panels now require visual agreement with the exact matched sequence plus an actual source-score crop.",
+            "Rejected score-note mistakes can be stored as regression evidence, and score panels now require verified visible noteheads, range, spelling, and an actual source-score crop.",
             "Build a larger benchmark suite for notes, rhythm, score boxes, and full phrases.",
         ),
         roadmap_gate(
@@ -1859,7 +1859,7 @@ def build_transcription_completion(
     implementation_summary = (
         "Practice-time scanning is working. The long-phrase path now has a local source score PDF and still counts only verified score/audio phrase matches."
         if not measure_match_count
-        else "Practice-time scanning is working. The long-phrase path now turns its first source-backed score/audio phrase into score-coordinate heat-map evidence, isolates source-verification targets, and builds staff review packets for MusicXML verification while still treating full long-phrase transcription as incomplete."
+        else "Practice-time scanning is working. The long-phrase path has source-verification targets and staff review packets, but accepted score/audio phrase evidence is currently zero after the mismatched score crop was demoted."
         if long_phrase_count
         else "Practice-time scanning is working. The long-phrase path now has a source-backed score/audio measure match and still separates measure progress from solved long phrases."
     )
@@ -1947,7 +1947,7 @@ def build_transcription_completion(
         "Local score-glyph candidates are queued for verification without being accepted as score evidence.",
         "Likely score noteheads now receive unaccepted staff-position pitch hypotheses before MusicXML review.",
         "Staff-level source review packets now map queued hypotheses back to the scanned score.",
-        "Score panels require exact score/transcription visual agreement and an actual source-score crop before display.",
+        "Score panels require visible score noteheads, range, spelling, and an actual source-score crop to match the transcription before display.",
     ]
     remaining_summary = [
         "Finish chronological active-practice coverage across the full archive.",
@@ -2018,7 +2018,7 @@ def build_transcription_completion(
             "phase": "9",
             "label": "Regression lock",
             "status": "partial" if rejected_score_count or benchmark_count or score_visual_lock_count else "pending",
-            "evidence": f"Current tests block wrong-note score evidence, broad score crops, generated-score score panels, and non-playing practice credit; {actual_source_score_snippet_lock_count} actual-source score locks active.",
+            "evidence": f"Current tests block wrong-note score evidence, broad score crops, visually unverified source crops, generated-score score panels, and non-playing practice credit; {actual_source_score_snippet_lock_count} actual-source score locks active.",
             "target": "Tests fail on mismatched audio/notation, wrong score boxes, missing media, and fake practice time.",
         },
     ]
