@@ -95,6 +95,7 @@ class TranscriptionCompletionTests(unittest.TestCase):
                             "scoreVisualAgreement": True,
                             "scoreVisualRangeAgreement": True,
                             "scoreVisibleNoteSequenceVerified": True,
+                            "scoreVisibleExactNoteSequenceVerified": True,
                             "scoreSpellingAgreement": True,
                             "scoreActualPieceAgreement": True,
                             "scoreSnippetStatus": "exact_score_location_verified",
@@ -110,6 +111,7 @@ class TranscriptionCompletionTests(unittest.TestCase):
                                 "actualSourceSnippetDisplayed": True,
                                 "visualRangeAgreement": True,
                                 "visibleScoreNoteSequenceVerified": True,
+                                "visibleScoreExactNoteSequenceVerified": True,
                                 "scoreSpellingAgreement": True,
                             },
                             "clip": {
@@ -228,6 +230,7 @@ class TranscriptionCompletionTests(unittest.TestCase):
                             "scoreVisualAgreement": True,
                             "scoreVisualRangeAgreement": True,
                             "scoreVisibleNoteSequenceVerified": True,
+                            "scoreVisibleExactNoteSequenceVerified": True,
                             "scoreSpellingAgreement": True,
                             "scoreActualPieceAgreement": True,
                             "scoreSnippetStatus": "exact_score_location_verified",
@@ -243,6 +246,7 @@ class TranscriptionCompletionTests(unittest.TestCase):
                                 "actualSourceSnippetDisplayed": True,
                                 "visualRangeAgreement": True,
                                 "visibleScoreNoteSequenceVerified": True,
+                                "visibleScoreExactNoteSequenceVerified": True,
                                 "scoreSpellingAgreement": True,
                             },
                             "clip": {

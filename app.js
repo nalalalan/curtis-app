@@ -2193,6 +2193,7 @@ function exactScoreSnippetReady(group) {
   if (score.actualSourceSnippetDisplayed !== true && group?.scoreActualPieceAgreement !== true) return false;
   if (score.visualRangeAgreement !== true || group?.scoreVisualRangeAgreement !== true) return false;
   if (score.visibleScoreNoteSequenceVerified !== true || group?.scoreVisibleNoteSequenceVerified !== true) return false;
+  if (score.visibleScoreExactNoteSequenceVerified !== true || group?.scoreVisibleExactNoteSequenceVerified !== true) return false;
   if (score.scoreSpellingAgreement !== true || group?.scoreSpellingAgreement !== true) return false;
   const imageUrl = String(score.imageUrl || "").trim();
   if (!imageUrl || imageUrl.startsWith("data:")) return false;

@@ -1108,6 +1108,10 @@ def score_note_name_sequence(notes: list[dict[str, Any]]) -> list[str]:
     return [note_name_without_octave(note.get("note")) for note in notes if note_name_without_octave(note.get("note"))]
 
 
+def score_exact_note_sequence(notes: list[dict[str, Any]]) -> list[str]:
+    return [str(note.get("note") or "").strip() for note in notes if str(note.get("note") or "").strip()]
+
+
 def same_note_midi_sequence(detected_notes: list[dict[str, Any]], score_notes: list[dict[str, Any]]) -> bool:
     if len(detected_notes) != len(score_notes) or not detected_notes:
         return False
@@ -1141,6 +1145,7 @@ def symbolic_source_snippet_for_range(
     reference_end: int,
     score_sequence: list[str] | None = None,
     score_note_sequence: list[str] | None = None,
+    score_exact_sequence: list[str] | None = None,
 ) -> dict[str, Any]:
     score_config = target.get("symbolicScore") if isinstance(target.get("symbolicScore"), dict) else {}
     snippets = score_config.get("sourceSnippets") if isinstance(score_config.get("sourceSnippets"), list) else []
@@ -1160,6 +1165,8 @@ def symbolic_source_snippet_for_range(
         if snippet.get("visualRangeAgreement") is not True:
             continue
         if snippet.get("visibleScoreNoteSequenceVerified") is not True:
+            continue
+        if snippet.get("visibleScoreExactNoteSequenceVerified") is not True:
             continue
         snippet_sequence = [
             str(value)
@@ -1195,6 +1202,19 @@ def symbolic_source_snippet_for_range(
             if value
         ]
         if score_note_sequence and visible_sequence and visible_sequence != score_note_sequence:
+            continue
+        exact_visible_sequence = [
+            str(value)
+            for value in (
+                snippet.get("visibleScoreExactNoteSequence")
+                if isinstance(snippet.get("visibleScoreExactNoteSequence"), list)
+                else []
+            )
+            if value
+        ]
+        if not exact_visible_sequence:
+            continue
+        if score_exact_sequence and exact_visible_sequence != score_exact_sequence:
             continue
         if start == reference_start and end == reference_end:
             return snippet
@@ -1252,6 +1272,7 @@ def symbolic_score_sequence_matches_for_run(
         display_notes = score_spelled_display_notes(matched_notes, score_slice)
         score_sequence = [str(note.get("pitchClass") or "") for note in score_slice if note.get("pitchClass")]
         score_note_sequence = score_note_name_sequence(score_slice)
+        score_exact_sequence = score_exact_note_sequence(score_slice)
         measures = [str(note.get("measure") or "") for note in score_slice if note.get("measure")]
         if measures:
             label = f"m. {measures[0]}" if measures[0] == measures[-1] else f"mm. {measures[0]}-{measures[-1]}"
@@ -1264,7 +1285,14 @@ def symbolic_score_sequence_matches_for_run(
             key_signature=target.get("keySignature") if isinstance(target.get("keySignature"), dict) else None,
         )
         generated_notation_url = _svg_data_url(svg)
-        source_snippet = symbolic_source_snippet_for_range(target, r0, r1, score_sequence, score_note_sequence)
+        source_snippet = symbolic_source_snippet_for_range(
+            target,
+            r0,
+            r1,
+            score_sequence,
+            score_note_sequence,
+            score_exact_sequence,
+        )
         source_snippet_exact = bool(source_snippet)
         score_image_url = str(source_snippet.get("imageUrl") or "").strip() if source_snippet_exact else ""
         visual_agreement_basis = "exact_actual_source_snippet_range" if source_snippet_exact else "actual_source_snippet_required"
@@ -1278,6 +1306,7 @@ def symbolic_score_sequence_matches_for_run(
             "scoreVisualAgreementBasis": visual_agreement_basis,
             "scoreVisualRangeAgreement": source_snippet_exact,
             "scoreVisibleNoteSequenceVerified": bool(source_snippet.get("visibleScoreNoteSequenceVerified")) if source_snippet else False,
+            "scoreVisibleExactNoteSequenceVerified": bool(source_snippet.get("visibleScoreExactNoteSequenceVerified")) if source_snippet else False,
             "scoreSpellingAgreement": source_snippet_exact,
             "scoreActualPieceAgreement": source_snippet_exact,
             "minimumMatchedNoteRun": minimum_note_run,
@@ -1296,6 +1325,7 @@ def symbolic_score_sequence_matches_for_run(
             "referencePitchClassSequence": " ".join(score_sequence),
             "scorePitchClassSequence": " ".join(score_sequence),
             "scoreNoteSeriesLabel": " ".join(str(note.get("note") or "") for note in score_slice if note.get("note")),
+            "scoreExactNoteSequenceLabel": " ".join(score_exact_sequence),
             "scoreNotePitchSequenceLabel": " ".join(score_note_sequence),
             "detectedPitchClassSequenceCompact": " ".join(compact_pitch_class_sequence(detected_sequence)),
             "referencePitchClassSequenceCompact": " ".join(compact_pitch_class_sequence(score_sequence)),
@@ -1322,6 +1352,7 @@ def symbolic_score_sequence_matches_for_run(
                 "visualAgreementBasis": visual_agreement_basis,
                 "visualRangeAgreement": source_snippet_exact,
                 "visibleScoreNoteSequenceVerified": bool(source_snippet.get("visibleScoreNoteSequenceVerified")) if source_snippet else False,
+                "visibleScoreExactNoteSequenceVerified": bool(source_snippet.get("visibleScoreExactNoteSequenceVerified")) if source_snippet else False,
                 "scoreSpellingAgreement": source_snippet_exact,
                 "actualPieceAgreement": source_snippet_exact,
                 "actualSourceSnippetDisplayed": source_snippet_exact,
@@ -1329,6 +1360,7 @@ def symbolic_score_sequence_matches_for_run(
                 "scorePitchClassSequence": " ".join(score_sequence),
                 "scoreNotePitchSequenceLabel": " ".join(score_note_sequence),
                 "scoreNoteSeriesLabel": " ".join(str(note.get("note") or "") for note in score_slice if note.get("note")),
+                "scoreExactNoteSequenceLabel": " ".join(score_exact_sequence),
                 "snippetKind": "symbolic_score_phrase",
                 "sourceSnippetStatus": source_snippet.get("status") if source_snippet else "",
                 "measureLabel": label,

@@ -188,7 +188,7 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(record["clips"][0]["localEndSeconds"], 20)
         self.assertNotIn("reading decoration", " ".join(video["title"] for video in record["videos"]))
 
-    def test_scherzo_symbolic_score_sequence_demotes_unverified_visual_crop(self):
+    def test_scherzo_symbolic_score_sequence_accepts_exact_visual_crop(self):
         inventory = {
             "youtube": [
                 {
@@ -235,27 +235,32 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(record["pieces"][0]["title"], "Wieniawski Scherzo-Tarantelle, Op. 16")
         self.assertEqual(record["matchingWorkflow"]["scoreReferenceStatus"], "symbolic_score_sequence_ready")
         self.assertGreater(record["matchingWorkflow"]["scoreSequenceMatchCount"], 0)
-        self.assertEqual(record["matchingWorkflow"]["status"], "reference_sequence_matches_ready")
-        self.assertEqual(record["matchingWorkflow"]["scoreLocationVerifiedCount"], 0)
-        self.assertFalse(record["transcription"]["scoreLinked"])
+        self.assertEqual(record["matchingWorkflow"]["status"], "score_sequence_matches_ready")
+        self.assertEqual(record["matchingWorkflow"]["scoreLocationVerifiedCount"], 1)
+        self.assertTrue(record["transcription"]["scoreLinked"])
         self.assertTrue(record["transcription"]["referenceLinked"])
-        self.assertEqual(record["transcription"]["scoreAlignmentStatus"], "reference_sequence_match_pending_score_location")
+        self.assertEqual(record["transcription"]["scoreAlignmentStatus"], "exact_score_location_verified")
         self.assertTrue(record["matchGroups"])
         self.assertEqual(record["matchGroups"][0]["status"], "symbolic_score_phrase_match")
         self.assertEqual(record["matchGroups"][0]["score"]["assetId"], "wieniawski-scherzo-tarantelle-vln")
         self.assertEqual(record["matchGroups"][0]["matchedNoteRun"], 5)
         self.assertEqual(record["matchGroups"][0]["scoreSequenceLabel"], "mm. 2-4")
         self.assertEqual(record["matchGroups"][0]["score"]["boxes"], [])
-        self.assertEqual(record["matchGroups"][0]["score"]["cropStatus"], "actual_source_snippet_pending")
-        self.assertFalse(record["matchGroups"][0]["scoreVisualAgreement"])
-        self.assertEqual(record["matchGroups"][0]["scoreVisualAgreementBasis"], "actual_source_snippet_required")
-        self.assertFalse(record["matchGroups"][0]["scoreVisualRangeAgreement"])
-        self.assertFalse(record["matchGroups"][0]["scoreSpellingAgreement"])
-        self.assertFalse(record["matchGroups"][0]["score"]["actualSourceSnippetDisplayed"])
-        self.assertFalse(record["matchGroups"][0]["score"]["visualRangeAgreement"])
-        self.assertFalse(record["matchGroups"][0]["score"]["scoreSpellingAgreement"])
+        self.assertEqual(record["matchGroups"][0]["score"]["cropStatus"], "exact_score_location_verified")
+        self.assertTrue(record["matchGroups"][0]["scoreVisualAgreement"])
+        self.assertEqual(record["matchGroups"][0]["scoreVisualAgreementBasis"], "exact_actual_source_snippet_range")
+        self.assertTrue(record["matchGroups"][0]["scoreVisualRangeAgreement"])
+        self.assertTrue(record["matchGroups"][0]["scoreVisibleExactNoteSequenceVerified"])
+        self.assertTrue(record["matchGroups"][0]["scoreSpellingAgreement"])
+        self.assertTrue(record["matchGroups"][0]["score"]["actualSourceSnippetDisplayed"])
+        self.assertTrue(record["matchGroups"][0]["score"]["visualRangeAgreement"])
+        self.assertTrue(record["matchGroups"][0]["score"]["visibleScoreExactNoteSequenceVerified"])
+        self.assertTrue(record["matchGroups"][0]["score"]["scoreSpellingAgreement"])
         self.assertEqual(record["matchGroups"][0]["score"]["keySignature"]["accidentals"], ["Bb", "Eb"])
-        self.assertEqual(record["matchGroups"][0]["score"]["imageUrl"], "")
+        self.assertEqual(
+            record["matchGroups"][0]["score"]["imageUrl"],
+            "/assets/score/wieniawski-scherzo-tarantelle-opening-bb-d-c-bb-d-exact-source.png",
+        )
         self.assertTrue(record["matchGroups"][0]["score"]["generatedNotationImageUrl"].startswith("data:image/svg+xml;base64,"))
         self.assertFalse(record["matchGroups"][0]["rhythmRequired"])
         self.assertEqual([item["detectedNote"] for item in record["matchGroups"][0]["transcription"]["notes"]], ["A#4", "D5", "C5", "A#4", "D5"])
@@ -263,11 +268,11 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual([item["note"] for item in record["matchGroups"][0]["scoreMatchedNotes"]], ["Bb4", "D5", "C5", "Bb4", "D5"])
         self.assertEqual(record["matchGroups"][0]["clip"]["localStartSeconds"], 0.0)
         self.assertEqual(record["matchGroups"][0]["clip"]["localEndSeconds"], 2.4)
-        self.assertEqual(record["heatMap"]["status"], "reference_sequence_match_pending_score_location")
-        self.assertEqual(record["heatMap"]["fragments"], [])
-        self.assertEqual(record["heatMap"]["layers"][0]["status"], "pending_transcription")
-        self.assertIn("not strong enough", record["mainCurtisBlocker"])
-        self.assertIn("score location agree", record["mainCurtisBlocker"])
+        self.assertEqual(record["heatMap"]["status"], "exact_score_location_verified")
+        self.assertEqual(record["heatMap"]["fragments"][0]["scoreNotes"], ["Bb4", "D5", "C5", "Bb4", "D5"])
+        self.assertEqual(record["heatMap"]["layers"][0]["status"], "ready")
+        self.assertIn("Bb4 D5 C5 Bb4 D5", record["mainCurtisBlocker"])
+        self.assertIn("too short", record["mainCurtisBlocker"])
         self.assertEqual(record["clips"][0]["mediaUrl"], "/api/curtis/media/sample/Njh8_zq9_DM-1")
 
     def test_score_free_exercise_days_are_not_forced_into_score_matching(self):
@@ -1105,17 +1110,17 @@ class DailyRecordTests(unittest.TestCase):
         )
         self.assertEqual(pitch_anchor_matches_for_series(a5_series, [{"title": "Score", "score": target}]), [])
 
-    def test_wieniawski_score_note_anchor_is_withheld_after_visual_review_failure(self):
+    def test_wieniawski_score_note_anchor_is_withheld_but_verified_phrase_source_is_ready(self):
         target = wieniawski_reference_target()
         audit = score_reference_audit_for_pieces([{"score": target}])
         rejected_by_note = {}
         for anchor in target["rejectedScorePitchClassAnchors"]:
             rejected_by_note.setdefault(anchor["displayNote"], []).append(anchor)
 
-        self.assertEqual(target["scoreNoteCropStatus"], "no_visual_note_verified_anchor_ready")
+        self.assertEqual(target["scoreNoteCropStatus"], "one_actual_source_phrase_verified")
         self.assertEqual(audit["sourcePdfLocalReadyCount"], 1)
         self.assertEqual(audit["symbolicScoreNoteCount"], 7)
-        self.assertEqual(audit["symbolicScoreSourceSnippetCount"], 0)
+        self.assertEqual(audit["symbolicScoreSourceSnippetCount"], 1)
         self.assertGreaterEqual(audit["scoreMapCandidateGlyphCount"], 1)
         self.assertGreaterEqual(audit["scoreMapCandidateStaffCount"], 1)
         self.assertGreaterEqual(audit["scoreMapNoteHypothesisCount"], 1)
@@ -1127,6 +1132,10 @@ class DailyRecordTests(unittest.TestCase):
             )
         )
         self.assertEqual(target["scorePitchClassAnchors"], [])
+        accepted_source = target["symbolicScore"]["sourceSnippets"][1]
+        self.assertEqual(accepted_source["status"], "source_score_phrase_verified")
+        self.assertEqual(accepted_source["visibleScoreExactNoteSequence"], ["Bb4", "D5", "C5", "Bb4", "D5"])
+        self.assertTrue(accepted_source["visibleScoreExactNoteSequenceVerified"])
         self.assertTrue(
             any(
                 anchor.get("snippetImageUrl") == "/assets/score/wieniawski-scherzo-tarantelle-a4-source-verified.png"

@@ -1117,6 +1117,11 @@ def actual_source_score_snippet_ready(match: dict[str, Any]) -> bool:
         return False
     if score.get("visibleScoreNoteSequenceVerified") is not True or match.get("scoreVisibleNoteSequenceVerified") is not True:
         return False
+    if (
+        score.get("visibleScoreExactNoteSequenceVerified") is not True
+        or match.get("scoreVisibleExactNoteSequenceVerified") is not True
+    ):
+        return False
     if score.get("scoreSpellingAgreement") is not True or match.get("scoreSpellingAgreement") is not True:
         return False
     return bool(match.get("scoreVisualAgreement") is True)
