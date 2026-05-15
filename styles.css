@@ -76,8 +76,24 @@ input {
   overflow: hidden;
 }
 
+.suite-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  min-height: 54px;
+  padding: 0 max(18px, calc((100vw - 1080px) / 2));
+  border-bottom: 1px solid var(--line);
+  background: rgba(255, 254, 250, .94);
+  max-width: 100vw;
+  overflow: hidden;
+}
+
 .brand-cluster,
 .brand,
+.suite-brand-cluster,
+.suite-app-brand,
 .topbar nav,
 .topbar nav a,
 button {
@@ -85,11 +101,13 @@ button {
   align-items: center;
 }
 
-.brand-cluster {
+.brand-cluster,
+.suite-brand-cluster {
   gap: 10px;
 }
 
-.brand {
+.brand,
+.suite-app-brand {
   gap: 9px;
   color: var(--ink);
   font-size: 16px;
@@ -98,7 +116,8 @@ button {
   text-decoration: none;
 }
 
-.brand-mark {
+.brand-mark,
+.suite-app-mark {
   width: 38px;
   height: 38px;
   flex: 0 0 31px;
@@ -128,13 +147,20 @@ button {
   cursor: pointer;
 }
 
-.ao-home {
+.ao-home,
+.suite-ao-home {
   display: inline-grid;
   place-items: center;
   width: 42px;
   height: 42px;
   flex: 0 0 42px;
   text-decoration: none;
+}
+
+.suite-ao-home img {
+  width: 31px;
+  height: 31px;
+  display: block;
 }
 
 .topbar nav a.ao-home {
@@ -3874,14 +3900,16 @@ body {
   background: var(--bg);
 }
 
-.topbar {
+.topbar,
+.suite-topbar {
   min-height: 54px;
   border-bottom: 1px solid var(--line);
   background: rgba(255, 254, 250, .94);
   backdrop-filter: none;
 }
 
-.brand-mark {
+.brand-mark,
+.suite-app-mark {
   width: 31px;
   height: 31px;
   flex-basis: 31px;
@@ -3889,13 +3917,15 @@ body {
 }
 
 .ao-home,
+.suite-ao-home,
 .topbar nav a.ao-home {
   width: 34px;
   height: 34px;
   flex-basis: 34px;
 }
 
-.ao-home img {
+.ao-home img,
+.suite-ao-home img {
   width: 31px;
   height: 31px;
 }
@@ -4397,7 +4427,8 @@ h2 {
     padding: 12px 10px 34px;
   }
 
-  .topbar {
+  .topbar,
+  .suite-topbar {
     padding: 9px 10px;
   }
 
