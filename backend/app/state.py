@@ -43,6 +43,10 @@ DEFAULT_STATE: dict[str, Any] = {
     "lastScan": None,
     "evidenceCorrections": [],
     "transcriptionBenchmarks": [],
+    "truthWorkbench": {
+        "version": "truth_workbench_v1",
+        "items": [],
+    },
     "activePracticeScan": {
         "version": "active_practice_scan_v1",
         "intervals": [],

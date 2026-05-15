@@ -43,7 +43,7 @@ from .settings import (
 )
 from .state import append_run, load_state, save_state, utc_now
 from .daily_records import build_daily_records, build_repertoire_evidence, exact_score_location_ready
-from .evidence_ledger import build_active_practice_coverage, build_evidence_progress
+from .evidence_ledger import build_active_practice_coverage, build_evidence_progress, build_truth_progress
 from .study_packets import build_practice_study, build_practice_totals
 from .symbolic_scores import (
     longest_common_contiguous_run,
@@ -1100,7 +1100,7 @@ def score_visual_agreement_count(daily_records: dict[str, Any]) -> int:
     total = 0
     for record in records:
         groups = record.get("matchGroups") if isinstance(record.get("matchGroups"), list) else []
-        total += sum(1 for group in groups if isinstance(group, dict) and group.get("scoreVisualAgreement") is True)
+        total += sum(1 for group in groups if isinstance(group, dict) and actual_source_score_snippet_ready(group))
     return total
 
 
@@ -1114,6 +1114,8 @@ def actual_source_score_snippet_ready(match: dict[str, Any]) -> bool:
     if score.get("actualSourceSnippetDisplayed") is not True and match.get("scoreActualPieceAgreement") is not True:
         return False
     if score.get("visualRangeAgreement") is not True or match.get("scoreVisualRangeAgreement") is not True:
+        return False
+    if score.get("visibleScoreNoteSequenceVerified") is not True or match.get("scoreVisibleNoteSequenceVerified") is not True:
         return False
     if score.get("scoreSpellingAgreement") is not True or match.get("scoreSpellingAgreement") is not True:
         return False
@@ -1381,6 +1383,88 @@ def source_verification_target_top(daily_records: dict[str, Any]) -> dict[str, A
     return targets[0] if targets else {}
 
 
+def build_truth_workbench(
+    state: dict[str, Any],
+    daily_records: dict[str, Any],
+    evidence_progress: dict[str, Any],
+    limit: int = 12,
+) -> dict[str, Any]:
+    truth_progress = build_truth_progress(state)
+    source_targets = source_verification_targets(daily_records, limit=limit)
+    benchmarks = (
+        evidence_progress.get("recentBenchmarks")
+        if isinstance(evidence_progress.get("recentBenchmarks"), list)
+        else []
+    )
+    corrections = (
+        evidence_progress.get("recentCorrections")
+        if isinstance(evidence_progress.get("recentCorrections"), list)
+        else []
+    )
+    rejected_score_corrections = [
+        item
+        for item in corrections
+        if isinstance(item, dict)
+        and item.get("status") == "rejected"
+        and item.get("type") in {"score", "score_note", "score_match", "match"}
+    ]
+    queued_items: list[dict[str, Any]] = []
+    for target in source_targets:
+        queued_items.append(
+            {
+                "kind": "source_target",
+                "status": "pending_review",
+                "practiceDay": target.get("practiceDay") or "",
+                "pieceTitle": target.get("pieceTitle") or target.get("sourceScoreTitle") or "",
+                "sequence": target.get("sequence") or "",
+                "scoreStatus": target.get("sourceScoreCheckStatus") or "pending",
+                "scoreOverlap": target.get("sourceScoreBestOverlap") or 0,
+                "noteCount": target.get("sequenceNoteCount") or 0,
+                "sampleId": target.get("clipSampleId") or "",
+                "limit": target.get("limit") or "",
+            }
+        )
+    for item in truth_progress.get("recentTruthItems", []):
+        if not isinstance(item, dict):
+            continue
+        gate_state = item.get("gateState") if isinstance(item.get("gateState"), dict) else {}
+        queued_items.append(
+            {
+                "kind": "truth_item",
+                "status": item.get("status") or "",
+                "practiceDay": item.get("practiceDay") or "",
+                "pieceTitle": item.get("pieceTitle") or "",
+                "sequence": item.get("acceptedPitchClassSequence") or item.get("detectedPitchClassSequence") or "",
+                "scoreStatus": "accepted" if gate_state.get("acceptedEvidenceReady") else "pending",
+                "scoreOverlap": len(str(item.get("scorePitchClassSequence") or "").split()),
+                "noteCount": len(str(item.get("acceptedPitchClassSequence") or item.get("detectedPitchClassSequence") or "").split()),
+                "sampleId": item.get("sampleId") or "",
+                "limit": item.get("limit") or "",
+            }
+        )
+    return {
+        "status": "ready" if source_targets or benchmarks or truth_progress.get("truthItemCount") else "empty",
+        "version": truth_progress.get("version") or "truth_workbench_v1",
+        "truthItemCount": int(truth_progress.get("truthItemCount") or 0),
+        "acceptedTruthCount": int(truth_progress.get("acceptedTruthCount") or 0),
+        "pendingTruthCount": int(truth_progress.get("pendingTruthCount") or 0),
+        "rejectedTruthCount": int(truth_progress.get("rejectedTruthCount") or 0),
+        "acceptedEvidenceReadyCount": int(truth_progress.get("acceptedEvidenceReadyCount") or 0),
+        "scoreReadyTruthCount": int(truth_progress.get("scoreReadyTruthCount") or 0),
+        "sourceTargetQueueCount": len(source_targets),
+        "wrongScoreRegressionCount": int(evidence_progress.get("wrongScoreNoteRegressionCount") or 0),
+        "benchmarkCount": int(evidence_progress.get("benchmarkCount") or len(benchmarks) or 0),
+        "rejectedScoreCorrectionCount": len(rejected_score_corrections),
+        "queuedItems": queued_items[: max(0, int(limit))],
+        "acceptanceRule": "Accepted score evidence needs local media, accepted audio notes, verified source-score notes, matching pitch sequence, and verified score coordinates.",
+        "nextAction": (
+            "Convert queued score-note hypotheses into verified MusicXML, then store accepted or rejected truth items for each audio-score phrase."
+            if source_targets
+            else "Add accepted or rejected truth items from local clips before promoting score matches."
+        ),
+    }
+
+
 def accepted_long_phrase_match(match: dict[str, Any]) -> bool:
     if not isinstance(match, dict):
         return False
@@ -1636,7 +1720,9 @@ def build_transcription_completion(
     evidence_progress: dict[str, Any],
     media_samples: list[dict[str, Any]],
     transcriptions: list[dict[str, Any]],
+    truth_workbench: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    truth_workbench = truth_workbench or {}
     active_scan = (
         active_practice_coverage.get("activePracticeScan")
         if isinstance(active_practice_coverage.get("activePracticeScan"), dict)
@@ -1669,6 +1755,11 @@ def build_transcription_completion(
     score_map_review_packet_count = int(score_audit_totals.get("scoreMapReviewPacketCount") or 0)
     benchmark_count = int(evidence_progress.get("benchmarkCount") or 0)
     rejected_score_count = int(evidence_progress.get("wrongScoreNoteRegressionCount") or 0)
+    truth_item_count = int(truth_workbench.get("truthItemCount") or 0)
+    truth_ready_count = int(truth_workbench.get("acceptedEvidenceReadyCount") or 0)
+    score_truth_ready_count = int(truth_workbench.get("scoreReadyTruthCount") or 0)
+    truth_queue_count = int(truth_workbench.get("sourceTargetQueueCount") or 0) + int(truth_workbench.get("pendingTruthCount") or 0)
+    truth_route_ready = str(truth_workbench.get("version") or "") == "truth_workbench_v1"
     repertoire_entries = repertoire_evidence.get("entries") if isinstance(repertoire_evidence.get("entries"), list) else []
     score_target_count = int(
         training.get("scoreReferenceTargetCount")
@@ -1750,15 +1841,18 @@ def build_transcription_completion(
         ),
         roadmap_gate(
             "correction-benchmarks",
-            "Correction and benchmark loop",
+            "Truth, correction, and benchmark loop",
             6,
             (1.5 if benchmark_count else 0)
             + (0.5 if rejected_score_count else 0)
+            + (1.0 if truth_route_ready else 0)
+            + min(1.0, truth_queue_count * 0.25)
+            + min(1.0, truth_ready_count * 0.5)
             + (0.75 if score_visual_lock_count else 0)
             + (0.75 if actual_source_score_snippet_lock_count else 0),
-            f"{benchmark_count} benchmark corrections / {rejected_score_count} wrong-score-note regressions / {score_visual_lock_count} score-visual locks / {actual_source_score_snippet_lock_count} actual-source score locks",
-            "Rejected score-note mistakes can be stored as regression evidence, and score panels now require verified visible noteheads, range, spelling, and an actual source-score crop.",
-            "Build a larger benchmark suite for notes, rhythm, score boxes, and full phrases.",
+            f"{benchmark_count} benchmark corrections / {rejected_score_count} wrong-score-note regressions / {truth_queue_count} queued truth checks / {truth_ready_count} accepted truth items / {score_visual_lock_count} score-visual locks / {actual_source_score_snippet_lock_count} actual-source score locks",
+            "Rejected score-note mistakes can be stored as regression evidence, and score panels now require verified visible noteheads, range, spelling, an actual source-score crop, and truth-set promotion.",
+            "Build accepted truth clips for notes, rhythm, score boxes, and full phrases.",
         ),
         roadmap_gate(
             "score-truth",
@@ -1900,6 +1994,11 @@ def build_transcription_completion(
             "detail": f"{score_map_note_hypothesis_count} notes queued",
         },
         {
+            "label": "Truth set",
+            "value": str(truth_ready_count),
+            "detail": f"{truth_queue_count} queued / {score_truth_ready_count} score-ready",
+        },
+        {
             "label": "Long phrases",
             "value": str(long_phrase_count),
             "detail": "accepted",
@@ -1948,10 +2047,12 @@ def build_transcription_completion(
         "Likely score noteheads now receive unaccepted staff-position pitch hypotheses before MusicXML review.",
         "Staff-level source review packets now map queued hypotheses back to the scanned score.",
         "Score panels require visible score noteheads, range, spelling, and an actual source-score crop to match the transcription before display.",
+        "A truth workbench now separates queued, accepted, and rejected audio-score-transcription evidence before anything can become visible score evidence.",
     ]
     remaining_summary = [
         "Finish chronological active-practice coverage across the full archive.",
         "Build benchmark clips for known notes, fast runs, arpeggios, rhythm, and score boxes.",
+        "Promote local clips into accepted truth items only after their audio notes, score notes, and score coordinates agree.",
         "Use review packets to convert queued score-note hypotheses into verified MusicXML notes before promoting source targets from reference-audio candidates to accepted score evidence.",
         "Replace short fragments with accurate phrase-level note and rhythm extraction.",
         "Align accepted phrases to score locations or score-free repeated exercise patterns.",
@@ -1967,10 +2068,10 @@ def build_transcription_completion(
         },
         {
             "phase": "2",
-            "label": "Benchmark and correction set",
+            "label": "Truth, benchmark, and correction set",
             "status": "pending" if not (benchmark_count or rejected_score_count or score_visual_lock_count) else "partial",
-            "evidence": f"{benchmark_count} benchmark corrections / {rejected_score_count} wrong-score-note regressions / {score_visual_lock_count} score-visual locks / {actual_source_score_snippet_lock_count} actual-source score locks",
-            "target": "Gold clips for A/D anchors, fast runs, arpeggios, repeats, rests, and score boxes.",
+            "evidence": f"{benchmark_count} benchmark corrections / {rejected_score_count} wrong-score-note regressions / {truth_item_count} stored truth items / {truth_queue_count} queued truth checks / {score_visual_lock_count} score-visual locks / {actual_source_score_snippet_lock_count} actual-source score locks",
+            "target": "Accepted truth clips for A/D anchors, fast runs, arpeggios, repeats, rests, and score boxes.",
         },
         {
             "phase": "3",
@@ -2064,6 +2165,11 @@ def build_transcription_completion(
         "scoreMapReviewPacketCount": score_map_review_packet_count,
         "scoreVisualAgreementCount": score_visual_lock_count,
         "actualSourceScoreSnippetCount": actual_source_score_snippet_lock_count,
+        "truthWorkbench": truth_workbench,
+        "truthItemCount": truth_item_count,
+        "acceptedTruthItemCount": truth_ready_count,
+        "scoreReadyTruthItemCount": score_truth_ready_count,
+        "truthQueueCount": truth_queue_count,
         "pitchSequenceGroupCount": score_sequence_count,
         "checkedVideoLabel": checked_label if checked_label != "0s" else "",
         "uploadedVideoLabel": uploaded_label if uploaded_label != "unknown" else "",
@@ -2124,6 +2230,7 @@ def derive_review(
         state.get("activePracticeScan") if isinstance(state.get("activePracticeScan"), dict) else {},
     )
     evidence_progress = build_evidence_progress(state)
+    truth_workbench = build_truth_workbench(state, daily_records, evidence_progress)
     transcription_completion = build_transcription_completion(
         training,
         daily_records,
@@ -2132,6 +2239,7 @@ def derive_review(
         evidence_progress,
         media_samples,
         transcriptions,
+        truth_workbench,
     )
     progress_plan = existing.get("progressPlan") if isinstance(existing.get("progressPlan"), dict) else None
     youtube_items = inventory.get("youtube", [])
@@ -2174,6 +2282,7 @@ def derive_review(
         "dailyRecords": daily_records,
         "activePracticeCoverage": active_practice_coverage,
         "evidenceProgress": evidence_progress,
+        "truthWorkbench": truth_workbench,
         "transcriptionCompletion": transcription_completion,
         "repertoireEvidence": repertoire_evidence,
         "progressPlan": progress_plan,

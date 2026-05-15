@@ -33,6 +33,15 @@ EVIDENCE_CORRECTION_TYPES = {
 }
 EVIDENCE_CORRECTION_STATUSES = {"accepted", "rejected", "needs_review"}
 BENCHMARK_TYPES = {"note", "score", "score_note", "score_match", "match", "active_interval"}
+TRUTH_ITEM_TYPES = {
+    "audio_note",
+    "audio_phrase",
+    "score_note",
+    "score_phrase",
+    "audio_score_match",
+    "practice_window",
+}
+TRUTH_ITEM_STATUSES = {"pending_review", "accepted_truth", "rejected_mismatch"}
 
 
 def _safe_int(value: Any) -> int:
@@ -65,6 +74,23 @@ def _note_pitch_class(value: Any) -> str:
 def _stable_id(prefix: str, payload: dict[str, Any]) -> str:
     body = json.dumps(payload, sort_keys=True, default=str)
     return f"{prefix}_{hashlib.sha1(body.encode('utf-8')).hexdigest()[:14]}"
+
+
+def _clean_note_sequence(value: Any) -> list[str]:
+    if isinstance(value, list):
+        return [_clean(item) for item in value if _clean(item)]
+    text = _clean(value).replace(",", " ")
+    return [part.strip() for part in text.split() if part.strip()]
+
+
+def _pitch_class_sequence(notes: list[str]) -> list[str]:
+    return [pitch for pitch in (_note_pitch_class(note) for note in notes) if pitch]
+
+
+def _same_pitch_sequence(left: list[str], right: list[str]) -> bool:
+    left_pitches = _pitch_class_sequence(left)
+    right_pitches = _pitch_class_sequence(right)
+    return bool(left_pitches and right_pitches and left_pitches == right_pitches)
 
 
 def _interval_from_item(item: dict[str, Any], fallback_duration: int = 0) -> tuple[int, int]:
@@ -418,6 +444,148 @@ def record_evidence_correction(state: dict[str, Any], raw: dict[str, Any]) -> di
         "createdAt": correction["createdAt"],
     }
     return {"correction": correction, "benchmark": benchmark}
+
+
+def normalize_truth_item(raw: dict[str, Any]) -> dict[str, Any]:
+    item_type = _clean(raw.get("type") or raw.get("itemType") or "audio_score_match").lower()
+    if item_type not in TRUTH_ITEM_TYPES:
+        raise ValueError("Unsupported truth item type.")
+    status = _clean(raw.get("status") or "pending_review").lower()
+    if status not in TRUTH_ITEM_STATUSES:
+        raise ValueError("Unsupported truth item status.")
+
+    detected_notes = _clean_note_sequence(raw.get("detectedNotes") or raw.get("transcribedNotes") or raw.get("observedNotes"))
+    accepted_notes = _clean_note_sequence(raw.get("acceptedNotes") or raw.get("correctedNotes"))
+    score_notes = _clean_note_sequence(raw.get("scoreNotes") or raw.get("sourceScoreNotes"))
+    if status == "accepted_truth":
+        if not accepted_notes:
+            accepted_notes = detected_notes
+        if not accepted_notes:
+            raise ValueError("Accepted truth items require accepted notes.")
+        if score_notes and not _same_pitch_sequence(accepted_notes, score_notes):
+            raise ValueError("Accepted truth item cannot mismatch audio and score note sequence.")
+
+    start_seconds = _safe_float(raw.get("startSeconds") or raw.get("sourceStartSeconds"))
+    end_seconds = _safe_float(raw.get("endSeconds") or raw.get("sourceEndSeconds"))
+    local_media_available = bool(
+        _clean(raw.get("sampleId"))
+        or _clean(raw.get("mediaUrl"))
+        or _clean(raw.get("audioUrl"))
+        or _clean(raw.get("videoUrl"))
+    )
+    score_coordinate_verified = bool(
+        score_notes
+        and _clean(raw.get("scoreLocation"))
+        and (
+            _clean(raw.get("scoreImageUrl"))
+            or _clean(raw.get("scoreSource"))
+            or _clean(raw.get("scoreAssetId"))
+        )
+    )
+    audio_note_verified = status == "accepted_truth" and bool(accepted_notes)
+    score_note_verified = status == "accepted_truth" and bool(score_notes) and score_coordinate_verified
+    audio_score_agreement = bool(score_notes and accepted_notes and _same_pitch_sequence(accepted_notes, score_notes))
+    accepted_evidence_ready = bool(
+        status == "accepted_truth"
+        and local_media_available
+        and audio_note_verified
+        and (
+            item_type not in {"score_note", "score_phrase", "audio_score_match"}
+            or (score_note_verified and audio_score_agreement)
+        )
+    )
+
+    item = {
+        "type": item_type,
+        "status": status,
+        "sourceVideoId": _clean(raw.get("sourceVideoId") or raw.get("videoId")),
+        "sourceUrl": _clean(raw.get("sourceUrl") or raw.get("url")),
+        "sourceTitle": _clean(raw.get("sourceTitle") or raw.get("title")),
+        "practiceDay": _clean(raw.get("practiceDay")),
+        "sampleId": _clean(raw.get("sampleId")),
+        "startSeconds": round(start_seconds, 3),
+        "endSeconds": round(end_seconds, 3),
+        "pieceTitle": _clean(raw.get("pieceTitle")),
+        "scoreSource": _clean(raw.get("scoreSource")),
+        "scoreAssetId": _clean(raw.get("scoreAssetId")),
+        "scoreLocation": _clean(raw.get("scoreLocation")),
+        "scoreImageUrl": _clean(raw.get("scoreImageUrl")),
+        "detectedNotes": detected_notes,
+        "acceptedNotes": accepted_notes,
+        "scoreNotes": score_notes,
+        "detectedPitchClassSequence": " ".join(_pitch_class_sequence(detected_notes)),
+        "acceptedPitchClassSequence": " ".join(_pitch_class_sequence(accepted_notes)),
+        "scorePitchClassSequence": " ".join(_pitch_class_sequence(score_notes)),
+        "sequenceAgreement": audio_score_agreement,
+        "reason": _clean(raw.get("reason") or raw.get("note")),
+        "createdAt": _clean(raw.get("createdAt")) or utc_now(),
+        "gateState": {
+            "localMediaAvailable": local_media_available,
+            "audioNoteSequenceVerified": audio_note_verified,
+            "scoreNoteSequenceVerified": score_note_verified,
+            "audioScoreAgreement": audio_score_agreement,
+            "scoreCoordinateVerified": score_coordinate_verified,
+            "acceptedEvidenceReady": accepted_evidence_ready,
+        },
+        "limit": "Truth items feed regression and acceptance gates; they do not display as score evidence until all gateState fields required for the item type pass.",
+    }
+    item["itemId"] = _clean(raw.get("itemId")) or _stable_id("truth", item)
+    return item
+
+
+def record_truth_item(state: dict[str, Any], raw: dict[str, Any]) -> dict[str, Any]:
+    item = normalize_truth_item(raw)
+    workbench = state.get("truthWorkbench") if isinstance(state.get("truthWorkbench"), dict) else {}
+    items = [entry for entry in workbench.get("items", []) if isinstance(entry, dict)]
+    items = [entry for entry in items if entry.get("itemId") != item["itemId"]]
+    state["truthWorkbench"] = {
+        **workbench,
+        "version": workbench.get("version") or "truth_workbench_v1",
+        "items": [item, *items][:1000],
+        "updatedAt": item["createdAt"],
+    }
+    state["lastTruthWorkbenchItem"] = {
+        "itemId": item["itemId"],
+        "type": item["type"],
+        "status": item["status"],
+        "createdAt": item["createdAt"],
+    }
+    return {"truthItem": item}
+
+
+def build_truth_progress(state: dict[str, Any]) -> dict[str, Any]:
+    workbench = state.get("truthWorkbench") if isinstance(state.get("truthWorkbench"), dict) else {}
+    items = [entry for entry in workbench.get("items", []) if isinstance(entry, dict)]
+    status_counts = Counter(str(item.get("status") or "unknown") for item in items)
+    type_counts = Counter(str(item.get("type") or "unknown") for item in items)
+    accepted_ready = [
+        item
+        for item in items
+        if item.get("status") == "accepted_truth"
+        and isinstance(item.get("gateState"), dict)
+        and item["gateState"].get("acceptedEvidenceReady") is True
+    ]
+    score_ready = [
+        item
+        for item in accepted_ready
+        if isinstance(item.get("gateState"), dict)
+        and item["gateState"].get("scoreNoteSequenceVerified") is True
+        and item["gateState"].get("audioScoreAgreement") is True
+    ]
+    return {
+        "status": "ready" if items else "empty",
+        "version": workbench.get("version") or "truth_workbench_v1",
+        "truthItemCount": len(items),
+        "acceptedTruthCount": status_counts.get("accepted_truth", 0),
+        "pendingTruthCount": status_counts.get("pending_review", 0),
+        "rejectedTruthCount": status_counts.get("rejected_mismatch", 0),
+        "acceptedEvidenceReadyCount": len(accepted_ready),
+        "scoreReadyTruthCount": len(score_ready),
+        "truthItemsByType": dict(type_counts),
+        "truthItemsByStatus": dict(status_counts),
+        "lastTruthItemAt": items[0].get("createdAt") if items else "",
+        "recentTruthItems": items[:10],
+    }
 
 
 def build_evidence_progress(state: dict[str, Any]) -> dict[str, Any]:

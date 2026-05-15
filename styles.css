@@ -3209,6 +3209,86 @@ h2 {
   overflow-wrap: anywhere;
 }
 
+.truth-workbench {
+  display: grid;
+  grid-template-columns: minmax(180px, .32fr) minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 10px;
+  border: 1px solid rgba(95, 118, 104, .18);
+  border-radius: 8px;
+  background: rgba(95, 118, 104, .06);
+}
+
+.truth-workbench-head {
+  min-width: 0;
+}
+
+.truth-workbench span {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 780;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.truth-workbench strong {
+  display: block;
+  margin-top: 5px;
+  color: var(--ink);
+  font-size: 18px;
+  font-weight: 760;
+  line-height: 1.08;
+}
+
+.truth-workbench em {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 650;
+  line-height: 1.18;
+}
+
+.truth-workbench ol {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.truth-workbench li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px solid rgba(31, 41, 39, .08);
+  border-radius: 7px;
+  background: rgba(255, 253, 248, .72);
+}
+
+.truth-workbench b {
+  min-width: 0;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 740;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.truth-workbench small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
 .roadmap-columns {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
@@ -3417,6 +3497,7 @@ h2 {
   .transcription-proof-ledger,
   .transcription-stats,
   .roadmap-score,
+  .truth-workbench,
   .roadmap-phase,
   .roadmap-columns,
   .musician-read > div {

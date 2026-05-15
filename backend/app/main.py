@@ -36,7 +36,7 @@ from .daily_records import (
     video_match_keys,
     violin_positive_sample_ids,
 )
-from .evidence_ledger import record_evidence_correction
+from .evidence_ledger import record_evidence_correction, record_truth_item
 from .media import probe_youtube_media, record_uploaded_sample
 from .piece_id import identify_pieces_from_samples
 from .scanner import base_ops, run_scan, transcription_items
@@ -123,6 +123,60 @@ class EvidenceCorrection(BaseModel):
             "reason": self.reason,
             "note": self.note,
             "benchmark": self.benchmark,
+        }
+
+
+class TruthWorkbenchItem(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    type: str = "audio_score_match"
+    status: str = "pending_review"
+    source_video_id: str = Field(default="", alias="sourceVideoId")
+    video_id: str = Field(default="", alias="videoId")
+    source_url: str = Field(default="", alias="sourceUrl")
+    source_title: str = Field(default="", alias="sourceTitle")
+    practice_day: str = Field(default="", alias="practiceDay")
+    sample_id: str = Field(default="", alias="sampleId")
+    start_seconds: float = Field(default=0.0, alias="startSeconds")
+    end_seconds: float = Field(default=0.0, alias="endSeconds")
+    piece_title: str = Field(default="", alias="pieceTitle")
+    score_source: str = Field(default="", alias="scoreSource")
+    score_asset_id: str = Field(default="", alias="scoreAssetId")
+    score_location: str = Field(default="", alias="scoreLocation")
+    score_image_url: str = Field(default="", alias="scoreImageUrl")
+    detected_notes: list[str] | str = Field(default_factory=list, alias="detectedNotes")
+    transcribed_notes: list[str] | str = Field(default_factory=list, alias="transcribedNotes")
+    accepted_notes: list[str] | str = Field(default_factory=list, alias="acceptedNotes")
+    corrected_notes: list[str] | str = Field(default_factory=list, alias="correctedNotes")
+    score_notes: list[str] | str = Field(default_factory=list, alias="scoreNotes")
+    source_score_notes: list[str] | str = Field(default_factory=list, alias="sourceScoreNotes")
+    reason: str = ""
+    note: str = ""
+
+    def to_state(self) -> dict[str, Any]:
+        return {
+            "type": self.type,
+            "status": self.status,
+            "sourceVideoId": self.source_video_id or self.video_id,
+            "sourceUrl": self.source_url,
+            "sourceTitle": self.source_title,
+            "practiceDay": self.practice_day,
+            "sampleId": self.sample_id,
+            "startSeconds": self.start_seconds,
+            "endSeconds": self.end_seconds,
+            "pieceTitle": self.piece_title,
+            "scoreSource": self.score_source,
+            "scoreAssetId": self.score_asset_id,
+            "scoreLocation": self.score_location,
+            "scoreImageUrl": self.score_image_url,
+            "detectedNotes": self.detected_notes,
+            "transcribedNotes": self.transcribed_notes,
+            "acceptedNotes": self.accepted_notes,
+            "correctedNotes": self.corrected_notes,
+            "scoreNotes": self.score_notes,
+            "sourceScoreNotes": self.source_score_notes,
+            "reason": self.reason,
+            "note": self.note,
         }
 
 
@@ -666,6 +720,24 @@ async def active_practice_scan_run(max_samples: int = 80, max_queue: int = 250, 
 @app.get("/api/curtis/evidence-progress")
 async def evidence_progress() -> dict[str, Any]:
     return base_ops(load_state())["review"]["evidenceProgress"]
+
+
+@app.get("/api/curtis/truth-workbench")
+async def truth_workbench() -> dict[str, Any]:
+    return base_ops(load_state())["review"]["truthWorkbench"]
+
+
+@app.post("/api/curtis/truth-workbench/items")
+async def truth_workbench_item(item: TruthWorkbenchItem) -> dict[str, Any]:
+    state = load_state()
+    try:
+        result = record_truth_item(state, item.to_state())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    save_state(state)
+    ops = base_ops(state)
+    ops["truthWorkbenchItem"] = result
+    return ops
 
 
 @app.post("/api/curtis/evidence-corrections")

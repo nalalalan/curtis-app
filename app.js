@@ -2192,6 +2192,7 @@ function exactScoreSnippetReady(group) {
   if (score.visualAgreement !== true && group?.scoreVisualAgreement !== true) return false;
   if (score.actualSourceSnippetDisplayed !== true && group?.scoreActualPieceAgreement !== true) return false;
   if (score.visualRangeAgreement !== true || group?.scoreVisualRangeAgreement !== true) return false;
+  if (score.visibleScoreNoteSequenceVerified !== true || group?.scoreVisibleNoteSequenceVerified !== true) return false;
   if (score.scoreSpellingAgreement !== true || group?.scoreSpellingAgreement !== true) return false;
   const imageUrl = String(score.imageUrl || "").trim();
   if (!imageUrl || imageUrl.startsWith("data:")) return false;
@@ -2739,6 +2740,35 @@ function planPhaseList(items) {
   `;
 }
 
+function truthWorkbenchStrip(workbench) {
+  const truth = workbench && typeof workbench === "object" ? workbench : null;
+  if (!truth || truth.status === "empty") return "";
+  const accepted = Number(truth.acceptedEvidenceReadyCount ?? truth.acceptedTruthCount) || 0;
+  const queued = (Number(truth.sourceTargetQueueCount) || 0) + (Number(truth.pendingTruthCount) || 0);
+  const rejected = Number(truth.rejectedTruthCount ?? truth.rejectedScoreCorrectionCount) || 0;
+  const benchmark = Number(truth.benchmarkCount) || 0;
+  const rows = Array.isArray(truth.queuedItems) ? truth.queuedItems.slice(0, 3) : [];
+  return `
+    <div class="truth-workbench">
+      <div class="truth-workbench-head">
+        <span>Truth set</span>
+        <strong>${escapeHtml(String(accepted))} accepted</strong>
+        <em>${escapeHtml(`${queued} queued / ${rejected} rejected / ${benchmark} benchmarks`)}</em>
+      </div>
+      ${rows.length ? `
+        <ol>
+          ${rows.map((item) => `
+            <li>
+              <b>${escapeHtml(item.sequence || item.pieceTitle || item.kind || "pending")}</b>
+              <small>${escapeHtml([item.practiceDay, item.scoreStatus].filter(Boolean).join(" / "))}</small>
+            </li>
+          `).join("")}
+        </ol>
+      ` : ""}
+    </div>
+  `;
+}
+
 function renderTranscriptionCompletion() {
   if (!elements.transcriptionCompletion) return;
   if (!backend.online) {
@@ -2773,6 +2803,7 @@ function renderTranscriptionCompletion() {
     </div>
     ${completion.implementationSummary ? `<p class="roadmap-summary">${escapeHtml(completion.implementationSummary)}</p>` : ""}
     ${completionCards(completion.implementationCurrent)}
+    ${truthWorkbenchStrip(completion.truthWorkbench)}
     <div class="roadmap-columns">
       <article>
         <span>Done</span>

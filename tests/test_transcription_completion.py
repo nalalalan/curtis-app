@@ -4,6 +4,7 @@ from backend.app.scanner import (
     accepted_long_phrase_count,
     accepted_measure_match_count,
     build_transcription_completion,
+    build_truth_workbench,
     reference_phrase_candidate_count,
     reference_phrase_candidate_top,
     source_verification_target_count,
@@ -93,6 +94,7 @@ class TranscriptionCompletionTests(unittest.TestCase):
                             "scoreLocationVerified": True,
                             "scoreVisualAgreement": True,
                             "scoreVisualRangeAgreement": True,
+                            "scoreVisibleNoteSequenceVerified": True,
                             "scoreSpellingAgreement": True,
                             "scoreActualPieceAgreement": True,
                             "scoreSnippetStatus": "exact_score_location_verified",
@@ -107,6 +109,7 @@ class TranscriptionCompletionTests(unittest.TestCase):
                                 "imageUrl": "/assets/score/m12.png",
                                 "actualSourceSnippetDisplayed": True,
                                 "visualRangeAgreement": True,
+                                "visibleScoreNoteSequenceVerified": True,
                                 "scoreSpellingAgreement": True,
                             },
                             "clip": {
@@ -224,6 +227,7 @@ class TranscriptionCompletionTests(unittest.TestCase):
                             "scoreLocationVerified": True,
                             "scoreVisualAgreement": True,
                             "scoreVisualRangeAgreement": True,
+                            "scoreVisibleNoteSequenceVerified": True,
                             "scoreSpellingAgreement": True,
                             "scoreActualPieceAgreement": True,
                             "scoreSnippetStatus": "exact_score_location_verified",
@@ -236,6 +240,51 @@ class TranscriptionCompletionTests(unittest.TestCase):
                                 "cropStatus": "exact_score_location_verified",
                                 "measureLabel": "opening motif",
                                 "imageUrl": "/assets/score/opening.png",
+                                "actualSourceSnippetDisplayed": True,
+                                "visualRangeAgreement": True,
+                                "visibleScoreNoteSequenceVerified": True,
+                                "scoreSpellingAgreement": True,
+                            },
+                            "clip": {
+                                "mediaUrl": "/api/curtis/media/sample/source-motif",
+                                "audioUrl": "/api/curtis/media/sample/source-motif/clip?start=0&end=1",
+                            },
+                            "transcription": {"sampleId": "source-motif"},
+                        }
+                    ],
+                }
+            ]
+        }
+
+        self.assertEqual(accepted_measure_match_count(daily_records), 1)
+        self.assertEqual(accepted_long_phrase_count(daily_records), 0)
+
+    def test_actual_source_snippet_requires_visible_note_sequence_verification(self):
+        daily_records = {
+            "records": [
+                {
+                    "practiceDay": "2026-05-03",
+                    "matchGroups": [
+                        {
+                            "status": "symbolic_score_phrase_match",
+                            "matchedNoteRun": 5,
+                            "minimumMatchedNoteRun": 5,
+                            "detectedPitchClassSequenceCompact": "A# D C A# D",
+                            "scoreLocationVerified": True,
+                            "scoreVisualAgreement": True,
+                            "scoreVisualRangeAgreement": True,
+                            "scoreSpellingAgreement": True,
+                            "scoreActualPieceAgreement": True,
+                            "scoreSnippetStatus": "exact_score_location_verified",
+                            "scoreLocationStatus": "exact_score_location_verified",
+                            "scoreSequenceLabel": "mm. 2-4",
+                            "referenceStart": 2,
+                            "referenceEnd": 7,
+                            "score": {
+                                "assetId": "wieniawski-scherzo-tarantelle-vln",
+                                "cropStatus": "exact_score_location_verified",
+                                "measureLabel": "mm. 2-4",
+                                "imageUrl": "/assets/score/too-broad.png",
                                 "actualSourceSnippetDisplayed": True,
                                 "visualRangeAgreement": True,
                                 "scoreSpellingAgreement": True,
@@ -251,7 +300,7 @@ class TranscriptionCompletionTests(unittest.TestCase):
             ]
         }
 
-        self.assertEqual(accepted_measure_match_count(daily_records), 1)
+        self.assertEqual(accepted_measure_match_count(daily_records), 0)
         self.assertEqual(accepted_long_phrase_count(daily_records), 0)
 
     def test_reference_phrase_candidates_are_counted_without_accepting_score_evidence(self):
@@ -336,6 +385,11 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertEqual(completion["sourceVerificationTargets"][0]["sourceScoreBestOverlap"], 1)
         self.assertEqual(completion["sourceVerificationTargets"][0]["sourceScoreReferenceSequence"], "D C A# D C A# D")
         self.assertGreaterEqual(completion["sourceVerificationTargets"][0]["sourceScoreCandidateGlyphCount"], 1)
+        workbench = build_truth_workbench({}, daily_records, {"benchmarkCount": 1, "wrongScoreNoteRegressionCount": 1})
+        self.assertEqual(workbench["status"], "ready")
+        self.assertEqual(workbench["sourceTargetQueueCount"], 1)
+        self.assertEqual(workbench["queuedItems"][0]["sequence"], "D D D# D D A# G")
+        self.assertEqual(workbench["acceptedEvidenceReadyCount"], 0)
 
     def test_source_verification_targets_require_local_unverified_source_runs(self):
         daily_records = {
