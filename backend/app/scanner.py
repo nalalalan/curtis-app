@@ -2046,13 +2046,13 @@ def build_transcription_completion(
         "Local score-glyph candidates are queued for verification without being accepted as score evidence.",
         "Likely score noteheads now receive unaccepted staff-position pitch hypotheses before MusicXML review.",
         "Staff-level source review packets now map queued hypotheses back to the scanned score.",
-        "Score panels require visible score noteheads, range, spelling, and an actual source-score crop to match the transcription before display.",
+        "Score panels require visible score noteheads, range, spelling, exact note-and-octave agreement, and an actual source-score crop before display.",
         "A truth workbench now separates queued, accepted, and rejected audio-score-transcription evidence before anything can become visible score evidence.",
     ]
     remaining_summary = [
         "Finish chronological active-practice coverage across the full archive.",
         "Build benchmark clips for known notes, fast runs, arpeggios, rhythm, and score boxes.",
-        "Promote local clips into accepted truth items only after their audio notes, score notes, and score coordinates agree.",
+        "Promote local clips into accepted truth items only after audio notes, score notes, octave/register, and score coordinates agree.",
         "Use review packets to convert queued score-note hypotheses into verified MusicXML notes before promoting source targets from reference-audio candidates to accepted score evidence.",
         "Replace short fragments with accurate phrase-level note and rhythm extraction.",
         "Align accepted phrases to score locations or score-free repeated exercise patterns.",
@@ -2071,7 +2071,7 @@ def build_transcription_completion(
             "label": "Truth, benchmark, and correction set",
             "status": "pending" if not (benchmark_count or rejected_score_count or score_visual_lock_count) else "partial",
             "evidence": f"{benchmark_count} benchmark corrections / {rejected_score_count} wrong-score-note regressions / {truth_item_count} stored truth items / {truth_queue_count} queued truth checks / {score_visual_lock_count} score-visual locks / {actual_source_score_snippet_lock_count} actual-source score locks",
-            "target": "Accepted truth clips for A/D anchors, fast runs, arpeggios, repeats, rests, and score boxes.",
+            "target": "Accepted truth clips for exact notes, registers, fast runs, arpeggios, repeats, rests, and score boxes.",
         },
         {
             "phase": "3",
