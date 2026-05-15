@@ -4419,6 +4419,11 @@ h2 {
 }
 
 @media (max-width: 620px) {
+  html,
+  body {
+    overflow-x: hidden;
+  }
+
   .shell,
   .curtis-shell,
   .two-section-shell {
@@ -4446,7 +4451,8 @@ h2 {
   }
 
   .record-card {
-    grid-template-columns: 74px minmax(0, 1fr);
+    grid-template-columns: 54px minmax(0, 1fr);
+    max-width: 100%;
   }
 
   .record-card::before {
@@ -4457,13 +4463,19 @@ h2 {
   }
 
   .record-summary {
+    grid-template-columns: minmax(0, 1fr);
     min-height: 62px;
     padding: 9px 10px;
+    padding-right: 34px;
+    min-width: 0;
   }
 
   .record-title-block strong,
   .record-card .record-summary strong {
+    display: block;
+    max-width: 100%;
     font-size: 15px;
+    overflow-wrap: anywhere;
   }
 
   .record-title-block span {
@@ -4476,6 +4488,7 @@ h2 {
 
   .record-essentials-body {
     padding: 9px 10px;
+    min-width: 0;
   }
 
   .matched-practice-pair .embedded-media {
