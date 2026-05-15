@@ -3264,7 +3264,14 @@ def build_daily_records(
     media_samples: list[dict[str, Any]],
     transcriptions: list[dict[str, Any]],
     sections: list[dict[str, Any]],
+    active_practice_coverage: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    coverage_source = active_practice_coverage if isinstance(active_practice_coverage, dict) else {}
+    coverage_days = {
+        str(item.get("practiceDay") or ""): item
+        for item in coverage_source.get("days", [])
+        if isinstance(item, dict) and item.get("practiceDay")
+    }
     ledger = practice_ledger_videos(inventory)
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for video in ledger:
@@ -3280,10 +3287,13 @@ def build_daily_records(
         if isinstance(sample, dict) and sample.get("id") and not sample_is_violin_positive(sample)
     )
     for day, videos in grouped.items():
+        coverage_day = coverage_days.get(str(day))
         keys = set().union(*(video_match_keys(video) for video in videos))
         raw_day_samples = [sample for sample in media_samples if item_matches_keys(sample, keys)]
         day_samples = [sample for sample in raw_day_samples if sample_is_violin_positive(sample)]
         processed_seconds = sum(sample_duration_seconds(sample) for sample in day_samples)
+        if coverage_day:
+            processed_seconds = int(coverage_day.get("checkedVideoSeconds") or processed_seconds)
         day_sample_ids = violin_positive_sample_ids(day_samples)
         day_transcriptions = sorted(
             [
@@ -3319,8 +3329,13 @@ def build_daily_records(
         active_seconds = scan_active if day_active_scan_items or day_active_scan_result_items else max(note_active, section_active)
         if processed_seconds:
             active_seconds = min(processed_seconds, active_seconds)
+        if coverage_day:
+            active_seconds = int(coverage_day.get("activePracticeSeconds") or active_seconds)
+            scan_active = int(coverage_day.get("activeScanSeconds") or scan_active or active_seconds)
         active_status = (
-            "measured_from_pitch"
+            "measured_from_active_practice_scan"
+            if coverage_day and int(coverage_day.get("activeScanSeconds") or 0)
+            else "measured_from_pitch"
             if note_active
             else "estimated_from_audio_energy"
             if section_active
@@ -3641,7 +3656,11 @@ def build_daily_records(
                 "activeTimeStatus": active_status,
                 "activePracticeScanSeconds": scan_active,
                 "activePracticeScanLabel": duration_seconds_label(scan_active) if scan_active else "",
-                "activePracticeScanIntervalCount": len(day_active_scan_items),
+                "activePracticeScanIntervalCount": int(
+                    coverage_day.get("activeScanIntervalCount")
+                    if coverage_day and coverage_day.get("activeScanIntervalCount") is not None
+                    else len(day_active_scan_items)
+                ),
                 "pieces": confirmed,
                 "uncertainPieces": uncertain,
                 "materialStatus": material_status,
@@ -3757,31 +3776,65 @@ def build_daily_records(
     )
     if total_uploaded:
         estimated_total_active = min(total_uploaded, estimated_total_active)
+    if coverage_source:
+        total_uploaded = int(coverage_source.get("uploadedVideoSeconds") or total_uploaded)
+        total_processed = int(coverage_source.get("checkedVideoSeconds") or total_processed)
+        total_active = int(coverage_source.get("activePracticeSeconds") or total_active)
+        unmeasured_uploaded = int(coverage_source.get("unmeasuredVideoSeconds") or max(0, total_uploaded - total_processed))
+        active_ratio = float(coverage_source.get("estimatedPracticeRatio") or active_ratio or 0.0)
+        estimated_total_active = int(coverage_source.get("estimatedTotalPracticeSeconds") or estimated_total_active)
+    total_uploaded_label = coverage_source.get("uploadedVideoLabel") or duration_seconds_label(total_uploaded)
+    total_processed_label = coverage_source.get("checkedVideoLabel") or (duration_seconds_label(total_processed) if total_processed else "")
+    total_active_label = coverage_source.get("activePracticeLabel") or (duration_seconds_label(total_active) if total_active else "")
+    estimated_total_label = coverage_source.get("estimatedTotalPracticeLabel") or (
+        duration_seconds_label(estimated_total_active) if estimated_total_active else ""
+    )
+    unmeasured_label = coverage_source.get("unmeasuredVideoLabel") or (
+        duration_seconds_label(unmeasured_uploaded) if unmeasured_uploaded else ""
+    )
+    estimate_status = coverage_source.get("estimateStatus") or (
+        "estimated_from_checked_windows" if total_processed and unmeasured_uploaded else "measured"
+    )
+    measurement_status = coverage_source.get("measurementStatus") or (
+        "partial" if unmeasured_uploaded else "complete" if total_uploaded else "pending"
+    )
     return {
         "status": "ready" if records else "pending",
         "recordCount": len(records),
         "totalUploadedVideoSeconds": total_uploaded,
-        "totalUploadedVideoLabel": duration_seconds_label(total_uploaded),
+        "totalUploadedVideoLabel": total_uploaded_label,
+        "uploadedVideoSeconds": total_uploaded,
+        "uploadedVideoLabel": total_uploaded_label,
+        "checkedVideoSeconds": total_processed,
+        "checkedVideoLabel": total_processed_label,
+        "activePracticeSeconds": total_active,
+        "activePracticeLabel": total_active_label,
         "totalAnalyzedVideoSeconds": total_processed,
-        "totalAnalyzedVideoLabel": duration_seconds_label(total_processed) if total_processed else "",
+        "totalAnalyzedVideoLabel": total_processed_label,
         "totalProcessedSampleSeconds": total_processed,
-        "totalProcessedSampleLabel": duration_seconds_label(total_processed) if total_processed else "",
+        "totalProcessedSampleLabel": total_processed_label,
         "totalPracticeTimeSeconds": total_active,
-        "totalPracticeTimeLabel": duration_seconds_label(total_active) if total_active else "",
+        "totalPracticeTimeLabel": total_active_label,
         "totalActiveViolinSeconds": total_active,
-        "totalActiveViolinLabel": duration_seconds_label(total_active) if total_active else "",
+        "totalActiveViolinLabel": total_active_label,
+        "estimatedTotalPracticeSeconds": estimated_total_active,
+        "estimatedTotalPracticeLabel": estimated_total_label,
         "estimatedTotalPracticeTimeSeconds": estimated_total_active,
-        "estimatedTotalPracticeTimeLabel": duration_seconds_label(estimated_total_active) if estimated_total_active else "",
+        "estimatedTotalPracticeTimeLabel": estimated_total_label,
         "estimatedPracticeRatio": round(active_ratio, 4) if active_ratio else 0.0,
         "estimatedPracticeBasis": (
             f"{duration_seconds_label(total_active)} detected from {duration_seconds_label(total_processed)} checked"
             if total_processed and total_active
             else ""
         ),
-        "estimatedPracticeStatus": "estimated_from_checked_windows" if total_processed and unmeasured_uploaded else "measured",
+        "estimatedPracticeStatus": estimate_status,
+        "estimateStatus": estimate_status,
         "unmeasuredUploadedVideoSeconds": unmeasured_uploaded,
-        "unmeasuredUploadedVideoLabel": duration_seconds_label(unmeasured_uploaded) if unmeasured_uploaded else "",
-        "activeMeasurementStatus": "partial" if unmeasured_uploaded else "complete" if total_uploaded else "pending",
+        "unmeasuredUploadedVideoLabel": unmeasured_label,
+        "unmeasuredVideoSeconds": unmeasured_uploaded,
+        "unmeasuredVideoLabel": unmeasured_label,
+        "activeMeasurementStatus": measurement_status,
+        "measurementStatus": measurement_status,
         "mediaSampleCount": len(media_samples),
         "violinPositiveSampleCount": len(all_violin_sample_ids),
         "withheldNonViolinSampleCount": withheld_sample_count,

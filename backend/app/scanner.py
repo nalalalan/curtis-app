@@ -2225,8 +2225,6 @@ def derive_review(
     practice_totals = build_practice_totals(inventory)
     practice_study = build_practice_study(state, inventory, media_samples, pieces, practice_totals)
     transcriptions = transcription_items(state)
-    daily_records = build_daily_records(state, inventory, media_samples, transcriptions, sections)
-    repertoire_evidence = build_repertoire_evidence(daily_records)
     active_practice_coverage = build_active_practice_coverage(
         inventory,
         media_samples,
@@ -2234,6 +2232,15 @@ def derive_review(
         sections,
         state.get("activePracticeScan") if isinstance(state.get("activePracticeScan"), dict) else {},
     )
+    daily_records = build_daily_records(
+        state,
+        inventory,
+        media_samples,
+        transcriptions,
+        sections,
+        active_practice_coverage=active_practice_coverage,
+    )
+    repertoire_evidence = build_repertoire_evidence(daily_records)
     evidence_progress = build_evidence_progress(state)
     truth_workbench = build_truth_workbench(state, daily_records, evidence_progress)
     transcription_completion = build_transcription_completion(

@@ -188,6 +188,67 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(record["clips"][0]["localEndSeconds"], 20)
         self.assertNotIn("reading decoration", " ".join(video["title"] for video in record["videos"]))
 
+    def test_daily_records_use_canonical_active_practice_coverage_totals(self):
+        inventory = {
+            "youtube": [
+                {
+                    "id": "K38CgZhvF3Q",
+                    "title": "5-2-26",
+                    "url": "https://www.youtube.com/watch?v=K38CgZhvF3Q",
+                    "publishedAt": "2026-05-07T17:02:05Z",
+                    "durationSeconds": 1000,
+                    "practiceCandidate": True,
+                }
+            ]
+        }
+        coverage = {
+            "uploadedVideoSeconds": 1000,
+            "uploadedVideoLabel": "16m 40s",
+            "checkedVideoSeconds": 180,
+            "checkedVideoLabel": "3m",
+            "activePracticeSeconds": 120,
+            "activePracticeLabel": "2m",
+            "estimatedTotalPracticeSeconds": 667,
+            "estimatedTotalPracticeLabel": "11m 7s",
+            "estimatedPracticeRatio": 0.6667,
+            "unmeasuredVideoSeconds": 820,
+            "unmeasuredVideoLabel": "13m 40s",
+            "measurementStatus": "partial",
+            "estimateStatus": "estimated_from_checked_windows",
+            "days": [
+                {
+                    "practiceDay": "2026-05-02",
+                    "checkedVideoSeconds": 180,
+                    "activePracticeSeconds": 120,
+                    "activeScanSeconds": 120,
+                    "activeScanIntervalCount": 2,
+                }
+            ],
+        }
+
+        daily = build_daily_records(
+            inventory=inventory,
+            state={},
+            media_samples=[{"id": "K38CgZhvF3Q", "path": "sample.mp4", "window": "*10-20", "containsViolin": True}],
+            transcriptions=[],
+            sections=[],
+            active_practice_coverage=coverage,
+        )
+        record = daily["records"][0]
+
+        self.assertEqual(daily["checkedVideoSeconds"], 180)
+        self.assertEqual(daily["totalAnalyzedVideoSeconds"], 180)
+        self.assertEqual(daily["totalPracticeTimeSeconds"], 120)
+        self.assertEqual(daily["estimatedTotalPracticeSeconds"], 667)
+        self.assertEqual(daily["estimatedTotalPracticeLabel"], "11m 7s")
+        self.assertEqual(daily["unmeasuredVideoSeconds"], 820)
+        self.assertEqual(daily["measurementStatus"], "partial")
+        self.assertEqual(record["processedSampleSeconds"], 180)
+        self.assertEqual(record["activeViolinSeconds"], 120)
+        self.assertEqual(record["activePracticeScanSeconds"], 120)
+        self.assertEqual(record["activePracticeScanIntervalCount"], 2)
+        self.assertEqual(record["activeTimeStatus"], "measured_from_active_practice_scan")
+
     def test_scherzo_symbolic_score_sequence_accepts_exact_visual_crop(self):
         inventory = {
             "youtube": [
