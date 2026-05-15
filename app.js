@@ -94,7 +94,7 @@ function apiBase() {
 
 async function apiFetch(path, options = {}) {
   const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), 15000);
+  const timeout = window.setTimeout(() => controller.abort(), 60000);
   try {
     const response = await fetch(`${apiBase()}${path}`, {
       ...options,
