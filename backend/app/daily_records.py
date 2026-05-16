@@ -1058,7 +1058,7 @@ def exact_score_location_ready(value: Any) -> bool:
     status = str(value or "").strip().lower()
     if not status:
         return False
-    if any(token in status for token in ("pending", "estimate", "estimated", "unverified", "candidate")):
+    if any(token in status for token in ("pending", "estimate", "estimated", "unverified", "candidate", "rejected", "failed", "mismatch")):
         return False
     return any(
         token in status

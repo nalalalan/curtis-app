@@ -1117,6 +1117,18 @@ def actual_source_score_snippet_ready(match: dict[str, Any]) -> bool:
     image_url = str(score.get("imageUrl") or "").strip()
     if not image_url or image_url.startswith("data:"):
         return False
+    status_text = " ".join(
+        str(value or "")
+        for value in (
+            match.get("status"),
+            match.get("scoreLocationStatus"),
+            match.get("scoreSnippetStatus"),
+            score.get("status"),
+            score.get("cropStatus"),
+        )
+    ).lower()
+    if any(token in status_text for token in ("rejected", "failed", "mismatch")):
+        return False
     if score.get("actualSourceSnippetDisplayed") is not True and match.get("scoreActualPieceAgreement") is not True:
         return False
     if score.get("visualRangeAgreement") is not True or match.get("scoreVisualRangeAgreement") is not True:
@@ -2078,6 +2090,7 @@ def build_transcription_completion(
         "Likely score noteheads now receive unaccepted staff-position pitch hypotheses before MusicXML review.",
         "Staff-level source review packets now map queued hypotheses back to the scanned score.",
         "Score panels require visible score noteheads, range, spelling, exact note-and-octave agreement, and an actual source-score crop before display.",
+        "The rejected five-note Scherzo phrase is blocked from accepted score evidence.",
         "A truth workbench now separates queued, accepted, and rejected audio-score-transcription evidence before anything can become visible score evidence.",
     ]
     remaining_summary = [

@@ -2216,7 +2216,7 @@ function exactScoreSnippetReady(group) {
     || group?.scoreAlignmentStatus
     || ""
   );
-  if (!status || ["pending", "estimate", "estimated", "unverified", "candidate"].some((token) => status.includes(token))) {
+  if (!status || ["pending", "estimate", "estimated", "unverified", "candidate", "rejected", "failed", "mismatch"].some((token) => status.includes(token))) {
     return false;
   }
   return [
