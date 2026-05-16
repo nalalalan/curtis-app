@@ -334,10 +334,10 @@ class DailyRecordTests(unittest.TestCase):
                 "tempoBpm": 96,
                 "quality": {"windowMode": "detected_active_sections"},
                 "notes": [
-                    note("D5", 0.0, 0.14),
-                    note("C5", 0.15, 0.29),
-                    note("Bb4", 0.30, 0.44),
-                    note("D5", 0.45, 0.59),
+                    note("D6", 0.0, 0.14),
+                    note("C6", 0.15, 0.29),
+                    note("Bb5", 0.30, 0.44),
+                    note("D6", 0.45, 0.59),
                 ],
             }
         ]

@@ -226,7 +226,7 @@ class SymbolicScoreTests(unittest.TestCase):
         self.assertFalse(candidate_audit["scoreMapCandidatesAccepted"])
         self.assertEqual(
             [item["note"] for item in score["notes"]],
-            ["D5", "C5", "Bb4", "D5", "C5", "Bb4", "D5"],
+            ["D6", "C6", "Bb5", "D6", "C6", "Bb5", "D6"],
         )
         self.assertEqual([item["pitchClass"] for item in score["notes"]], ["D", "C", "A#", "D", "C", "A#", "D"])
 
@@ -237,6 +237,41 @@ class SymbolicScoreTests(unittest.TestCase):
                 {
                     "transcriptionId": "wieniawski-source-motif",
                     "sampleId": "sample-source-motif",
+                    "sourceWindow": "*0-10",
+                    "notes": [
+                        note("D6", 0.0, 0.25),
+                        note("C6", 0.25, 0.5),
+                        note("A#5", 0.5, 0.75),
+                        note("D6", 0.75, 1.0),
+                    ],
+                }
+            ],
+            max_series=None,
+        )
+
+        matches = score_sequence_matches_for_series(
+            series,
+            [{"title": "Wieniawski Scherzo-Tarantelle, Op. 16", "score": target}],
+        )
+
+        self.assertEqual(matches[0]["status"], "symbolic_score_phrase_match")
+        self.assertEqual(matches[0]["minimumMatchedNoteRun"], 4)
+        self.assertEqual(matches[0]["minimumDistinctPitchClasses"], 3)
+        self.assertEqual(matches[0]["detectedPitchClassSequence"], "D C A# D")
+        self.assertEqual(matches[0]["scorePitchClassSequence"], "D C A# D")
+        self.assertEqual([item["note"] for item in matches[0]["scoreMatchedNotes"]], ["D6", "C6", "Bb5", "D6"])
+        self.assertFalse(matches[0]["scoreVisualAgreement"])
+        self.assertEqual(matches[0]["scoreVisualAgreementBasis"], "actual_source_snippet_required")
+        self.assertEqual(matches[0]["score"]["imageUrl"], "")
+        self.assertTrue(matches[0]["score"]["generatedNotationImageUrl"].startswith("data:image/svg+xml;base64,"))
+
+    def test_wieniawski_lower_octave_opening_map_is_rejected(self):
+        target = wieniawski_reference_target()
+        series = detected_note_series(
+            [
+                {
+                    "transcriptionId": "wieniawski-lower-octave-source-motif",
+                    "sampleId": "sample-lower-octave-source-motif",
                     "sourceWindow": "*0-10",
                     "notes": [
                         note("D5", 0.0, 0.25),
@@ -254,20 +289,11 @@ class SymbolicScoreTests(unittest.TestCase):
             [{"title": "Wieniawski Scherzo-Tarantelle, Op. 16", "score": target}],
         )
 
-        self.assertEqual(matches[0]["status"], "symbolic_score_phrase_match")
-        self.assertEqual(matches[0]["minimumMatchedNoteRun"], 4)
-        self.assertEqual(matches[0]["minimumDistinctPitchClasses"], 3)
-        self.assertEqual(matches[0]["detectedPitchClassSequence"], "D C A# D")
-        self.assertEqual(matches[0]["scorePitchClassSequence"], "D C A# D")
-        self.assertEqual([item["note"] for item in matches[0]["scoreMatchedNotes"]], ["D5", "C5", "Bb4", "D5"])
-        self.assertFalse(matches[0]["scoreVisualAgreement"])
-        self.assertEqual(matches[0]["scoreVisualAgreementBasis"], "actual_source_snippet_required")
-        self.assertEqual(matches[0]["score"]["imageUrl"], "")
-        self.assertTrue(matches[0]["score"]["generatedNotationImageUrl"].startswith("data:image/svg+xml;base64,"))
+        self.assertFalse(any(match["status"] == "symbolic_score_phrase_match" for match in matches))
 
     def test_wieniawski_symbolic_opening_rejects_phrase_when_one_note_fails_audio_gate(self):
         target = wieniawski_reference_target()
-        weak_c = note("C5", 0.4, 0.6, audioAgreement=False, agreementSourceCount=0, agreementSources=[])
+        weak_c = note("C6", 0.4, 0.6, audioAgreement=False, agreementSourceCount=0, agreementSources=[])
         series = detected_note_series(
             [
                 {
@@ -275,11 +301,11 @@ class SymbolicScoreTests(unittest.TestCase):
                     "sampleId": "sample-long-phrase",
                     "sourceWindow": "*0-10",
                     "notes": [
-                        note("A#4", 0.0, 0.2),
-                        note("D5", 0.2, 0.4),
+                        note("A#5", 0.0, 0.2),
+                        note("D6", 0.2, 0.4),
                         weak_c,
-                        note("A#4", 0.6, 0.8),
-                        note("D5", 0.8, 1.0),
+                        note("A#5", 0.6, 0.8),
+                        note("D6", 0.8, 1.0),
                     ],
                 }
             ],
@@ -308,13 +334,13 @@ class SymbolicScoreTests(unittest.TestCase):
                     "sampleId": "sample-transition-candidate",
                     "sourceWindow": "*0-10",
                     "status": "failed_pitch_collapse",
-                    "notes": [note("D5", index * 0.1, index * 0.1 + 0.08) for index in range(20)],
+                    "notes": [note("D6", index * 0.1, index * 0.1 + 0.08) for index in range(20)],
                     "scoreMatchCandidateNotes": [
-                        note("A#4", 0.0, 0.2, **agreed),
-                        note("D5", 0.2, 0.4, **agreed),
-                        note("C5", 0.4, 0.6, **agreed),
-                        note("A#4", 0.6, 0.8, **agreed),
-                        note("D5", 0.8, 1.0, **agreed),
+                        note("A#5", 0.0, 0.2, **agreed),
+                        note("D6", 0.2, 0.4, **agreed),
+                        note("C6", 0.4, 0.6, **agreed),
+                        note("A#5", 0.6, 0.8, **agreed),
+                        note("D6", 0.8, 1.0, **agreed),
                     ],
                 }
             ],
@@ -330,7 +356,7 @@ class SymbolicScoreTests(unittest.TestCase):
         self.assertTrue(candidate_series)
         self.assertEqual(matches[0]["status"], "symbolic_score_phrase_match")
         self.assertEqual(matches[0]["matchedNoteRun"], 5)
-        self.assertEqual([item["note"] for item in matches[0]["displayDetectedNotes"]], ["Bb4", "D5", "C5", "Bb4", "D5"])
+        self.assertEqual([item["note"] for item in matches[0]["displayDetectedNotes"]], ["Bb5", "D6", "C6", "Bb5", "D6"])
         self.assertFalse(matches[0]["scoreVisualAgreement"])
         self.assertEqual(matches[0]["score"]["cropStatus"], "actual_source_snippet_pending")
 
@@ -356,11 +382,11 @@ class SymbolicScoreTests(unittest.TestCase):
                     "sourceWindow": "*0-10",
                     "status": "failed_pitch_collapse",
                     "scoreMatchCandidateNotes": [
-                        note("A#4", 0.0, 0.2, **agreed),
-                        note("D5", 0.2, 0.4, **agreed),
-                        note("C5", 0.4, 0.6, **weak),
-                        note("A#4", 0.6, 0.8, **agreed),
-                        note("D5", 0.8, 1.0, **agreed),
+                        note("A#5", 0.0, 0.2, **agreed),
+                        note("D6", 0.2, 0.4, **agreed),
+                        note("C6", 0.4, 0.6, **weak),
+                        note("A#5", 0.6, 0.8, **agreed),
+                        note("D6", 0.8, 1.0, **agreed),
                     ],
                 }
             ],
@@ -379,9 +405,9 @@ class SymbolicScoreTests(unittest.TestCase):
 
     def test_symbolic_match_rejects_uncertain_octave_corrected_candidate(self):
         target = wieniawski_reference_target()
-        uncertain = note("C5", 0.2, 0.4)
+        uncertain = note("C6", 0.2, 0.4)
         uncertain["uncertain"] = True
-        uncertain["rawNote"] = "C4"
+        uncertain["rawNote"] = "C5"
         series = detected_note_series(
             [
                 {
@@ -389,10 +415,10 @@ class SymbolicScoreTests(unittest.TestCase):
                     "sampleId": "sample-uncertain-candidate",
                     "sourceWindow": "*0-10",
                     "scoreMatchCandidateNotes": [
-                        note("D5", 0.0, 0.2),
+                        note("D6", 0.0, 0.2),
                         uncertain,
-                        note("A#4", 0.6, 0.8),
-                        note("D5", 0.8, 1.0),
+                        note("A#5", 0.6, 0.8),
+                        note("D6", 0.8, 1.0),
                     ],
                 }
             ],

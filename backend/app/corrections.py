@@ -291,7 +291,7 @@ def wieniawski_reference_target() -> dict[str, Any]:
             "partId": "P1",
             "musicXmlPath": "assets/score/wieniawski-scherzo-tarantelle-symbolic-opening.musicxml",
             "candidateMapPath": "assets/score/wieniawski-scherzo-tarantelle-page2-score-map-candidates.json",
-            "source": "Manually verified symbolic excerpt from the local IMSLP solo-violin PDF, page 2. The visible opening phrase is D-C-Bb-D-C-Bb-D; the previous D-Bb-G-D source sequence is rejected.",
+            "source": "Manually verified symbolic excerpt from the local IMSLP solo-violin PDF, page 2. The visible opening phrase is D6-C6-Bb5-D6-C6-Bb5-D6; the previous lower-octave D5-C5-Bb4 map and D-Bb-G-D source sequence are rejected.",
             "sourcePdfLocalPath": "assets/score/wieniawski-scherzo-tarantelle-solo-imslp.pdf",
             "candidateMapStatus": "unaccepted_score_glyph_verification_queue",
             "verification": "source_score_note_sequence_verified_before_matching",

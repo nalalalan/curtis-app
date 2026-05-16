@@ -28,7 +28,7 @@
       <note>
         <pitch>
           <step>D</step>
-          <octave>5</octave>
+          <octave>6</octave>
         </pitch>
         <duration>2</duration>
         <type>eighth</type>
@@ -36,7 +36,7 @@
       <note>
         <pitch>
           <step>C</step>
-          <octave>5</octave>
+          <octave>6</octave>
         </pitch>
         <duration>2</duration>
         <type>eighth</type>
@@ -45,7 +45,7 @@
         <pitch>
           <step>B</step>
           <alter>-1</alter>
-          <octave>4</octave>
+          <octave>5</octave>
         </pitch>
         <duration>2</duration>
         <type>eighth</type>
@@ -55,7 +55,7 @@
       <note>
         <pitch>
           <step>D</step>
-          <octave>5</octave>
+          <octave>6</octave>
         </pitch>
         <duration>2</duration>
         <type>eighth</type>
@@ -63,7 +63,7 @@
       <note>
         <pitch>
           <step>C</step>
-          <octave>5</octave>
+          <octave>6</octave>
         </pitch>
         <duration>2</duration>
         <type>eighth</type>
@@ -72,7 +72,7 @@
         <pitch>
           <step>B</step>
           <alter>-1</alter>
-          <octave>4</octave>
+          <octave>5</octave>
         </pitch>
         <duration>2</duration>
         <type>eighth</type>
@@ -82,7 +82,7 @@
       <note>
         <pitch>
           <step>D</step>
-          <octave>5</octave>
+          <octave>6</octave>
         </pitch>
         <duration>2</duration>
         <type>eighth</type>
