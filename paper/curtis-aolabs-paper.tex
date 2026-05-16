@@ -146,6 +146,8 @@ The 2026-05-15 10:54 PM EDT second-pass audio-gate update targets the loop that 
 
 The 2026-05-15 11:17 PM EDT candidate-isolation update closes the remaining daily-record leak. Source-verification candidates and reference-audio pitch-sequence groups are now separated from displayable score matches. Candidates may populate \texttt{candidateMatchGroups}, the truth workbench, and source-verification target queues, but the user-facing \texttt{matchGroups} bucket stays empty until exact source-score crop, visible note sequence, box centers, paired audio, transcription, score spelling, and accepted truth-evidence flags all pass. A regression test covers a playable Wieniawski source-sequence candidate that remains queued without becoming a visible match, score link, reference link, or heat-map fragment.
 
+The 2026-05-15 11:32 PM EDT live verification reported the strict post-update state: 46.125\% exact weighted implementation progress, 0 accepted long phrases, 0 accepted measures, 0 exact score-aligned windows, 0 actual-source score snippets, and 0 score-coordinate heat-map fragments. The 2026-05-03 daily record had 0 visible \texttt{matchGroups}, 6 queued \texttt{candidateMatchGroups}, and no score or reference link. The current top queued target is \texttt{A D D F\# D}, which remains rejected as accepted score evidence because the verified symbolic source map \texttt{D C A\# D C A\# D} gives only a one-note contiguous overlap.
+
 \begin{table}[htbp]
 \centering
 \scriptsize
