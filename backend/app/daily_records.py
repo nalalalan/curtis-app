@@ -32,6 +32,9 @@ MATCH_GROUP_MIN_NOTE_RUN = 1
 MATCH_GROUP_MIN_DISTINCT_PITCH_CLASSES = 2
 SYMBOLIC_SCORE_MATCH_MIN_NOTE_RUN = 5
 SYMBOLIC_SCORE_MATCH_MIN_DISTINCT_PITCH_CLASSES = 3
+SCORE_MATCH_AUDIO_MIN_CONFIDENCE = 0.70
+SCORE_MATCH_AUDIO_MIN_DURATION_SECONDS = 0.06
+SCORE_MATCH_CANDIDATE_AUDIO_MIN_DURATION_SECONDS = 0.075
 PITCH_ANCHOR_MIN_DISTINCT_PITCH_CLASSES = 1
 MAX_PITCH_ANCHOR_MATCHES = 8
 MAX_DETECTED_NOTE_SERIES_API = 16
@@ -582,7 +585,7 @@ def note_pitch_class(note: dict[str, Any] | str) -> str:
 def note_event_for_series(note: dict[str, Any]) -> dict[str, Any]:
     start = safe_float(note.get("startSeconds"))
     end = safe_float(note.get("endSeconds"), start)
-    return {
+    event = {
         "note": str(note.get("note") or "").strip(),
         "pitchClass": note_pitch_class(note),
         "midi": note_midi_value(note),
@@ -592,6 +595,42 @@ def note_event_for_series(note: dict[str, Any]) -> dict[str, Any]:
         "confidence": round(safe_float(note.get("confidence")), 3),
         "uncertain": bool(note.get("uncertain")) or safe_float(note.get("confidence")) < 0.62,
     }
+    for key in ("audioAgreement", "audioMatchedFragment", "strictAudioWindow", "microVerified"):
+        if key in note:
+            event[key] = bool(note.get(key))
+    if "agreementSourceCount" in note:
+        event["agreementSourceCount"] = int(safe_float(note.get("agreementSourceCount")))
+    if isinstance(note.get("agreementSources"), list):
+        event["agreementSources"] = [str(source) for source in note["agreementSources"] if str(source).strip()]
+    for key in ("detectorSource", "verification", "rawNote", "durationKind"):
+        if str(note.get(key) or "").strip():
+            event[key] = str(note.get(key) or "").strip()
+    if isinstance(note.get("uncertaintyReasons"), list):
+        event["uncertaintyReasons"] = [str(reason) for reason in note["uncertaintyReasons"] if str(reason).strip()]
+    return event
+
+
+def note_has_score_match_audio_agreement(note: dict[str, Any], *, candidate_only: bool = False) -> bool:
+    if not isinstance(note, dict) or not str(note.get("note") or "").strip():
+        return False
+    if note.get("uncertain"):
+        return False
+    if note_midi_value(note) is None:
+        return False
+    if safe_float(note.get("confidence")) < SCORE_MATCH_AUDIO_MIN_CONFIDENCE:
+        return False
+    minimum_duration = SCORE_MATCH_CANDIDATE_AUDIO_MIN_DURATION_SECONDS if candidate_only else SCORE_MATCH_AUDIO_MIN_DURATION_SECONDS
+    if safe_float(note.get("durationSeconds")) < minimum_duration:
+        return False
+    if note.get("audioAgreement") is not True:
+        return False
+    if int(safe_float(note.get("agreementSourceCount"))) < 1:
+        return False
+    return has_spectral_audio_agreement(note)
+
+
+def notes_have_score_match_audio_agreement(notes: list[dict[str, Any]], *, candidate_only: bool = False) -> bool:
+    return bool(notes) and all(note_has_score_match_audio_agreement(note, candidate_only=candidate_only) for note in notes)
 
 
 def compact_adjacent_pitch_classes(values: list[str]) -> list[str]:
@@ -628,6 +667,11 @@ def detected_note_series(
                 if isinstance(note, dict) and str(note.get("note") or "").strip()
             ]
             notes = [note for note in notes if note.get("pitchClass")]
+            candidate_raw_note_count = len(notes)
+            candidate_audio_rejected_note_count = 0
+            if candidate_only:
+                notes = [note for note in notes if note_has_score_match_audio_agreement(note, candidate_only=True)]
+                candidate_audio_rejected_note_count = candidate_raw_note_count - len(notes)
             if not notes:
                 continue
             notes.sort(key=lambda note: (safe_float(note.get("startSeconds")), safe_float(note.get("endSeconds"))))
@@ -662,6 +706,11 @@ def detected_note_series(
                         "omittedNoteCount": max(0, detected_count - len(run)),
                         "uncertainNoteCount": sum(1 for note in current if note.get("uncertain")),
                         "candidateOnly": candidate_only,
+                        "audioAgreementRequired": candidate_only,
+                        "audioAgreementEventCount": sum(1 for note in current if note.get("audioAgreement") is True),
+                        "spectralAudioAgreementEventCount": sum(1 for note in current if has_spectral_audio_agreement(note)),
+                        "candidateAudioRejectedNoteCount": candidate_audio_rejected_note_count if candidate_only else 0,
+                        "candidateAudioGate": "verified" if candidate_only else "not_required",
                         "notes": run,
                         "noteSeries": [str(note.get("note") or "") for note in run],
                         "pitchClasses": pitch_classes,
@@ -1287,6 +1336,11 @@ def symbolic_score_sequence_matches_for_run(
         score_slice = score_notes[r0:r1]
         if len(score_slice) < minimum_note_run:
             continue
+        if not notes_have_score_match_audio_agreement(
+            matched_notes,
+            candidate_only=bool(run.get("candidateOnly")),
+        ):
+            continue
         if not same_note_midi_sequence(matched_notes, score_slice):
             continue
         display_notes = score_spelled_display_notes(matched_notes, score_slice)
@@ -1475,11 +1529,16 @@ def score_sequence_matches_for_series(
             for reference in reference_pitch_class_sequences(target):
                 reference_values = reference.get("pitchClasses") if isinstance(reference.get("pitchClasses"), list) else []
                 score_derived_reference = reference_sequence_is_score_derived(reference)
+                reference_kind = str(reference.get("sequenceKind") or "").lower()
+                minimum_note_run = 4 if reference_kind == "reference_audio_pitch_trace" else MATCH_GROUP_MIN_NOTE_RUN
+                minimum_distinct_pitch_classes = (
+                    3 if reference_kind == "reference_audio_pitch_trace" else MATCH_GROUP_MIN_DISTINCT_PITCH_CLASSES
+                )
                 best_for_reference: dict[str, Any] = {}
                 for query_info in queries:
                     query = query_info["values"]
                     candidate = longest_common_contiguous_run(query, reference_values)
-                    if candidate["length"] < MATCH_GROUP_MIN_NOTE_RUN:
+                    if candidate["length"] < minimum_note_run:
                         continue
                     if candidate["length"] <= int(best_for_reference.get("matchedNoteRun") or 0):
                         continue
@@ -1489,11 +1548,16 @@ def score_sequence_matches_for_series(
                     r1 = r0 + int(candidate["length"])
                     detected_sequence = query[q0:q1]
                     score_sequence = reference_values[r0:r1]
-                    if len(set(detected_sequence)) < MATCH_GROUP_MIN_DISTINCT_PITCH_CLASSES:
+                    if len(set(detected_sequence)) < minimum_distinct_pitch_classes:
                         continue
                     run_notes = run.get("notes") if isinstance(run.get("notes"), list) else []
                     raw_indices = query_info["indices"][q0:q1]
                     matched_notes = [run_notes[index] for index in raw_indices if 0 <= index < len(run_notes)]
+                    if not notes_have_score_match_audio_agreement(
+                        matched_notes,
+                        candidate_only=bool(run.get("candidateOnly")),
+                    ):
+                        continue
                     display_notes = matched_notes if query_info["collapsed"] else compact_notes_by_pitch_class(matched_notes)
                     selected_boxes = exact_score_boxes_for_reference_match(target, reference, r0, r1)
                     score_location_verified = bool(selected_boxes)
@@ -1507,8 +1571,8 @@ def score_sequence_matches_for_series(
                             if score_location_verified and detected_sequence == score_sequence
                             else ""
                         ),
-                        "minimumMatchedNoteRun": MATCH_GROUP_MIN_NOTE_RUN,
-                        "minimumDistinctPitchClasses": MATCH_GROUP_MIN_DISTINCT_PITCH_CLASSES,
+                        "minimumMatchedNoteRun": minimum_note_run,
+                        "minimumDistinctPitchClasses": minimum_distinct_pitch_classes,
                         "matchedNoteRun": int(candidate["length"]),
                         "referenceStart": r0,
                         "referenceEnd": r1,

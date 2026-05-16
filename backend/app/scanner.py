@@ -1926,7 +1926,7 @@ def build_transcription_completion(
             + (1 if transition_trace_count else 0)
             + min(2, long_phrase_count * 2),
             f"{len(transcriptions)} transcription records / {transition_trace_count} hidden fast-note candidates / {transcribed_record_count} notation-ready daily records / {audio_record_count} audio-evidence records",
-            "Short audio-checked fragments exist; failed broad transcription stays hidden, and fast-transition candidates can be searched without being displayed as accepted notation.",
+            "Short audio-checked fragments exist; failed broad transcription stays hidden, and fast-transition candidates now need second-pass spectral/onset audio agreement before score search.",
             "Fast runs, arpeggios, repeated notes, rests, rhythm, and full active windows remain unsolved.",
         ),
         roadmap_gate(
@@ -2086,6 +2086,7 @@ def build_transcription_completion(
         "Violin-positive local audio/video evidence can be stored and replayed.",
         "Failed broad transcription is withheld from notation.",
         "Fast YIN transition traces are hidden from notation but available to the strict score matcher.",
+        "Fast-transition phrase candidates now fail closed unless every matched note has second-pass spectral/onset audio agreement.",
         "Local score-glyph candidates are queued for verification without being accepted as score evidence.",
         "Likely score noteheads now receive unaccepted staff-position pitch hypotheses before MusicXML review.",
         "Staff-level source review packets now map queued hypotheses back to the scanned score.",
@@ -2099,6 +2100,7 @@ def build_transcription_completion(
         "Promote local clips into accepted truth items only after audio notes, score notes, octave/register, and score coordinates agree.",
         "Use review packets to convert queued score-note hypotheses into verified MusicXML notes before promoting source targets from reference-audio candidates to accepted score evidence.",
         "Replace short fragments with accurate phrase-level note and rhythm extraction.",
+        "Build longer phrase candidates that survive the second-pass audio gate instead of relying on loose transition traces or reference-audio coincidences.",
         "Align accepted phrases to score locations or score-free repeated exercise patterns.",
         "Generate heat maps and Curtis-level observations only from accepted evidence.",
     ]

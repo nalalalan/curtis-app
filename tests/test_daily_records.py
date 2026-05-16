@@ -48,6 +48,10 @@ def note(name, start, end, confidence=0.9, **extra):
         "endSeconds": end,
         "durationSeconds": end - start,
         "confidence": confidence,
+        "audioAgreement": True,
+        "agreementSourceCount": 1,
+        "agreementSources": ["pitch_hysteresis"],
+        "detectorSource": "spectral_onset",
         **extra,
     }
 
@@ -277,7 +281,7 @@ class DailyRecordTests(unittest.TestCase):
                 "notes": [
                     note("A#4", 0.0, 0.4),
                     note("D5", 0.5, 0.9),
-                    note("C5", 1.0, 1.4),
+                    note("C5", 1.0, 1.4, audioAgreement=False, agreementSourceCount=0, agreementSources=[]),
                     note("A#4", 1.5, 1.9),
                     note("D5", 2.0, 2.4),
                 ],
@@ -295,38 +299,13 @@ class DailyRecordTests(unittest.TestCase):
 
         self.assertEqual(record["pieces"][0]["title"], "Wieniawski Scherzo-Tarantelle, Op. 16")
         self.assertEqual(record["matchingWorkflow"]["scoreReferenceStatus"], "symbolic_score_sequence_ready")
-        self.assertGreater(record["matchingWorkflow"]["scoreSequenceMatchCount"], 0)
-        self.assertEqual(record["matchingWorkflow"]["status"], "reference_sequence_matches_ready")
+        self.assertEqual(record["matchingWorkflow"]["scoreSequenceMatchCount"], 0)
         self.assertEqual(record["matchingWorkflow"]["scoreLocationVerifiedCount"], 0)
         self.assertFalse(record["transcription"]["scoreLinked"])
-        self.assertTrue(record["transcription"]["referenceLinked"])
-        self.assertEqual(record["transcription"]["scoreAlignmentStatus"], "reference_sequence_match_pending_score_location")
-        self.assertTrue(record["matchGroups"])
-        self.assertEqual(record["matchGroups"][0]["status"], "symbolic_score_phrase_match")
-        self.assertEqual(record["matchGroups"][0]["score"]["assetId"], "wieniawski-scherzo-tarantelle-vln")
-        self.assertEqual(record["matchGroups"][0]["matchedNoteRun"], 5)
-        self.assertEqual(record["matchGroups"][0]["scoreSequenceLabel"], "mm. 2-4")
-        self.assertEqual(record["matchGroups"][0]["score"]["boxes"], [])
-        self.assertEqual(record["matchGroups"][0]["score"]["cropStatus"], "actual_source_snippet_pending")
-        self.assertFalse(record["matchGroups"][0]["scoreVisualAgreement"])
-        self.assertEqual(record["matchGroups"][0]["scoreVisualAgreementBasis"], "actual_source_snippet_required")
-        self.assertFalse(record["matchGroups"][0]["scoreVisualRangeAgreement"])
-        self.assertFalse(record["matchGroups"][0]["scoreVisibleExactNoteSequenceVerified"])
-        self.assertFalse(record["matchGroups"][0]["scoreSpellingAgreement"])
-        self.assertFalse(record["matchGroups"][0]["score"]["actualSourceSnippetDisplayed"])
-        self.assertFalse(record["matchGroups"][0]["score"]["visualRangeAgreement"])
-        self.assertFalse(record["matchGroups"][0]["score"]["visibleScoreExactNoteSequenceVerified"])
-        self.assertFalse(record["matchGroups"][0]["score"]["scoreSpellingAgreement"])
-        self.assertEqual(record["matchGroups"][0]["score"]["keySignature"]["accidentals"], ["Bb", "Eb"])
-        self.assertEqual(record["matchGroups"][0]["score"]["imageUrl"], "")
-        self.assertTrue(record["matchGroups"][0]["score"]["generatedNotationImageUrl"].startswith("data:image/svg+xml;base64,"))
-        self.assertFalse(record["matchGroups"][0]["rhythmRequired"])
-        self.assertEqual([item["detectedNote"] for item in record["matchGroups"][0]["transcription"]["notes"]], ["A#4", "D5", "C5", "A#4", "D5"])
-        self.assertEqual([item["note"] for item in record["matchGroups"][0]["transcription"]["notes"]], ["Bb4", "D5", "C5", "Bb4", "D5"])
-        self.assertEqual([item["note"] for item in record["matchGroups"][0]["scoreMatchedNotes"]], ["Bb4", "D5", "C5", "Bb4", "D5"])
-        self.assertEqual(record["matchGroups"][0]["clip"]["localStartSeconds"], 0.0)
-        self.assertEqual(record["matchGroups"][0]["clip"]["localEndSeconds"], 2.4)
-        self.assertEqual(record["heatMap"]["status"], "reference_sequence_match_pending_score_location")
+        self.assertFalse(record["transcription"]["referenceLinked"])
+        self.assertEqual(record["transcription"]["scoreAlignmentStatus"], "pending_score_alignment")
+        self.assertFalse(any(group["status"] == "symbolic_score_phrase_match" for group in record["matchGroups"]))
+        self.assertEqual(record["heatMap"]["status"], "pending_score_alignment")
         self.assertEqual(record["heatMap"]["fragments"], [])
         self.assertNotIn("accepted clip maps to mm. 2-4", record["mainCurtisBlocker"])
         self.assertEqual(record["clips"][0]["mediaUrl"], "/api/curtis/media/sample/Njh8_zq9_DM-1")
@@ -420,7 +399,7 @@ class DailyRecordTests(unittest.TestCase):
 
         self.assertEqual(matches[0]["detectedPitchClassSequence"], "C D E F G")
         self.assertEqual(matches[0]["matchedNoteRun"], 5)
-        self.assertEqual(matches[1]["detectedPitchClassSequence"], "D D D D# D")
+        self.assertEqual(len(matches), 1)
 
     def test_candidate_micro_transcription_is_withheld_until_audio_match(self):
         inventory = {
@@ -678,11 +657,11 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(scherzo["clips"][1]["sampleId"], "Njh8_zq9_DM-10815")
         self.assertEqual(scherzo["transcription"]["musicianRead"]["source"], "Alan-confirmed source label")
         self.assertEqual(scherzo["transcription"]["musicianRead"]["scoreMode"], "source_confirmed_score_target")
-        self.assertEqual(scherzo["matchingWorkflow"]["status"], "reference_sequence_matches_ready")
+        self.assertEqual(scherzo["matchingWorkflow"]["status"], "searching_score_match")
         self.assertFalse(scherzo["transcription"]["scoreLinked"])
-        self.assertTrue(scherzo["transcription"]["referenceLinked"])
-        self.assertGreaterEqual(len(scherzo["matchGroups"]), 1)
-        self.assertGreaterEqual(scherzo["transcription"]["scoreSequenceMatchCount"], 1)
+        self.assertFalse(scherzo["transcription"]["referenceLinked"])
+        self.assertEqual(len(scherzo["matchGroups"]), 0)
+        self.assertEqual(scherzo["transcription"]["scoreSequenceMatchCount"], 0)
         self.assertGreaterEqual(scherzo["transcription"]["detectedSeriesCount"], 1)
 
     def test_audio_matched_single_note_fragment_renders_with_exact_clip_window(self):

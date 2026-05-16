@@ -34,7 +34,7 @@ def midi_for_note(name):
     return (octave + 1) * 12 + NOTE_CLASS[pitch]
 
 
-def note(name, start, end, confidence=0.92):
+def note(name, start, end, confidence=0.92, **extra):
     return {
         "note": name,
         "midi": midi_for_note(name),
@@ -42,6 +42,11 @@ def note(name, start, end, confidence=0.92):
         "endSeconds": end,
         "durationSeconds": end - start,
         "confidence": confidence,
+        "audioAgreement": True,
+        "agreementSourceCount": 1,
+        "agreementSources": ["pitch_hysteresis"],
+        "detectorSource": "spectral_onset",
+        **extra,
     }
 
 
@@ -260,8 +265,9 @@ class SymbolicScoreTests(unittest.TestCase):
         self.assertEqual(matches[0]["score"]["imageUrl"], "")
         self.assertTrue(matches[0]["score"]["generatedNotationImageUrl"].startswith("data:image/svg+xml;base64,"))
 
-    def test_wieniawski_symbolic_opening_keeps_rejected_five_note_crop_hidden(self):
+    def test_wieniawski_symbolic_opening_rejects_phrase_when_one_note_fails_audio_gate(self):
         target = wieniawski_reference_target()
+        weak_c = note("C5", 0.4, 0.6, audioAgreement=False, agreementSourceCount=0, agreementSources=[])
         series = detected_note_series(
             [
                 {
@@ -271,7 +277,7 @@ class SymbolicScoreTests(unittest.TestCase):
                     "notes": [
                         note("A#4", 0.0, 0.2),
                         note("D5", 0.2, 0.4),
-                        note("C5", 0.4, 0.6),
+                        weak_c,
                         note("A#4", 0.6, 0.8),
                         note("D5", 0.8, 1.0),
                     ],
@@ -285,33 +291,16 @@ class SymbolicScoreTests(unittest.TestCase):
             [{"title": "Wieniawski Scherzo-Tarantelle, Op. 16", "score": target}],
         )
 
-        self.assertEqual(matches[0]["status"], "symbolic_score_phrase_match")
-        self.assertEqual(matches[0]["matchedNoteRun"], 5)
-        self.assertEqual(matches[0]["detectedPitchClassSequence"], "A# D C A# D")
-        self.assertEqual(matches[0]["scorePitchClassSequence"], "A# D C A# D")
-        self.assertEqual(matches[0]["referenceStart"], 2)
-        self.assertEqual(matches[0]["referenceEnd"], 7)
-        self.assertEqual([item["note"] for item in matches[0]["scoreMatchedNotes"]], ["Bb4", "D5", "C5", "Bb4", "D5"])
-        self.assertEqual([item["note"] for item in matches[0]["displayDetectedNotes"]], ["Bb4", "D5", "C5", "Bb4", "D5"])
-        self.assertEqual(matches[0]["scoreNotePitchSequenceLabel"], "Bb D C Bb D")
-        self.assertEqual(matches[0]["scoreExactNoteSequenceLabel"], "Bb4 D5 C5 Bb4 D5")
-        self.assertFalse(matches[0]["scoreVisualAgreement"])
-        self.assertEqual(matches[0]["scoreVisualAgreementBasis"], "actual_source_snippet_required")
-        self.assertFalse(matches[0]["scoreVisualRangeAgreement"])
-        self.assertFalse(matches[0]["scoreVisibleExactNoteSequenceVerified"])
-        self.assertFalse(matches[0]["scoreSpellingAgreement"])
-        self.assertFalse(matches[0]["score"]["actualSourceSnippetDisplayed"])
-        self.assertFalse(matches[0]["score"]["visualRangeAgreement"])
-        self.assertFalse(matches[0]["score"]["visibleScoreExactNoteSequenceVerified"])
-        self.assertFalse(matches[0]["score"]["scoreSpellingAgreement"])
-        self.assertEqual(matches[0]["score"]["keySignature"]["accidentals"], ["Bb", "Eb"])
-        self.assertEqual(matches[0]["score"]["imageUrl"], "")
-        self.assertEqual(matches[0]["score"]["cropStatus"], "actual_source_snippet_pending")
-        self.assertTrue(matches[0]["score"]["generatedNotationImageUrl"].startswith("data:image/svg+xml;base64,"))
-        self.assertEqual(matches[0]["score"]["measureLabel"], "mm. 2-4")
+        self.assertFalse(any(match["status"] == "symbolic_score_phrase_match" for match in matches))
 
-    def test_hidden_transition_candidate_can_match_score_without_raw_notation_display(self):
+    def test_hidden_transition_candidate_can_match_score_when_audio_gate_passes(self):
         target = wieniawski_reference_target()
+        agreed = {
+            "audioAgreement": True,
+            "agreementSourceCount": 1,
+            "agreementSources": ["spectral_onset"],
+            "detectorSource": "yin_transition_trace",
+        }
         series = detected_note_series(
             [
                 {
@@ -321,11 +310,11 @@ class SymbolicScoreTests(unittest.TestCase):
                     "status": "failed_pitch_collapse",
                     "notes": [note("D5", index * 0.1, index * 0.1 + 0.08) for index in range(20)],
                     "scoreMatchCandidateNotes": [
-                        note("A#4", 0.0, 0.2),
-                        note("D5", 0.2, 0.4),
-                        note("C5", 0.4, 0.6),
-                        note("A#4", 0.6, 0.8),
-                        note("D5", 0.8, 1.0),
+                        note("A#4", 0.0, 0.2, **agreed),
+                        note("D5", 0.2, 0.4, **agreed),
+                        note("C5", 0.4, 0.6, **agreed),
+                        note("A#4", 0.6, 0.8, **agreed),
+                        note("D5", 0.8, 1.0, **agreed),
                     ],
                 }
             ],
@@ -345,11 +334,54 @@ class SymbolicScoreTests(unittest.TestCase):
         self.assertFalse(matches[0]["scoreVisualAgreement"])
         self.assertEqual(matches[0]["score"]["cropStatus"], "actual_source_snippet_pending")
 
+    def test_hidden_transition_candidate_rejects_unagreed_fast_note(self):
+        target = wieniawski_reference_target()
+        agreed = {
+            "audioAgreement": True,
+            "agreementSourceCount": 1,
+            "agreementSources": ["spectral_onset"],
+            "detectorSource": "yin_transition_trace",
+        }
+        weak = {
+            "audioAgreement": False,
+            "agreementSourceCount": 0,
+            "agreementSources": [],
+            "detectorSource": "yin_transition_trace",
+        }
+        series = detected_note_series(
+            [
+                {
+                    "transcriptionId": "wieniawski-transition-candidate",
+                    "sampleId": "sample-transition-candidate",
+                    "sourceWindow": "*0-10",
+                    "status": "failed_pitch_collapse",
+                    "scoreMatchCandidateNotes": [
+                        note("A#4", 0.0, 0.2, **agreed),
+                        note("D5", 0.2, 0.4, **agreed),
+                        note("C5", 0.4, 0.6, **weak),
+                        note("A#4", 0.6, 0.8, **agreed),
+                        note("D5", 0.8, 1.0, **agreed),
+                    ],
+                }
+            ],
+            max_series=None,
+        )
+
+        candidate_series = [item for item in series if item.get("candidateOnly")]
+        matches = score_sequence_matches_for_series(
+            candidate_series,
+            [{"title": "Wieniawski Scherzo-Tarantelle, Op. 16", "score": target}],
+        )
+
+        self.assertTrue(candidate_series)
+        self.assertEqual(candidate_series[0]["candidateAudioRejectedNoteCount"], 1)
+        self.assertFalse(any(match["status"] == "symbolic_score_phrase_match" for match in matches))
+
     def test_symbolic_match_rejects_uncertain_octave_corrected_candidate(self):
         target = wieniawski_reference_target()
-        uncertain = note("A#4", 0.0, 0.2)
+        uncertain = note("C5", 0.2, 0.4)
         uncertain["uncertain"] = True
-        uncertain["rawNote"] = "A#3"
+        uncertain["rawNote"] = "C4"
         series = detected_note_series(
             [
                 {
@@ -357,9 +389,8 @@ class SymbolicScoreTests(unittest.TestCase):
                     "sampleId": "sample-uncertain-candidate",
                     "sourceWindow": "*0-10",
                     "scoreMatchCandidateNotes": [
+                        note("D5", 0.0, 0.2),
                         uncertain,
-                        note("D5", 0.2, 0.4),
-                        note("C5", 0.4, 0.6),
                         note("A#4", 0.6, 0.8),
                         note("D5", 0.8, 1.0),
                     ],
