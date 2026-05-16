@@ -15,7 +15,7 @@ from .state import load_state, save_state, utc_now
 
 MAX_TRANSCRIPTION_SECONDS = int(os.getenv("CURTIS_TRANSCRIPTION_MAX_SECONDS", "180"))
 TRANSCRIPTION_SAMPLE_LIMIT = int(os.getenv("CURTIS_TRANSCRIPTION_SAMPLE_LIMIT", "8"))
-TRANSCRIPTION_PIPELINE_VERSION = "violin_audio_matched_fragment_v10"
+TRANSCRIPTION_PIPELINE_VERSION = "violin_audio_matched_fragment_v11"
 MIN_NOTE_SECONDS = float(os.getenv("CURTIS_MIN_NOTE_SECONDS", "0.055"))
 MIN_ONSET_NOTE_SECONDS = float(os.getenv("CURTIS_MIN_ONSET_NOTE_SECONDS", "0.04"))
 MAX_STORED_NOTES = int(os.getenv("CURTIS_MAX_STORED_NOTES", "240"))
@@ -47,6 +47,8 @@ PITCH_COLLAPSE_MAX_PITCH_CLASSES = int(os.getenv("CURTIS_PITCH_COLLAPSE_MAX_PITC
 SPECTRAL_MIN_CONFIDENCE = float(os.getenv("CURTIS_SPECTRAL_MIN_CONFIDENCE", "0.18"))
 SPECTRAL_MIN_SEGMENT_SECONDS = float(os.getenv("CURTIS_SPECTRAL_MIN_SEGMENT_SECONDS", "0.035"))
 SPECTRAL_HARMONIC_COUNT = int(os.getenv("CURTIS_SPECTRAL_HARMONIC_COUNT", "5"))
+YIN_TRANSITION_RMS_RATIO = float(os.getenv("CURTIS_YIN_TRANSITION_RMS_RATIO", "0.18"))
+YIN_TRANSITION_MIN_SECONDS = float(os.getenv("CURTIS_YIN_TRANSITION_MIN_SECONDS", "0.018"))
 AUDIO_AGREEMENT_SECONDS = float(os.getenv("CURTIS_AUDIO_AGREEMENT_SECONDS", "0.11"))
 AUDIO_AGREEMENT_MIDI_TOLERANCE = int(os.getenv("CURTIS_AUDIO_AGREEMENT_MIDI_TOLERANCE", "1"))
 MATCHED_FRAGMENT_MIN_SECONDS = float(os.getenv("CURTIS_MATCHED_FRAGMENT_MIN_SECONDS", "0.52"))
@@ -609,6 +611,100 @@ def spectral_onset_events(
     return events
 
 
+def yin_transition_events(
+    y: Any,
+    sr: int,
+    hop_length: int,
+    librosa: Any,
+    numpy: Any,
+) -> list[dict[str, Any]]:
+    if y.size <= 0:
+        return []
+    try:
+        yin = librosa.yin(
+            y,
+            fmin=librosa.midi_to_hz(VIOLIN_MIN_MIDI),
+            fmax=librosa.midi_to_hz(VIOLIN_MAX_MIDI),
+            sr=sr,
+            frame_length=PITCH_FRAME_LENGTH,
+            hop_length=hop_length,
+        )
+        rms = librosa.feature.rms(y=y, frame_length=PITCH_FRAME_LENGTH, hop_length=hop_length, center=True)[0]
+    except Exception:
+        return []
+    if len(yin) == 0 or len(rms) == 0:
+        return []
+    active_rms = [float(value) for value in rms if float(value) > 0]
+    if not active_rms:
+        return []
+    threshold = max(0.006, float(numpy.percentile(numpy.array(active_rms), 70)) * YIN_TRANSITION_RMS_RATIO)
+    frame_seconds = hop_length / sr
+    events: list[dict[str, Any]] = []
+    current_midi: int | None = None
+    current_start: float | None = None
+    current_energy: list[float] = []
+
+    def close(end_seconds: float) -> None:
+        nonlocal current_midi, current_start, current_energy
+        if current_midi is None or current_start is None:
+            current_midi = None
+            current_start = None
+            current_energy = []
+            return
+        duration = max(0.0, end_seconds - current_start)
+        if duration >= YIN_TRANSITION_MIN_SECONDS:
+            confidence = min(0.86, max(0.54, sum(current_energy) / max(1, len(current_energy)) / max(threshold, 1e-9) * 0.18))
+            events.append(
+                {
+                    "startSeconds": round(current_start, 3),
+                    "endSeconds": round(end_seconds, 3),
+                    "durationSeconds": round(duration, 3),
+                    "midi": int(current_midi),
+                    "note": note_name(int(current_midi)),
+                    "confidence": round(confidence, 3),
+                    "detectorSource": "yin_transition_trace",
+                    "candidateOnly": True,
+                }
+            )
+        current_midi = None
+        current_start = None
+        current_energy = []
+
+    for index, value in enumerate(yin):
+        if index >= len(rms):
+            break
+        energy = float(rms[index])
+        time_seconds = float(index * frame_seconds)
+        try:
+            frequency = float(value)
+        except (TypeError, ValueError):
+            close(time_seconds)
+            continue
+        if energy < threshold or math.isnan(frequency) or frequency <= 0:
+            close(time_seconds)
+            continue
+        midi = midi_from_hz(frequency)
+        if midi < VIOLIN_MIN_MIDI or midi > VIOLIN_MAX_MIDI:
+            close(time_seconds)
+            continue
+        if current_midi is None:
+            current_midi = midi
+            current_start = time_seconds
+            current_energy = [energy]
+            continue
+        if midi == current_midi:
+            current_energy.append(energy)
+            continue
+        close(time_seconds)
+        current_midi = midi
+        current_start = time_seconds
+        current_energy = [energy]
+        if len(events) >= MAX_STORED_NOTES:
+            break
+    close(float(len(yin) * frame_seconds))
+    return merge_adjacent_same_note_events(events)[:MAX_STORED_NOTES]
+
+
 def transcription_failure_state(events: list[dict[str, Any]], quality: dict[str, Any]) -> dict[str, Any]:
     collapse = pitch_collapse_report(events, int(quality.get("detectedOnsetCount") or 0))
     if collapse.get("pitchCollapseDetected"):
@@ -1012,6 +1108,7 @@ def transcribe_audio_array(y: Any, sr: int, librosa: Any, numpy: Any) -> dict[st
     pitch_events = f0_to_events(f0, voiced_flag, voiced_prob, sr, hop_length, numpy)
     onset_events = f0_to_onset_events(f0, voiced_flag, voiced_prob, onset_frames, sr, hop_length, numpy)
     spectral_events = spectral_onset_events(pitch_y, onset_frames, sr, hop_length, librosa, numpy)
+    transition_events = yin_transition_events(pitch_y, sr, hop_length, librosa, numpy)
     raw_events, segmentation_source = choose_transcription_events(pitch_events, onset_events, spectral_events)
     peer_groups = [
         ("pitch_hysteresis", pitch_events),
@@ -1019,6 +1116,8 @@ def transcribe_audio_array(y: Any, sr: int, librosa: Any, numpy: Any) -> dict[st
         ("spectral_onset", spectral_events),
     ]
     raw_events = mark_audio_agreement(raw_events, segmentation_source, peer_groups)
+    marked_transition_events = mark_audio_agreement(transition_events, "yin_transition_trace", peer_groups)
+    score_match_candidate_events, transition_quality = pitch_sanity_filter(marked_transition_events)
     events, sanity_quality = pitch_sanity_filter(raw_events)
     voiced_ratio = round(float(numpy.nanmean(voiced_flag)) if len(voiced_flag) else 0.0, 3)
     spectral_agreed_count = sum(
@@ -1033,6 +1132,8 @@ def transcribe_audio_array(y: Any, sr: int, librosa: Any, numpy: Any) -> dict[st
         "pitchEventCount": len(pitch_events),
         "onsetEventCount": len(onset_events),
         "spectralEventCount": len(spectral_events),
+        "transitionTraceEventCount": len(transition_events),
+        "transitionTraceSelectedEventCount": len(score_match_candidate_events),
         "rawSelectedEventCount": len(raw_events),
         "selectedEventCount": len(events),
         "audioAgreementEventCount": sum(1 for event in events if event.get("audioAgreement")),
@@ -1041,11 +1142,15 @@ def transcribe_audio_array(y: Any, sr: int, librosa: Any, numpy: Any) -> dict[st
         "pitchDiversity": pitch_diversity(pitch_events),
         "onsetDiversity": pitch_diversity(onset_events),
         "spectralDiversity": pitch_diversity(spectral_events),
+        "transitionTraceDiversity": pitch_diversity(score_match_candidate_events),
+        "transitionTraceSanityGlitchDroppedCount": int(transition_quality.get("sanityGlitchDroppedCount") or 0),
+        "transitionTraceSanityOctaveAdjustedCount": int(transition_quality.get("sanityOctaveAdjustedCount") or 0),
         **sanity_quality,
     }
     failure = transcription_failure_state(events, quality)
     return {
         "events": events,
+        "scoreMatchCandidateNotes": score_match_candidate_events[:MAX_STORED_NOTES],
         "tempoBpm": tempo,
         "voicedFrameRatio": voiced_ratio,
         "quality": {**quality, **failure},
@@ -1060,6 +1165,7 @@ def transcribe_active_windows(
     numpy: Any,
 ) -> dict[str, Any]:
     events: list[dict[str, Any]] = []
+    score_match_candidate_notes: list[dict[str, Any]] = []
     tempos: list[float] = []
     voiced_ratios: list[float] = []
     quality_totals = Counter()
@@ -1094,6 +1200,8 @@ def transcribe_active_windows(
             "pitchEventCount",
             "onsetEventCount",
             "spectralEventCount",
+            "transitionTraceEventCount",
+            "transitionTraceSelectedEventCount",
             "rawSelectedEventCount",
             "selectedEventCount",
             "audioAgreementEventCount",
@@ -1105,6 +1213,8 @@ def transcribe_active_windows(
             "sanityLowConfidenceNoteCount",
             "pitchCollapseEventCount",
             "pitchCollapseDetectedOnsetCount",
+            "transitionTraceSanityGlitchDroppedCount",
+            "transitionTraceSanityOctaveAdjustedCount",
         ):
             quality_totals[key] += int(quality.get(key) or 0)
         if quality.get("failed"):
@@ -1113,10 +1223,26 @@ def transcribe_active_windows(
                 collapse_notes[str(quality.get("pitchCollapseDominantNote"))] += 1
             if quality.get("failureLimit"):
                 failure_limits.add(str(quality.get("failureLimit")))
+        chunk_candidate_notes: list[dict[str, Any]] = []
+        for event in result.get("scoreMatchCandidateNotes", []) if isinstance(result.get("scoreMatchCandidateNotes"), list) else []:
+            if not isinstance(event, dict):
+                continue
+            shifted = dict(event)
+            shifted["startSeconds"] = round(trim_offset + float(event.get("startSeconds") or 0.0), 3)
+            shifted["endSeconds"] = round(trim_offset + float(event.get("endSeconds") or 0.0), 3)
+            chunk_candidate_notes.append(shifted)
+        score_match_candidate_notes.extend(chunk_candidate_notes)
         if len(chunk_events) < MIN_ACTIVE_WINDOW_NOTES:
             quality_totals["omittedSparseWindowCount"] += 1
             total_seconds += end - start
-            used_windows.append({"start": round(start, 3), "end": round(end, 3), "notation": "omitted_sparse"})
+            used_windows.append(
+                {
+                    "start": round(start, 3),
+                    "end": round(end, 3),
+                    "notation": "omitted_sparse",
+                    "scoreMatchCandidateCount": len(chunk_candidate_notes),
+                }
+            )
             continue
         for event in chunk_events:
             shifted = dict(event)
@@ -1130,6 +1256,7 @@ def transcribe_active_windows(
         used_windows.append({"start": round(start, 3), "end": round(end, 3), "notation": "included"})
     return {
         "events": events[:MAX_STORED_NOTES],
+        "scoreMatchCandidateNotes": score_match_candidate_notes[:MAX_STORED_NOTES],
         "tempoBpm": round(float(numpy.median(numpy.array(tempos))), 1) if tempos else 0.0,
         "voicedFrameRatio": round(sum(voiced_ratios) / max(1, len(voiced_ratios)), 3),
         "durationSeconds": round(total_seconds, 2),
@@ -1140,6 +1267,8 @@ def transcribe_active_windows(
             "pitchEventCount": int(quality_totals["pitchEventCount"]),
             "onsetEventCount": int(quality_totals["onsetEventCount"]),
             "spectralEventCount": int(quality_totals["spectralEventCount"]),
+            "transitionTraceEventCount": int(quality_totals["transitionTraceEventCount"]),
+            "transitionTraceSelectedEventCount": int(quality_totals["transitionTraceSelectedEventCount"]),
             "rawSelectedEventCount": int(quality_totals["rawSelectedEventCount"]),
             "selectedEventCount": int(quality_totals["selectedEventCount"]),
             "audioAgreementEventCount": int(quality_totals["audioAgreementEventCount"]),
@@ -1159,6 +1288,8 @@ def transcribe_active_windows(
             "pitchCollapseWindowCount": int(sum(failure_modes.values())),
             "pitchCollapseEventCount": int(quality_totals["pitchCollapseEventCount"]),
             "pitchCollapseDetectedOnsetCount": int(quality_totals["pitchCollapseDetectedOnsetCount"]),
+            "transitionTraceSanityGlitchDroppedCount": int(quality_totals["transitionTraceSanityGlitchDroppedCount"]),
+            "transitionTraceSanityOctaveAdjustedCount": int(quality_totals["transitionTraceSanityOctaveAdjustedCount"]),
         },
     }
 
@@ -1220,6 +1351,7 @@ def transcribe_path(path: Path, active_windows: list[dict[str, float]] | None = 
             "voicedFrameRatio": transcription["voicedFrameRatio"],
             "noteCount": len(events),
             "notes": events,
+            "scoreMatchCandidateNotes": transcription.get("scoreMatchCandidateNotes", []),
             "fingerprint": fingerprint,
             "quality": {
                 "range": f"{note_name(VIOLIN_MIN_MIDI)}-{note_name(VIOLIN_MAX_MIDI)}",
@@ -1320,6 +1452,11 @@ def build_transcription(sample: dict[str, Any], state: dict[str, Any]) -> dict[s
     correction = correction_for_item(state, sample)
     base_start = parse_window_start(str(sample.get("window") or ""))
     for event in result.get("notes", []) if isinstance(result.get("notes"), list) else []:
+        if not isinstance(event, dict):
+            continue
+        event["sourceStartSeconds"] = base_start + float(event.get("startSeconds") or 0.0)
+        event["sourceEndSeconds"] = base_start + float(event.get("endSeconds") or 0.0)
+    for event in result.get("scoreMatchCandidateNotes", []) if isinstance(result.get("scoreMatchCandidateNotes"), list) else []:
         if not isinstance(event, dict):
             continue
         event["sourceStartSeconds"] = base_start + float(event.get("startSeconds") or 0.0)

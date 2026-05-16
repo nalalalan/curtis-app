@@ -1296,6 +1296,7 @@ const TREBLE_STAFF_BOTTOM_Y = TREBLE_STAFF_TOP_Y + (TREBLE_STAFF_LINE_GAP * 4);
 const TREBLE_G4_Y = TREBLE_STAFF_TOP_Y + (TREBLE_STAFF_LINE_GAP * 3);
 const TREBLE_STAFF_STEP_Y = TREBLE_STAFF_LINE_GAP / 2;
 const TREBLE_NOTE_ORDER = { C: 0, D: 1, E: 2, F: 3, G: 4, A: 5, B: 6 };
+const TREBLE_CLEF_BASELINE_Y = 63;
 
 function naturalNoteStep(note) {
   const match = String(note || "").match(/^([A-G])(#|b)?(\d)$/);
@@ -1419,7 +1420,7 @@ function renderKeySignatureMarks(signature) {
   };
   const positions = normalized.accidentalType === "flat" ? flatPositions : sharpPositions;
   const glyph = normalized.accidentalType === "flat" ? "&#9837;" : "&#9839;";
-  const baselineOffset = normalized.accidentalType === "flat" ? 1 : 3;
+  const baselineOffset = normalized.accidentalType === "flat" ? -5 : 0;
   const marks = normalized.accidentals
     .map((item, index) => {
       const letter = String(item || "").trim().charAt(0).toUpperCase();
@@ -1438,7 +1439,7 @@ function renderKeySignatureMarks(signature) {
 }
 
 function renderTrebleClef() {
-  return `<text class="treble-clef" x="24" y="70">&#119070;</text>`;
+  return `<text class="treble-clef" x="24" y="${TREBLE_CLEF_BASELINE_Y}">&#119070;</text>`;
 }
 
 function renderLedgerLines(y, x) {

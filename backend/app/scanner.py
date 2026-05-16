@@ -1779,6 +1779,11 @@ def build_transcription_completion(
     score_truth_ready_count = int(truth_workbench.get("scoreReadyTruthCount") or 0)
     truth_queue_count = int(truth_workbench.get("sourceTargetQueueCount") or 0) + int(truth_workbench.get("pendingTruthCount") or 0)
     truth_route_ready = str(truth_workbench.get("version") or "") == "truth_workbench_v1"
+    transition_trace_count = sum(
+        int((item.get("quality") if isinstance(item.get("quality"), dict) else {}).get("transitionTraceSelectedEventCount") or 0)
+        for item in transcriptions
+        if isinstance(item, dict)
+    )
     repertoire_entries = repertoire_evidence.get("entries") if isinstance(repertoire_evidence.get("entries"), list) else []
     score_target_count = int(
         training.get("scoreReferenceTargetCount")
@@ -1906,9 +1911,10 @@ def build_transcription_completion(
             (1 if transcriptions else 0)
             + (1 if transcribed_record_count else 0)
             + (1 if audio_record_count else 0)
+            + (1 if transition_trace_count else 0)
             + min(2, long_phrase_count * 2),
-            f"{len(transcriptions)} transcription records / {transcribed_record_count} notation-ready daily records / {audio_record_count} audio-evidence records",
-            "Short audio-checked fragments exist; failed broad transcription stays hidden.",
+            f"{len(transcriptions)} transcription records / {transition_trace_count} hidden fast-note candidates / {transcribed_record_count} notation-ready daily records / {audio_record_count} audio-evidence records",
+            "Short audio-checked fragments exist; failed broad transcription stays hidden, and fast-transition candidates can be searched without being displayed as accepted notation.",
             "Fast runs, arpeggios, repeated notes, rests, rhythm, and full active windows remain unsolved.",
         ),
         roadmap_gate(
@@ -2023,6 +2029,11 @@ def build_transcription_completion(
             "detail": "accepted",
         },
         {
+            "label": "Fast-note trace",
+            "value": str(transition_trace_count),
+            "detail": "hidden candidates",
+        },
+        {
             "label": "Measure target",
             "value": f"{min(measure_match_count, 1)}/1",
             "detail": "verified score/audio measure",
@@ -2062,6 +2073,7 @@ def build_transcription_completion(
         "Uploaded video time is separated from active violin-playing time.",
         "Violin-positive local audio/video evidence can be stored and replayed.",
         "Failed broad transcription is withheld from notation.",
+        "Fast YIN transition traces are hidden from notation but available to the strict score matcher.",
         "Local score-glyph candidates are queued for verification without being accepted as score evidence.",
         "Likely score noteheads now receive unaccepted staff-position pitch hypotheses before MusicXML review.",
         "Staff-level source review packets now map queued hypotheses back to the scanned score.",
@@ -2110,7 +2122,7 @@ def build_transcription_completion(
             "phase": "5",
             "label": "Accurate phrase transcription",
             "status": "partial" if transcriptions else "pending",
-            "evidence": f"{len(transcriptions)} transcription records / {long_phrase_count} accepted long phrases",
+            "evidence": f"{len(transcriptions)} transcription records / {transition_trace_count} hidden fast-note candidates / {long_phrase_count} accepted long phrases",
             "target": "10-30 second passages with notes, rests, rhythm, repeats, and audio agreement.",
         },
         {
@@ -2189,6 +2201,7 @@ def build_transcription_completion(
         "acceptedTruthItemCount": truth_ready_count,
         "scoreReadyTruthItemCount": score_truth_ready_count,
         "truthQueueCount": truth_queue_count,
+        "transitionTraceCandidateCount": transition_trace_count,
         "pitchSequenceGroupCount": score_sequence_count,
         "checkedVideoLabel": checked_label if checked_label != "0s" else "",
         "uploadedVideoLabel": uploaded_label if uploaded_label != "unknown" else "",

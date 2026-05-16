@@ -609,71 +609,81 @@ def detected_note_series(
 ) -> list[dict[str, Any]]:
     series: list[dict[str, Any]] = []
     for transcription in transcriptions:
-        notes = [
-            note_event_for_series(note)
-            for note in (transcription.get("notes") if isinstance(transcription.get("notes"), list) else [])
-            if isinstance(note, dict) and str(note.get("note") or "").strip()
-        ]
-        notes = [note for note in notes if note.get("pitchClass")]
-        if not notes:
-            continue
-        notes.sort(key=lambda note: (safe_float(note.get("startSeconds")), safe_float(note.get("endSeconds"))))
         source_start = parse_window_start(str(transcription.get("sourceWindow") or ""))
         sample_id = str(transcription.get("sampleId") or "").strip()
         source_title = str(transcription.get("sourceTitle") or "").strip()
         source_url = str(transcription.get("sourceUrl") or "").strip()
         source_window = str(transcription.get("sourceWindow") or "").strip()
-        current: list[dict[str, Any]] = []
-        previous_end = 0.0
+        note_sets: list[tuple[str, list[Any], bool]] = [
+            (str(transcription.get("status") or ""), transcription.get("notes") if isinstance(transcription.get("notes"), list) else [], False)
+        ]
+        candidate_notes = transcription.get("scoreMatchCandidateNotes")
+        if isinstance(candidate_notes, list) and candidate_notes:
+            note_sets.append(("score_match_candidate_trace", candidate_notes, True))
 
-        def flush() -> None:
-            nonlocal current
-            if not current:
-                return
-            run = current if max_notes_per_series is None else current[:max_notes_per_series]
-            pitch_classes = [str(note.get("pitchClass") or "") for note in run if note.get("pitchClass")]
-            collapsed = compact_adjacent_pitch_classes(pitch_classes)
-            start = safe_float(run[0].get("startSeconds"))
-            end = safe_float(run[-1].get("endSeconds"), start)
-            detected_count = len(current)
-            series.append(
-                {
-                    "id": f"{sample_id or source_title}:{source_window}:{len(series) + 1}",
-                    "sourceTitle": source_title,
-                    "sourceUrl": source_url,
-                    "sourceWindow": source_window,
-                    "sampleId": sample_id,
-                    "startSeconds": round(source_start + start, 3),
-                    "endSeconds": round(source_start + end, 3),
-                    "localStartSeconds": round(start, 3),
-                    "localEndSeconds": round(end, 3),
-                    "durationSeconds": round(max(0.0, end - start), 3),
-                    "noteCount": detected_count,
-                    "displayedNoteCount": len(run),
-                    "omittedNoteCount": max(0, detected_count - len(run)),
-                    "uncertainNoteCount": sum(1 for note in current if note.get("uncertain")),
-                    "notes": run,
-                    "noteSeries": [str(note.get("note") or "") for note in run],
-                    "pitchClasses": pitch_classes,
-                    "collapsedPitchClasses": collapsed,
-                    "noteSeriesLabel": " ".join(str(note.get("note") or "") for note in run),
-                    "pitchClassSeriesLabel": " ".join(pitch_classes),
-                    "collapsedPitchClassSeriesLabel": " ".join(collapsed),
-                    "status": str(transcription.get("status") or ""),
-                    "pipelineVersion": str(transcription.get("pipelineVersion") or ""),
-                }
-            )
-            current = []
+        for status, raw_notes, candidate_only in note_sets:
+            notes = [
+                note_event_for_series(note)
+                for note in raw_notes
+                if isinstance(note, dict) and str(note.get("note") or "").strip()
+            ]
+            notes = [note for note in notes if note.get("pitchClass")]
+            if not notes:
+                continue
+            notes.sort(key=lambda note: (safe_float(note.get("startSeconds")), safe_float(note.get("endSeconds"))))
+            current: list[dict[str, Any]] = []
+            previous_end = 0.0
 
-        for note in notes:
-            start = safe_float(note.get("startSeconds"))
-            if current and start - previous_end > NOTE_SERIES_MAX_GAP_SECONDS:
-                flush()
-            current.append(note)
-            previous_end = max(previous_end, safe_float(note.get("endSeconds"), start))
-        flush()
-        if max_series is not None and len(series) >= max_series:
-            return series[:max_series]
+            def flush() -> None:
+                nonlocal current
+                if not current:
+                    return
+                run = current if max_notes_per_series is None else current[:max_notes_per_series]
+                pitch_classes = [str(note.get("pitchClass") or "") for note in run if note.get("pitchClass")]
+                collapsed = compact_adjacent_pitch_classes(pitch_classes)
+                start = safe_float(run[0].get("startSeconds"))
+                end = safe_float(run[-1].get("endSeconds"), start)
+                detected_count = len(current)
+                trace_suffix = ":candidate" if candidate_only else ""
+                series.append(
+                    {
+                        "id": f"{sample_id or source_title}:{source_window}{trace_suffix}:{len(series) + 1}",
+                        "sourceTitle": source_title,
+                        "sourceUrl": source_url,
+                        "sourceWindow": source_window,
+                        "sampleId": sample_id,
+                        "startSeconds": round(source_start + start, 3),
+                        "endSeconds": round(source_start + end, 3),
+                        "localStartSeconds": round(start, 3),
+                        "localEndSeconds": round(end, 3),
+                        "durationSeconds": round(max(0.0, end - start), 3),
+                        "noteCount": detected_count,
+                        "displayedNoteCount": len(run),
+                        "omittedNoteCount": max(0, detected_count - len(run)),
+                        "uncertainNoteCount": sum(1 for note in current if note.get("uncertain")),
+                        "candidateOnly": candidate_only,
+                        "notes": run,
+                        "noteSeries": [str(note.get("note") or "") for note in run],
+                        "pitchClasses": pitch_classes,
+                        "collapsedPitchClasses": collapsed,
+                        "noteSeriesLabel": " ".join(str(note.get("note") or "") for note in run),
+                        "pitchClassSeriesLabel": " ".join(pitch_classes),
+                        "collapsedPitchClassSeriesLabel": " ".join(collapsed),
+                        "status": status,
+                        "pipelineVersion": str(transcription.get("pipelineVersion") or ""),
+                    }
+                )
+                current = []
+
+            for note in notes:
+                start = safe_float(note.get("startSeconds"))
+                if current and start - previous_end > NOTE_SERIES_MAX_GAP_SECONDS:
+                    flush()
+                current.append(note)
+                previous_end = max(previous_end, safe_float(note.get("endSeconds"), start))
+            flush()
+            if max_series is not None and len(series) >= max_series:
+                return series[:max_series]
     return series if max_series is None else series[:max_series]
 
 
@@ -1114,6 +1124,8 @@ def score_exact_note_sequence(notes: list[dict[str, Any]]) -> list[str]:
 
 def same_note_midi_sequence(detected_notes: list[dict[str, Any]], score_notes: list[dict[str, Any]]) -> bool:
     if len(detected_notes) != len(score_notes) or not detected_notes:
+        return False
+    if any(note.get("uncertain") for note in detected_notes):
         return False
     detected_midi = [note_midi_value(note) for note in detected_notes]
     score_midi = [note_midi_value(note) for note in score_notes]

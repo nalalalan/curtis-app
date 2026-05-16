@@ -313,6 +313,69 @@ class SymbolicScoreTests(unittest.TestCase):
         self.assertTrue(matches[0]["score"]["generatedNotationImageUrl"].startswith("data:image/svg+xml;base64,"))
         self.assertEqual(matches[0]["score"]["measureLabel"], "mm. 2-4")
 
+    def test_hidden_transition_candidate_can_match_score_without_raw_notation_display(self):
+        target = wieniawski_reference_target()
+        series = detected_note_series(
+            [
+                {
+                    "transcriptionId": "wieniawski-transition-candidate",
+                    "sampleId": "sample-transition-candidate",
+                    "sourceWindow": "*0-10",
+                    "status": "failed_pitch_collapse",
+                    "notes": [note("D5", index * 0.1, index * 0.1 + 0.08) for index in range(20)],
+                    "scoreMatchCandidateNotes": [
+                        note("A#4", 0.0, 0.2),
+                        note("D5", 0.2, 0.4),
+                        note("C5", 0.4, 0.6),
+                        note("A#4", 0.6, 0.8),
+                        note("D5", 0.8, 1.0),
+                    ],
+                }
+            ],
+            max_series=None,
+        )
+
+        candidate_series = [item for item in series if item.get("candidateOnly")]
+        matches = score_sequence_matches_for_series(
+            candidate_series,
+            [{"title": "Wieniawski Scherzo-Tarantelle, Op. 16", "score": target}],
+        )
+
+        self.assertTrue(candidate_series)
+        self.assertEqual(matches[0]["status"], "symbolic_score_phrase_match")
+        self.assertEqual(matches[0]["matchedNoteRun"], 5)
+        self.assertEqual([item["note"] for item in matches[0]["displayDetectedNotes"]], ["Bb4", "D5", "C5", "Bb4", "D5"])
+
+    def test_symbolic_match_rejects_uncertain_octave_corrected_candidate(self):
+        target = wieniawski_reference_target()
+        uncertain = note("A#4", 0.0, 0.2)
+        uncertain["uncertain"] = True
+        uncertain["rawNote"] = "A#3"
+        series = detected_note_series(
+            [
+                {
+                    "transcriptionId": "wieniawski-uncertain-candidate",
+                    "sampleId": "sample-uncertain-candidate",
+                    "sourceWindow": "*0-10",
+                    "scoreMatchCandidateNotes": [
+                        uncertain,
+                        note("D5", 0.2, 0.4),
+                        note("C5", 0.4, 0.6),
+                        note("A#4", 0.6, 0.8),
+                        note("D5", 0.8, 1.0),
+                    ],
+                }
+            ],
+            max_series=None,
+        )
+
+        matches = score_sequence_matches_for_series(
+            series,
+            [{"title": "Wieniawski Scherzo-Tarantelle, Op. 16", "score": target}],
+        )
+
+        self.assertFalse(any(match["status"] == "symbolic_score_phrase_match" for match in matches))
+
     def test_wieniawski_symbolic_match_rejects_pitch_class_only_octave_mismatch(self):
         target = wieniawski_reference_target()
         series = detected_note_series(

@@ -19,6 +19,7 @@ from backend.app.transcription import (
     transcription_failure_state,
     reference_matches_for,
     transcription_prior_hint,
+    yin_transition_events,
 )
 
 
@@ -274,6 +275,28 @@ class TranscriptionTrainingTests(unittest.TestCase):
         self.assertGreaterEqual(len(events), 8)
         self.assertGreaterEqual(len({event["midi"] % 12 for event in events}), 4)
         self.assertFalse(failure["pitchCollapseDetected"])
+
+    def test_yin_transition_events_recovers_fast_note_changes_as_hidden_candidates(self):
+        import librosa  # type: ignore
+        import numpy  # type: ignore
+
+        sr = 22050
+        hop_length = 256
+        pattern = [74, 72, 70, 74, 72, 70, 74]
+        duration = 0.08
+        chunks = []
+        for midi in pattern:
+            frequency = hz_for_midi(midi)
+            t = numpy.linspace(0, duration, int(sr * duration), endpoint=False)
+            envelope = numpy.hanning(t.size)
+            chunks.append(0.3 * numpy.sin(2 * numpy.pi * frequency * t) * envelope)
+        y = numpy.concatenate(chunks)
+
+        events = yin_transition_events(y, sr, hop_length, librosa, numpy)
+
+        self.assertGreaterEqual(len(events), len(pattern) - 1)
+        self.assertEqual([event["midi"] for event in events[:5]], pattern[:5])
+        self.assertTrue(all(event["candidateOnly"] for event in events[:5]))
 
     def test_audio_agreement_marks_matching_independent_detector_events(self):
         selected = [
