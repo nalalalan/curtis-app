@@ -1526,9 +1526,10 @@ def transcription_prior_hint(state: dict[str, Any], sample: dict[str, Any]) -> s
     return ""
 
 
-def transcribe_media_samples(limit: int | None = None) -> dict[str, Any]:
+def transcribe_media_samples(limit: int | None = None, sample_ids: list[str] | None = None) -> dict[str, Any]:
     state = load_state()
     sample_limit = TRANSCRIPTION_SAMPLE_LIMIT if limit is None else int(limit)
+    requested_ids = {str(item).strip() for item in (sample_ids or []) if str(item).strip()}
     samples = [sample for sample in state.get("mediaSamples", []) if isinstance(sample, dict)]
     existing = [
         item
@@ -1540,16 +1541,26 @@ def transcribe_media_samples(limit: int | None = None) -> dict[str, Any]:
         for item in existing
         if item.get("transcriptionId")
     }
-    selected = [
-        sample
-        for sample in samples
-        if sample.get("path")
-        and sample_is_violin_positive(sample)
-        and (
-            transcription_key(sample) not in existing_by_id
-            or existing_by_id[transcription_key(sample)].get("pipelineVersion") != TRANSCRIPTION_PIPELINE_VERSION
+    selected: list[dict[str, Any]] = []
+    for sample in samples:
+        if not sample.get("path") or not sample_is_violin_positive(sample):
+            continue
+        key = transcription_key(sample)
+        sample_id = str(sample.get("id") or "").strip()
+        source_key = source_key_from_item(sample)
+        requested = bool(
+            requested_ids
+            and (
+                sample_id in requested_ids
+                or key in requested_ids
+                or source_key in requested_ids
+            )
         )
-    ][:sample_limit]
+        stale_or_missing = key not in existing_by_id or existing_by_id[key].get("pipelineVersion") != TRANSCRIPTION_PIPELINE_VERSION
+        if requested or (not requested_ids and stale_or_missing):
+            selected.append(sample)
+        if len(selected) >= sample_limit:
+            break
     results = [build_transcription(sample, state) for sample in selected]
     replaced_ids = {item.get("transcriptionId") for item in results if item.get("transcriptionId")}
     items = [*results, *[item for item in existing if item.get("transcriptionId") not in replaced_ids]][:80]
@@ -1573,6 +1584,7 @@ def transcribe_media_samples(limit: int | None = None) -> dict[str, Any]:
             else "blocked"
         ),
         "sampleCount": len(selected),
+        "requestedSampleIds": sorted(requested_ids),
         "reprocessedCount": sum(1 for sample in selected if transcription_key(sample) in existing_by_id),
         "transcribedCount": sum(1 for item in results if item.get("status") == "transcribed"),
         "failedQualityCount": sum(1 for item in results if str(item.get("status") or "").startswith("failed_")),

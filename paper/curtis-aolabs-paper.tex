@@ -134,6 +134,8 @@ The 2026-05-15 08:37 PM EDT fast-transition candidate update addresses the next 
 
 The 2026-05-15 08:48 PM EDT notation-renderer correction moves the SVG treble clef baseline upward and re-anchors flat key-signature glyphs so B-flat and E-flat appear on the intended staff positions. This is a display correction only; it does not promote any transcription or score match without the stricter audio/source-score gate.
 
+The 2026-05-15 09:07 PM EDT targeted-transcription update adds a direct reprocess path for specific media samples through \texttt{/api/curtis/transcribe/run?sampleId=...}. This reduces the burden of waiting through broad eight-sample queue passes when a known evidence clip needs to be regenerated under a new transcription pipeline. It is an implementation-speed improvement, not an acceptance shortcut: targeted runs still use the same strict hidden-candidate and source-score gates.
+
 \begin{table}[htbp]
 \centering
 \scriptsize

@@ -7,7 +7,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel, ConfigDict, Field
@@ -625,8 +625,11 @@ async def analyze_run() -> dict[str, Any]:
 
 
 @app.post("/api/curtis/transcribe/run")
-async def transcribe_run() -> dict[str, Any]:
-    await asyncio.to_thread(transcribe_media_samples)
+async def transcribe_run(
+    limit: int | None = Query(default=None, ge=1, le=80),
+    sample_id: list[str] | None = Query(default=None, alias="sampleId"),
+) -> dict[str, Any]:
+    await asyncio.to_thread(transcribe_media_samples, limit, sample_id)
     return base_ops(load_state())
 
 

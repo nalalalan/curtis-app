@@ -99,6 +99,8 @@ First tracker update & This PDF now defines the full implementation plan and bec
 
 \paragraph{2026-05-15 08:48 PM EDT notation-renderer correction} The web notation renderer now moves the treble-clef baseline upward and re-anchors flat key-signature glyphs so B-flat and E-flat render on the intended staff positions. This fixes a display-layer source of visible wrongness, but it does not count as transcription progress unless the paired audio and source-score sequence pass the strict acceptance gate.
 
+\paragraph{2026-05-15 09:07 PM EDT targeted-transcription update} Live v11 reprocessing exposed a workflow bottleneck: the public transcribe endpoint could only walk the stale media queue in fixed eight-sample passes, so a known evidence clip could remain stale while unrelated samples were regenerated first. The endpoint now accepts a bounded \texttt{sampleId} query parameter and an optional bounded \texttt{limit}, allowing a specific local media sample to be regenerated under the current pipeline without bypassing violin-positive checks, hidden-candidate gating, uncertainty rejection, or source-score acceptance rules. This is required for faster long-phrase iteration because failures can be retested directly instead of waiting through broad queue churn.
+
 \subsection{Definition of solved}
 
 Long-phrase transcription is solved for Curtis only when the system can take Alan's long-form practice archive and produce evidence groups that a musician can trust without manually checking every note. The complete goal is not merely a model that prints plausible notation. The solved system must satisfy all of the following conditions.
