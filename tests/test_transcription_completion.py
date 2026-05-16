@@ -12,6 +12,41 @@ from backend.app.scanner import (
 )
 
 
+NOTE_CLASS = {
+    "C": 0,
+    "C#": 1,
+    "D": 2,
+    "D#": 3,
+    "E": 4,
+    "F": 5,
+    "F#": 6,
+    "G": 7,
+    "G#": 8,
+    "A": 9,
+    "A#": 10,
+    "B": 11,
+}
+
+
+def midi_for_note(name):
+    return (int(name[-1]) + 1) * 12 + NOTE_CLASS[name[:-1]]
+
+
+def note(name, start=0.0):
+    return {
+        "note": name,
+        "midi": midi_for_note(name),
+        "startSeconds": start,
+        "endSeconds": start + 0.12,
+        "durationSeconds": 0.12,
+        "confidence": 0.92,
+        "audioAgreement": True,
+        "agreementSourceCount": 1,
+        "agreementSources": ["spectral_onset"],
+        "detectorSource": "spectral_onset_test",
+    }
+
+
 class TranscriptionCompletionTests(unittest.TestCase):
     def test_completion_reports_weighted_roadmap_and_open_long_phrase_gate(self):
         completion = build_transcription_completion(
@@ -330,6 +365,15 @@ class TranscriptionCompletionTests(unittest.TestCase):
                             "matchedNoteRun": 7,
                             "detectedPitchClassSequenceCompact": "D D# D A# G",
                             "detectedPitchClassSequence": "D D D# D D A# G",
+                            "matchedDetectedNotes": [
+                                note("D6", 0.00),
+                                note("D6", 0.12),
+                                note("D#6", 0.24),
+                                note("D6", 0.36),
+                                note("D6", 0.48),
+                                note("A#5", 0.60),
+                                note("G5", 0.72),
+                            ],
                             "scoreLocationVerified": False,
                             "scoreLocationStatus": "exact_score_location_pending",
                             "referenceStart": 30,
@@ -379,7 +423,7 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertEqual(completion["sourceVerificationTargetVerifiedCount"], 0)
         self.assertTrue(completion["sourceVerificationTargetTopChecked"])
         self.assertFalse(completion["sourceVerificationTargetTopVerified"])
-        self.assertEqual(completion["sourceVerificationTargetTopStatus"], "source_score_sequence_not_found")
+        self.assertEqual(completion["sourceVerificationTargetTopStatus"], "source_score_exact_midi_sequence_not_found")
         self.assertEqual(completion["sourceVerificationTargetTopBestSourceOverlap"], 1)
         self.assertEqual(completion["longPhraseAcceptedCount"], 0)
         phrase_card = next(item for item in completion["implementationCurrent"] if item["label"] == "Phrase candidates")
@@ -390,12 +434,14 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertEqual(source_card["detail"], "D D D# D D A# G")
         check_card = next(item for item in completion["implementationCurrent"] if item["label"] == "Target check")
         self.assertEqual(check_card["value"], "0/1")
-        self.assertEqual(check_card["detail"], "1/7 source overlap")
+        self.assertEqual(check_card["detail"], "1/7 MIDI overlap")
         self.assertEqual(completion["sourceVerificationTargets"][0]["status"], "source_verification_required")
         self.assertIn("not accepted score evidence", completion["sourceVerificationTargets"][0]["limit"])
-        self.assertEqual(completion["sourceVerificationTargets"][0]["sourceScoreCheckStatus"], "source_score_sequence_not_found")
+        self.assertEqual(completion["sourceVerificationTargets"][0]["sourceScoreCheckStatus"], "source_score_exact_midi_sequence_not_found")
         self.assertEqual(completion["sourceVerificationTargets"][0]["sourceScoreBestOverlap"], 1)
-        self.assertEqual(completion["sourceVerificationTargets"][0]["sourceScoreReferenceSequence"], "D C A# D C A# D")
+        self.assertEqual(completion["sourceVerificationTargets"][0]["sourceScoreReferenceSequence"], "A5 G5 F5 A5 G5 F5 A5 G#5 F5")
+        self.assertEqual(completion["sourceVerificationTargets"][0]["sourceScoreBestOverlapSequence"], "G5")
+        self.assertEqual(completion["sourceVerificationTargets"][0]["sourceScoreMatchCriterion"], "exact_midi_sequence")
         self.assertGreaterEqual(completion["sourceVerificationTargets"][0]["sourceScoreCandidateGlyphCount"], 1)
         workbench = build_truth_workbench({}, daily_records, {"benchmarkCount": 1, "wrongScoreNoteRegressionCount": 1})
         self.assertEqual(workbench["status"], "ready")
@@ -448,8 +494,14 @@ class TranscriptionCompletionTests(unittest.TestCase):
                         {
                             "status": "reference_sequence_match",
                             "matchedNoteRun": 4,
-                            "detectedPitchClassSequence": "D C G A",
-                            "detectedPitchClassSequenceCompact": "D C G A",
+                            "detectedPitchClassSequence": "A G D C",
+                            "detectedPitchClassSequenceCompact": "A G D C",
+                            "matchedDetectedNotes": [
+                                note("A5", 0.00),
+                                note("G5", 0.12),
+                                note("D6", 0.24),
+                                note("C6", 0.36),
+                            ],
                             "scoreLocationVerified": False,
                             "score": {"assetId": "wieniawski-scherzo-tarantelle-vln"},
                             "clip": {"mediaUrl": "/api/curtis/media/sample/measure-target"},
@@ -462,11 +514,56 @@ class TranscriptionCompletionTests(unittest.TestCase):
 
         target = source_verification_target_top(daily_records)
 
-        self.assertEqual(target["sequence"], "D C G A")
+        self.assertEqual(target["sequence"], "A G D C")
         self.assertTrue(target["sourceScoreChecked"])
         self.assertFalse(target["sourceScoreVerified"])
         self.assertEqual(target["sourceScoreBestOverlap"], 2)
-        self.assertEqual(target["sourceScoreBestOverlapSequence"], "D C")
+        self.assertEqual(target["sourceScoreBestOverlapSequence"], "A5 G5")
+        self.assertEqual(target["sourceScoreBestOverlapMidiSequence"], "81 79")
+        self.assertEqual(target["sourceScoreMatchCriterion"], "exact_midi_sequence")
+
+    def test_source_verification_targets_accept_audio_agreed_exact_midi_phrase(self):
+        daily_records = {
+            "records": [
+                {
+                    "practiceDay": "2026-05-03",
+                    "matchGroups": [
+                        {
+                            "status": "reference_sequence_match",
+                            "matchedNoteRun": 5,
+                            "detectedPitchClassSequence": "G F A G# F",
+                            "detectedPitchClassSequenceCompact": "G F A G# F",
+                            "matchedDetectedNotes": [
+                                note("G5", 0.00),
+                                note("F5", 0.12),
+                                note("A5", 0.24),
+                                note("G#5", 0.36),
+                                note("F5", 0.48),
+                            ],
+                            "scoreLocationVerified": False,
+                            "pieceTitle": "Wieniawski Scherzo-Tarantelle, Op. 16",
+                            "score": {"assetId": "wieniawski-scherzo-tarantelle-vln"},
+                            "clip": {"mediaUrl": "/api/curtis/media/sample/exact-midi-target"},
+                            "transcription": {"sampleId": "exact-midi-target"},
+                        }
+                    ],
+                }
+            ]
+        }
+
+        target = source_verification_target_top(daily_records)
+
+        self.assertEqual(target["sequence"], "G F A G# F")
+        self.assertTrue(target["sourceScoreChecked"])
+        self.assertTrue(target["sourceScoreVerified"])
+        self.assertTrue(target["sourceScoreAudioAgreed"])
+        self.assertEqual(target["sourceScoreCheckStatus"], "source_score_exact_midi_sequence_verified")
+        self.assertEqual(target["sourceScoreBestOverlap"], 5)
+        self.assertEqual(target["sourceScoreQueryExactSequence"], "G5 F5 A5 G#5 F5")
+        self.assertEqual(target["sourceScoreQueryMidiSequence"], "79 77 81 80 77")
+        self.assertEqual(target["sourceScoreBestOverlapSequence"], "G5 F5 A5 G#5 F5")
+        self.assertEqual(target["sourceScoreBestOverlapMidiSequence"], "79 77 81 80 77")
+        self.assertEqual(target["sourceScoreMatchCriterion"], "exact_midi_sequence")
 
     def test_reference_phrase_candidate_top_prefers_actual_displayed_sequence_length(self):
         daily_records = {

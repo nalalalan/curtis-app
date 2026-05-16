@@ -42,7 +42,13 @@ from .settings import (
     SERVICE_NAME,
 )
 from .state import append_run, load_state, save_state, utc_now
-from .daily_records import build_daily_records, build_repertoire_evidence, exact_score_location_ready
+from .daily_records import (
+    build_daily_records,
+    build_repertoire_evidence,
+    exact_score_location_ready,
+    note_midi_value,
+    notes_have_score_match_audio_agreement,
+)
 from .evidence_ledger import build_active_practice_coverage, build_evidence_progress, build_truth_progress
 from .study_packets import build_practice_study, build_practice_totals
 from .symbolic_scores import (
@@ -1206,6 +1212,30 @@ def match_detected_pitch_sequence(match: dict[str, Any]) -> str:
     return max((full, compact), key=lambda value: len(value.split()))
 
 
+def match_detected_note_events(match: dict[str, Any]) -> list[dict[str, Any]]:
+    for key in ("matchedDetectedNotes", "displayDetectedNotes"):
+        notes = match.get(key)
+        if isinstance(notes, list) and notes and all(isinstance(note, dict) for note in notes):
+            return [note for note in notes if isinstance(note, dict)]
+    detected = match.get("detectedSeries") if isinstance(match.get("detectedSeries"), dict) else {}
+    notes = detected.get("notes") if isinstance(detected.get("notes"), list) else []
+    return [note for note in notes if isinstance(note, dict)]
+
+
+def match_detected_exact_sequence(match: dict[str, Any]) -> str:
+    return " ".join(str(note.get("note") or "").strip() for note in match_detected_note_events(match) if str(note.get("note") or "").strip())
+
+
+def match_detected_midi_values(match: dict[str, Any]) -> list[int]:
+    values: list[int] = []
+    for note in match_detected_note_events(match):
+        midi = note_midi_value(note)
+        if midi is None:
+            return []
+        values.append(midi)
+    return values
+
+
 def match_distinct_pitch_class_count(match: dict[str, Any]) -> int:
     sequence = match_detected_pitch_sequence(match)
     return len({value for value in sequence.split() if value})
@@ -1326,10 +1356,16 @@ def source_target_score_check(match: dict[str, Any], sequence: str) -> dict[str,
     score = symbolic_score_from_target(target) if target else {}
     candidate_audit = score_map_candidate_audit(target) if target else {}
     notes = score.get("notes") if isinstance(score.get("notes"), list) else []
-    source_values = [normalize_pitch_class(note.get("pitchClass")) for note in notes if isinstance(note, dict)]
-    source_values = [value for value in source_values if value]
+    source_pitch_values = [normalize_pitch_class(note.get("pitchClass")) for note in notes if isinstance(note, dict)]
+    source_pitch_values = [value for value in source_pitch_values if value]
+    source_exact_values = [str(note.get("note") or "").strip() for note in notes if isinstance(note, dict) and str(note.get("note") or "").strip()]
+    source_midi_values = [note_midi_value(note) for note in notes if isinstance(note, dict)]
+    source_midi_values = [value for value in source_midi_values if value is not None]
     query_values = [normalize_pitch_class(value) for value in str(sequence or "").split()]
     query_values = [value for value in query_values if value]
+    query_notes = match_detected_note_events(match)
+    query_exact_values = [str(note.get("note") or "").strip() for note in query_notes if str(note.get("note") or "").strip()]
+    query_midi_values = match_detected_midi_values(match)
     score_config = target.get("symbolicScore") if isinstance(target.get("symbolicScore"), dict) else {}
     if not query_values:
         return {
@@ -1337,28 +1373,81 @@ def source_target_score_check(match: dict[str, Any], sequence: str) -> dict[str,
             "sourceScoreVerified": False,
             "sourceScoreCheckStatus": "source_score_sequence_missing",
             "sourceScoreBestOverlap": 0,
-            "sourceScoreLimit": "No detected pitch-class sequence is available to verify against the score.",
+            "sourceScoreExactMidiChecked": False,
+            "sourceScoreMatchCriterion": "exact_midi_sequence",
+            "sourceScoreLimit": "No detected sequence is available to verify against the score.",
         }
-    if not source_values:
+    if not source_midi_values:
         return {
             "sourceScoreChecked": False,
             "sourceScoreVerified": False,
             "sourceScoreCheckStatus": "source_score_map_missing",
             "sourceScoreBestOverlap": 0,
+            "sourceScoreExactMidiChecked": False,
+            "sourceScoreMatchCriterion": "exact_midi_sequence",
             "sourceScoreLimit": "No verified symbolic score map is available for this source target.",
         }
-    overlap = longest_common_contiguous_run(query_values, source_values)
-    overlap_length = int(overlap.get("length") or 0)
-    verified = overlap_length >= len(query_values)
-    reference_start = int(overlap.get("referenceStart") or 0)
+    pitch_overlap = longest_common_contiguous_run(query_values, source_pitch_values)
+    pitch_overlap_length = int(pitch_overlap.get("length") or 0)
+    if not query_notes or not query_midi_values or len(query_midi_values) != len(query_values):
+        return {
+            "sourceScoreChecked": True,
+            "sourceScoreVerified": False,
+            "sourceScoreCheckStatus": "source_score_exact_midi_missing",
+            "sourceScoreBestOverlap": 0,
+            "sourceScoreQueryLength": len(query_values),
+            "sourceScoreReferenceLength": len(source_midi_values),
+            "sourceScoreExactMidiChecked": False,
+            "sourceScoreMatchCriterion": "exact_midi_sequence",
+            "sourceScoreQueryPitchClassSequence": " ".join(query_values),
+            "sourceScoreQueryExactSequence": " ".join(query_exact_values),
+            "sourceScoreQueryMidiSequence": " ".join(str(value) for value in query_midi_values),
+            "sourceScoreReferencePitchClassSequence": " ".join(source_pitch_values),
+            "sourceScoreReferenceSequence": " ".join(source_exact_values),
+            "sourceScoreReferenceMidiSequence": " ".join(str(value) for value in source_midi_values),
+            "sourceScorePitchClassBestOverlap": pitch_overlap_length,
+            "sourceScorePitchClassBestOverlapSequence": " ".join(
+                source_pitch_values[
+                    int(pitch_overlap.get("referenceStart") or 0) :
+                    int(pitch_overlap.get("referenceStart") or 0) + pitch_overlap_length
+                ]
+            ),
+            "sourceScoreSourceId": str(score.get("sourceId") or score_config.get("sourceId") or ""),
+            "sourceScoreTitle": str(score.get("title") or target.get("work") or ""),
+            "sourceScoreCandidateGlyphCount": int(candidate_audit.get("scoreMapCandidateGlyphCount") or 0),
+            "sourceScoreCandidateStaffCount": int(candidate_audit.get("scoreMapCandidateStaffCount") or 0),
+            "sourceScoreNoteHypothesisCount": int(candidate_audit.get("scoreMapNoteHypothesisCount") or 0),
+            "sourceScoreNoteHypothesisStaffCount": int(candidate_audit.get("scoreMapNoteHypothesisStaffCount") or 0),
+            "sourceScoreReviewPacketCount": int(candidate_audit.get("scoreMapReviewPacketCount") or 0),
+            "sourceScoreCandidateStatus": str(candidate_audit.get("status") or ""),
+            "sourceScoreLimit": "Detected pitch letters are not enough; this source target needs exact detected MIDI values before it can be checked against MusicXML.",
+        }
+    candidate_only = bool((match.get("detectedSeries") if isinstance(match.get("detectedSeries"), dict) else {}).get("candidateOnly"))
+    audio_agreed = notes_have_score_match_audio_agreement(query_notes, candidate_only=candidate_only)
+    query_midi_strings = [str(value) for value in query_midi_values]
+    source_midi_strings = [str(value) for value in source_midi_values]
+    midi_overlap = longest_common_contiguous_run(query_midi_strings, source_midi_strings)
+    overlap_length = int(midi_overlap.get("length") or 0)
+    verified = audio_agreed and overlap_length >= len(query_midi_values)
+    reference_start = int(midi_overlap.get("referenceStart") or 0)
     reference_end = reference_start + overlap_length
+    check_status = (
+        "source_score_exact_midi_sequence_verified"
+        if verified
+        else "source_audio_agreement_missing"
+        if not audio_agreed
+        else "source_score_exact_midi_sequence_not_found"
+    )
     return {
         "sourceScoreChecked": True,
         "sourceScoreVerified": verified,
-        "sourceScoreCheckStatus": "source_score_sequence_verified" if verified else "source_score_sequence_not_found",
+        "sourceScoreCheckStatus": check_status,
         "sourceScoreBestOverlap": overlap_length,
-        "sourceScoreQueryLength": len(query_values),
-        "sourceScoreReferenceLength": len(source_values),
+        "sourceScoreQueryLength": len(query_midi_values),
+        "sourceScoreReferenceLength": len(source_midi_values),
+        "sourceScoreExactMidiChecked": True,
+        "sourceScoreAudioAgreed": audio_agreed,
+        "sourceScoreMatchCriterion": "exact_midi_sequence",
         "sourceScoreSourceId": str(score.get("sourceId") or score_config.get("sourceId") or ""),
         "sourceScoreTitle": str(score.get("title") or target.get("work") or ""),
         "sourceScoreCandidateGlyphCount": int(candidate_audit.get("scoreMapCandidateGlyphCount") or 0),
@@ -1367,12 +1456,27 @@ def source_target_score_check(match: dict[str, Any], sequence: str) -> dict[str,
         "sourceScoreNoteHypothesisStaffCount": int(candidate_audit.get("scoreMapNoteHypothesisStaffCount") or 0),
         "sourceScoreReviewPacketCount": int(candidate_audit.get("scoreMapReviewPacketCount") or 0),
         "sourceScoreCandidateStatus": str(candidate_audit.get("status") or ""),
-        "sourceScoreReferenceSequence": " ".join(source_values),
-        "sourceScoreBestOverlapSequence": " ".join(source_values[reference_start:reference_end]),
+        "sourceScoreQueryPitchClassSequence": " ".join(query_values),
+        "sourceScoreQueryExactSequence": " ".join(query_exact_values),
+        "sourceScoreQueryMidiSequence": " ".join(str(value) for value in query_midi_values),
+        "sourceScoreReferencePitchClassSequence": " ".join(source_pitch_values),
+        "sourceScoreReferenceSequence": " ".join(source_exact_values),
+        "sourceScoreReferenceMidiSequence": " ".join(str(value) for value in source_midi_values),
+        "sourceScoreBestOverlapSequence": " ".join(source_exact_values[reference_start:reference_end]),
+        "sourceScoreBestOverlapMidiSequence": " ".join(str(value) for value in source_midi_values[reference_start:reference_end]),
+        "sourceScorePitchClassBestOverlap": pitch_overlap_length,
+        "sourceScorePitchClassBestOverlapSequence": " ".join(
+            source_pitch_values[
+                int(pitch_overlap.get("referenceStart") or 0) :
+                int(pitch_overlap.get("referenceStart") or 0) + pitch_overlap_length
+            ]
+        ),
         "sourceScoreLimit": (
-            "Exact detected sequence exists in the verified symbolic score map; crop coordinates still need review before accepted display."
+            "Exact detected MIDI sequence exists in the verified symbolic score map; crop coordinates still need review before accepted display."
             if verified
-            else "Checked against the current verified symbolic score map; this sequence is not present, so it remains reference-audio only and not accepted score evidence until the score map is extended."
+            else "Checked against the current verified symbolic score map by exact MIDI; this sequence is not present, so it remains reference-audio only and not accepted score evidence until the source MusicXML is extended or the transcription changes."
+            if audio_agreed
+            else "Detected notes did not all pass the audio-agreement gate, so this remains search data and not accepted score evidence."
         ),
     }
 
@@ -1406,6 +1510,8 @@ def source_verification_targets(daily_records: dict[str, Any], limit: int = 5) -
             candidates[key] = {
                 "practiceDay": practice_day,
                 "sequence": sequence,
+                "exactSequence": match_detected_exact_sequence(match),
+                "midiSequence": " ".join(str(value) for value in match_detected_midi_values(match)),
                 "sequenceNoteCount": len(sequence.split()),
                 "matchedNoteRun": int(match.get("matchedNoteRun") or 0),
                 "distinctPitchClasses": match_distinct_pitch_class_count(match),
@@ -2099,7 +2205,7 @@ def build_transcription_completion(
             "label": "Target check",
             "value": f"{source_target_verified}/{source_target_checked}",
             "detail": (
-                f"{source_target_best_overlap}/{source_target_note_count} source overlap"
+                f"{source_target_best_overlap}/{source_target_note_count} MIDI overlap"
                 if source_target_checked and source_target_note_count
                 else "pending"
             ),
@@ -2266,7 +2372,7 @@ def build_transcription_completion(
             else "Extend the accepted source-backed measure into longer phrases and score-coordinate heat maps."
             if not long_phrase_count
             else (
-                f"Use IMSLP staff review packets to verify score-note hypotheses into MusicXML before promoting {source_target_sequence}; current source overlap is {source_target_best_overlap}/{source_target_note_count}."
+                f"Use IMSLP staff review packets to verify score-note hypotheses into MusicXML before promoting {source_target_sequence}; current exact-MIDI source overlap is {source_target_best_overlap}/{source_target_note_count}."
                 if source_target_checked and not source_target_verified and source_target_sequence
                 else f"Verify the {source_target_note_count}-note source target {source_target_sequence} against the local IMSLP score, then promote only if the score notes and crop match."
             )

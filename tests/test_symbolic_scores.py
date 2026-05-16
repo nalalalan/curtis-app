@@ -215,7 +215,7 @@ class SymbolicScoreTests(unittest.TestCase):
         candidate_audit = score_map_candidate_audit(target)
 
         self.assertEqual(audit["status"], "symbolic_score_ready")
-        self.assertEqual(audit["symbolicScoreNoteCount"], 7)
+        self.assertEqual(audit["symbolicScoreNoteCount"], 9)
         self.assertEqual(audit["symbolicScoreSourceSnippetCount"], 0)
         self.assertEqual(candidate_audit["status"], "score_map_candidates_ready")
         self.assertGreaterEqual(candidate_audit["scoreMapCandidateGlyphCount"], 1)
@@ -226,9 +226,9 @@ class SymbolicScoreTests(unittest.TestCase):
         self.assertFalse(candidate_audit["scoreMapCandidatesAccepted"])
         self.assertEqual(
             [item["note"] for item in score["notes"]],
-            ["D6", "C6", "Bb5", "D6", "C6", "Bb5", "D6"],
+            ["A5", "G5", "F5", "A5", "G5", "F5", "A5", "G#5", "F5"],
         )
-        self.assertEqual([item["pitchClass"] for item in score["notes"]], ["D", "C", "A#", "D", "C", "A#", "D"])
+        self.assertEqual([item["pitchClass"] for item in score["notes"]], ["A", "G", "F", "A", "G", "F", "A", "G#", "F"])
 
     def test_wieniawski_symbolic_measure_can_match_four_note_source_sequence(self):
         target = wieniawski_reference_target()
@@ -239,10 +239,10 @@ class SymbolicScoreTests(unittest.TestCase):
                     "sampleId": "sample-source-motif",
                     "sourceWindow": "*0-10",
                     "notes": [
-                        note("D6", 0.0, 0.25),
-                        note("C6", 0.25, 0.5),
-                        note("A#5", 0.5, 0.75),
-                        note("D6", 0.75, 1.0),
+                        note("A5", 0.0, 0.25),
+                        note("G5", 0.25, 0.5),
+                        note("F5", 0.5, 0.75),
+                        note("A5", 0.75, 1.0),
                     ],
                 }
             ],
@@ -257,13 +257,44 @@ class SymbolicScoreTests(unittest.TestCase):
         self.assertEqual(matches[0]["status"], "symbolic_score_phrase_match")
         self.assertEqual(matches[0]["minimumMatchedNoteRun"], 4)
         self.assertEqual(matches[0]["minimumDistinctPitchClasses"], 3)
-        self.assertEqual(matches[0]["detectedPitchClassSequence"], "D C A# D")
-        self.assertEqual(matches[0]["scorePitchClassSequence"], "D C A# D")
-        self.assertEqual([item["note"] for item in matches[0]["scoreMatchedNotes"]], ["D6", "C6", "Bb5", "D6"])
+        self.assertEqual(matches[0]["detectedPitchClassSequence"], "A G F A")
+        self.assertEqual(matches[0]["scorePitchClassSequence"], "A G F A")
+        self.assertEqual([item["note"] for item in matches[0]["scoreMatchedNotes"]], ["A5", "G5", "F5", "A5"])
         self.assertFalse(matches[0]["scoreVisualAgreement"])
         self.assertEqual(matches[0]["scoreVisualAgreementBasis"], "actual_source_snippet_required")
         self.assertEqual(matches[0]["score"]["imageUrl"], "")
         self.assertTrue(matches[0]["score"]["generatedNotationImageUrl"].startswith("data:image/svg+xml;base64,"))
+
+    def test_wieniawski_extended_source_tail_matches_exact_midi_only(self):
+        target = wieniawski_reference_target()
+        series = detected_note_series(
+            [
+                {
+                    "transcriptionId": "wieniawski-source-tail",
+                    "sampleId": "sample-source-tail",
+                    "sourceWindow": "*0-10",
+                    "notes": [
+                        note("G5", 0.0, 0.18),
+                        note("F5", 0.18, 0.36),
+                        note("A5", 0.36, 0.54),
+                        note("G#5", 0.54, 0.72),
+                        note("F5", 0.72, 0.90),
+                    ],
+                }
+            ],
+            max_series=None,
+        )
+
+        matches = score_sequence_matches_for_series(
+            series,
+            [{"title": "Wieniawski Scherzo-Tarantelle, Op. 16", "score": target}],
+        )
+
+        self.assertEqual(matches[0]["status"], "symbolic_score_phrase_match")
+        self.assertEqual(matches[0]["matchCriterion"], "symbolic_score_exact_midi_phrase")
+        self.assertEqual(matches[0]["matchedNoteRun"], 5)
+        self.assertEqual([item["note"] for item in matches[0]["scoreMatchedNotes"]], ["G5", "F5", "A5", "G#5", "F5"])
+        self.assertEqual([item["note"] for item in matches[0]["displayDetectedNotes"]], ["G5", "F5", "A5", "G#5", "F5"])
 
     def test_wieniawski_lower_octave_opening_map_is_rejected(self):
         target = wieniawski_reference_target()
@@ -274,10 +305,10 @@ class SymbolicScoreTests(unittest.TestCase):
                     "sampleId": "sample-lower-octave-source-motif",
                     "sourceWindow": "*0-10",
                     "notes": [
-                        note("D5", 0.0, 0.25),
-                        note("C5", 0.25, 0.5),
-                        note("A#4", 0.5, 0.75),
-                        note("D5", 0.75, 1.0),
+                        note("A4", 0.0, 0.25),
+                        note("G4", 0.25, 0.5),
+                        note("F4", 0.5, 0.75),
+                        note("A4", 0.75, 1.0),
                     ],
                 }
             ],
@@ -293,7 +324,7 @@ class SymbolicScoreTests(unittest.TestCase):
 
     def test_wieniawski_symbolic_opening_rejects_phrase_when_one_note_fails_audio_gate(self):
         target = wieniawski_reference_target()
-        weak_c = note("C6", 0.4, 0.6, audioAgreement=False, agreementSourceCount=0, agreementSources=[])
+        weak_g_sharp = note("G#5", 0.4, 0.6, audioAgreement=False, agreementSourceCount=0, agreementSources=[])
         series = detected_note_series(
             [
                 {
@@ -301,11 +332,11 @@ class SymbolicScoreTests(unittest.TestCase):
                     "sampleId": "sample-long-phrase",
                     "sourceWindow": "*0-10",
                     "notes": [
-                        note("A#5", 0.0, 0.2),
-                        note("D6", 0.2, 0.4),
-                        weak_c,
-                        note("A#5", 0.6, 0.8),
-                        note("D6", 0.8, 1.0),
+                        note("G5", 0.0, 0.2),
+                        note("F5", 0.2, 0.4),
+                        note("A5", 0.4, 0.6),
+                        weak_g_sharp,
+                        note("F5", 0.8, 1.0),
                     ],
                 }
             ],
@@ -334,13 +365,13 @@ class SymbolicScoreTests(unittest.TestCase):
                     "sampleId": "sample-transition-candidate",
                     "sourceWindow": "*0-10",
                     "status": "failed_pitch_collapse",
-                    "notes": [note("D6", index * 0.1, index * 0.1 + 0.08) for index in range(20)],
+                    "notes": [note("A5", index * 0.1, index * 0.1 + 0.08) for index in range(20)],
                     "scoreMatchCandidateNotes": [
-                        note("A#5", 0.0, 0.2, **agreed),
-                        note("D6", 0.2, 0.4, **agreed),
-                        note("C6", 0.4, 0.6, **agreed),
-                        note("A#5", 0.6, 0.8, **agreed),
-                        note("D6", 0.8, 1.0, **agreed),
+                        note("G5", 0.0, 0.2, **agreed),
+                        note("F5", 0.2, 0.4, **agreed),
+                        note("A5", 0.4, 0.6, **agreed),
+                        note("G#5", 0.6, 0.8, **agreed),
+                        note("F5", 0.8, 1.0, **agreed),
                     ],
                 }
             ],
@@ -356,7 +387,7 @@ class SymbolicScoreTests(unittest.TestCase):
         self.assertTrue(candidate_series)
         self.assertEqual(matches[0]["status"], "symbolic_score_phrase_match")
         self.assertEqual(matches[0]["matchedNoteRun"], 5)
-        self.assertEqual([item["note"] for item in matches[0]["displayDetectedNotes"]], ["Bb5", "D6", "C6", "Bb5", "D6"])
+        self.assertEqual([item["note"] for item in matches[0]["displayDetectedNotes"]], ["G5", "F5", "A5", "G#5", "F5"])
         self.assertFalse(matches[0]["scoreVisualAgreement"])
         self.assertEqual(matches[0]["score"]["cropStatus"], "actual_source_snippet_pending")
 
@@ -382,11 +413,11 @@ class SymbolicScoreTests(unittest.TestCase):
                     "sourceWindow": "*0-10",
                     "status": "failed_pitch_collapse",
                     "scoreMatchCandidateNotes": [
-                        note("A#5", 0.0, 0.2, **agreed),
-                        note("D6", 0.2, 0.4, **agreed),
-                        note("C6", 0.4, 0.6, **weak),
-                        note("A#5", 0.6, 0.8, **agreed),
-                        note("D6", 0.8, 1.0, **agreed),
+                        note("G5", 0.0, 0.2, **agreed),
+                        note("F5", 0.2, 0.4, **agreed),
+                        note("A5", 0.4, 0.6, **weak),
+                        note("G#5", 0.6, 0.8, **agreed),
+                        note("F5", 0.8, 1.0, **agreed),
                     ],
                 }
             ],
@@ -405,9 +436,9 @@ class SymbolicScoreTests(unittest.TestCase):
 
     def test_symbolic_match_rejects_uncertain_octave_corrected_candidate(self):
         target = wieniawski_reference_target()
-        uncertain = note("C6", 0.2, 0.4)
+        uncertain = note("G5", 0.2, 0.4)
         uncertain["uncertain"] = True
-        uncertain["rawNote"] = "C5"
+        uncertain["rawNote"] = "G4"
         series = detected_note_series(
             [
                 {
@@ -415,10 +446,10 @@ class SymbolicScoreTests(unittest.TestCase):
                     "sampleId": "sample-uncertain-candidate",
                     "sourceWindow": "*0-10",
                     "scoreMatchCandidateNotes": [
-                        note("D6", 0.0, 0.2),
+                        note("A5", 0.0, 0.2),
                         uncertain,
-                        note("A#5", 0.6, 0.8),
-                        note("D6", 0.8, 1.0),
+                        note("F5", 0.6, 0.8),
+                        note("A5", 0.8, 1.0),
                     ],
                 }
             ],

@@ -412,7 +412,7 @@ def ensure_transcription_pdf(practice_day: str) -> Path:
         f"Total practice time: {record.get('activeViolinLabel') or 'pending'}",
         f"Video checked for practice time: {record.get('processedSampleLabel') or 'pending'}",
         "PDF scope: all stored detected note series for this day",
-        "Match rule: pitch-class sequence; rhythm ignored; octave ignored",
+        "Match rule: source-score promotion requires exact MIDI equality plus per-note audio agreement; loose pitch-class grouping remains candidate-only",
         "",
     ]
     lines.extend(pdf_lines_for_detected_series(all_series))

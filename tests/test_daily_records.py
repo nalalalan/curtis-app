@@ -334,10 +334,10 @@ class DailyRecordTests(unittest.TestCase):
                 "tempoBpm": 96,
                 "quality": {"windowMode": "detected_active_sections"},
                 "notes": [
-                    note("D6", 0.0, 0.14),
-                    note("C6", 0.15, 0.29),
-                    note("Bb5", 0.30, 0.44),
-                    note("D6", 0.45, 0.59),
+                    note("A5", 0.0, 0.14),
+                    note("G5", 0.15, 0.29),
+                    note("F5", 0.30, 0.44),
+                    note("A5", 0.45, 0.59),
                 ],
             }
         ]
@@ -367,7 +367,7 @@ class DailyRecordTests(unittest.TestCase):
         self.assertFalse(record["transcription"]["referenceLinked"])
         self.assertEqual(record["matchGroups"], [])
         self.assertEqual(len(record["candidateMatchGroups"]), 1)
-        self.assertEqual(record["candidateMatchGroups"][0]["detectedPitchClassSequenceCompact"], "D C A# D")
+        self.assertEqual(record["candidateMatchGroups"][0]["detectedPitchClassSequenceCompact"], "A G F A")
         self.assertEqual(record["transcription"]["scoreAlignmentStatus"], "source_verification_pending")
         self.assertEqual(record["heatMap"]["fragments"], [])
 
@@ -1215,7 +1215,7 @@ class DailyRecordTests(unittest.TestCase):
 
         self.assertEqual(target["scoreNoteCropStatus"], "actual_source_phrase_review_pending")
         self.assertEqual(audit["sourcePdfLocalReadyCount"], 1)
-        self.assertEqual(audit["symbolicScoreNoteCount"], 7)
+        self.assertEqual(audit["symbolicScoreNoteCount"], 9)
         self.assertEqual(audit["symbolicScoreSourceSnippetCount"], 0)
         self.assertGreaterEqual(audit["scoreMapCandidateGlyphCount"], 1)
         self.assertGreaterEqual(audit["scoreMapCandidateStaffCount"], 1)

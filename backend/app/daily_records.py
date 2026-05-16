@@ -1421,7 +1421,7 @@ def symbolic_score_sequence_matches_for_run(
         best_match = {
             "status": "symbolic_score_phrase_match",
             "pieceTitle": piece.get("title") or score.get("title") or "",
-            "matchCriterion": "symbolic_score_pitch_class_phrase",
+            "matchCriterion": "symbolic_score_exact_midi_phrase",
             "scoreVisualAgreement": source_snippet_exact,
             "scoreVisualAgreementBasis": visual_agreement_basis,
             "scoreVisualRangeAgreement": source_snippet_exact,
