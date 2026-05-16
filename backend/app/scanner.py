@@ -1082,15 +1082,45 @@ def score_sequence_match_count(daily_records: dict[str, Any]) -> int:
     total = 0
     for record in records:
         transcription = record.get("transcription") if isinstance(record.get("transcription"), dict) else {}
-        total += int(transcription.get("scoreSequenceMatchCount") or 0)
+        total += int(
+            transcription.get("scoreSequenceCandidateCount")
+            or transcription.get("scoreSequenceMatchCount")
+            or 0
+        )
     return total
+
+
+def candidate_match_groups_for_record(record: dict[str, Any]) -> list[dict[str, Any]]:
+    groups: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str, int, int, str]] = set()
+    for key in ("candidateMatchGroups", "matchGroups"):
+        raw_groups = record.get(key) if isinstance(record.get(key), list) else []
+        for group in raw_groups:
+            if not isinstance(group, dict):
+                continue
+            transcription = group.get("transcription") if isinstance(group.get("transcription"), dict) else {}
+            detected = group.get("detectedSeries") if isinstance(group.get("detectedSeries"), dict) else {}
+            score = group.get("score") if isinstance(group.get("score"), dict) else {}
+            identity = (
+                str(group.get("status") or ""),
+                str(transcription.get("sampleId") or detected.get("sampleId") or ""),
+                str(score.get("assetId") or group.get("pieceTitle") or ""),
+                int(group.get("referenceStart") or 0),
+                int(group.get("referenceEnd") or 0),
+                match_detected_pitch_sequence(group),
+            )
+            if identity in seen:
+                continue
+            seen.add(identity)
+            groups.append(group)
+    return groups
 
 
 def score_location_verified_count(daily_records: dict[str, Any]) -> int:
     records = daily_records.get("records") if isinstance(daily_records.get("records"), list) else []
     total = 0
     for record in records:
-        groups = record.get("matchGroups") if isinstance(record.get("matchGroups"), list) else []
+        groups = candidate_match_groups_for_record(record)
         total += sum(
             1
             for group in groups
@@ -1105,7 +1135,7 @@ def score_visual_agreement_count(daily_records: dict[str, Any]) -> int:
     records = daily_records.get("records") if isinstance(daily_records.get("records"), list) else []
     total = 0
     for record in records:
-        groups = record.get("matchGroups") if isinstance(record.get("matchGroups"), list) else []
+        groups = candidate_match_groups_for_record(record)
         total += sum(1 for group in groups if isinstance(group, dict) and actual_source_score_snippet_ready(group))
     return total
 
@@ -1157,7 +1187,7 @@ def actual_source_score_snippet_count(daily_records: dict[str, Any]) -> int:
     records = daily_records.get("records") if isinstance(daily_records.get("records"), list) else []
     total = 0
     for record in records:
-        groups = record.get("matchGroups") if isinstance(record.get("matchGroups"), list) else []
+        groups = candidate_match_groups_for_record(record)
         total += sum(1 for group in groups if actual_source_score_snippet_ready(group))
     return total
 
@@ -1201,7 +1231,7 @@ def reference_phrase_candidate_count(daily_records: dict[str, Any]) -> int:
     candidates: set[tuple[str, str, str, int, int, str]] = set()
     for record in records:
         practice_day = str(record.get("practiceDay") or record.get("date") or "")
-        groups = record.get("matchGroups") if isinstance(record.get("matchGroups"), list) else []
+        groups = candidate_match_groups_for_record(record)
         for match in groups:
             if not reference_phrase_candidate_match(match):
                 continue
@@ -1228,7 +1258,7 @@ def reference_phrase_candidate_top(daily_records: dict[str, Any]) -> dict[str, A
         if not isinstance(record, dict):
             continue
         practice_day = str(record.get("practiceDay") or record.get("date") or "")
-        groups = record.get("matchGroups") if isinstance(record.get("matchGroups"), list) else []
+        groups = candidate_match_groups_for_record(record)
         for match in groups:
             if not reference_phrase_candidate_match(match):
                 continue
@@ -1354,7 +1384,7 @@ def source_verification_targets(daily_records: dict[str, Any], limit: int = 5) -
         if not isinstance(record, dict):
             continue
         practice_day = str(record.get("practiceDay") or record.get("date") or "")
-        groups = record.get("matchGroups") if isinstance(record.get("matchGroups"), list) else []
+        groups = candidate_match_groups_for_record(record)
         for match in groups:
             if not source_verification_target_match(match):
                 continue

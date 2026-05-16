@@ -1739,6 +1739,7 @@ function recordStatusLabel(record) {
   if (exactScoreMatchGroups(record).length) return "match";
   if (record?.matchingWorkflow?.status === "score_sequence_matches_ready") return "note match";
   if (record?.matchingWorkflow?.status === "reference_sequence_matches_ready") return "matching";
+  if (record?.matchingWorkflow?.status === "source_verification_pending") return "checking";
   if (record?.matchingWorkflow?.status === "pitch_anchor_matches_ready") {
     return "matching";
   }
@@ -1765,6 +1766,7 @@ function recordStatusTone(record) {
   if (
     record?.matchingWorkflow?.status === "score_sequence_matches_ready"
     || record?.matchingWorkflow?.status === "reference_sequence_matches_ready"
+    || record?.matchingWorkflow?.status === "source_verification_pending"
     || record?.matchingWorkflow?.status === "pitch_anchor_matches_ready"
   ) return "pending";
   if (record?.transcription?.transcriptionReady === true) return "verified";

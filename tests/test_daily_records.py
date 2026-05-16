@@ -310,6 +310,67 @@ class DailyRecordTests(unittest.TestCase):
         self.assertNotIn("accepted clip maps to mm. 2-4", record["mainCurtisBlocker"])
         self.assertEqual(record["clips"][0]["mediaUrl"], "/api/curtis/media/sample/Njh8_zq9_DM-1")
 
+    def test_source_sequence_candidate_does_not_become_visible_match_group(self):
+        inventory = {
+            "youtube": [
+                {
+                    "id": "Njh8_zq9_DM",
+                    "title": "5-3-26",
+                    "url": "https://www.youtube.com/watch?v=Njh8_zq9_DM",
+                    "publishedAt": "2026-05-04T09:10:00Z",
+                    "durationSeconds": 600,
+                    "practiceCandidate": True,
+                }
+            ]
+        }
+        transcriptions = [
+            {
+                "transcriptionId": "candidate-source-sequence",
+                "sampleId": "candidate-source-sequence",
+                "sourceUrl": "https://www.youtube.com/watch?v=Njh8_zq9_DM",
+                "sourceTitle": "5-3-26",
+                "sourceWindow": "*120-210",
+                "status": "transcribed",
+                "tempoBpm": 96,
+                "quality": {"windowMode": "detected_active_sections"},
+                "notes": [
+                    note("D5", 0.0, 0.14),
+                    note("C5", 0.15, 0.29),
+                    note("Bb4", 0.30, 0.44),
+                    note("D5", 0.45, 0.59),
+                ],
+            }
+        ]
+
+        daily = build_daily_records(
+            inventory=inventory,
+            state={},
+            media_samples=[
+                {
+                    "id": "candidate-source-sequence",
+                    "path": "candidate.mp4",
+                    "window": "*120-210",
+                    "containsViolin": True,
+                }
+            ],
+            transcriptions=transcriptions,
+            sections=[],
+        )
+        record = next(item for item in daily["records"] if item["practiceDay"] == "2026-05-03")
+
+        self.assertEqual(record["matchingWorkflow"]["status"], "source_verification_pending")
+        self.assertEqual(record["matchingWorkflow"]["scoreSequenceMatchCount"], 0)
+        self.assertEqual(record["matchingWorkflow"]["scoreSequenceCandidateCount"], 1)
+        self.assertEqual(record["transcription"]["scoreSequenceMatchCount"], 0)
+        self.assertEqual(record["transcription"]["scoreSequenceCandidateCount"], 1)
+        self.assertFalse(record["transcription"]["scoreLinked"])
+        self.assertFalse(record["transcription"]["referenceLinked"])
+        self.assertEqual(record["matchGroups"], [])
+        self.assertEqual(len(record["candidateMatchGroups"]), 1)
+        self.assertEqual(record["candidateMatchGroups"][0]["detectedPitchClassSequenceCompact"], "D C A# D")
+        self.assertEqual(record["transcription"]["scoreAlignmentStatus"], "source_verification_pending")
+        self.assertEqual(record["heatMap"]["fragments"], [])
+
     def test_score_free_exercise_days_are_not_forced_into_score_matching(self):
         inventory = {
             "youtube": [

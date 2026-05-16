@@ -1121,6 +1121,52 @@ def exact_score_location_ready(value: Any) -> bool:
     )
 
 
+def accepted_score_match_group_ready(match: dict[str, Any]) -> bool:
+    if not isinstance(match, dict):
+        return False
+    score = match.get("score") if isinstance(match.get("score"), dict) else {}
+    if match.get("scoreLocationVerified") is not True:
+        return False
+    if match.get("scoreVisualAgreement") is not True and score.get("visualAgreement") is not True:
+        return False
+    if match.get("scoreActualPieceAgreement") is not True and score.get("actualSourceSnippetDisplayed") is not True:
+        return False
+    if match.get("scoreVisualRangeAgreement") is not True or score.get("visualRangeAgreement") is not True:
+        return False
+    if (
+        match.get("scoreVisibleNoteSequenceVerified") is not True
+        or score.get("visibleScoreNoteSequenceVerified") is not True
+    ):
+        return False
+    if (
+        match.get("scoreVisibleExactNoteSequenceVerified") is not True
+        or score.get("visibleScoreExactNoteSequenceVerified") is not True
+    ):
+        return False
+    if match.get("scoreSpellingAgreement") is not True or score.get("scoreSpellingAgreement") is not True:
+        return False
+    if match.get("scoreBoxCenterAgreement") is not True and score.get("scoreBoxCenterAgreement") is not True:
+        return False
+    if match.get("audioTranscriptionAgreement") is not True and score.get("audioTranscriptionAgreement") is not True:
+        return False
+    if match.get("transcriptionScoreAgreement") is not True and score.get("transcriptionScoreAgreement") is not True:
+        return False
+    if match.get("truthEvidenceAccepted") is not True and score.get("truthEvidenceAccepted") is not True:
+        return False
+    image_url = str(score.get("imageUrl") or "").strip()
+    if not image_url or image_url.startswith("data:"):
+        return False
+    return any(
+        exact_score_location_ready(value)
+        for value in (
+            match.get("scoreLocationStatus"),
+            match.get("scoreSnippetStatus"),
+            score.get("cropStatus"),
+            score.get("status"),
+        )
+    )
+
+
 def exact_score_boxes_for_reference_match(
     target: dict[str, Any],
     reference: dict[str, Any],
@@ -3626,10 +3672,10 @@ def build_daily_records(
             if active_seconds and not confirmed
             else "Heat map waits for practice locations to align to actual score sections."
         )
-        match_groups = []
+        candidate_match_groups = []
         for match in score_sequence_matches:
             matched_series = matched_series_for_group(match)
-            match_groups.append(
+            candidate_match_groups.append(
                 {
                     **match,
                     "clip": detected_series_clip(matched_series),
@@ -3644,6 +3690,11 @@ def build_daily_records(
                     },
                 }
             )
+        match_groups = [
+            match
+            for match in candidate_match_groups
+            if accepted_score_match_group_ready(match)
+        ]
         pitch_anchor_groups = []
         for match in pitch_anchor_matches:
             matched_series = matched_series_for_group(match)
@@ -3678,6 +3729,9 @@ def build_daily_records(
                 if score_location_verified_count
                 else "Played notes matched a reference sequence; exact score-note and measure alignment remains pending."
             )
+        elif candidate_match_groups:
+            score_alignment_status = "source_verification_pending"
+            score_or_pattern_limit = "Candidate pitch sequence queued for source-score verification."
         elif pitch_anchor_groups:
             score_alignment_status = "pitch_anchor_match_pending_score_location"
             score_or_pattern_limit = "A played pitch exists in the confirmed target; exact sequence and measure alignment remain pending."
@@ -3706,6 +3760,8 @@ def build_daily_records(
                 if match_groups
                 else "pitch_anchor_matches_ready"
                 if pitch_anchor_groups
+                else "source_verification_pending"
+                if candidate_match_groups
                 else "searching_score_match"
                 if confirmed
                 else "awaiting_piece_name"
@@ -3725,8 +3781,12 @@ def build_daily_records(
             "displayMode": "groups_only",
             "rawTranscriptionDisplay": "hidden",
             "detectedSeriesCount": len(all_detected_series),
-            "scoreSequenceMatchCount": len(score_sequence_matches),
-            "referenceSequenceMatchCount": len(score_sequence_matches),
+            "scoreSequenceMatchCount": len(match_groups),
+            "referenceSequenceMatchCount": len(match_groups),
+            "scoreSequenceCandidateCount": len(score_sequence_matches),
+            "referenceSequenceCandidateCount": len(score_sequence_matches),
+            "candidateMatchGroupCount": len(candidate_match_groups),
+            "displayMatchGroupCount": len(match_groups),
             "pitchAnchorMatchCount": len(pitch_anchor_groups),
             "scoreLocationVerifiedCount": score_location_verified_count,
             "scoreReferenceStatus": score_reference_state,
@@ -3759,6 +3819,7 @@ def build_daily_records(
                 "materialLabel": material_label,
                 "matchingWorkflow": matching_workflow,
                 "matchGroups": match_groups,
+                "candidateMatchGroups": candidate_match_groups[:6],
                 "pitchAnchorGroups": pitch_anchor_groups,
                 "transcription": {
                     "status": (
@@ -3800,8 +3861,11 @@ def build_daily_records(
                     "segmentCount": len(notation_segments),
                     "detectedSeriesCount": len(all_detected_series),
                     "detectedSeries": api_detected_series,
-                    "scoreSequenceMatchCount": len(score_sequence_matches),
-                    "referenceSequenceMatchCount": len(score_sequence_matches),
+                    "scoreSequenceMatchCount": len(match_groups),
+                    "referenceSequenceMatchCount": len(match_groups),
+                    "scoreSequenceCandidateCount": len(score_sequence_matches),
+                    "referenceSequenceCandidateCount": len(score_sequence_matches),
+                    "candidateMatchGroupCount": len(candidate_match_groups),
                     "pitchAnchorMatchCount": len(pitch_anchor_groups),
                     "scoreLocationVerifiedCount": score_location_verified_count,
                     "scoreReferenceStatus": score_reference_state,
