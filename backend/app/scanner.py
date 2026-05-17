@@ -78,7 +78,7 @@ from .symbolic_scores import (
 )
 
 DEFAULT_YOUTUBE_SOURCE = "https://www.youtube.com/@nalalan"
-STAFF4_SOURCE_AUDIO_RESCAN_VERSION = "staff4_source_audio_rescan_v5"
+STAFF4_SOURCE_AUDIO_RESCAN_VERSION = "staff4_source_audio_rescan_v6"
 STAFF4_SOURCE_AUDIO_RESCAN_DIR = RUNTIME_DIR / "staff4-source-rescan"
 STAFF4_SOURCE_AUDIO_RESCAN_PAD_BEFORE_SECONDS = 4.0
 STAFF4_SOURCE_AUDIO_RESCAN_PAD_AFTER_SECONDS = 10.0
@@ -2369,6 +2369,98 @@ def staff4_adjacent_guided_reproduction_targets(
     return results
 
 
+def compact_staff4_adjacent_failure(target: dict[str, Any]) -> dict[str, Any]:
+    failed = target.get("failedAt") if isinstance(target.get("failedAt"), dict) else {}
+    if not failed:
+        return {}
+    best_attempt = failed.get("bestAttempt") if isinstance(failed.get("bestAttempt"), dict) else {}
+    detector_attempts = failed.get("detectorAttempts") if isinstance(failed.get("detectorAttempts"), list) else []
+    best_votes = best_attempt.get("detectorVotes") if isinstance(best_attempt.get("detectorVotes"), list) else []
+    expected_midi = int(failed.get("expectedMidi") or 0)
+    observed_midi_values = [
+        int(vote.get("midi"))
+        for vote in best_votes
+        if isinstance(vote, dict) and isinstance(vote.get("midi"), int)
+    ]
+    observed_notes = [
+        str(vote.get("note") or note_name(int(vote.get("midi"))))
+        for vote in best_votes
+        if isinstance(vote, dict) and isinstance(vote.get("midi"), int)
+    ]
+    observed_counts = {
+        midi: observed_midi_values.count(midi)
+        for midi in sorted(set(observed_midi_values))
+    }
+    observed_consensus_midi = (
+        max(observed_counts, key=lambda midi: (observed_counts[midi], -abs(midi - expected_midi)))
+        if observed_counts
+        else 0
+    )
+    exact_source_count = int(best_attempt.get("exactSourceCount") or 0)
+    if not best_votes:
+        failure_kind = str(best_attempt.get("reason") or "no_detector_votes")
+    elif observed_consensus_midi and observed_consensus_midi != expected_midi:
+        failure_kind = "wrong_midi_detected"
+    elif exact_source_count:
+        failure_kind = "partial_detector_agreement"
+    else:
+        failure_kind = "detectors_uncertain"
+    return {
+        "direction": str(target.get("direction") or ""),
+        "targetReferenceStart": int(target.get("targetReferenceStart") or 0),
+        "targetReferenceEnd": int(target.get("targetReferenceEnd") or 0),
+        "targetSequence": str(target.get("targetSequence") or ""),
+        "targetMidiSequence": [
+            int(value) for value in target.get("targetMidiSequence") or [] if isinstance(value, int)
+        ],
+        "targetNoteCount": int(target.get("targetNoteCount") or 0),
+        "reproducedNoteCount": int(target.get("reproducedNoteCount") or 0),
+        "failedNoteIndex": int(failed.get("noteIndex") or 0),
+        "expectedMidi": expected_midi,
+        "expectedNote": str(failed.get("expectedNote") or ""),
+        "reason": str(failed.get("reason") or ""),
+        "failureKind": failure_kind,
+        "attemptCount": len(detector_attempts),
+        "bestAttemptOffsetSeconds": best_attempt.get("offsetSeconds"),
+        "bestAttemptStartSeconds": best_attempt.get("startSeconds"),
+        "bestAttemptEndSeconds": best_attempt.get("endSeconds"),
+        "bestAttemptExactSourceCount": int(best_attempt.get("exactSourceCount") or 0),
+        "bestAttemptExactSources": [
+            str(source) for source in best_attempt.get("exactSources") or [] if str(source or "")
+        ],
+        "bestAttemptObservedMidi": observed_midi_values,
+        "bestAttemptObservedNotes": observed_notes,
+        "bestAttemptObservedConsensusMidi": observed_consensus_midi,
+        "bestAttemptObservedConsensusNote": note_name(observed_consensus_midi) if observed_consensus_midi else "",
+        "bestAttemptDetectorVotes": best_votes,
+    }
+
+
+def staff4_first_adjacent_failure(targets: list[dict[str, Any]]) -> dict[str, Any]:
+    failures = [
+        target
+        for target in targets
+        if isinstance(target, dict)
+        and target.get("status") != "reproduced"
+        and isinstance(target.get("failedAt"), dict)
+    ]
+    if not failures:
+        return {}
+
+    def failure_key(target: dict[str, Any]) -> tuple[int, int, int, str]:
+        failed = target.get("failedAt") if isinstance(target.get("failedAt"), dict) else {}
+        direction = str(target.get("direction") or "")
+        direction_rank = 0 if direction == "right-1" else 1 if direction == "right-2" else 2
+        return (
+            direction_rank,
+            int(failed.get("noteIndex") or 999),
+            int(target.get("targetNoteCount") or 999),
+            direction,
+        )
+
+    return compact_staff4_adjacent_failure(sorted(failures, key=failure_key)[0])
+
+
 def audio_agreed_midi_sequence_exists_in_runs(runs: list[dict[str, Any]], target_midi: list[int]) -> bool:
     if not target_midi:
         return False
@@ -2566,6 +2658,9 @@ def staff4_source_audio_rescan_record(
         for item in adjacent_guided_targets
         if isinstance(item, dict) and item.get("status") == "reproduced" and isinstance(item.get("notes"), list)
     ]
+    adjacent_first_failure = staff4_first_adjacent_failure(
+        [item for item in adjacent_guided_targets if isinstance(item, dict)]
+    )
     best_adjacent_target = max(
         reproduced_adjacent_targets,
         key=lambda item: int(item.get("targetNoteCount") or 0),
@@ -2640,6 +2735,7 @@ def staff4_source_audio_rescan_record(
             "guidedAdjacentTargetCount": len(adjacent_guided_targets),
             "guidedAdjacentReproducedCount": len(reproduced_adjacent_targets),
             "guidedAdjacentStatus": "reproduced" if reproduced_adjacent_targets else "not_reproduced" if adjacent_guided_targets else "not_checked",
+            "guidedAdjacentFirstFailure": adjacent_first_failure,
             "guidedAdjacentTargets": [
                 {
                     key: value
@@ -2665,6 +2761,7 @@ def staff4_source_audio_rescan_record(
                 "guidedAnchorStatus": "reproduced" if guided_notes else "not_reproduced",
                 "guidedAdjacentEventCount": len(guided_adjacent_notes),
                 "guidedAdjacentStatus": "reproduced" if reproduced_adjacent_targets else "not_reproduced" if adjacent_guided_targets else "not_checked",
+                "guidedAdjacentFirstFailureExpectedNote": adjacent_first_failure.get("expectedNote") or "",
             },
             "runs": runs,
         }
@@ -2771,6 +2868,15 @@ def staff4_source_audio_rescan(daily_records: dict[str, Any], media_samples: lis
         if adjacent_reproduced_count
         else "not_reproduced"
     )
+    adjacent_first_failure = staff4_first_adjacent_failure(adjacent_targets)
+    adjacent_failure_label = str(adjacent_first_failure.get("expectedNote") or "")
+    adjacent_failure_offset = adjacent_first_failure.get("bestAttemptOffsetSeconds")
+    adjacent_failure_action = (
+        "Improve note-window segmentation for the next Staff 4 source note "
+        f"{adjacent_failure_label or 'unknown'}; the best swept offset "
+        f"{adjacent_failure_offset}s heard "
+        f"{adjacent_first_failure.get('bestAttemptObservedConsensusNote') or 'no stable MIDI'}."
+    )
     return {
         "version": STAFF4_SOURCE_AUDIO_RESCAN_VERSION,
         "status": status,
@@ -2794,6 +2900,7 @@ def staff4_source_audio_rescan(daily_records: dict[str, Any], media_samples: lis
         "guidedAdjacentTargetCount": len(adjacent_targets),
         "guidedAdjacentReproducedCount": adjacent_reproduced_count,
         "guidedAdjacentStatus": adjacent_reproduction_status,
+        "guidedAdjacentFirstFailure": adjacent_first_failure,
         "guidedAdjacentTargets": adjacent_targets,
         "audioAgreementEventCount": sum(int(record.get("audioAgreementEventCount") or 0) for record in records if isinstance(record, dict)),
         "cacheHitCount": sum(1 for record in records if isinstance(record, dict) and record.get("cacheHit")),
@@ -2804,6 +2911,8 @@ def staff4_source_audio_rescan(daily_records: dict[str, Any], media_samples: lis
             if anchor_reproduction_targets and not anchor_reproduced_count
             else "Audit the adjacent-guided Staff 4 phrase reproduced by current audio detectors."
             if adjacent_reproduced_count
+            else adjacent_failure_action
+            if adjacent_first_failure
             else "Improve note-window segmentation for the next Staff 4 source notes; adjacent-guided current detectors did not reproduce the exact source phrase."
             if adjacent_targets
             else "Search exact Staff 4 MIDI phrase windows inside the rescanned source-audio runs."
@@ -3172,11 +3281,21 @@ def staff4_adjacent_phrase_mining(
     elif status == "exact_midi_audio_unconfirmed":
         next_action = "Run second-pass audio agreement on the exact Staff 4 MIDI candidate before review."
     elif anchor_count:
+        adjacent_failure = (
+            source_audio_rescan.get("guidedAdjacentFirstFailure")
+            if isinstance(source_audio_rescan.get("guidedAdjacentFirstFailure"), dict)
+            else {}
+        )
         if (
             int(source_audio_rescan.get("guidedAdjacentTargetCount") or 0)
             and str(source_audio_rescan.get("guidedAdjacentStatus") or "") == "not_reproduced"
         ):
-            next_action = "Adjacent-guided Staff 4 source-note windows were tested, but current detectors did not reproduce exact MIDI; improve note segmentation around the next source notes."
+            expected_note = str(adjacent_failure.get("expectedNote") or "the next source note")
+            best_offset = adjacent_failure.get("bestAttemptOffsetSeconds")
+            next_action = (
+                "Adjacent-guided Staff 4 source-note windows were tested, but current detectors did not reproduce exact MIDI; "
+                f"calibrate the failed {expected_note} window at best offset {best_offset}s."
+            )
         elif int(source_audio_rescan.get("runCount") or 0):
             next_action = "No exact adjacent Staff 4 MIDI window was found after source-audio rescanning; widen the source window or improve note segmentation."
         else:
@@ -3196,6 +3315,11 @@ def staff4_adjacent_phrase_mining(
         "sourceAudioRescanGuidedAdjacentStatus": str(source_audio_rescan.get("guidedAdjacentStatus") or ""),
         "sourceAudioRescanGuidedAdjacentTargetCount": int(source_audio_rescan.get("guidedAdjacentTargetCount") or 0),
         "sourceAudioRescanGuidedAdjacentReproducedCount": int(source_audio_rescan.get("guidedAdjacentReproducedCount") or 0),
+        "sourceAudioRescanGuidedAdjacentFirstFailure": (
+            source_audio_rescan.get("guidedAdjacentFirstFailure")
+            if isinstance(source_audio_rescan.get("guidedAdjacentFirstFailure"), dict)
+            else {}
+        ),
         "searchedWindowCount": total_searched,
         "exactCandidateCount": total_exact,
         "bestCandidate": best_candidate,
@@ -3956,6 +4080,17 @@ def build_transcription_completion(
     staff4_source_rescan_adjacent_status = str(staff4_source_rescan.get("guidedAdjacentStatus") or "")
     staff4_source_rescan_adjacent_count = int(staff4_source_rescan.get("guidedAdjacentReproducedCount") or 0)
     staff4_source_rescan_adjacent_target_count = int(staff4_source_rescan.get("guidedAdjacentTargetCount") or 0)
+    staff4_source_rescan_adjacent_first_failure = (
+        staff4_source_rescan.get("guidedAdjacentFirstFailure")
+        if isinstance(staff4_source_rescan.get("guidedAdjacentFirstFailure"), dict)
+        else {}
+    )
+    staff4_source_rescan_adjacent_failure_note = str(
+        staff4_source_rescan_adjacent_first_failure.get("expectedNote") or ""
+    )
+    staff4_source_rescan_adjacent_failure_offset = staff4_source_rescan_adjacent_first_failure.get(
+        "bestAttemptOffsetSeconds"
+    )
     staff4_mining_status = str(staff4_mining.get("status") or "")
     staff4_mining_searched_count = int(staff4_mining.get("searchedWindowCount") or 0)
     staff4_mining_exact_count = int(staff4_mining.get("exactCandidateCount") or 0)
@@ -4427,8 +4562,10 @@ def build_transcription_completion(
                     )
                 elif staff4_source_rescan_adjacent_target_count and staff4_source_rescan_adjacent_status == "not_reproduced":
                     next_action = (
-                        "Improve the Staff 4 note-window segmentation; source-audio rescan reproduces the anchor, "
-                        "but adjacent-guided current detectors still did not reproduce the exact next source phrase."
+                        "Calibrate the Staff 4 adjacent note-window segmentation; source-audio rescan reproduces the anchor, "
+                        f"but the first failed adjacent note is {staff4_source_rescan_adjacent_failure_note or 'unknown'} "
+                        f"at best swept offset {staff4_source_rescan_adjacent_failure_offset}s; detectors heard "
+                        f"{staff4_source_rescan_adjacent_first_failure.get('bestAttemptObservedConsensusNote') or 'no stable MIDI'}."
                     )
                 elif staff4_source_rescan_run_count:
                     next_action = (
@@ -4453,8 +4590,10 @@ def build_transcription_completion(
                     )
                 elif staff4_source_rescan_adjacent_target_count and staff4_source_rescan_adjacent_status == "not_reproduced":
                     next_action = (
-                        "Improve the Staff 4 note-window segmentation; source-audio rescan reproduces the anchor, "
-                        "but adjacent-guided current detectors still did not reproduce the exact next source phrase."
+                        "Calibrate the Staff 4 adjacent note-window segmentation; source-audio rescan reproduces the anchor, "
+                        f"but the first failed adjacent note is {staff4_source_rescan_adjacent_failure_note or 'unknown'} "
+                        f"at best swept offset {staff4_source_rescan_adjacent_failure_offset}s; detectors heard "
+                        f"{staff4_source_rescan_adjacent_first_failure.get('bestAttemptObservedConsensusNote') or 'no stable MIDI'}."
                     )
                 else:
                     next_action = (
@@ -4524,6 +4663,7 @@ def build_transcription_completion(
         "staff4SourceAudioRescanAdjacentStatus": staff4_source_rescan_adjacent_status,
         "staff4SourceAudioRescanAdjacentReproducedCount": staff4_source_rescan_adjacent_count,
         "staff4SourceAudioRescanAdjacentTargetCount": staff4_source_rescan_adjacent_target_count,
+        "staff4SourceAudioRescanAdjacentFirstFailure": staff4_source_rescan_adjacent_first_failure,
         "staff4AdjacentMining": staff4_mining,
         "staff4AdjacentMiningStatus": staff4_mining_status,
         "staff4AdjacentMiningSearchedWindowCount": staff4_mining_searched_count,

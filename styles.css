@@ -2360,7 +2360,7 @@ h2 {
   display: block;
   width: 100%;
   min-width: 720px;
-  height: 112px;
+  height: 128px;
 }
 
 .notation-sheet text {
@@ -2373,7 +2373,7 @@ h2 {
 .notation-sheet .treble-clef {
   fill: var(--ink);
   font-family: "Noto Music", "Segoe UI Symbol", "Apple Symbols", Georgia, "Times New Roman", serif;
-  font-size: 68px;
+  font-size: 76px;
   font-weight: 400;
 }
 
@@ -2394,16 +2394,37 @@ h2 {
 .notation-sheet .accidental-glyph {
   fill: none;
   stroke: var(--ink);
-  stroke-linecap: round;
-  stroke-linejoin: round;
+  stroke-linecap: butt;
+  stroke-linejoin: miter;
 }
 
 .notation-sheet .note-accidental .accidental-stroke {
-  stroke-width: 2.05;
+  stroke-width: 1.65;
 }
 
 .notation-sheet .key-signature-mark .accidental-stroke {
-  stroke-width: 1.9;
+  stroke-width: 1.5;
+}
+
+.notation-sheet .accidental-sharp .accidental-sharp-stem {
+  stroke-width: 1.55;
+}
+
+.notation-sheet .accidental-sharp .accidental-sharp-bar {
+  fill: var(--ink);
+  stroke: none;
+}
+
+.notation-sheet .accidental-flat .accidental-flat-stem {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1.7;
+  stroke-linecap: round;
+}
+
+.notation-sheet .accidental-flat .accidental-flat-bowl {
+  fill: var(--ink);
+  stroke: none;
 }
 
 .staff-lines line {
@@ -3884,7 +3905,7 @@ h2 {
 
   .matched-notation-panel .notation-sheet svg {
     min-width: 200px;
-    height: 74px;
+    height: 118px;
   }
 
   .score-heat-box b {
@@ -4270,7 +4291,7 @@ h2 {
 }
 
 .matched-notation-panel .notation-sheet svg {
-  height: 96px;
+  height: 118px;
 }
 
 .notation-sheet {
@@ -4285,7 +4306,7 @@ h2 {
 
 .notation-sheet .treble-clef {
   font-family: "CurtisBravura", "Bravura", "Noto Music", "Segoe UI Symbol", "Apple Symbols", serif;
-  font-size: 62px;
+  font-size: 76px;
 }
 
 .notation-sheet .key-signature-mark {
@@ -4303,16 +4324,16 @@ h2 {
 .notation-sheet .accidental-glyph {
   fill: none;
   stroke: var(--ink);
-  stroke-linecap: round;
-  stroke-linejoin: round;
+  stroke-linecap: butt;
+  stroke-linejoin: miter;
 }
 
 .notation-sheet .note-accidental .accidental-stroke {
-  stroke-width: 2.05;
+  stroke-width: 1.65;
 }
 
 .notation-sheet .key-signature-mark .accidental-stroke {
-  stroke-width: 1.9;
+  stroke-width: 1.5;
 }
 
 .staff-lines line {

@@ -1385,7 +1385,8 @@ const TREBLE_STAFF_BOTTOM_Y = TREBLE_STAFF_TOP_Y + (TREBLE_STAFF_LINE_GAP * 4);
 const TREBLE_G4_Y = TREBLE_STAFF_TOP_Y + (TREBLE_STAFF_LINE_GAP * 3);
 const TREBLE_STAFF_STEP_Y = TREBLE_STAFF_LINE_GAP / 2;
 const TREBLE_NOTE_ORDER = { C: 0, D: 1, E: 2, F: 3, G: 4, A: 5, B: 6 };
-const TREBLE_CLEF_BASELINE_Y = 63;
+const TREBLE_CLEF_BASELINE_Y = 72;
+const NOTATION_VIEWBOX_HEIGHT = 128;
 const SHARP_TO_FLAT_NOTE = { "C#": "Db", "D#": "Eb", "F#": "Gb", "G#": "Ab", "A#": "Bb" };
 const FLAT_TO_SHARP_NOTE = { Db: "C#", Eb: "D#", Gb: "F#", Ab: "G#", Bb: "A#" };
 
@@ -1447,17 +1448,17 @@ function renderAccidentalGlyph(type, x, y, className) {
   if (safeType === "flat") {
     return `
       <g class="${className} accidental-glyph accidental-flat" aria-label="flat" transform="translate(${x.toFixed(1)} ${y.toFixed(1)})">
-        <path class="accidental-stroke" d="M-3.5 -17 L-3.5 9.5"></path>
-        <path class="accidental-stroke" d="M-3.5 5.5 C3.5 -0.5 8.5 -3.5 8.5 -8.2 C8.5 -12.6 4.3 -14.2 0.2 -11.8 C-2.8 -10.1 -3.5 -6.8 -3.5 5.5"></path>
+        <path class="accidental-flat-stem" d="M-4.0 -18.2 C-3.6 -10.0 -3.4 -2.0 -3.8 8.6"></path>
+        <path class="accidental-flat-bowl" d="M-3.7 4.9 C1.4 0.2 7.5 -2.1 8.0 -7.0 C8.4 -11.2 4.8 -13.7 0.6 -11.9 C-2.8 -10.4 -4.2 -6.4 -3.7 4.9 Z"></path>
       </g>
     `;
   }
   return `
     <g class="${className} accidental-glyph accidental-sharp" aria-label="sharp" transform="translate(${x.toFixed(1)} ${y.toFixed(1)})">
-      <path class="accidental-stroke" d="M-4.8 -13.5 L-4.8 13.5"></path>
-      <path class="accidental-stroke" d="M4.8 -14.5 L4.8 12.5"></path>
-      <path class="accidental-stroke" d="M-10 -5.5 L10 -8.5"></path>
-      <path class="accidental-stroke" d="M-10 5.5 L10 2.5"></path>
+      <path class="accidental-stroke accidental-sharp-stem" d="M-4.2 -13.6 L-4.2 12.4"></path>
+      <path class="accidental-stroke accidental-sharp-stem" d="M4.2 -14.6 L4.2 11.4"></path>
+      <path class="accidental-sharp-bar" d="M-9.2 -6.9 L9.2 -9.8 L9.2 -6.2 L-9.2 -3.3 Z"></path>
+      <path class="accidental-sharp-bar" d="M-9.2 5.1 L9.2 2.2 L9.2 5.8 L-9.2 8.7 Z"></path>
     </g>
   `;
 }
@@ -1467,7 +1468,8 @@ function renderNoteAccidental(spelledNote, signature, x, y) {
   if (!parsed || !parsed.accidental || keySignatureCoversNote(spelledNote, signature)) return "";
   const type = parsed.accidental === "b" ? "flat" : "sharp";
   const safeY = Math.max(type === "flat" ? 18 : 15, Math.min(88, y));
-  return renderAccidentalGlyph(type, x - 21, safeY, "note-accidental");
+  const accidentalX = x - (type === "sharp" ? 18 : 21);
+  return renderAccidentalGlyph(type, accidentalX, safeY, "note-accidental");
 }
 
 function naturalNoteStep(note) {
@@ -1658,7 +1660,7 @@ function renderNotationSheet(events, options = {}) {
   if (!items.length) {
     return `
       <div class="notation-sheet notation-empty${repeatClass}${draftClass}" aria-label="Sheet-music-style transcription pending">
-        <svg viewBox="0 0 720 104" role="img">
+        <svg viewBox="0 0 720 ${NOTATION_VIEWBOX_HEIGHT}" role="img">
         <g class="staff-lines">${staffLines}</g>
           ${renderTrebleClef()}
           ${keySignature.svg}
@@ -1708,7 +1710,7 @@ function renderNotationSheet(events, options = {}) {
   }).join("");
   return `
     <div class="notation-sheet${repeatClass}${draftClass}" aria-label="Sheet-music-style machine transcription">
-      <svg viewBox="0 0 720 104" role="img">
+      <svg viewBox="0 0 720 ${NOTATION_VIEWBOX_HEIGHT}" role="img">
         <g class="staff-lines">${staffLines}</g>
         ${renderTrebleClef()}
         ${keySignature.svg}
@@ -1734,7 +1736,7 @@ function renderVerifiedNotationGate(
   const signature = renderKeySignatureMarks(keySignature);
   return `
     <div class="notation-gate" aria-label="${escapeHtml(title)}">
-      <svg viewBox="0 0 720 118" role="img">
+      <svg viewBox="0 0 720 ${NOTATION_VIEWBOX_HEIGHT}" role="img">
         <g class="staff-lines">${staffLines}</g>
         ${renderTrebleClef()}
         ${signature.svg}
@@ -3088,6 +3090,11 @@ function renderStaff4Mining(mining, sourceRescan) {
   const status = String(mining.status || "").replace(/_/g, " ");
   if (!status || status === "no staff4 anchor") return "";
   const rescan = sourceRescan && typeof sourceRescan === "object" ? sourceRescan : {};
+  const failure = mining.sourceAudioRescanGuidedAdjacentFirstFailure && typeof mining.sourceAudioRescanGuidedAdjacentFirstFailure === "object"
+    ? mining.sourceAudioRescanGuidedAdjacentFirstFailure
+    : rescan.guidedAdjacentFirstFailure && typeof rescan.guidedAdjacentFirstFailure === "object"
+      ? rescan.guidedAdjacentFirstFailure
+      : {};
   const nearest = mining.nearestWindow && typeof mining.nearestWindow === "object" ? mining.nearestWindow : {};
   const candidate = mining.bestCandidate && typeof mining.bestCandidate === "object" ? mining.bestCandidate : {};
   const target = candidate.targetSequence || nearest.targetSequence || "";
@@ -3098,6 +3105,9 @@ function renderStaff4Mining(mining, sourceRescan) {
   const rescanEvents = Number(mining.sourceAudioRescanEventCount || (Number(rescan.eventCount) || 0) + (Number(rescan.candidateEventCount) || 0)) || 0;
   const rescanStatus = String(mining.sourceAudioRescanStatus || rescan.status || "").replace(/_/g, " ");
   const direction = candidate.targetDirection || nearest.targetDirection || "";
+  const failedExpected = failure.expectedNote || "";
+  const failedHeard = failure.bestAttemptObservedConsensusNote || "";
+  const failedOffset = failure.bestAttemptOffsetSeconds ?? "";
   return `
     <section class="staff4-mining-card" aria-label="Staff 4 adjacent mining">
       <div class="staff4-mining-head">
@@ -3110,6 +3120,11 @@ function renderStaff4Mining(mining, sourceRescan) {
         <em>${escapeHtml(shortText(observed || "no stored audio window", 54))}</em>
         ${rescanStatus ? `<span>${escapeHtml(rescanStatus)}</span>` : ""}
         ${rescanRuns || rescanEvents ? `<strong>${escapeHtml(rescanRuns)} source runs</strong><em>${escapeHtml(rescanEvents)} source events</em>` : ""}
+        ${failedExpected ? `
+          <span>Next note</span>
+          <strong>${escapeHtml(failedExpected)}</strong>
+          <em>${escapeHtml([failedHeard ? `${failedHeard} heard` : failure.failureKind || "unresolved", failedOffset !== "" ? `${failedOffset}s` : ""].filter(Boolean).join(" / "))}</em>
+        ` : ""}
       </div>
     </section>
   `;

@@ -1032,6 +1032,217 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertEqual(guided_runs[0]["notes"][5]["timingOffsetSeconds"], -0.06)
         self.assertGreater(len(guided_runs[0]["notes"][5]["detectorAttempts"]), 1)
 
+    def test_staff4_adjacent_guided_failure_exposes_first_failed_source_note(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source_path = Path(temp_dir) / "staff4-source.wav"
+            write_tiny_wav(source_path)
+            calls = {"count": 0}
+
+            def fake_extract(_source, target, _start, _end):
+                write_tiny_wav(target, seconds=17)
+                return True, ""
+
+            def failing_next_note_detector_votes(_segment, expected_midi, _sr, _librosa, _numpy):
+                calls["count"] += 1
+                if calls["count"] in set(range(11, 20)) | set(range(25, 34)):
+                    return [
+                        {
+                            "detector": "pyin",
+                            "midi": 74,
+                            "note": "D5",
+                            "confidence": 0.72,
+                            "exact": False,
+                            "frameCount": 6,
+                        },
+                        {
+                            "detector": "spectral_onset",
+                            "midi": 74,
+                            "note": "D5",
+                            "confidence": 0.74,
+                            "exact": False,
+                            "frameCount": 1,
+                        },
+                    ]
+                return [
+                    {
+                        "detector": "pyin",
+                        "midi": expected_midi,
+                        "note": "C5" if expected_midi == 72 else "D#5",
+                        "confidence": 0.91,
+                        "exact": True,
+                        "frameCount": 6,
+                    },
+                    {
+                        "detector": "spectral_onset",
+                        "midi": expected_midi,
+                        "note": "C5" if expected_midi == 72 else "D#5",
+                        "confidence": 0.89,
+                        "exact": True,
+                        "frameCount": 1,
+                    },
+                ]
+
+            anchor_notes = [
+                note("D#5", 20.225),
+                note("D#5", 20.550),
+                note("C5", 20.817),
+                note("D#5", 21.629),
+                note("D#5", 22.361),
+            ]
+            source_notes = [
+                note("A5"),
+                note("G5"),
+                note("F5"),
+                note("D#5"),
+                note("D#5"),
+                note("C5"),
+                note("D#5"),
+                note("D#5"),
+                note("D#5"),
+                note("C5"),
+            ]
+            anchor = {
+                "practiceDay": "2026-05-03",
+                "pieceTitle": "Wieniawski Scherzo-Tarantelle, Op. 16",
+                "anchorSequence": "D#5 D#5 C5 D#5 D#5",
+                "anchorMidiSequence": [75, 75, 72, 75, 75],
+                "sourceNotes": source_notes,
+                "referenceStart": 3,
+                "referenceEnd": 8,
+                "sampleId": "accepted-anchor",
+                "sourceWindow": "*8835-8925",
+                "anchorLocalStartSeconds": 20.225,
+                "anchorLocalEndSeconds": 22.481,
+                "match": {
+                    "detectedSeries": {
+                        "sampleId": "accepted-anchor",
+                        "sourceWindow": "*8835-8925",
+                        "notes": anchor_notes,
+                    },
+                    "matchedDetectedNotes": anchor_notes,
+                },
+            }
+
+            with patch("backend.app.scanner.run_ffmpeg_extract_audio", side_effect=fake_extract), patch(
+                "backend.app.scanner.transcribe_audio_array",
+                return_value={"events": [], "scoreMatchCandidateNotes": [], "quality": {}},
+            ), patch("backend.app.scanner.staff4_detector_votes_for_segment", side_effect=failing_next_note_detector_votes):
+                record = staff4_source_audio_rescan_record(
+                    anchor=anchor,
+                    sample={"id": "accepted-anchor", "path": str(source_path), "window": "*8835-8925"},
+                    source_path=source_path,
+                    scan_window={
+                        "label": "anchor_core",
+                        "scanLocalStartSeconds": 16.225,
+                        "scanLocalEndSeconds": 32.535,
+                    },
+                )
+
+        failure = record["guidedAdjacentFirstFailure"]
+        self.assertEqual(record["guidedAdjacentStatus"], "not_reproduced")
+        self.assertEqual(record["guidedAdjacentReproducedCount"], 0)
+        self.assertEqual(failure["direction"], "right-1")
+        self.assertEqual(failure["failedNoteIndex"], 5)
+        self.assertEqual(failure["expectedMidi"], 75)
+        self.assertEqual(failure["expectedNote"], "D#5")
+        self.assertEqual(failure["targetMidiSequence"], [75, 75, 72, 75, 75, 75])
+        self.assertEqual(failure["attemptCount"], 9)
+        self.assertEqual(failure["bestAttemptExactSourceCount"], 0)
+        self.assertEqual(failure["failureKind"], "wrong_midi_detected")
+        self.assertEqual(failure["bestAttemptObservedConsensusMidi"], 74)
+        self.assertEqual(failure["bestAttemptObservedConsensusNote"], "D5")
+        self.assertIn("current_detectors_did_not_reproduce_exact_midi", failure["reason"])
+
+    def test_completion_surfaces_staff4_adjacent_failure_without_losing_detector_detail(self):
+        failure = {
+            "direction": "right-1",
+            "targetSequence": "D#5 D#5 C5 D#5 D#5 D#5",
+            "targetMidiSequence": [75, 75, 72, 75, 75, 75],
+            "failedNoteIndex": 5,
+            "expectedMidi": 75,
+            "expectedNote": "D#5",
+            "failureKind": "wrong_midi_detected",
+            "bestAttemptOffsetSeconds": -0.06,
+            "bestAttemptObservedConsensusMidi": 74,
+            "bestAttemptObservedConsensusNote": "D5",
+        }
+        fake_rescan = {
+            "version": "staff4_source_audio_rescan_v6",
+            "status": "rescanned",
+            "runCount": 1,
+            "eventCount": 0,
+            "candidateEventCount": 0,
+            "guidedAnchorEventCount": 5,
+            "guidedAdjacentEventCount": 0,
+            "guidedAdjacentTargetCount": 1,
+            "guidedAdjacentReproducedCount": 0,
+            "guidedAdjacentStatus": "not_reproduced",
+            "guidedAdjacentFirstFailure": failure,
+            "runs": [],
+        }
+        fake_expansion = {
+            "targetCount": 1,
+            "acceptedExpansionCount": 0,
+            "readyForReviewCount": 0,
+            "blockedExpansionCount": 1,
+            "rejectedRegressionCount": 1,
+            "audioRunCount": 4,
+            "rawDetectedAudioRunCount": 0,
+            "sourceAudioRescanRunCount": 1,
+            "currentBest": {
+                "direction": "right-1",
+                "targetSequence": "D#5 D#5 C5 D#5 D#5 D#5",
+                "anchorSequence": "D#5 D#5 C5 D#5 D#5",
+                "expectedNextScoreNote": "D#5",
+                "observedNextAudioNote": "D5",
+            },
+        }
+        fake_mining = {
+            "status": "not_found",
+            "searchedWindowCount": 32,
+            "exactCandidateCount": 0,
+            "sourceAudioRescanRunCount": 1,
+            "sourceAudioRescanEventCount": 5,
+            "sourceAudioRescanGuidedAdjacentStatus": "not_reproduced",
+            "sourceAudioRescanGuidedAdjacentTargetCount": 1,
+            "sourceAudioRescanGuidedAdjacentFirstFailure": failure,
+        }
+        with patch("backend.app.scanner.staff4_source_audio_rescan", return_value=fake_rescan), patch(
+            "backend.app.scanner.source_phrase_expansion_harness",
+            return_value=fake_expansion,
+        ), patch("backend.app.scanner.staff4_adjacent_phrase_mining", return_value=fake_mining):
+            completion = build_transcription_completion(
+                {"scoreReferenceTargetCount": 1},
+                {"recordCount": 1, "records": []},
+                {"entries": [{"title": "Wieniawski Scherzo-Tarantelle, Op. 16"}]},
+                {
+                    "ledgerVideoCount": 1,
+                    "uploadedVideoSeconds": 120,
+                    "uploadedVideoLabel": "2m",
+                    "checkedVideoSeconds": 120,
+                    "checkedVideoLabel": "2m",
+                    "activePracticeLabel": "2m",
+                    "estimatedTotalPracticeLabel": "2m",
+                    "activePracticeScan": {
+                        "activeIntervalCount": 1,
+                        "sampleResultCount": 1,
+                        "activeViolinSampleCount": 1,
+                        "checkedNoViolinSampleCount": 0,
+                        "pendingWindowCount": 0,
+                    },
+                },
+                {"benchmarkCount": 1, "wrongScoreNoteRegressionCount": 1},
+                [],
+                [],
+            )
+
+        surfaced = completion["staff4SourceAudioRescanAdjacentFirstFailure"]
+        self.assertEqual(surfaced["expectedNote"], "D#5")
+        self.assertEqual(surfaced["bestAttemptObservedConsensusNote"], "D5")
+        self.assertEqual(completion["staff4AdjacentMining"]["sourceAudioRescanGuidedAdjacentFirstFailure"], failure)
+        self.assertIn("D#5", completion["nextAction"])
+        self.assertIn("D5", completion["nextAction"])
+
     def test_staff4_truth_manifest_anchor_persists_without_visible_match_group(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             source_path = Path(temp_dir) / "staff4-source.wav"
