@@ -1390,12 +1390,14 @@ const SHARP_TO_FLAT_NOTE = { "C#": "Db", "D#": "Eb", "F#": "Gb", "G#": "Ab", "A#
 const FLAT_TO_SHARP_NOTE = { Db: "C#", Eb: "D#", Gb: "F#", Ab: "G#", Bb: "A#" };
 
 function normalizeAccidentalToken(value) {
-  return String(value || "")
+  const clean = String(value || "")
     .trim()
     .replace(/\u266d/g, "b")
     .replace(/\u266f/g, "#")
     .replace(/♭/g, "b")
     .replace(/♯/g, "#");
+  const match = clean.match(/^([A-Ga-g])(#|b)?(\d?)$/);
+  return match ? `${match[1].toUpperCase()}${match[2] || ""}${match[3] || ""}` : clean;
 }
 
 function parseExactNote(value) {
@@ -1413,6 +1415,10 @@ function normalizedAccidentalNames(signature) {
   return new Set(
     (Array.isArray(signature?.accidentals) ? signature.accidentals : [])
       .map((item) => normalizeAccidentalToken(item))
+      .map((item) => {
+        const match = String(item || "").match(/^([A-G])(#|b)?/);
+        return match ? `${match[1]}${match[2] || ""}` : "";
+      })
       .filter(Boolean)
   );
 }
@@ -1436,12 +1442,32 @@ function keySignatureCoversNote(spelledNote, signature) {
   return normalizedAccidentalNames(signature).has(parsed.pitch);
 }
 
+function renderAccidentalGlyph(type, x, y, className) {
+  const safeType = type === "flat" ? "flat" : "sharp";
+  if (safeType === "flat") {
+    return `
+      <g class="${className} accidental-glyph accidental-flat" aria-label="flat" transform="translate(${x.toFixed(1)} ${y.toFixed(1)})">
+        <path class="accidental-stroke" d="M-3.5 -17 L-3.5 9.5"></path>
+        <path class="accidental-stroke" d="M-3.5 5.5 C3.5 -0.5 8.5 -3.5 8.5 -8.2 C8.5 -12.6 4.3 -14.2 0.2 -11.8 C-2.8 -10.1 -3.5 -6.8 -3.5 5.5"></path>
+      </g>
+    `;
+  }
+  return `
+    <g class="${className} accidental-glyph accidental-sharp" aria-label="sharp" transform="translate(${x.toFixed(1)} ${y.toFixed(1)})">
+      <path class="accidental-stroke" d="M-4.8 -13.5 L-4.8 13.5"></path>
+      <path class="accidental-stroke" d="M4.8 -14.5 L4.8 12.5"></path>
+      <path class="accidental-stroke" d="M-10 -5.5 L10 -8.5"></path>
+      <path class="accidental-stroke" d="M-10 5.5 L10 2.5"></path>
+    </g>
+  `;
+}
+
 function renderNoteAccidental(spelledNote, signature, x, y) {
   const parsed = parseExactNote(spelledNote);
   if (!parsed || !parsed.accidental || keySignatureCoversNote(spelledNote, signature)) return "";
-  const glyph = parsed.accidental === "b" ? "&#9837;" : "&#9839;";
-  const yOffset = parsed.accidental === "b" ? -4 : 0;
-  return `<text class="note-accidental" x="${(x - 20).toFixed(1)}" y="${(y + yOffset).toFixed(1)}">${glyph}</text>`;
+  const type = parsed.accidental === "b" ? "flat" : "sharp";
+  const safeY = Math.max(type === "flat" ? 18 : 15, Math.min(88, y));
+  return renderAccidentalGlyph(type, x - 21, safeY, "note-accidental");
 }
 
 function naturalNoteStep(note) {
@@ -1565,15 +1591,13 @@ function renderKeySignatureMarks(signature) {
     B: staffNoteY("B4"),
   };
   const positions = normalized.accidentalType === "flat" ? flatPositions : sharpPositions;
-  const glyph = normalized.accidentalType === "flat" ? "&#9837;" : "&#9839;";
-  const baselineOffset = normalized.accidentalType === "flat" ? -5 : 0;
   const marks = normalized.accidentals
     .map((item, index) => {
       const letter = String(item || "").trim().charAt(0).toUpperCase();
       const y = positions[letter];
       if (!Number.isFinite(y)) return "";
       const x = 63 + (index * 16);
-      return `<text class="key-signature-mark" x="${x}" y="${(y + baselineOffset).toFixed(1)}">${glyph}</text>`;
+      return renderAccidentalGlyph(normalized.accidentalType, x, y, "key-signature-mark");
     })
     .filter(Boolean)
     .join("");

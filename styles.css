@@ -2391,6 +2391,21 @@ h2 {
   font-weight: 400;
 }
 
+.notation-sheet .accidental-glyph {
+  fill: none;
+  stroke: var(--ink);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.notation-sheet .note-accidental .accidental-stroke {
+  stroke-width: 2.05;
+}
+
+.notation-sheet .key-signature-mark .accidental-stroke {
+  stroke-width: 1.9;
+}
+
 .staff-lines line {
   stroke: rgba(31, 41, 39, .58);
   stroke-width: 1.05;
@@ -4283,6 +4298,21 @@ h2 {
   font-family: "CurtisBravura", "Bravura", "Noto Music", "Segoe UI Symbol", "Apple Symbols", serif;
   font-size: 24px;
   font-weight: 400;
+}
+
+.notation-sheet .accidental-glyph {
+  fill: none;
+  stroke: var(--ink);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.notation-sheet .note-accidental .accidental-stroke {
+  stroke-width: 2.05;
+}
+
+.notation-sheet .key-signature-mark .accidental-stroke {
+  stroke-width: 1.9;
 }
 
 .staff-lines line {
