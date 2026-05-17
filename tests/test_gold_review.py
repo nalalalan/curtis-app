@@ -79,6 +79,42 @@ class GoldReviewTests(unittest.TestCase):
         self.assertEqual(candidate["detectedMidiSequence"], [79, 77, 81, 80, 77])
         self.assertEqual(candidate["clip"]["audioUrl"], "/api/curtis/media/sample/sample-a/clip?start=0.000&end=1.150")
 
+    def test_review_queue_only_publishes_playable_clip_windows(self):
+        daily_records = {
+            "records": [
+                {
+                    "practiceDay": "2026-05-03",
+                    "transcription": {
+                        "detectedSeries": [
+                            {
+                                "sampleId": "sample-long",
+                                "sourceTitle": "5-3-26",
+                                "sourceUrl": "https://www.youtube.com/watch?v=abc",
+                                "startSeconds": 200.0,
+                                "localStartSeconds": 0.0,
+                                "notes": [
+                                    note("D5", 74, 0.0),
+                                    note("E5", 76, 3.0),
+                                    note("F5", 77, 6.0),
+                                    note("G5", 79, 9.0),
+                                    note("A5", 81, 12.0),
+                                    note("B5", 83, 16.0),
+                                    note("C6", 84, 18.0),
+                                ],
+                            }
+                        ]
+                    },
+                }
+            ]
+        }
+
+        review = build_gold_review_loop({}, daily_records)
+
+        self.assertEqual(review["queueCount"], 1)
+        clip = review["queue"][0]["clip"]
+        self.assertLessEqual(clip["localEndSeconds"] - clip["localStartSeconds"], 15.0)
+        self.assertEqual(review["queue"][0]["detectedNotes"], ["D5", "E5", "F5", "G5", "A5"])
+
     def test_recording_audio_phrase_removes_candidate_and_mirrors_truth_item(self):
         state = {}
         daily_records = {

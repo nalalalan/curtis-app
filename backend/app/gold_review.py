@@ -13,6 +13,7 @@ from .state import utc_now
 GOLD_REVIEW_VERSION = "gold_review_v1"
 GOLD_REVIEW_STATUSES = {"pending_review", "accepted_truth", "rejected_mismatch"}
 GOLD_REVIEW_TYPES = {"audio_phrase", "score_phrase", "audio_score_match", "practice_window"}
+MAX_REVIEW_CLIP_SECONDS = 14.75
 
 
 def _clean(value: Any) -> str:
@@ -75,17 +76,33 @@ def _pitch_class_count(notes: list[dict[str, Any]]) -> int:
     return len(values)
 
 
-def best_review_note_slice(notes: list[dict[str, Any]], *, min_notes: int = 5, max_notes: int = 12) -> list[dict[str, Any]]:
+def _note_span_seconds(notes: list[dict[str, Any]]) -> float:
+    if not notes:
+        return 0.0
+    start = _safe_float(notes[0].get("startSeconds"))
+    end = max(start, _safe_float(notes[-1].get("endSeconds") or notes[-1].get("startSeconds")))
+    return max(0.0, end - start)
+
+
+def best_review_note_slice(
+    notes: list[dict[str, Any]],
+    *,
+    min_notes: int = 5,
+    max_notes: int = 12,
+    max_seconds: float = MAX_REVIEW_CLIP_SECONDS - 0.25,
+) -> list[dict[str, Any]]:
     clean_notes = [note for note in notes if _clean(note.get("note")) and note_midi_value(note) is not None]
     if not clean_notes:
         return []
-    if len(clean_notes) <= max_notes:
+    if len(clean_notes) <= max_notes and _note_span_seconds(clean_notes) <= max_seconds:
         return clean_notes if len(clean_notes) >= min_notes else clean_notes
-    best: tuple[float, int, int] = (-1.0, 0, min_notes)
+    best: tuple[float, int, int] | None = None
     search_limit = min(len(clean_notes), 96)
     for start in range(0, max(1, search_limit - min_notes + 1)):
         for length in range(min_notes, min(max_notes, search_limit - start) + 1):
             window = clean_notes[start : start + length]
+            if _note_span_seconds(window) > max_seconds:
+                continue
             distinct = _pitch_class_count(window)
             audio_agreed = sum(1 for note in window if note.get("audioAgreement") is True)
             spectral = sum(1 for note in window if "spectral_onset" in (note.get("agreementSources") or []))
@@ -94,8 +111,10 @@ def best_review_note_slice(notes: list[dict[str, Any]], *, min_notes: int = 5, m
                 repeated_penalty += 2
             confidence = sum(float(note.get("confidence") or 0.0) for note in window) / max(1, len(window))
             score = (distinct * 8) + (audio_agreed * 2) + spectral + confidence - repeated_penalty
-            if score > best[0]:
+            if best is None or score > best[0]:
                 best = (score, start, length)
+    if best is None:
+        return []
     _, start, length = best
     return clean_notes[start : start + length]
 
@@ -112,6 +131,8 @@ def _clip_from_series(series: dict[str, Any], notes: list[dict[str, Any]]) -> di
     else:
         local_start = _safe_float(series.get("localStartSeconds"))
         local_end = _safe_float(series.get("localEndSeconds"))
+    if local_end - local_start > MAX_REVIEW_CLIP_SECONDS:
+        local_end = local_start + MAX_REVIEW_CLIP_SECONDS
     absolute_start = max(0.0, series_abs + local_start - series_local)
     absolute_end = max(absolute_start, series_abs + local_end - series_local)
     media_url = f"/api/curtis/media/sample/{sample_id}" if sample_id else ""
@@ -130,6 +151,17 @@ def _clip_from_series(series: dict[str, Any], notes: list[dict[str, Any]]) -> di
         "localEndSeconds": round(local_end, 3),
         "durationSeconds": round(max(0.0, absolute_end - absolute_start), 3),
     }
+
+
+def _clip_is_playable(clip: dict[str, Any]) -> bool:
+    if not isinstance(clip, dict):
+        return False
+    if not _clean(clip.get("sampleId")):
+        return False
+    local_start = _safe_float(clip.get("localStartSeconds"))
+    local_end = _safe_float(clip.get("localEndSeconds"))
+    duration = local_end - local_start
+    return 0.05 < duration <= 15.0 and bool(_clean(clip.get("mediaUrl")) and _clean(clip.get("audioUrl")))
 
 
 def _candidate_id(payload: dict[str, Any]) -> str:
@@ -153,6 +185,8 @@ def _candidate_from_series(record: dict[str, Any], series: dict[str, Any]) -> di
     if len(note_names) < 3:
         return {}
     clip = _clip_from_series(series, notes)
+    if not _clip_is_playable(clip):
+        return {}
     payload = {
         "reviewKind": "audio_phrase_candidate",
         "reviewType": "audio_phrase",
@@ -189,6 +223,8 @@ def _candidate_from_group(record: dict[str, Any], group: dict[str, Any]) -> dict
     if len(note_names) < 3:
         return {}
     clip = group.get("clip") if isinstance(group.get("clip"), dict) else _clip_from_series(transcription, notes)
+    if not _clip_is_playable(clip):
+        return {}
     score = group.get("score") if isinstance(group.get("score"), dict) else {}
     score_notes = _clean_note_names(
         group.get("sourceScoreExactSequence")
