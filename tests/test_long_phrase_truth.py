@@ -25,8 +25,8 @@ class LongPhraseTruthTests(unittest.TestCase):
         result = verify_long_phrase_truth_manifest()
 
         self.assertEqual(result["status"], "verified")
-        self.assertEqual(result["sourceVerifiedCount"], 2)
-        self.assertEqual(result["positiveSourcePhraseVerifiedCount"], 2)
+        self.assertEqual(result["sourceVerifiedCount"], 3)
+        self.assertEqual(result["positiveSourcePhraseVerifiedCount"], 3)
         self.assertEqual(result["rejectedRegressionPhraseCount"], 3)
         self.assertEqual(result["rejectedRegressionBlockedCount"], 3)
         self.assertEqual(result["liveAcceptedPhraseCount"], 1)
@@ -37,9 +37,12 @@ class LongPhraseTruthTests(unittest.TestCase):
 
         self.assertEqual(
             [note["note"] for note in notes],
-            ["A5", "G5", "F5", "A5", "G5", "F5", "A5", "G#5", "F5", "Eb5", "Eb5", "C5", "Eb5", "Eb5"],
+            [
+                "A5", "G5", "F5", "A5", "G5", "F5", "A5", "G#5", "F5",
+                "Eb5", "Eb5", "C5", "Eb5", "Eb5", "Eb5", "C5",
+            ],
         )
-        self.assertEqual(note_midi_sequence(notes), [81, 79, 77, 81, 79, 77, 81, 80, 77, 75, 75, 72, 75, 75])
+        self.assertEqual(note_midi_sequence(notes), [81, 79, 77, 81, 79, 77, 81, 80, 77, 75, 75, 72, 75, 75, 75, 72])
 
     def test_gate_accepts_only_full_audio_agreed_exact_midi_phrase(self):
         source_notes = symbolic_score_from_target(wieniawski_reference_target())["notes"]
@@ -75,6 +78,26 @@ class LongPhraseTruthTests(unittest.TestCase):
         self.assertEqual(gate["status"], "source_score_exact_midi_sequence_verified")
         self.assertEqual(gate["bestOverlap"], 5)
         self.assertEqual(gate["referenceStart"], 9)
+        self.assertEqual(gate["bestOverlapExactSequence"], ["Eb5", "Eb5", "C5", "Eb5", "Eb5"])
+        self.assertEqual(gate["bestOverlapMidiSequence"], [75, 75, 72, 75, 75])
+
+    def test_staff4_extension_rejects_current_audio_after_the_accepted_prefix(self):
+        source_notes = symbolic_score_from_target(wieniawski_reference_target())["notes"]
+        detected = [
+            detected_note("D#5", 75, 0.00),
+            detected_note("D#5", 75, 0.12),
+            detected_note("C5", 72, 0.24),
+            detected_note("D#5", 75, 0.36),
+            detected_note("D#5", 75, 0.48),
+            detected_note("D5", 74, 0.60),
+            detected_note("D#5", 75, 0.72),
+        ]
+
+        gate = exact_midi_phrase_gate(detected, source_notes, audio_agreed=True, min_exact_notes=7)
+
+        self.assertFalse(gate["accepted"])
+        self.assertEqual(gate["status"], "source_score_exact_midi_sequence_not_found")
+        self.assertEqual(gate["bestOverlap"], 5)
         self.assertEqual(gate["bestOverlapExactSequence"], ["Eb5", "Eb5", "C5", "Eb5", "Eb5"])
         self.assertEqual(gate["bestOverlapMidiSequence"], [75, 75, 72, 75, 75])
 

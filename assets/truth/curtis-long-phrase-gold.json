@@ -5,7 +5,7 @@
   "minimumAcceptedEvidenceRule": "A displayed score/transcription/video/audio phrase needs exact MIDI agreement between audio-agreed detected notes and verified MusicXML source notes. Pitch letters, OCR/OMR candidates, and source crops alone are not accepted evidence.",
   "sources": [
     {
-      "id": "wieniawski-scherzo-tarantelle-opening-symbolic-v6",
+      "id": "wieniawski-scherzo-tarantelle-opening-symbolic-v7",
       "pieceTitle": "Wieniawski Scherzo-Tarantelle, Op. 16",
       "target": "wieniawski_reference_target",
       "status": "verified_source_excerpt",
@@ -28,12 +28,25 @@
       "midiSequence": [75, 75, 72, 75, 75],
       "sourceCropImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-verified.png",
       "liveAccepted": true
+    },
+    {
+      "id": "wieniawski-staff4-eb-eb-c-eb-eb-eb-c-symbolic-v1",
+      "pieceTitle": "Wieniawski Scherzo-Tarantelle, Op. 16",
+      "target": "wieniawski_reference_target",
+      "status": "verified_source_excerpt",
+      "basis": "The current accepted Staff 4 lane extended outward into the two immediate right-adjacent source notes from the same local IMSLP solo-violin page. This is source-verified only; the current May 3 audio phrase stops matching at the next note and remains accepted only for the first five notes.",
+      "referenceStart": 9,
+      "referenceEnd": 16,
+      "sequence": ["Eb5", "Eb5", "C5", "Eb5", "Eb5", "Eb5", "C5"],
+      "midiSequence": [75, 75, 72, 75, 75, 75, 72],
+      "sourceCropImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-eb-c-source.png",
+      "liveAccepted": false
     }
   ],
   "positiveSourcePhrases": [
     {
       "id": "wieniawski-opening-exact-midi-source-positive",
-      "sourceId": "wieniawski-scherzo-tarantelle-opening-symbolic-v6",
+      "sourceId": "wieniawski-scherzo-tarantelle-opening-symbolic-v7",
       "status": "source_only_regression",
       "basis": "This exact MIDI phrase must be discoverable in verified MusicXML, but it is not a live accepted transcription without paired audio agreement.",
       "minimumExactNotes": 5,
@@ -55,12 +68,22 @@
       "midiSequence": [75, 75, 72, 75, 75],
       "scoreImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-verified.png",
       "liveAccepted": true
+    },
+    {
+      "id": "wieniawski-staff4-source-extension-positive",
+      "sourceId": "wieniawski-staff4-eb-eb-c-eb-eb-eb-c-symbolic-v1",
+      "status": "source_only_regression",
+      "basis": "The Staff 4 source lane now contains seven verified source notes. This phrase is discoverable in MusicXML but must not display as accepted live evidence until an audio-agreed detected phrase has the same exact MIDI sequence.",
+      "minimumExactNotes": 7,
+      "sequence": ["Eb5", "Eb5", "C5", "Eb5", "Eb5", "Eb5", "C5"],
+      "midiSequence": [75, 75, 72, 75, 75, 75, 72],
+      "liveAccepted": false
     }
   ],
   "rejectedRegressionPhrases": [
     {
       "id": "rejected-old-false-opening-d-c-bb",
-      "sourceId": "wieniawski-scherzo-tarantelle-opening-symbolic-v6",
+      "sourceId": "wieniawski-scherzo-tarantelle-opening-symbolic-v7",
       "status": "rejected",
       "basis": "Previous false score-map candidate; must not be promoted as Wieniawski source evidence.",
       "minimumExactNotes": 5,
@@ -69,7 +92,7 @@
     },
     {
       "id": "rejected-user-flagged-bb-d-c-bb-d",
-      "sourceId": "wieniawski-scherzo-tarantelle-opening-symbolic-v6",
+      "sourceId": "wieniawski-scherzo-tarantelle-opening-symbolic-v7",
       "status": "rejected",
       "basis": "User-flagged mismatch where displayed transcription and score did not share the same notes.",
       "minimumExactNotes": 5,
@@ -78,7 +101,7 @@
     },
     {
       "id": "rejected-current-live-target-g-g-bb-bb-bb-bb-a",
-      "sourceId": "wieniawski-scherzo-tarantelle-opening-symbolic-v6",
+      "sourceId": "wieniawski-scherzo-tarantelle-opening-symbolic-v7",
       "status": "rejected",
       "basis": "Current best live source target is an audio-agreed candidate but does not exist in the verified symbolic score excerpt.",
       "minimumExactNotes": 5,

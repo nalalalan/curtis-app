@@ -441,7 +441,7 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertEqual(completion["sourceVerificationTargets"][0]["sourceScoreBestOverlap"], 1)
         self.assertEqual(
             completion["sourceVerificationTargets"][0]["sourceScoreReferenceSequence"],
-            "A5 G5 F5 A5 G5 F5 A5 G#5 F5 Eb5 Eb5 C5 Eb5 Eb5",
+            "A5 G5 F5 A5 G5 F5 A5 G#5 F5 Eb5 Eb5 C5 Eb5 Eb5 Eb5 C5",
         )
         self.assertEqual(completion["sourceVerificationTargets"][0]["sourceScoreBestOverlapSequence"], "G5")
         self.assertEqual(completion["sourceVerificationTargets"][0]["sourceScoreMatchCriterion"], "exact_midi_sequence")
