@@ -62,14 +62,19 @@ def verify_long_phrase_truth_manifest(path: str | Path | None = None) -> dict[st
         source_notes_by_id[source_id] = notes
         expected_midi = [int(value) for value in source.get("midiSequence", []) if str(value).strip()]
         actual_midi = note_midi_sequence(notes)
-        exact_match = bool(expected_midi) and actual_midi[: len(expected_midi)] == expected_midi
+        reference_start = int(source.get("referenceStart") or 0)
+        reference_end = int(source.get("referenceEnd") or (reference_start + len(expected_midi)))
+        actual_slice = actual_midi[reference_start:reference_end]
+        exact_match = bool(expected_midi) and actual_slice == expected_midi
         source_results.append(
             {
                 "id": source_id,
                 "status": "verified_source_excerpt" if exact_match else "source_excerpt_mismatch",
                 "expectedNoteCount": len(expected_midi),
                 "actualNoteCount": len(actual_midi),
-                "midiSequence": actual_midi[: len(expected_midi) or len(actual_midi)],
+                "referenceStart": reference_start,
+                "referenceEnd": reference_end,
+                "midiSequence": actual_slice or actual_midi[: len(expected_midi) or len(actual_midi)],
             }
         )
 

@@ -1703,7 +1703,8 @@ def accepted_measure_match(match: dict[str, Any]) -> bool:
     if matched_note_run < minimum_note_run:
         return False
     detected = str(match.get("detectedPitchClassSequenceCompact") or match.get("detectedPitchClassSequence") or "")
-    if len({value for value in detected.split() if value}) < 3:
+    minimum_distinct = max(2, int(match.get("minimumDistinctPitchClasses") or 3))
+    if len({value for value in detected.split() if value}) < minimum_distinct:
         return False
     return match_has_local_media(match)
 

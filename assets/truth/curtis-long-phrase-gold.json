@@ -1,11 +1,11 @@
 {
   "schema": "curtis_long_phrase_truth_v1",
-  "updatedAt": "2026-05-16",
+  "updatedAt": "2026-05-17",
   "status": "active",
   "minimumAcceptedEvidenceRule": "A displayed score/transcription/video/audio phrase needs exact MIDI agreement between audio-agreed detected notes and verified MusicXML source notes. Pitch letters, OCR/OMR candidates, and source crops alone are not accepted evidence.",
   "sources": [
     {
-      "id": "wieniawski-scherzo-tarantelle-opening-symbolic-v5",
+      "id": "wieniawski-scherzo-tarantelle-opening-symbolic-v6",
       "pieceTitle": "Wieniawski Scherzo-Tarantelle, Op. 16",
       "target": "wieniawski_reference_target",
       "status": "verified_source_excerpt",
@@ -15,24 +15,52 @@
       "sequence": ["A5", "G5", "F5", "A5", "G5", "F5", "A5", "G#5", "F5"],
       "midiSequence": [81, 79, 77, 81, 79, 77, 81, 80, 77],
       "liveAccepted": false
+    },
+    {
+      "id": "wieniawski-staff4-eb-eb-c-eb-eb-symbolic-v1",
+      "pieceTitle": "Wieniawski Scherzo-Tarantelle, Op. 16",
+      "target": "wieniawski_reference_target",
+      "status": "verified_source_excerpt",
+      "basis": "Queued Staff 4 score review packet converted into MusicXML from the local IMSLP solo-violin page. The accepted source crop boxes are centered on the five visible noteheads.",
+      "referenceStart": 9,
+      "referenceEnd": 14,
+      "sequence": ["Eb5", "Eb5", "C5", "Eb5", "Eb5"],
+      "midiSequence": [75, 75, 72, 75, 75],
+      "sourceCropImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-verified.png",
+      "liveAccepted": true
     }
   ],
   "positiveSourcePhrases": [
     {
       "id": "wieniawski-opening-exact-midi-source-positive",
-      "sourceId": "wieniawski-scherzo-tarantelle-opening-symbolic-v5",
+      "sourceId": "wieniawski-scherzo-tarantelle-opening-symbolic-v6",
       "status": "source_only_regression",
       "basis": "This exact MIDI phrase must be discoverable in verified MusicXML, but it is not a live accepted transcription without paired audio agreement.",
       "minimumExactNotes": 5,
       "sequence": ["G5", "F5", "A5", "G#5", "F5"],
       "midiSequence": [79, 77, 81, 80, 77],
       "liveAccepted": false
+    },
+    {
+      "id": "wieniawski-staff4-live-audio-exact-midi-positive",
+      "sourceId": "wieniawski-staff4-eb-eb-c-eb-eb-symbolic-v1",
+      "status": "accepted_truth",
+      "basis": "May 3 detected phrase from sample Njh8_zq9_DM-8835 has audio-agreed D#5-D#5-C5-D#5-D#5; the verified source spelling is Eb5-Eb5-C5-Eb5-Eb5 and the MIDI sequence is identical.",
+      "practiceDay": "2026-05-03",
+      "sampleId": "Njh8_zq9_DM-8835",
+      "sourceWindow": "*8835-8925",
+      "minimumExactNotes": 5,
+      "sequence": ["D#5", "D#5", "C5", "D#5", "D#5"],
+      "acceptedScoreSpellingSequence": ["Eb5", "Eb5", "C5", "Eb5", "Eb5"],
+      "midiSequence": [75, 75, 72, 75, 75],
+      "scoreImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-verified.png",
+      "liveAccepted": true
     }
   ],
   "rejectedRegressionPhrases": [
     {
       "id": "rejected-old-false-opening-d-c-bb",
-      "sourceId": "wieniawski-scherzo-tarantelle-opening-symbolic-v5",
+      "sourceId": "wieniawski-scherzo-tarantelle-opening-symbolic-v6",
       "status": "rejected",
       "basis": "Previous false score-map candidate; must not be promoted as Wieniawski source evidence.",
       "minimumExactNotes": 5,
@@ -41,7 +69,7 @@
     },
     {
       "id": "rejected-user-flagged-bb-d-c-bb-d",
-      "sourceId": "wieniawski-scherzo-tarantelle-opening-symbolic-v5",
+      "sourceId": "wieniawski-scherzo-tarantelle-opening-symbolic-v6",
       "status": "rejected",
       "basis": "User-flagged mismatch where displayed transcription and score did not share the same notes.",
       "minimumExactNotes": 5,
@@ -50,7 +78,7 @@
     },
     {
       "id": "rejected-current-live-target-g-g-bb-bb-bb-bb-a",
-      "sourceId": "wieniawski-scherzo-tarantelle-opening-symbolic-v5",
+      "sourceId": "wieniawski-scherzo-tarantelle-opening-symbolic-v6",
       "status": "rejected",
       "basis": "Current best live source target is an audio-agreed candidate but does not exist in the verified symbolic score excerpt.",
       "minimumExactNotes": 5,

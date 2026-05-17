@@ -1215,8 +1215,8 @@ class DailyRecordTests(unittest.TestCase):
 
         self.assertEqual(target["scoreNoteCropStatus"], "actual_source_phrase_review_pending")
         self.assertEqual(audit["sourcePdfLocalReadyCount"], 1)
-        self.assertEqual(audit["symbolicScoreNoteCount"], 9)
-        self.assertEqual(audit["symbolicScoreSourceSnippetCount"], 0)
+        self.assertEqual(audit["symbolicScoreNoteCount"], 14)
+        self.assertEqual(audit["symbolicScoreSourceSnippetCount"], 1)
         self.assertGreaterEqual(audit["scoreMapCandidateGlyphCount"], 1)
         self.assertGreaterEqual(audit["scoreMapCandidateStaffCount"], 1)
         self.assertGreaterEqual(audit["scoreMapNoteHypothesisCount"], 1)
@@ -1228,18 +1228,25 @@ class DailyRecordTests(unittest.TestCase):
             )
         )
         self.assertEqual(target["scorePitchClassAnchors"], [])
-        accepted_source = target["symbolicScore"]["sourceSnippets"][1]
+        verified_source = target["symbolicScore"]["sourceSnippets"][0]
+        self.assertEqual(verified_source["status"], "source_score_exact_midi_sequence_verified")
+        self.assertEqual(verified_source["visibleScoreExactNoteSequence"], ["Eb5", "Eb5", "C5", "Eb5", "Eb5"])
+        self.assertTrue(verified_source["visibleScoreExactNoteSequenceVerified"])
+        self.assertTrue(verified_source["scoreBoxCenterAgreement"])
+        self.assertTrue(verified_source["truthEvidenceAccepted"])
+        self.assertEqual(verified_source["acceptedAudioPhrase"]["midiSequence"], [75, 75, 72, 75, 75])
+        accepted_source = target["symbolicScore"]["sourceSnippets"][2]
         self.assertEqual(accepted_source["status"], "source_score_phrase_review_rejected")
         self.assertEqual(accepted_source["visibleScoreExactNoteSequence"], ["Bb4", "D5", "C5", "Bb4", "D5"])
         self.assertFalse(accepted_source["visibleScoreExactNoteSequenceVerified"])
         self.assertFalse(accepted_source["scoreBoxCenterAgreement"])
-        corrected_source = target["symbolicScore"]["sourceSnippets"][2]
+        corrected_source = target["symbolicScore"]["sourceSnippets"][3]
         self.assertEqual(corrected_source["status"], "source_score_phrase_review_rejected")
         self.assertEqual(corrected_source["visibleScoreExactNoteSequence"], ["Bb4", "D5", "C5", "Bb4", "D5"])
         self.assertFalse(corrected_source["visibleScoreExactNoteSequenceVerified"])
         self.assertFalse(corrected_source["scoreBoxCenterAgreement"])
         self.assertFalse(corrected_source["truthEvidenceAccepted"])
-        self.assertEqual(target["symbolicScoreStatus"], "source_symbolic_opening_phrase_review_pending")
+        self.assertEqual(target["symbolicScoreStatus"], "symbolic_score_ready")
         self.assertTrue(
             any(
                 item.get("pitchClassSequence") == ["A#", "D", "C", "A#", "D"]

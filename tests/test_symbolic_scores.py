@@ -215,8 +215,8 @@ class SymbolicScoreTests(unittest.TestCase):
         candidate_audit = score_map_candidate_audit(target)
 
         self.assertEqual(audit["status"], "symbolic_score_ready")
-        self.assertEqual(audit["symbolicScoreNoteCount"], 9)
-        self.assertEqual(audit["symbolicScoreSourceSnippetCount"], 0)
+        self.assertEqual(audit["symbolicScoreNoteCount"], 14)
+        self.assertEqual(audit["symbolicScoreSourceSnippetCount"], 1)
         self.assertEqual(candidate_audit["status"], "score_map_candidates_ready")
         self.assertGreaterEqual(candidate_audit["scoreMapCandidateGlyphCount"], 1)
         self.assertGreaterEqual(candidate_audit["scoreMapCandidateStaffCount"], 1)
@@ -226,9 +226,12 @@ class SymbolicScoreTests(unittest.TestCase):
         self.assertFalse(candidate_audit["scoreMapCandidatesAccepted"])
         self.assertEqual(
             [item["note"] for item in score["notes"]],
-            ["A5", "G5", "F5", "A5", "G5", "F5", "A5", "G#5", "F5"],
+            ["A5", "G5", "F5", "A5", "G5", "F5", "A5", "G#5", "F5", "Eb5", "Eb5", "C5", "Eb5", "Eb5"],
         )
-        self.assertEqual([item["pitchClass"] for item in score["notes"]], ["A", "G", "F", "A", "G", "F", "A", "G#", "F"])
+        self.assertEqual(
+            [item["pitchClass"] for item in score["notes"]],
+            ["A", "G", "F", "A", "G", "F", "A", "G#", "F", "D#", "D#", "C", "D#", "D#"],
+        )
 
     def test_wieniawski_symbolic_measure_can_match_four_note_source_sequence(self):
         target = wieniawski_reference_target()
@@ -256,7 +259,7 @@ class SymbolicScoreTests(unittest.TestCase):
 
         self.assertEqual(matches[0]["status"], "symbolic_score_phrase_match")
         self.assertEqual(matches[0]["minimumMatchedNoteRun"], 4)
-        self.assertEqual(matches[0]["minimumDistinctPitchClasses"], 3)
+        self.assertEqual(matches[0]["minimumDistinctPitchClasses"], 2)
         self.assertEqual(matches[0]["detectedPitchClassSequence"], "A G F A")
         self.assertEqual(matches[0]["scorePitchClassSequence"], "A G F A")
         self.assertEqual([item["note"] for item in matches[0]["scoreMatchedNotes"]], ["A5", "G5", "F5", "A5"])
@@ -295,6 +298,42 @@ class SymbolicScoreTests(unittest.TestCase):
         self.assertEqual(matches[0]["matchedNoteRun"], 5)
         self.assertEqual([item["note"] for item in matches[0]["scoreMatchedNotes"]], ["G5", "F5", "A5", "G#5", "F5"])
         self.assertEqual([item["note"] for item in matches[0]["displayDetectedNotes"]], ["G5", "F5", "A5", "G#5", "F5"])
+
+    def test_wieniawski_staff4_packet_accepts_audio_agreed_eb_measure_window(self):
+        target = wieniawski_reference_target()
+        series = detected_note_series(
+            [
+                {
+                    "transcriptionId": "wieniawski-staff4-live-window",
+                    "sampleId": "Njh8_zq9_DM-8835",
+                    "sourceWindow": "*8835-8925",
+                    "notes": [
+                        note("D#5", 0.0, 0.12),
+                        note("D#5", 0.12, 0.24),
+                        note("C5", 0.24, 0.36),
+                        note("D#5", 0.36, 0.48),
+                        note("D#5", 0.48, 0.60),
+                    ],
+                }
+            ],
+            max_series=None,
+        )
+
+        matches = score_sequence_matches_for_series(
+            series,
+            [{"title": "Wieniawski Scherzo-Tarantelle, Op. 16", "score": target}],
+        )
+
+        self.assertEqual(matches[0]["status"], "symbolic_score_phrase_match")
+        self.assertEqual(matches[0]["matchedNoteRun"], 5)
+        self.assertEqual(matches[0]["minimumDistinctPitchClasses"], 2)
+        self.assertEqual(matches[0]["referenceStart"], 9)
+        self.assertEqual(matches[0]["scoreSequenceLabel"], "m. staff4-packet-1")
+        self.assertTrue(matches[0]["scoreVisualAgreement"])
+        self.assertTrue(matches[0]["truthEvidenceAccepted"])
+        self.assertEqual(matches[0]["score"]["imageUrl"], "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-verified.png")
+        self.assertEqual([item["note"] for item in matches[0]["scoreMatchedNotes"]], ["Eb5", "Eb5", "C5", "Eb5", "Eb5"])
+        self.assertEqual([item["note"] for item in matches[0]["displayDetectedNotes"]], ["Eb5", "Eb5", "C5", "Eb5", "Eb5"])
 
     def test_wieniawski_lower_octave_opening_map_is_rejected(self):
         target = wieniawski_reference_target()
