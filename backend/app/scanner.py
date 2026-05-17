@@ -72,11 +72,13 @@ from .symbolic_scores import (
 )
 
 DEFAULT_YOUTUBE_SOURCE = "https://www.youtube.com/@nalalan"
-STAFF4_SOURCE_AUDIO_RESCAN_VERSION = "staff4_source_audio_rescan_v1"
+STAFF4_SOURCE_AUDIO_RESCAN_VERSION = "staff4_source_audio_rescan_v2"
 STAFF4_SOURCE_AUDIO_RESCAN_DIR = RUNTIME_DIR / "staff4-source-rescan"
 STAFF4_SOURCE_AUDIO_RESCAN_PAD_BEFORE_SECONDS = 4.0
 STAFF4_SOURCE_AUDIO_RESCAN_PAD_AFTER_SECONDS = 10.0
 STAFF4_SOURCE_AUDIO_RESCAN_MAX_SECONDS = 18.0
+STAFF4_SOURCE_AUDIO_RESCAN_STEP_SECONDS = 14.0
+STAFF4_SOURCE_AUDIO_RESCAN_MAX_WINDOWS = 5
 STAFF4_ACCEPTED_ANCHOR_MIDI = [75, 75, 72, 75, 75]
 MEDIA_REVIEW_PENDING_BLOCKERS = {"youtube_data_api_returns_metadata_not_video_media"}
 WEAK_EVIDENCE_TERMS = (
@@ -1912,7 +1914,7 @@ def staff4_anchor_matches(daily_records: dict[str, Any]) -> list[dict[str, Any]]
     return anchors
 
 
-def staff4_rescan_id(sample_id: str, source_path: Path, scan_start: float, scan_end: float) -> str:
+def staff4_rescan_id(sample_id: str, source_path: Path, scan_start: float, scan_end: float, scan_label: str = "") -> str:
     try:
         stat = source_path.stat()
         stamp = f"{stat.st_mtime_ns}:{stat.st_size}"
@@ -1922,6 +1924,7 @@ def staff4_rescan_id(sample_id: str, source_path: Path, scan_start: float, scan_
         [
             STAFF4_SOURCE_AUDIO_RESCAN_VERSION,
             sample_id,
+            scan_label,
             str(source_path),
             f"{scan_start:.3f}",
             f"{scan_end:.3f}",
@@ -1949,20 +1952,80 @@ def shifted_rescan_notes(notes: list[dict[str, Any]], scan_start: float, *, dete
     return shifted
 
 
+def staff4_source_audio_rescan_windows(anchor: dict[str, Any], sample: dict[str, Any]) -> list[dict[str, Any]]:
+    anchor_start = float(anchor.get("anchorLocalStartSeconds") or 0.0)
+    anchor_end = max(anchor_start + 0.25, float(anchor.get("anchorLocalEndSeconds") or anchor_start + 2.0))
+    source_window = str(anchor.get("sourceWindow") or sample.get("window") or "")
+    source_window_start, source_window_end = parse_window_bounds(source_window)
+    source_duration = float(source_window_end - source_window_start) if source_window_end > source_window_start else 0.0
+    window_seconds = float(STAFF4_SOURCE_AUDIO_RESCAN_MAX_SECONDS)
+    step_seconds = float(STAFF4_SOURCE_AUDIO_RESCAN_STEP_SECONDS)
+    max_windows = max(1, int(STAFF4_SOURCE_AUDIO_RESCAN_MAX_WINDOWS))
+    windows: list[dict[str, Any]] = []
+    seen: set[tuple[float, float]] = set()
+
+    def add_window(label: str, start: float, end: float) -> bool:
+        if source_duration:
+            start = min(max(0.0, start), source_duration)
+            end = min(max(0.0, end), source_duration)
+        else:
+            start = max(0.0, start)
+            end = max(0.0, end)
+        if end - start < 1.0:
+            return False
+        identity = (round(start, 3), round(end, 3))
+        if identity in seen:
+            return False
+        seen.add(identity)
+        windows.append(
+            {
+                "label": label,
+                "scanLocalStartSeconds": round(start, 3),
+                "scanLocalEndSeconds": round(end, 3),
+                "scanDurationSeconds": round(end - start, 3),
+            }
+        )
+        return True
+
+    core_start = max(0.0, anchor_start - STAFF4_SOURCE_AUDIO_RESCAN_PAD_BEFORE_SECONDS)
+    core_end = max(anchor_end + STAFF4_SOURCE_AUDIO_RESCAN_PAD_AFTER_SECONDS, core_start + 2.0)
+    if core_end - core_start > window_seconds:
+        core_end = core_start + window_seconds
+    add_window("anchor_core", core_start, core_end)
+
+    next_start = core_start + step_seconds
+    while len(windows) < max_windows:
+        if source_duration and next_start >= source_duration - 1.0:
+            break
+        start = next_start
+        if source_duration and start + window_seconds > source_duration:
+            start = max(0.0, source_duration - window_seconds)
+        if not add_window(f"right_{len(windows)}", start, start + window_seconds):
+            break
+        if source_duration and windows[-1]["scanLocalEndSeconds"] >= source_duration:
+            break
+        next_start += step_seconds
+
+    return windows
+
+
 def staff4_source_audio_rescan_record(
     *,
     anchor: dict[str, Any],
     sample: dict[str, Any],
     source_path: Path,
+    scan_window: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     sample_id = str(anchor.get("sampleId") or sample.get("id") or "")
     anchor_start = float(anchor.get("anchorLocalStartSeconds") or 0.0)
     anchor_end = max(anchor_start + 0.25, float(anchor.get("anchorLocalEndSeconds") or anchor_start + 2.0))
-    scan_start = max(0.0, anchor_start - STAFF4_SOURCE_AUDIO_RESCAN_PAD_BEFORE_SECONDS)
-    scan_end = max(anchor_end + STAFF4_SOURCE_AUDIO_RESCAN_PAD_AFTER_SECONDS, scan_start + 2.0)
+    scan_window = scan_window if isinstance(scan_window, dict) else {}
+    scan_label = str(scan_window.get("label") or "anchor_core")
+    scan_start = float(scan_window.get("scanLocalStartSeconds") or max(0.0, anchor_start - STAFF4_SOURCE_AUDIO_RESCAN_PAD_BEFORE_SECONDS))
+    scan_end = float(scan_window.get("scanLocalEndSeconds") or max(anchor_end + STAFF4_SOURCE_AUDIO_RESCAN_PAD_AFTER_SECONDS, scan_start + 2.0))
     if scan_end - scan_start > STAFF4_SOURCE_AUDIO_RESCAN_MAX_SECONDS:
         scan_end = scan_start + STAFF4_SOURCE_AUDIO_RESCAN_MAX_SECONDS
-    rescan_id = staff4_rescan_id(sample_id, source_path, scan_start, scan_end)
+    rescan_id = staff4_rescan_id(sample_id, source_path, scan_start, scan_end, scan_label)
     rescan_dir = STAFF4_SOURCE_AUDIO_RESCAN_DIR / rescan_id
     result_path = rescan_dir / "rescan.json"
     audio_path = rescan_dir / "source-window.wav"
@@ -1984,6 +2047,7 @@ def staff4_source_audio_rescan_record(
         "pieceTitle": anchor.get("pieceTitle") or "",
         "sampleId": sample_id,
         "sourceWindow": anchor.get("sourceWindow") or sample.get("window") or "",
+        "scanLabel": scan_label,
         "anchorSequence": anchor.get("anchorSequence") or "",
         "anchorMidiSequence": anchor.get("anchorMidiSequence") or [],
         "anchorLocalStartSeconds": round(anchor_start, 3),
@@ -1991,6 +2055,12 @@ def staff4_source_audio_rescan_record(
         "scanLocalStartSeconds": round(scan_start, 3),
         "scanLocalEndSeconds": round(scan_end, 3),
         "scanDurationSeconds": round(scan_end - scan_start, 3),
+        "scanWindow": {
+            "label": scan_label,
+            "scanLocalStartSeconds": round(scan_start, 3),
+            "scanLocalEndSeconds": round(scan_end, 3),
+            "scanDurationSeconds": round(scan_end - scan_start, 3),
+        },
         "runs": [],
         "eventCount": 0,
         "candidateEventCount": 0,
@@ -2116,17 +2186,29 @@ def staff4_source_audio_rescan(daily_records: dict[str, Any], media_samples: lis
                 }
             )
             continue
-        record = staff4_source_audio_rescan_record(anchor=anchor, sample=sample, source_path=source_path)
-        records.append(record)
-        for run in record.get("runs") if isinstance(record.get("runs"), list) else []:
-            if isinstance(run, dict):
-                runs.append(run)
+        for scan_window in staff4_source_audio_rescan_windows(anchor, sample):
+            record = staff4_source_audio_rescan_record(
+                anchor=anchor,
+                sample=sample,
+                source_path=source_path,
+                scan_window=scan_window,
+            )
+            records.append(record)
+            for run in record.get("runs") if isinstance(record.get("runs"), list) else []:
+                if isinstance(run, dict):
+                    runs.append(run)
     status = "rescanned" if runs else "blocked_media_missing" if blocked == len(records) else "no_notes_detected"
     return {
         "version": STAFF4_SOURCE_AUDIO_RESCAN_VERSION,
         "status": status,
         "anchorCount": len(anchors),
         "recordCount": len(records),
+        "scanWindowCount": len(records),
+        "scanWindowLabels": [
+            str(record.get("scanLabel") or "")
+            for record in records
+            if isinstance(record, dict) and str(record.get("scanLabel") or "")
+        ],
         "runCount": len(runs),
         "eventCount": sum(int(record.get("eventCount") or 0) for record in records if isinstance(record, dict)),
         "candidateEventCount": sum(int(record.get("candidateEventCount") or 0) for record in records if isinstance(record, dict)),
