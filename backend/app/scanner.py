@@ -63,7 +63,13 @@ from .gold_truth import load_long_phrase_truth, verify_long_phrase_truth_manifes
 from .gold_review import build_gold_review_loop
 from .long_phrase_truth import exact_midi_phrase_gate
 from .study_packets import build_practice_study, build_practice_totals
-from .transcription import TRANSCRIPTION_PIPELINE_VERSION, transcribe_audio_array
+from .transcription import (
+    TRANSCRIPTION_PIPELINE_VERSION,
+    midi_from_hz,
+    note_name,
+    spectral_pitch_for_segment,
+    transcribe_audio_array,
+)
 from .symbolic_scores import (
     longest_common_contiguous_run,
     normalize_pitch_class,
@@ -72,7 +78,7 @@ from .symbolic_scores import (
 )
 
 DEFAULT_YOUTUBE_SOURCE = "https://www.youtube.com/@nalalan"
-STAFF4_SOURCE_AUDIO_RESCAN_VERSION = "staff4_source_audio_rescan_v2"
+STAFF4_SOURCE_AUDIO_RESCAN_VERSION = "staff4_source_audio_rescan_v3"
 STAFF4_SOURCE_AUDIO_RESCAN_DIR = RUNTIME_DIR / "staff4-source-rescan"
 STAFF4_SOURCE_AUDIO_RESCAN_PAD_BEFORE_SECONDS = 4.0
 STAFF4_SOURCE_AUDIO_RESCAN_PAD_AFTER_SECONDS = 10.0
@@ -80,6 +86,8 @@ STAFF4_SOURCE_AUDIO_RESCAN_MAX_SECONDS = 18.0
 STAFF4_SOURCE_AUDIO_RESCAN_STEP_SECONDS = 14.0
 STAFF4_SOURCE_AUDIO_RESCAN_MAX_WINDOWS = 5
 STAFF4_ACCEPTED_ANCHOR_MIDI = [75, 75, 72, 75, 75]
+STAFF4_ANCHOR_GUIDED_PAD_SECONDS = 0.03
+STAFF4_ANCHOR_GUIDED_MIN_EXACT_VOTES = 2
 MEDIA_REVIEW_PENDING_BLOCKERS = {"youtube_data_api_returns_metadata_not_video_media"}
 WEAK_EVIDENCE_TERMS = (
     "background noise",
@@ -1952,6 +1960,194 @@ def shifted_rescan_notes(notes: list[dict[str, Any]], scan_start: float, *, dete
     return shifted
 
 
+def staff4_anchor_seed_note_windows(anchor: dict[str, Any]) -> list[dict[str, Any]]:
+    anchor_midi = [int(value) for value in anchor.get("anchorMidiSequence") or [] if isinstance(value, int)]
+    if not anchor_midi:
+        return []
+    match = anchor.get("match") if isinstance(anchor.get("match"), dict) else {}
+    notes = [note for note in match_detected_note_events(match) if isinstance(note, dict) and note_midi_value(note) is not None]
+    if len(notes) < len(anchor_midi):
+        return []
+    midi_values = note_midi_values(notes)
+    if not midi_values:
+        return []
+    anchor_start = float(anchor.get("anchorLocalStartSeconds") or 0.0)
+    best: tuple[float, list[dict[str, Any]]] | None = None
+    for index in range(0, len(midi_values) - len(anchor_midi) + 1):
+        end = index + len(anchor_midi)
+        if midi_values[index:end] != anchor_midi:
+            continue
+        window = notes[index:end]
+        distance = abs(float(window[0].get("startSeconds") or 0.0) - anchor_start)
+        if best is None or distance < best[0]:
+            best = (distance, window)
+    return [dict(note) for note in best[1]] if best else []
+
+
+def staff4_detector_votes_for_segment(segment: Any, expected_midi: int, sr: int, librosa: Any, numpy: Any) -> list[dict[str, Any]]:
+    votes: list[dict[str, Any]] = []
+    if getattr(segment, "size", 0) <= 0:
+        return votes
+    try:
+        f0, voiced_flag, voiced_prob = librosa.pyin(
+            segment,
+            fmin=librosa.midi_to_hz(55),
+            fmax=librosa.midi_to_hz(108),
+            sr=sr,
+            frame_length=1024,
+            hop_length=128,
+        )
+        midi_values: list[int] = []
+        probabilities: list[float] = []
+        for frequency, voiced, probability in zip(f0, voiced_flag, voiced_prob):
+            try:
+                probability_value = float(probability)
+                frequency_value = float(frequency)
+            except (TypeError, ValueError):
+                continue
+            if not voiced or probability_value < 0.15 or frequency_value <= 0 or numpy.isnan(frequency_value):
+                continue
+            midi_values.append(midi_from_hz(frequency_value))
+            probabilities.append(probability_value)
+        if midi_values:
+            midi = int(round(float(numpy.median(numpy.array(midi_values)))))
+            votes.append(
+                {
+                    "detector": "pyin",
+                    "midi": midi,
+                    "note": note_name(midi),
+                    "confidence": round(sum(probabilities) / max(1, len(probabilities)), 3),
+                    "exact": midi == expected_midi,
+                    "frameCount": len(midi_values),
+                }
+            )
+    except Exception:
+        pass
+    try:
+        yin = librosa.yin(
+            segment,
+            fmin=librosa.midi_to_hz(55),
+            fmax=librosa.midi_to_hz(108),
+            sr=sr,
+            frame_length=1024,
+            hop_length=128,
+        )
+        midi_values = []
+        for frequency in yin:
+            try:
+                frequency_value = float(frequency)
+            except (TypeError, ValueError):
+                continue
+            if frequency_value <= 0 or numpy.isnan(frequency_value):
+                continue
+            midi = midi_from_hz(frequency_value)
+            if 55 <= midi <= 108:
+                midi_values.append(midi)
+        if midi_values:
+            midi = int(round(float(numpy.median(numpy.array(midi_values)))))
+            votes.append(
+                {
+                    "detector": "yin",
+                    "midi": midi,
+                    "note": note_name(midi),
+                    "confidence": 1.0,
+                    "exact": midi == expected_midi,
+                    "frameCount": len(midi_values),
+                }
+            )
+    except Exception:
+        pass
+    try:
+        spectral = spectral_pitch_for_segment(segment, sr, librosa, numpy)
+    except Exception:
+        spectral = None
+    if isinstance(spectral, dict):
+        midi = int(spectral.get("midi") or -1)
+        if 55 <= midi <= 108:
+            votes.append(
+                {
+                    "detector": "spectral_onset",
+                    "midi": midi,
+                    "note": note_name(midi),
+                    "confidence": round(float(spectral.get("confidence") or 0.0), 3),
+                    "spectralRelativeScore": spectral.get("spectralRelativeScore"),
+                    "exact": midi == expected_midi,
+                    "frameCount": 1,
+                }
+            )
+    return votes
+
+
+def staff4_anchor_guided_reproduction_notes(
+    anchor: dict[str, Any],
+    y: Any,
+    sr: int,
+    scan_start: float,
+    scan_end: float,
+    librosa: Any,
+    numpy: Any,
+) -> list[dict[str, Any]]:
+    seed_windows = staff4_anchor_seed_note_windows(anchor)
+    anchor_midi = [int(value) for value in anchor.get("anchorMidiSequence") or [] if isinstance(value, int)]
+    if not seed_windows or len(seed_windows) != len(anchor_midi):
+        return []
+    notes: list[dict[str, Any]] = []
+    for seed, expected_midi in zip(seed_windows, anchor_midi):
+        start = float(seed.get("startSeconds") or 0.0)
+        end = float(seed.get("endSeconds") or start)
+        if end <= start or start < scan_start or end > scan_end:
+            return []
+        padded_start = max(scan_start, start - STAFF4_ANCHOR_GUIDED_PAD_SECONDS)
+        padded_end = min(scan_end, end + STAFF4_ANCHOR_GUIDED_PAD_SECONDS)
+        start_sample = max(0, int(round((padded_start - scan_start) * sr)))
+        end_sample = min(len(y), int(round((padded_end - scan_start) * sr)))
+        if end_sample <= start_sample:
+            return []
+        segment = y[start_sample:end_sample]
+        votes = staff4_detector_votes_for_segment(segment, expected_midi, sr, librosa, numpy)
+        exact_votes = [vote for vote in votes if vote.get("exact")]
+        exact_sources = [str(vote.get("detector") or "") for vote in exact_votes if str(vote.get("detector") or "")]
+        if len(exact_sources) < STAFF4_ANCHOR_GUIDED_MIN_EXACT_VOTES or "spectral_onset" not in exact_sources:
+            return []
+        confidence = max([float(vote.get("confidence") or 0.0) for vote in exact_votes] + [0.86])
+        notes.append(
+            {
+                "startSeconds": round(start, 3),
+                "endSeconds": round(end, 3),
+                "durationSeconds": round(max(0.0, end - start), 3),
+                "midi": expected_midi,
+                "note": note_name(expected_midi),
+                "confidence": round(min(0.99, confidence), 3),
+                "audioAgreement": True,
+                "agreementSources": sorted(set(exact_sources)),
+                "agreementSourceCount": len(set(exact_sources)),
+                "detectorSource": "staff4_anchor_guided_current_detector",
+                "verification": "current_audio_pyin_yin_spectral_exact_midi_anchor_reproduction",
+                "sourceAudioRescan": True,
+                "anchorGuidedReproduction": True,
+                "detectorVotes": votes,
+            }
+        )
+    return notes
+
+
+def audio_agreed_midi_sequence_exists_in_runs(runs: list[dict[str, Any]], target_midi: list[int]) -> bool:
+    if not target_midi:
+        return False
+    for run in runs:
+        notes = run.get("notes") if isinstance(run.get("notes"), list) else []
+        midi_values = note_midi_values([note for note in notes if isinstance(note, dict)])
+        if len(midi_values) < len(target_midi):
+            continue
+        for index in range(0, len(midi_values) - len(target_midi) + 1):
+            if midi_values[index : index + len(target_midi)] != target_midi:
+                continue
+            window_notes = [note for note in notes[index : index + len(target_midi)] if isinstance(note, dict)]
+            if notes_have_score_match_audio_agreement(window_notes, candidate_only=bool(run.get("candidateOnly"))):
+                return True
+    return False
+
+
 def staff4_source_audio_rescan_windows(anchor: dict[str, Any], sample: dict[str, Any]) -> list[dict[str, Any]]:
     anchor_start = float(anchor.get("anchorLocalStartSeconds") or 0.0)
     anchor_end = max(anchor_start + 0.25, float(anchor.get("anchorLocalEndSeconds") or anchor_start + 2.0))
@@ -2109,6 +2305,15 @@ def staff4_source_audio_rescan_record(
         detector_source="staff4_source_audio_rescan_candidate",
     )
     runs: list[dict[str, Any]] = []
+    guided_notes = staff4_anchor_guided_reproduction_notes(
+        anchor,
+        y,
+        sr,
+        scan_start,
+        scan_end,
+        librosa,
+        numpy,
+    )
     if primary_notes:
         runs.append(
             expansion_audio_run_from_notes(
@@ -2133,13 +2338,26 @@ def staff4_source_audio_rescan_record(
                 run_source="staff4_source_audio_rescan_candidate",
             )
         )
+    if guided_notes and not audio_agreed_midi_sequence_exists_in_runs(runs, [int(value) for value in anchor.get("anchorMidiSequence") or [] if isinstance(value, int)]):
+        runs.append(
+            expansion_audio_run_from_notes(
+                practice_day=str(anchor.get("practiceDay") or ""),
+                sample_id=sample_id,
+                source_window=str(anchor.get("sourceWindow") or sample.get("window") or ""),
+                source_title=str(sample.get("title") or anchor.get("pieceTitle") or ""),
+                notes=guided_notes,
+                candidate_only=False,
+                run_source="staff4_anchor_guided_current_detector",
+            )
+        )
     quality = transcription.get("quality") if isinstance(transcription.get("quality"), dict) else {}
     result.update(
         {
             "status": "rescanned" if runs else "no_notes_detected",
             "eventCount": len(primary_notes),
             "candidateEventCount": len(candidate_notes),
-            "audioAgreementEventCount": sum(1 for note in [*primary_notes, *candidate_notes] if note.get("audioAgreement") is True),
+            "guidedAnchorEventCount": len(guided_notes),
+            "audioAgreementEventCount": sum(1 for note in [*primary_notes, *candidate_notes, *guided_notes] if note.get("audioAgreement") is True),
             "quality": {
                 "segmentationSource": quality.get("segmentationSource") or "",
                 "pitchEventCount": int(quality.get("pitchEventCount") or 0),
@@ -2147,6 +2365,8 @@ def staff4_source_audio_rescan_record(
                 "spectralEventCount": int(quality.get("spectralEventCount") or 0),
                 "transitionTraceEventCount": int(quality.get("transitionTraceEventCount") or 0),
                 "audioAgreementEventCount": int(quality.get("audioAgreementEventCount") or 0),
+                "guidedAnchorEventCount": len(guided_notes),
+                "guidedAnchorStatus": "reproduced" if guided_notes else "not_reproduced",
             },
             "runs": runs,
         }
@@ -2256,6 +2476,7 @@ def staff4_source_audio_rescan(daily_records: dict[str, Any], media_samples: lis
         "runCount": len(runs),
         "eventCount": sum(int(record.get("eventCount") or 0) for record in records if isinstance(record, dict)),
         "candidateEventCount": sum(int(record.get("candidateEventCount") or 0) for record in records if isinstance(record, dict)),
+        "guidedAnchorEventCount": sum(int(record.get("guidedAnchorEventCount") or 0) for record in records if isinstance(record, dict)),
         "audioAgreementEventCount": sum(int(record.get("audioAgreementEventCount") or 0) for record in records if isinstance(record, dict)),
         "cacheHitCount": sum(1 for record in records if isinstance(record, dict) and record.get("cacheHit")),
         "records": records,
@@ -3391,7 +3612,11 @@ def build_transcription_completion(
     phrase_expansion_source_rescan_run_count = int(phrase_expansion.get("sourceAudioRescanRunCount") or 0)
     staff4_source_rescan_status = str(staff4_source_rescan.get("status") or "")
     staff4_source_rescan_run_count = int(staff4_source_rescan.get("runCount") or 0)
-    staff4_source_rescan_event_count = int(staff4_source_rescan.get("eventCount") or 0) + int(staff4_source_rescan.get("candidateEventCount") or 0)
+    staff4_source_rescan_event_count = (
+        int(staff4_source_rescan.get("eventCount") or 0)
+        + int(staff4_source_rescan.get("candidateEventCount") or 0)
+        + int(staff4_source_rescan.get("guidedAnchorEventCount") or 0)
+    )
     staff4_source_rescan_anchor_status = str(staff4_source_rescan.get("anchorReproductionStatus") or "")
     staff4_source_rescan_anchor_count = int(staff4_source_rescan.get("anchorReproducedCount") or 0)
     staff4_source_rescan_anchor_target_count = int(staff4_source_rescan.get("anchorReproductionTargetCount") or 0)

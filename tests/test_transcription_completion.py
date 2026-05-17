@@ -9,10 +9,12 @@ from backend.app.scanner import (
     accepted_measure_match_count,
     build_transcription_completion,
     build_truth_workbench,
+    audio_window_search_for_exact_midi,
     reference_phrase_candidate_count,
     reference_phrase_candidate_top,
     source_verification_target_count,
     source_verification_target_top,
+    staff4_source_audio_rescan_record,
 )
 
 
@@ -51,12 +53,12 @@ def note(name, start=0.0):
     }
 
 
-def write_tiny_wav(path):
+def write_tiny_wav(path, seconds=1.0):
     with wave.open(str(path), "wb") as handle:
         handle.setnchannels(1)
         handle.setsampwidth(2)
         handle.setframerate(22050)
-        handle.writeframes(b"\x00\x00" * 22050)
+        handle.writeframes(b"\x00\x00" * max(1, int(22050 * float(seconds))))
 
 
 class TranscriptionCompletionTests(unittest.TestCase):
@@ -519,7 +521,7 @@ class TranscriptionCompletionTests(unittest.TestCase):
             write_tiny_wav(source_path)
 
             def fake_extract(_source, target, _start, _end):
-                write_tiny_wav(target)
+                write_tiny_wav(target, seconds=17)
                 return True, ""
 
             fake_transcription = {
@@ -676,6 +678,112 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertEqual(completion["staff4AdjacentMiningStatus"], "exact_audio_candidate")
         self.assertEqual(completion["staff4AdjacentMining"]["bestCandidate"]["audioRunSource"], "staff4_source_audio_rescan")
         self.assertEqual(completion["staff4AdjacentMining"]["bestCandidate"]["windowSequence"], "D#5 D#5 C5 D#5 D#5 D#5 C5")
+
+    def test_staff4_source_audio_rescan_guided_anchor_reproduces_when_broad_pass_misses(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source_path = Path(temp_dir) / "staff4-source.wav"
+            write_tiny_wav(source_path)
+
+            def fake_extract(_source, target, _start, _end):
+                write_tiny_wav(target, seconds=17)
+                return True, ""
+
+            def exact_detector_votes(_segment, expected_midi, _sr, _librosa, _numpy):
+                names = {72: "C5", 75: "D#5"}
+                return [
+                    {
+                        "detector": "pyin",
+                        "midi": expected_midi,
+                        "note": names.get(expected_midi, "D#5"),
+                        "confidence": 0.91,
+                        "exact": True,
+                        "frameCount": 6,
+                    },
+                    {
+                        "detector": "spectral_onset",
+                        "midi": expected_midi,
+                        "note": names.get(expected_midi, "D#5"),
+                        "confidence": 0.88,
+                        "exact": True,
+                        "frameCount": 1,
+                    },
+                ]
+
+            fake_transcription = {
+                "events": [
+                    note("D5", 0.00),
+                    note("D5", 0.12),
+                    note("C5", 0.24),
+                    note("D5", 0.36),
+                    note("D5", 0.48),
+                ],
+                "scoreMatchCandidateNotes": [],
+                "quality": {
+                    "segmentationSource": "patched_staff4_source_rescan_broad_miss",
+                    "pitchEventCount": 5,
+                    "onsetEventCount": 5,
+                    "spectralEventCount": 5,
+                    "transitionTraceEventCount": 5,
+                    "audioAgreementEventCount": 5,
+                },
+            }
+            anchor_notes = [
+                note("D#5", 20.225),
+                note("D#5", 20.550),
+                note("C5", 20.817),
+                note("D#5", 21.629),
+                note("D#5", 22.361),
+            ]
+            anchor = {
+                "practiceDay": "2026-05-03",
+                "pieceTitle": "Wieniawski Scherzo-Tarantelle, Op. 16",
+                "anchorSequence": "Eb5 Eb5 C5 Eb5 Eb5",
+                "anchorMidiSequence": [75, 75, 72, 75, 75],
+                "sampleId": "accepted-anchor",
+                "sourceWindow": "*8835-8925",
+                "anchorLocalStartSeconds": 20.225,
+                "anchorLocalEndSeconds": 22.481,
+                "match": {
+                    "detectedSeries": {
+                        "sampleId": "accepted-anchor",
+                        "sourceWindow": "*8835-8925",
+                        "notes": anchor_notes,
+                    },
+                    "matchedDetectedNotes": anchor_notes,
+                },
+            }
+
+            with patch("backend.app.scanner.run_ffmpeg_extract_audio", side_effect=fake_extract), patch(
+                "backend.app.scanner.transcribe_audio_array",
+                return_value=fake_transcription,
+            ), patch("backend.app.scanner.staff4_detector_votes_for_segment", side_effect=exact_detector_votes):
+                record = staff4_source_audio_rescan_record(
+                    anchor=anchor,
+                    sample={"id": "accepted-anchor", "path": str(source_path), "window": "*8835-8925"},
+                    source_path=source_path,
+                    scan_window={
+                        "label": "anchor_core",
+                        "scanLocalStartSeconds": 16.225,
+                        "scanLocalEndSeconds": 32.535,
+                    },
+                )
+
+        guided_runs = [run for run in record["runs"] if run.get("runSource") == "staff4_anchor_guided_current_detector"]
+        self.assertEqual(record["status"], "rescanned")
+        self.assertEqual(record["guidedAnchorEventCount"], 5)
+        self.assertEqual(record["quality"]["guidedAnchorStatus"], "reproduced")
+        self.assertEqual(len(guided_runs), 1)
+        self.assertEqual([item["midi"] for item in guided_runs[0]["notes"]], [75, 75, 72, 75, 75])
+        self.assertTrue(all(item["audioAgreement"] for item in guided_runs[0]["notes"]))
+        search = audio_window_search_for_exact_midi(
+            record["runs"],
+            [75, 75, 72, 75, 75],
+            practice_day="2026-05-03",
+            anchor_sample_id="accepted-anchor",
+            anchor_absolute_start=8855.225,
+        )
+        exact_audio = [item for item in search["exactCandidates"] if item["audioAgreed"]]
+        self.assertEqual(exact_audio[0]["audioRunSource"], "staff4_anchor_guided_current_detector")
 
     def test_staff4_truth_manifest_anchor_persists_without_visible_match_group(self):
         with tempfile.TemporaryDirectory() as temp_dir:

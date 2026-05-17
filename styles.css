@@ -2384,6 +2384,13 @@ h2 {
   font-weight: 400;
 }
 
+.notation-sheet .note-accidental {
+  fill: var(--ink);
+  font-family: "CurtisBravura", "Bravura", "Noto Music", "Segoe UI Symbol", "Apple Symbols", Georgia, "Times New Roman", serif;
+  font-size: 24px;
+  font-weight: 400;
+}
+
 .staff-lines line {
   stroke: rgba(31, 41, 39, .58);
   stroke-width: 1.05;
@@ -4269,6 +4276,12 @@ h2 {
 .notation-sheet .key-signature-mark {
   font-family: "CurtisBravura", "Bravura", "Noto Music", "Segoe UI Symbol", "Apple Symbols", serif;
   font-size: 22px;
+  font-weight: 400;
+}
+
+.notation-sheet .note-accidental {
+  font-family: "CurtisBravura", "Bravura", "Noto Music", "Segoe UI Symbol", "Apple Symbols", serif;
+  font-size: 24px;
   font-weight: 400;
 }
 

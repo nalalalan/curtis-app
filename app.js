@@ -1386,6 +1386,63 @@ const TREBLE_G4_Y = TREBLE_STAFF_TOP_Y + (TREBLE_STAFF_LINE_GAP * 3);
 const TREBLE_STAFF_STEP_Y = TREBLE_STAFF_LINE_GAP / 2;
 const TREBLE_NOTE_ORDER = { C: 0, D: 1, E: 2, F: 3, G: 4, A: 5, B: 6 };
 const TREBLE_CLEF_BASELINE_Y = 63;
+const SHARP_TO_FLAT_NOTE = { "C#": "Db", "D#": "Eb", "F#": "Gb", "G#": "Ab", "A#": "Bb" };
+const FLAT_TO_SHARP_NOTE = { Db: "C#", Eb: "D#", Gb: "F#", Ab: "G#", Bb: "A#" };
+
+function normalizeAccidentalToken(value) {
+  return String(value || "")
+    .trim()
+    .replace(/\u266d/g, "b")
+    .replace(/\u266f/g, "#")
+    .replace(/♭/g, "b")
+    .replace(/♯/g, "#");
+}
+
+function parseExactNote(value) {
+  const match = normalizeAccidentalToken(value).match(/^([A-G])(#|b)?(\d)$/);
+  if (!match) return null;
+  return {
+    letter: match[1],
+    accidental: match[2] || "",
+    octave: match[3],
+    pitch: `${match[1]}${match[2] || ""}`,
+  };
+}
+
+function normalizedAccidentalNames(signature) {
+  return new Set(
+    (Array.isArray(signature?.accidentals) ? signature.accidentals : [])
+      .map((item) => normalizeAccidentalToken(item))
+      .filter(Boolean)
+  );
+}
+
+function notationDisplayNote(note, signature) {
+  const parsed = parseExactNote(note);
+  if (!parsed) return String(note || "");
+  const accidentalNames = normalizedAccidentalNames(signature);
+  if (parsed.accidental === "#" && (signature?.accidentalType === "flat" || accidentalNames.has(SHARP_TO_FLAT_NOTE[parsed.pitch]))) {
+    return `${SHARP_TO_FLAT_NOTE[parsed.pitch] || parsed.pitch}${parsed.octave}`;
+  }
+  if (parsed.accidental === "b" && signature?.accidentalType === "sharp" && accidentalNames.has(FLAT_TO_SHARP_NOTE[parsed.pitch])) {
+    return `${FLAT_TO_SHARP_NOTE[parsed.pitch] || parsed.pitch}${parsed.octave}`;
+  }
+  return `${parsed.pitch}${parsed.octave}`;
+}
+
+function keySignatureCoversNote(spelledNote, signature) {
+  const parsed = parseExactNote(spelledNote);
+  if (!parsed || !parsed.accidental) return true;
+  return normalizedAccidentalNames(signature).has(parsed.pitch);
+}
+
+function renderNoteAccidental(spelledNote, signature, x, y) {
+  const parsed = parseExactNote(spelledNote);
+  if (!parsed || !parsed.accidental || keySignatureCoversNote(spelledNote, signature)) return "";
+  const glyph = parsed.accidental === "b" ? "&#9837;" : "&#9839;";
+  const yOffset = parsed.accidental === "b" ? -4 : 0;
+  return `<text class="note-accidental" x="${(x - 20).toFixed(1)}" y="${(y + yOffset).toFixed(1)}">${glyph}</text>`;
+}
 
 function naturalNoteStep(note) {
   const match = String(note || "").match(/^([A-G])(#|b)?(\d)$/);
@@ -1474,7 +1531,7 @@ function notationDurationClass(kind) {
 
 function normalizedKeySignature(signature) {
   const accidentals = Array.isArray(signature?.accidentals)
-    ? signature.accidentals.map((item) => String(item || "").trim()).filter(Boolean).slice(0, 7)
+    ? signature.accidentals.map((item) => normalizeAccidentalToken(item)).filter(Boolean).slice(0, 7)
     : [];
   const accidentalType = String(signature?.accidentalType || "").toLowerCase();
   return {
@@ -1549,7 +1606,8 @@ function renderNotationSheet(events, options = {}) {
   const items = Array.isArray(events) ? events.slice(0, maxNotes) : [];
   const staffLines = [30, 40, 50, 60, 70].map((y) => `<line x1="22" x2="698" y1="${y}" y2="${y}" />`).join("");
   const repeatGroup = options?.repeatGroup && typeof options.repeatGroup === "object" ? options.repeatGroup : null;
-  const keySignature = renderKeySignatureMarks(options?.keySignature);
+  const normalizedSignature = normalizedKeySignature(options?.keySignature || {});
+  const keySignature = renderKeySignatureMarks(normalizedSignature);
   const repeatLabel = repeatGroup?.notationLabel || options?.repeatLabel || "";
   const repeatPattern = repeatGroup?.practicePattern || options?.practicePattern || "";
   const qualityLabel = options?.qualityLabel || "";
@@ -1606,17 +1664,19 @@ function renderNotationSheet(events, options = {}) {
         </g>
       `;
     }
-    const y = staffNoteY(event.note);
+    const displayNote = notationDisplayNote(event.note, normalizedSignature);
+    const y = staffNoteY(displayNote);
     const stemUp = y >= TREBLE_STAFF_TOP_Y + (TREBLE_STAFF_LINE_GAP * 2);
     const stemX = x + (stemUp ? 6 : -6);
     const stemEndY = stemUp ? Math.max(10, y - 30) : Math.min(94, y + 30);
     const isUncertain = Boolean(event.uncertain || options?.forceUncertain);
     const uncertain = isUncertain ? " notation-uncertain" : "";
-    const raw = event.rawNote ? `raw ${event.rawNote}` : "";
-    const label = escapeHtml([event.note, raw, isUncertain ? "uncertain" : ""].filter(Boolean).join(" / "));
+    const raw = event.rawNote ? `raw ${event.rawNote}` : event.note && displayNote !== event.note ? `detected ${event.note}` : "";
+    const label = escapeHtml([displayNote, raw, isUncertain ? "uncertain" : ""].filter(Boolean).join(" / "));
     return `
       <g class="notation-note ${durationClass}${uncertain}" aria-label="${label}">
         ${renderLedgerLines(y, x)}
+        ${renderNoteAccidental(displayNote, normalizedSignature, x, y)}
         <ellipse cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" rx="6.6" ry="4.4" transform="rotate(-16 ${x.toFixed(1)} ${y.toFixed(1)})"></ellipse>
         ${durationClass === "whole" ? "" : `<line class="note-stem" x1="${stemX.toFixed(1)}" x2="${stemX.toFixed(1)}" y1="${y.toFixed(1)}" y2="${stemEndY.toFixed(1)}"></line>`}
       </g>
