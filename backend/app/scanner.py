@@ -77,6 +77,7 @@ STAFF4_SOURCE_AUDIO_RESCAN_DIR = RUNTIME_DIR / "staff4-source-rescan"
 STAFF4_SOURCE_AUDIO_RESCAN_PAD_BEFORE_SECONDS = 4.0
 STAFF4_SOURCE_AUDIO_RESCAN_PAD_AFTER_SECONDS = 10.0
 STAFF4_SOURCE_AUDIO_RESCAN_MAX_SECONDS = 18.0
+STAFF4_ACCEPTED_ANCHOR_MIDI = [75, 75, 72, 75, 75]
 MEDIA_REVIEW_PENDING_BLOCKERS = {"youtube_data_api_returns_metadata_not_video_media"}
 WEAK_EVIDENCE_TERMS = (
     "background noise",
@@ -1697,6 +1698,131 @@ def staff4_anchor_audio_bounds(match: dict[str, Any]) -> tuple[float, float]:
     return 0.0, 2.0
 
 
+def staff4_truth_anchor_source() -> tuple[dict[str, Any], dict[str, Any], list[dict[str, Any]]]:
+    target = wieniawski_reference_target()
+    score = symbolic_score_from_target(target)
+    source_notes = score.get("notes") if isinstance(score.get("notes"), list) else []
+    return target, score, source_notes
+
+
+def staff4_anchor_audio_window_from_runs(
+    daily_records: dict[str, Any],
+    *,
+    sample_id: str,
+    source_window: str,
+    midi_sequence: list[int],
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    if not sample_id or not midi_sequence:
+        return {}, []
+    for run in detected_audio_runs_for_expansion(daily_records):
+        if str(run.get("sampleId") or "") != sample_id:
+            continue
+        if source_window and str(run.get("sourceWindow") or "") != source_window:
+            continue
+        notes = run.get("notes") if isinstance(run.get("notes"), list) else []
+        run_midi = note_midi_values([note for note in notes if isinstance(note, dict)])
+        if len(run_midi) < len(midi_sequence):
+            continue
+        for start in range(0, len(run_midi) - len(midi_sequence) + 1):
+            end = start + len(midi_sequence)
+            if run_midi[start:end] == midi_sequence:
+                return run, notes[start:end]
+    return {}, []
+
+
+def staff4_truth_anchor_matches(daily_records: dict[str, Any]) -> list[dict[str, Any]]:
+    truth = load_long_phrase_truth()
+    phrases = truth.get("positiveSourcePhrases") if isinstance(truth.get("positiveSourcePhrases"), list) else []
+    sources = truth.get("sources") if isinstance(truth.get("sources"), list) else []
+    sources_by_id = {str(item.get("id") or ""): item for item in sources if isinstance(item, dict)}
+    records = daily_records.get("records") if isinstance(daily_records.get("records"), list) else []
+    record_days = {
+        str(record.get("practiceDay") or record.get("date") or "")
+        for record in records
+        if isinstance(record, dict)
+    }
+    target, score, source_notes = staff4_truth_anchor_source()
+    anchors: list[dict[str, Any]] = []
+    for phrase in phrases:
+        if not isinstance(phrase, dict):
+            continue
+        if phrase.get("liveAccepted") is not True and str(phrase.get("status") or "") != "accepted_truth":
+            continue
+        midi_sequence = [int(value) for value in phrase.get("midiSequence") or [] if isinstance(value, int)]
+        if midi_sequence != STAFF4_ACCEPTED_ANCHOR_MIDI:
+            continue
+        source = sources_by_id.get(str(phrase.get("sourceId") or ""))
+        if not isinstance(source, dict):
+            continue
+        practice_day = str(phrase.get("practiceDay") or "")
+        if record_days and practice_day and practice_day not in record_days:
+            continue
+        reference_start = int(source.get("referenceStart") or 0)
+        reference_end = int(source.get("referenceEnd") or reference_start)
+        anchor_slice = source_notes[reference_start:reference_end] if source_notes else []
+        if note_midi_values(anchor_slice) != STAFF4_ACCEPTED_ANCHOR_MIDI:
+            continue
+        sample_id = str(phrase.get("sampleId") or "")
+        source_window = str(phrase.get("sourceWindow") or "")
+        run, window_notes = staff4_anchor_audio_window_from_runs(
+            daily_records,
+            sample_id=sample_id,
+            source_window=source_window,
+            midi_sequence=STAFF4_ACCEPTED_ANCHOR_MIDI,
+        )
+        local_start = phrase.get("localStartSeconds")
+        local_end = phrase.get("localEndSeconds")
+        if window_notes:
+            local_start = window_notes[0].get("startSeconds")
+            local_end = window_notes[-1].get("endSeconds") or window_notes[-1].get("startSeconds")
+        try:
+            local_start = float(local_start) if local_start is not None else 0.0
+        except (TypeError, ValueError):
+            local_start = 0.0
+        try:
+            local_end = float(local_end) if local_end is not None and float(local_end) > local_start else local_start + 2.0
+        except (TypeError, ValueError):
+            local_end = local_start + 2.0
+        match = {
+            "status": "truth_manifest_staff4_anchor",
+            "pieceTitle": str(source.get("pieceTitle") or phrase.get("pieceTitle") or score.get("title") or ""),
+            "referenceStart": reference_start,
+            "referenceEnd": reference_end,
+            "detectedSeries": {
+                "sampleId": sample_id,
+                "sourceWindow": source_window,
+                "notes": window_notes,
+            },
+            "clip": {
+                "sampleId": sample_id,
+                "sourceWindow": source_window,
+                "localStartSeconds": round(local_start, 3),
+                "localEndSeconds": round(local_end, 3),
+            },
+        }
+        anchors.append(
+            {
+                "practiceDay": practice_day,
+                "pieceTitle": str(source.get("pieceTitle") or phrase.get("pieceTitle") or score.get("title") or ""),
+                "match": match,
+                "target": target,
+                "score": score,
+                "sourceNotes": source_notes,
+                "referenceStart": reference_start,
+                "referenceEnd": reference_end,
+                "anchorSequence": note_exact_label(anchor_slice),
+                "anchorMidiSequence": STAFF4_ACCEPTED_ANCHOR_MIDI,
+                "sampleId": sample_id,
+                "sourceWindow": source_window,
+                "anchorLocalStartSeconds": round(local_start, 3),
+                "anchorLocalEndSeconds": round(local_end, 3),
+                "anchorSource": "truth_manifest",
+                "audioRunSource": str(run.get("runSource") or "") if run else "",
+            }
+        )
+    return anchors
+
+
 def staff4_anchor_matches(daily_records: dict[str, Any]) -> list[dict[str, Any]]:
     records = daily_records.get("records") if isinstance(daily_records.get("records"), list) else []
     anchors: list[dict[str, Any]] = []
@@ -1720,7 +1846,7 @@ def staff4_anchor_matches(daily_records: dict[str, Any]) -> list[dict[str, Any]]
             reference_end = int(match.get("referenceEnd") or reference_start)
             anchor_slice = source_notes[reference_start:reference_end]
             anchor_midi = note_midi_values(anchor_slice)
-            if anchor_midi != [75, 75, 72, 75, 75]:
+            if anchor_midi != STAFF4_ACCEPTED_ANCHOR_MIDI:
                 continue
             detected = match.get("detectedSeries") if isinstance(match.get("detectedSeries"), dict) else {}
             clip = match.get("clip") if isinstance(match.get("clip"), dict) else {}
@@ -1743,6 +1869,46 @@ def staff4_anchor_matches(daily_records: dict[str, Any]) -> list[dict[str, Any]]
                     "anchorLocalEndSeconds": round(local_end, 3),
                 }
             )
+    seen = {
+        (
+            str(anchor.get("practiceDay") or ""),
+            str(anchor.get("sampleId") or ""),
+            str(anchor.get("sourceWindow") or ""),
+            int(anchor.get("referenceStart") or 0),
+            int(anchor.get("referenceEnd") or 0),
+            tuple(anchor.get("anchorMidiSequence") or []),
+        )
+        for anchor in anchors
+    }
+    source_seen = {
+        (
+            str(anchor.get("practiceDay") or ""),
+            int(anchor.get("referenceStart") or 0),
+            int(anchor.get("referenceEnd") or 0),
+            tuple(anchor.get("anchorMidiSequence") or []),
+        )
+        for anchor in anchors
+    }
+    for anchor in staff4_truth_anchor_matches(daily_records):
+        identity = (
+            str(anchor.get("practiceDay") or ""),
+            str(anchor.get("sampleId") or ""),
+            str(anchor.get("sourceWindow") or ""),
+            int(anchor.get("referenceStart") or 0),
+            int(anchor.get("referenceEnd") or 0),
+            tuple(anchor.get("anchorMidiSequence") or []),
+        )
+        source_identity = (
+            str(anchor.get("practiceDay") or ""),
+            int(anchor.get("referenceStart") or 0),
+            int(anchor.get("referenceEnd") or 0),
+            tuple(anchor.get("anchorMidiSequence") or []),
+        )
+        if identity in seen or source_identity in source_seen:
+            continue
+        seen.add(identity)
+        source_seen.add(source_identity)
+        anchors.append(anchor)
     return anchors
 
 
@@ -2232,7 +2398,6 @@ def staff4_adjacent_phrase_mining(
     source_audio_rescan: dict[str, Any] | None = None,
     limit: int = 4,
 ) -> dict[str, Any]:
-    records = daily_records.get("records") if isinstance(daily_records.get("records"), list) else []
     audio_runs = detected_audio_runs_for_expansion(daily_records, extra_audio_runs)
     source_audio_rescan = source_audio_rescan if isinstance(source_audio_rescan, dict) else {}
     target_results: list[dict[str, Any]] = []
@@ -2242,99 +2407,85 @@ def staff4_adjacent_phrase_mining(
     best_candidate: dict[str, Any] = {}
     best_nearest: dict[str, Any] = {}
 
-    for record in records:
-        if not isinstance(record, dict):
+    for anchor in staff4_anchor_matches(daily_records):
+        practice_day = str(anchor.get("practiceDay") or "")
+        source_notes = anchor.get("sourceNotes") if isinstance(anchor.get("sourceNotes"), list) else []
+        if not source_notes:
             continue
-        practice_day = str(record.get("practiceDay") or record.get("date") or "")
-        groups = record.get("matchGroups") if isinstance(record.get("matchGroups"), list) else []
-        for match in groups:
-            if not accepted_long_phrase_match(match):
-                continue
-            target = source_reference_target_for_match(match)
-            score = symbolic_score_from_target(target) if target else {}
-            source_notes = score.get("notes") if isinstance(score.get("notes"), list) else []
-            if not source_notes:
-                continue
-            piece_title = str(match.get("pieceTitle") or score.get("title") or "")
-            if "wieniawski" not in piece_title.lower():
-                continue
-            reference_start = int(match.get("referenceStart") or 0)
-            reference_end = int(match.get("referenceEnd") or reference_start)
-            anchor_slice = source_notes[reference_start:reference_end]
-            anchor_midi = note_midi_values(anchor_slice)
-            if anchor_midi != [75, 75, 72, 75, 75]:
-                continue
-            anchor_count += 1
-            detected = match.get("detectedSeries") if isinstance(match.get("detectedSeries"), dict) else {}
-            clip = match.get("clip") if isinstance(match.get("clip"), dict) else {}
-            anchor_sample_id = str(detected.get("sampleId") or clip.get("sampleId") or "")
-            anchor_source_window = str(detected.get("sourceWindow") or clip.get("sourceWindow") or "")
-            anchor_notes = match_detected_note_events(match)
-            anchor_absolute_start = None
-            if anchor_notes:
-                anchor_absolute_start = parse_window_start(anchor_source_window) + float(anchor_notes[0].get("startSeconds") or 0.0)
-            targets: list[tuple[str, int, int]] = []
-            if reference_end < len(source_notes):
-                targets.append(("right-1", reference_start, reference_end + 1))
-            if reference_end + 1 < len(source_notes):
-                targets.append(("right-2", reference_start, reference_end + 2))
-            for direction, start, end in targets:
-                source_slice = source_notes[start:end]
-                target_midi = note_midi_values(source_slice)
-                search = audio_window_search_for_exact_midi(
-                    audio_runs,
-                    target_midi,
-                    practice_day=practice_day,
-                    anchor_sample_id=anchor_sample_id,
-                    anchor_absolute_start=anchor_absolute_start,
+        piece_title = str(anchor.get("pieceTitle") or "")
+        if "wieniawski" not in piece_title.lower():
+            continue
+        reference_start = int(anchor.get("referenceStart") or 0)
+        reference_end = int(anchor.get("referenceEnd") or reference_start)
+        anchor_midi = [int(value) for value in anchor.get("anchorMidiSequence") or [] if isinstance(value, int)]
+        if anchor_midi != STAFF4_ACCEPTED_ANCHOR_MIDI:
+            continue
+        anchor_count += 1
+        anchor_sample_id = str(anchor.get("sampleId") or "")
+        anchor_source_window = str(anchor.get("sourceWindow") or "")
+        anchor_absolute_start = parse_window_start(anchor_source_window) + float(anchor.get("anchorLocalStartSeconds") or 0.0)
+        targets: list[tuple[str, int, int]] = []
+        if reference_end < len(source_notes):
+            targets.append(("right-1", reference_start, reference_end + 1))
+        if reference_end + 1 < len(source_notes):
+            targets.append(("right-2", reference_start, reference_end + 2))
+        for direction, start, end in targets:
+            source_slice = source_notes[start:end]
+            target_midi = note_midi_values(source_slice)
+            search = audio_window_search_for_exact_midi(
+                audio_runs,
+                target_midi,
+                practice_day=practice_day,
+                anchor_sample_id=anchor_sample_id,
+                anchor_absolute_start=anchor_absolute_start,
+            )
+            exact_candidates = search["exactCandidates"][: max(0, int(limit))]
+            nearest = search["nearestWindow"]
+            total_searched += int(search.get("searchedWindowCount") or 0)
+            total_exact += len(search["exactCandidates"])
+            status = "exact_audio_candidate" if any(item.get("audioAgreed") for item in search["exactCandidates"]) else "exact_midi_audio_unconfirmed" if search["exactCandidates"] else "not_found"
+            if exact_candidates and (not best_candidate or len(target_midi) > int(best_candidate.get("targetNoteCount") or 0)):
+                candidate = dict(exact_candidates[0])
+                candidate["targetDirection"] = direction
+                candidate["targetSequence"] = note_exact_label(source_slice)
+                candidate["targetMidiSequence"] = target_midi
+                candidate["targetNoteCount"] = len(target_midi)
+                best_candidate = candidate
+            if nearest:
+                nearest_with_target = dict(nearest)
+                nearest_with_target["targetDirection"] = direction
+                nearest_with_target["targetSequence"] = note_exact_label(source_slice)
+                nearest_with_target["targetMidiSequence"] = target_midi
+                nearest_key = (
+                    int(nearest_with_target.get("exactCount") or 0),
+                    int(nearest_with_target.get("prefixCount") or 0),
+                    len(target_midi),
                 )
-                exact_candidates = search["exactCandidates"][: max(0, int(limit))]
-                nearest = search["nearestWindow"]
-                total_searched += int(search.get("searchedWindowCount") or 0)
-                total_exact += len(search["exactCandidates"])
-                status = "exact_audio_candidate" if any(item.get("audioAgreed") for item in search["exactCandidates"]) else "exact_midi_audio_unconfirmed" if search["exactCandidates"] else "not_found"
-                if exact_candidates and (not best_candidate or len(target_midi) > int(best_candidate.get("targetNoteCount") or 0)):
-                    candidate = dict(exact_candidates[0])
-                    candidate["targetDirection"] = direction
-                    candidate["targetSequence"] = note_exact_label(source_slice)
-                    candidate["targetMidiSequence"] = target_midi
-                    candidate["targetNoteCount"] = len(target_midi)
-                    best_candidate = candidate
-                if nearest:
-                    nearest_with_target = dict(nearest)
-                    nearest_with_target["targetDirection"] = direction
-                    nearest_with_target["targetSequence"] = note_exact_label(source_slice)
-                    nearest_with_target["targetMidiSequence"] = target_midi
-                    nearest_key = (
-                        int(nearest_with_target.get("exactCount") or 0),
-                        int(nearest_with_target.get("prefixCount") or 0),
-                        len(target_midi),
-                    )
-                    best_nearest_key = (
-                        int(best_nearest.get("exactCount") or 0),
-                        int(best_nearest.get("prefixCount") or 0),
-                        len(best_nearest.get("targetMidiSequence") or []),
-                    )
-                    if not best_nearest or nearest_key > best_nearest_key:
-                        best_nearest = nearest_with_target
-                target_results.append(
-                    {
-                        "direction": direction,
-                        "practiceDay": practice_day,
-                        "pieceTitle": piece_title,
-                        "targetReferenceStart": start,
-                        "targetReferenceEnd": end,
-                        "targetSequence": note_exact_label(source_slice),
-                        "targetMidiSequence": target_midi,
-                        "targetNoteCount": len(target_midi),
-                        "status": status,
-                        "searchedWindowCount": int(search.get("searchedWindowCount") or 0),
-                        "exactCandidateCount": len(search["exactCandidates"]),
-                        "exactAudioCandidateCount": sum(1 for item in search["exactCandidates"] if item.get("audioAgreed")),
-                        "exactCandidates": exact_candidates,
-                        "nearestWindow": nearest,
-                    }
+                best_nearest_key = (
+                    int(best_nearest.get("exactCount") or 0),
+                    int(best_nearest.get("prefixCount") or 0),
+                    len(best_nearest.get("targetMidiSequence") or []),
                 )
+                if not best_nearest or nearest_key > best_nearest_key:
+                    best_nearest = nearest_with_target
+            target_results.append(
+                {
+                    "direction": direction,
+                    "practiceDay": practice_day,
+                    "pieceTitle": piece_title,
+                    "targetReferenceStart": start,
+                    "targetReferenceEnd": end,
+                    "targetSequence": note_exact_label(source_slice),
+                    "targetMidiSequence": target_midi,
+                    "targetNoteCount": len(target_midi),
+                    "status": status,
+                    "searchedWindowCount": int(search.get("searchedWindowCount") or 0),
+                    "exactCandidateCount": len(search["exactCandidates"]),
+                    "exactAudioCandidateCount": sum(1 for item in search["exactCandidates"] if item.get("audioAgreed")),
+                    "exactCandidates": exact_candidates,
+                    "nearestWindow": nearest,
+                }
+            )
 
     status = (
         "exact_audio_candidate"
@@ -2484,143 +2635,139 @@ def source_phrase_expansion_harness(
     extra_audio_runs: list[dict[str, Any]] | None = None,
     limit: int = 8,
 ) -> dict[str, Any]:
-    records = daily_records.get("records") if isinstance(daily_records.get("records"), list) else []
     audio_runs = detected_audio_runs_for_expansion(daily_records, extra_audio_runs)
     rejected_cases = rejected_staff4_expansion_cases()
     items: list[dict[str, Any]] = []
     anchor_count = 0
-    for record in records:
-        if not isinstance(record, dict):
+    for anchor in staff4_anchor_matches(daily_records):
+        practice_day = str(anchor.get("practiceDay") or "")
+        target = anchor.get("target") if isinstance(anchor.get("target"), dict) else {}
+        score = anchor.get("score") if isinstance(anchor.get("score"), dict) else {}
+        source_notes = anchor.get("sourceNotes") if isinstance(anchor.get("sourceNotes"), list) else []
+        if not source_notes:
             continue
-        practice_day = str(record.get("practiceDay") or record.get("date") or "")
-        groups = record.get("matchGroups") if isinstance(record.get("matchGroups"), list) else []
-        for match in groups:
-            if not accepted_long_phrase_match(match):
-                continue
-            target = source_reference_target_for_match(match)
-            score = symbolic_score_from_target(target) if target else {}
-            source_notes = score.get("notes") if isinstance(score.get("notes"), list) else []
-            if not source_notes:
-                continue
-            reference_start = int(match.get("referenceStart") or 0)
-            reference_end = int(match.get("referenceEnd") or reference_start)
-            if reference_end <= reference_start:
-                continue
-            anchor_slice = source_notes[reference_start:reference_end]
+        reference_start = int(anchor.get("referenceStart") or 0)
+        reference_end = int(anchor.get("referenceEnd") or reference_start)
+        if reference_end <= reference_start:
+            continue
+        anchor_slice = source_notes[reference_start:reference_end]
+        anchor_midi = [int(value) for value in anchor.get("anchorMidiSequence") or [] if isinstance(value, int)]
+        if not anchor_midi:
             anchor_midi = note_midi_values(anchor_slice)
-            if not anchor_midi:
+        if not anchor_midi:
+            continue
+        anchor_count += 1
+        candidates: list[tuple[str, int, int]] = []
+        if reference_start > 0:
+            candidates.append(("left-1", reference_start - 1, reference_end))
+        if reference_end < len(source_notes):
+            candidates.append(("right-1", reference_start, reference_end + 1))
+        if reference_end + 1 < len(source_notes):
+            candidates.append(("right-2", reference_start, reference_end + 2))
+        for direction, start, end in candidates:
+            source_slice = source_notes[start:end]
+            source_midi = note_midi_values(source_slice)
+            if not source_midi:
                 continue
-            anchor_count += 1
-            candidates: list[tuple[str, int, int]] = []
-            if reference_start > 0:
-                candidates.append(("left-1", reference_start - 1, reference_end))
-            if reference_end < len(source_notes):
-                candidates.append(("right-1", reference_start, reference_end + 1))
-            if reference_end + 1 < len(source_notes):
-                candidates.append(("right-2", reference_start, reference_end + 2))
-            for direction, start, end in candidates:
-                source_slice = source_notes[start:end]
-                source_midi = note_midi_values(source_slice)
-                if not source_midi:
-                    continue
-                anchor_offset = reference_start - start
-                source_snippet = source_snippet_for_range(target, start, end)
-                best_window = best_audio_window_for_source_range(
-                    audio_runs,
-                    source_slice,
-                    anchor_midi=anchor_midi,
-                    anchor_offset=anchor_offset,
+            anchor_offset = reference_start - start
+            source_snippet = source_snippet_for_range(target, start, end)
+            best_window = best_audio_window_for_source_range(
+                audio_runs,
+                source_slice,
+                anchor_midi=anchor_midi,
+                anchor_offset=anchor_offset,
+            )
+            status, limit_text = expansion_status_for_window(
+                source_slice=source_slice,
+                source_snippet=source_snippet,
+                best_window=best_window,
+            )
+            rejected_case = rejected_staff4_case_for_candidate(
+                rejected_cases,
+                direction=direction,
+                start=start,
+                end=end,
+                source_midi=source_midi,
+                best_window=best_window,
+            )
+            if rejected_case:
+                status = "rejected_regression"
+                limit_text = str(
+                    rejected_case.get("basis")
+                    or "Rejected by the Staff 4 audit packet; this exact source/audio expansion must not be retried as accepted evidence."
                 )
-                status, limit_text = expansion_status_for_window(
-                    source_slice=source_slice,
-                    source_snippet=source_snippet,
-                    best_window=best_window,
-                )
-                rejected_case = rejected_staff4_case_for_candidate(
-                    rejected_cases,
-                    direction=direction,
-                    start=start,
-                    end=end,
-                    source_midi=source_midi,
-                    best_window=best_window,
-                )
-                if rejected_case:
-                    status = "rejected_regression"
-                    limit_text = str(
-                        rejected_case.get("basis")
-                        or "Rejected by the Staff 4 audit packet; this exact source/audio expansion must not be retried as accepted evidence."
-                    )
-                mismatch_index = int(best_window.get("mismatchIndex") if best_window else -1)
-                expected_note = ""
-                observed_note = ""
-                expected_midi = None
-                observed_midi = None
-                if mismatch_index >= 0 and mismatch_index < len(source_slice):
-                    expected_note = str(source_slice[mismatch_index].get("note") or "")
-                    expected_midi = note_midi_value(source_slice[mismatch_index])
-                    window_notes = best_window.get("windowNotes") if isinstance(best_window.get("windowNotes"), list) else []
-                    if mismatch_index < len(window_notes):
-                        observed_note = str(window_notes[mismatch_index].get("note") or "")
-                        observed_midi = note_midi_value(window_notes[mismatch_index])
-                elif isinstance(source_snippet.get("extensionCheck"), dict):
-                    check = source_snippet["extensionCheck"]
-                    expected_note = str(check.get("expectedNextScoreNote") or "")
-                    expected_midi = check.get("expectedNextScoreMidi")
-                    observed_note = str(check.get("observedNextAudioNote") or "")
-                    observed_midi = check.get("observedNextAudioMidi")
-                    if not best_window and observed_note:
-                        status = "blocked_audio_mismatch"
-                        limit_text = "Source-lane extension is verified, but the stored adjacent audio check disagrees."
-                run = best_window.get("run") if isinstance(best_window.get("run"), dict) else {}
+            mismatch_index = int(best_window.get("mismatchIndex") if best_window else -1)
+            expected_note = ""
+            observed_note = ""
+            expected_midi = None
+            observed_midi = None
+            if mismatch_index >= 0 and mismatch_index < len(source_slice):
+                expected_note = str(source_slice[mismatch_index].get("note") or "")
+                expected_midi = note_midi_value(source_slice[mismatch_index])
                 window_notes = best_window.get("windowNotes") if isinstance(best_window.get("windowNotes"), list) else []
-                audio_local_start = None
-                audio_local_end = None
-                if window_notes:
-                    audio_local_start = round(float(window_notes[0].get("startSeconds") or 0.0), 3)
-                    audio_local_end = round(float(window_notes[-1].get("endSeconds") or window_notes[-1].get("startSeconds") or 0.0), 3)
-                source_window_start = parse_window_start(str(run.get("sourceWindow") or ""))
-                items.append(
-                    {
-                        "status": status,
-                        "direction": direction,
-                        "practiceDay": practice_day,
-                        "pieceTitle": str(match.get("pieceTitle") or score.get("title") or ""),
-                        "anchorReferenceStart": reference_start,
-                        "anchorReferenceEnd": reference_end,
-                        "targetReferenceStart": start,
-                        "targetReferenceEnd": end,
-                        "sourceNoteCount": len(source_slice),
-                        "anchorSequence": note_exact_label(anchor_slice),
-                        "targetSequence": note_exact_label(source_slice),
-                        "targetMidiSequence": source_midi,
-                        "bestAudioSequence": str(best_window.get("windowExactSequence") or ""),
-                        "bestAudioMidiSequence": best_window.get("windowMidiSequence") or [],
-                        "bestExactCount": int(best_window.get("exactCount") or 0),
-                        "bestPrefixCount": int(best_window.get("prefixCount") or 0),
-                        "expectedNextScoreNote": expected_note,
-                        "expectedNextScoreMidi": expected_midi,
-                        "observedNextAudioNote": observed_note,
-                        "observedNextAudioMidi": observed_midi,
-                        "audioAgreed": bool(best_window.get("audioAgreed")) if best_window else False,
-                        "sourceCropReady": exact_source_range_visually_verified(source_snippet),
-                        "truthEvidenceAccepted": bool(source_snippet.get("truthEvidenceAccepted")) if source_snippet else False,
-                        "sourceImageUrl": str(source_snippet.get("imageUrl") or ""),
-                        "sampleId": str(run.get("sampleId") or ""),
-                        "sourceWindow": str(run.get("sourceWindow") or ""),
-                        "audioLocalStartSeconds": audio_local_start,
-                        "audioLocalEndSeconds": audio_local_end,
-                        "audioAbsoluteStartSeconds": round(source_window_start + audio_local_start, 3)
-                        if audio_local_start is not None
-                        else None,
-                        "audioAbsoluteEndSeconds": round(source_window_start + audio_local_end, 3)
-                        if audio_local_end is not None
-                        else None,
-                        "audioRunSource": str(run.get("runSource") or ""),
-                        "bestAudioNotes": expansion_window_note_summary(window_notes),
-                        "rejectedRegressionId": str(rejected_case.get("id") or "") if rejected_case else "",
-                        "limit": limit_text,
-                    }
-                )
+                if mismatch_index < len(window_notes):
+                    observed_note = str(window_notes[mismatch_index].get("note") or "")
+                    observed_midi = note_midi_value(window_notes[mismatch_index])
+            elif isinstance(source_snippet.get("extensionCheck"), dict):
+                check = source_snippet["extensionCheck"]
+                expected_note = str(check.get("expectedNextScoreNote") or "")
+                expected_midi = check.get("expectedNextScoreMidi")
+                observed_note = str(check.get("observedNextAudioNote") or "")
+                observed_midi = check.get("observedNextAudioMidi")
+                if not best_window and observed_note:
+                    status = "blocked_audio_mismatch"
+                    limit_text = "Source-lane extension is verified, but the stored adjacent audio check disagrees."
+            run = best_window.get("run") if isinstance(best_window.get("run"), dict) else {}
+            window_notes = best_window.get("windowNotes") if isinstance(best_window.get("windowNotes"), list) else []
+            audio_local_start = None
+            audio_local_end = None
+            if window_notes:
+                audio_local_start = round(float(window_notes[0].get("startSeconds") or 0.0), 3)
+                audio_local_end = round(float(window_notes[-1].get("endSeconds") or window_notes[-1].get("startSeconds") or 0.0), 3)
+            source_window_start = parse_window_start(str(run.get("sourceWindow") or ""))
+            items.append(
+                {
+                    "status": status,
+                    "direction": direction,
+                    "practiceDay": practice_day,
+                    "pieceTitle": str(anchor.get("pieceTitle") or score.get("title") or ""),
+                    "anchorSource": str(anchor.get("anchorSource") or "match_group"),
+                    "anchorReferenceStart": reference_start,
+                    "anchorReferenceEnd": reference_end,
+                    "targetReferenceStart": start,
+                    "targetReferenceEnd": end,
+                    "sourceNoteCount": len(source_slice),
+                    "anchorSequence": note_exact_label(anchor_slice),
+                    "targetSequence": note_exact_label(source_slice),
+                    "targetMidiSequence": source_midi,
+                    "bestAudioSequence": str(best_window.get("windowExactSequence") or ""),
+                    "bestAudioMidiSequence": best_window.get("windowMidiSequence") or [],
+                    "bestExactCount": int(best_window.get("exactCount") or 0),
+                    "bestPrefixCount": int(best_window.get("prefixCount") or 0),
+                    "expectedNextScoreNote": expected_note,
+                    "expectedNextScoreMidi": expected_midi,
+                    "observedNextAudioNote": observed_note,
+                    "observedNextAudioMidi": observed_midi,
+                    "audioAgreed": bool(best_window.get("audioAgreed")) if best_window else False,
+                    "sourceCropReady": exact_source_range_visually_verified(source_snippet),
+                    "truthEvidenceAccepted": bool(source_snippet.get("truthEvidenceAccepted")) if source_snippet else False,
+                    "sourceImageUrl": str(source_snippet.get("imageUrl") or ""),
+                    "sampleId": str(run.get("sampleId") or ""),
+                    "sourceWindow": str(run.get("sourceWindow") or ""),
+                    "audioLocalStartSeconds": audio_local_start,
+                    "audioLocalEndSeconds": audio_local_end,
+                    "audioAbsoluteStartSeconds": round(source_window_start + audio_local_start, 3)
+                    if audio_local_start is not None
+                    else None,
+                    "audioAbsoluteEndSeconds": round(source_window_start + audio_local_end, 3)
+                    if audio_local_end is not None
+                    else None,
+                    "audioRunSource": str(run.get("runSource") or ""),
+                    "bestAudioNotes": expansion_window_note_summary(window_notes),
+                    "rejectedRegressionId": str(rejected_case.get("id") or "") if rejected_case else "",
+                    "limit": limit_text,
+                }
+            )
     items = sorted(
         items,
         key=lambda item: (

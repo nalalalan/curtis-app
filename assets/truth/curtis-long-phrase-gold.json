@@ -62,6 +62,8 @@
       "practiceDay": "2026-05-03",
       "sampleId": "Njh8_zq9_DM-8835",
       "sourceWindow": "*8835-8925",
+      "localStartSeconds": 20.225,
+      "localEndSeconds": 20.825,
       "minimumExactNotes": 5,
       "sequence": ["D#5", "D#5", "C5", "D#5", "D#5"],
       "acceptedScoreSpellingSequence": ["Eb5", "Eb5", "C5", "Eb5", "Eb5"],

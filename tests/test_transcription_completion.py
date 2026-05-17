@@ -669,6 +669,108 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertEqual(completion["staff4AdjacentMining"]["bestCandidate"]["audioRunSource"], "staff4_source_audio_rescan")
         self.assertEqual(completion["staff4AdjacentMining"]["bestCandidate"]["windowSequence"], "D#5 D#5 C5 D#5 D#5 D#5 C5")
 
+    def test_staff4_truth_manifest_anchor_persists_without_visible_match_group(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source_path = Path(temp_dir) / "staff4-source.wav"
+            write_tiny_wav(source_path)
+
+            def fake_extract(_source, target, _start, _end):
+                write_tiny_wav(target)
+                return True, ""
+
+            fake_transcription = {
+                "events": [
+                    note("D#5", 0.00),
+                    note("D#5", 0.12),
+                    note("C5", 0.24),
+                    note("D#5", 0.36),
+                    note("D#5", 0.48),
+                    note("D#5", 0.60),
+                    note("C5", 0.72),
+                ],
+                "scoreMatchCandidateNotes": [],
+                "quality": {
+                    "segmentationSource": "patched_staff4_source_rescan",
+                    "pitchEventCount": 7,
+                    "onsetEventCount": 7,
+                    "spectralEventCount": 7,
+                    "transitionTraceEventCount": 7,
+                    "audioAgreementEventCount": 7,
+                },
+            }
+
+            daily_records = {
+                "recordCount": 1,
+                "audioEvidenceRecordCount": 1,
+                "transcribedRecordCount": 1,
+                "records": [
+                    {
+                        "practiceDay": "2026-05-03",
+                        "transcription": {
+                            "scoreSequenceMatchCount": 0,
+                            "scoreLocationVerifiedCount": 0,
+                            "detectedSeries": [
+                                {
+                                    "sampleId": "Njh8_zq9_DM-8835",
+                                    "sourceWindow": "*8835-8925",
+                                    "sourceTitle": "5-3-26",
+                                    "notes": [
+                                        note("D#5", 20.225),
+                                        note("D#5", 20.345),
+                                        note("C5", 20.465),
+                                        note("D#5", 20.585),
+                                        note("D#5", 20.705),
+                                    ],
+                                }
+                            ],
+                        },
+                        "matchGroups": [],
+                        "candidateMatchGroups": [],
+                    }
+                ],
+            }
+
+            with patch("backend.app.scanner.run_ffmpeg_extract_audio", side_effect=fake_extract), patch(
+                "backend.app.scanner.transcribe_audio_array",
+                return_value=fake_transcription,
+            ):
+                completion = build_transcription_completion(
+                    {"scoreReferenceTargetCount": 1},
+                    daily_records,
+                    {"entries": [{"title": "Wieniawski Scherzo-Tarantelle, Op. 16"}]},
+                    {
+                        "ledgerVideoCount": 1,
+                        "uploadedVideoSeconds": 120,
+                        "uploadedVideoLabel": "2m",
+                        "checkedVideoSeconds": 120,
+                        "checkedVideoLabel": "2m",
+                        "activePracticeLabel": "2m",
+                        "estimatedTotalPracticeLabel": "2m",
+                        "activePracticeScan": {
+                            "activeIntervalCount": 1,
+                            "sampleResultCount": 1,
+                            "activeViolinSampleCount": 1,
+                            "checkedNoViolinSampleCount": 0,
+                            "pendingWindowCount": 0,
+                        },
+                    },
+                    {"benchmarkCount": 1, "wrongScoreNoteRegressionCount": 1},
+                    [{"id": "Njh8_zq9_DM-8835", "path": str(source_path), "window": "*8835-8925"}],
+                    [{"transcriptionId": "t1"}],
+                )
+
+        self.assertNotEqual(completion["staff4SourceAudioRescanStatus"], "no_staff4_anchor")
+        self.assertEqual(completion["staff4SourceAudioRescanStatus"], "rescanned")
+        self.assertEqual(completion["staff4SourceAudioRescanRunCount"], 1)
+        self.assertGreater(completion["staff4SourceAudioRescanEventCount"], 0)
+        self.assertGreaterEqual(completion["phraseExpansionHarness"]["anchorCount"], 1)
+        self.assertEqual(completion["phraseExpansionHarness"]["currentBest"]["anchorSource"], "truth_manifest")
+        self.assertEqual(completion["phraseExpansionHarness"]["currentBest"]["audioRunSource"], "staff4_source_audio_rescan")
+        self.assertEqual(completion["staff4AdjacentMining"]["anchorCount"], 1)
+        self.assertEqual(completion["staff4AdjacentMiningStatus"], "exact_audio_candidate")
+        self.assertEqual(completion["staff4AdjacentMining"]["bestCandidate"]["audioRunSource"], "staff4_source_audio_rescan")
+        self.assertEqual(completion["staff4AdjacentMining"]["bestCandidate"]["windowMidiSequence"], [75, 75, 72, 75, 75, 75, 72])
+
     def test_local_source_score_pdf_advances_score_truth_without_accepting_phrase(self):
         completion = build_transcription_completion(
             {"scoreReferenceTargetCount": 1},
