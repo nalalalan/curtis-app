@@ -4388,6 +4388,181 @@ h2 {
   line-height: 1.18;
 }
 
+.gold-review-panel {
+  margin-top: 10px;
+}
+
+.gold-review {
+  display: grid;
+  gap: 8px;
+}
+
+.gold-review-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.gold-review-stats article {
+  min-height: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-soft);
+}
+
+.gold-review-stats span,
+.gold-review-head span,
+.gold-review-form span,
+.gold-review-notation small {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 760;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.gold-review-stats strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 760;
+  line-height: 1.08;
+}
+
+.gold-review-list {
+  display: grid;
+  gap: 8px;
+}
+
+.gold-review-item {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+}
+
+.gold-review-head {
+  display: grid;
+  grid-template-columns: minmax(0, .34fr) minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.gold-review-head strong {
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 740;
+  line-height: 1.18;
+  overflow-wrap: anywhere;
+}
+
+.gold-review-head em {
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 650;
+  line-height: 1.2;
+  text-align: right;
+}
+
+.gold-review-grid {
+  display: grid;
+  grid-template-columns: minmax(160px, 220px) minmax(0, 1fr) minmax(240px, .65fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.gold-review-grid .embedded-media {
+  max-width: 220px;
+  padding: 6px;
+  border-color: var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.gold-review-grid .embedded-media video {
+  max-height: 96px;
+  border-radius: 5px;
+}
+
+.gold-review-grid .embedded-media audio {
+  height: 28px;
+}
+
+.gold-review-notation {
+  display: grid;
+  gap: 5px;
+}
+
+.gold-review-notation .notation-sheet svg {
+  height: 92px;
+}
+
+.gold-review-notation small {
+  margin: 0;
+  text-transform: none;
+}
+
+.gold-review-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.gold-review-form label {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+}
+
+.gold-review-form input,
+.gold-review-form select {
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 620;
+}
+
+.gold-review-reason,
+.gold-review-actions,
+.gold-review-form > small {
+  grid-column: 1 / -1;
+}
+
+.gold-review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.gold-review-actions button {
+  min-height: 30px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.gold-review-actions button[value="rejected_mismatch"] {
+  color: var(--red);
+}
+
+.gold-review-form > small {
+  min-height: 14px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
 .empty {
   padding: 12px;
   border-color: var(--line);
@@ -4402,7 +4577,11 @@ h2 {
   .score-match-grid.pitch-anchor-grid,
   .matched-practice-pair,
   .roadmap-score,
-  .roadmap-stats {
+  .roadmap-stats,
+  .gold-review-stats,
+  .gold-review-head,
+  .gold-review-grid,
+  .gold-review-form {
     grid-template-columns: 1fr;
   }
 
@@ -4416,6 +4595,14 @@ h2 {
   }
 
   .matched-practice-pair .embedded-media {
+    max-width: 240px;
+  }
+
+  .gold-review-head em {
+    text-align: left;
+  }
+
+  .gold-review-grid .embedded-media {
     max-width: 240px;
   }
 }

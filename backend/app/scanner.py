@@ -51,6 +51,7 @@ from .daily_records import (
 )
 from .evidence_ledger import build_active_practice_coverage, build_evidence_progress, build_truth_progress
 from .gold_truth import verify_long_phrase_truth_manifest
+from .gold_review import build_gold_review_loop
 from .long_phrase_truth import exact_midi_phrase_gate
 from .study_packets import build_practice_study, build_practice_totals
 from .symbolic_scores import (
@@ -1903,8 +1904,10 @@ def build_transcription_completion(
     media_samples: list[dict[str, Any]],
     transcriptions: list[dict[str, Any]],
     truth_workbench: dict[str, Any] | None = None,
+    gold_review: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     truth_workbench = truth_workbench or {}
+    gold_review = gold_review or {}
     active_scan = (
         active_practice_coverage.get("activePracticeScan")
         if isinstance(active_practice_coverage.get("activePracticeScan"), dict)
@@ -1951,6 +1954,12 @@ def build_transcription_completion(
     truth_manifest_live_phrase_count = int(truth_workbench.get("truthManifestLiveAcceptedPhraseCount") or 0)
     truth_manifest_ready = truth_manifest_status == "verified"
     truth_route_ready = str(truth_workbench.get("version") or "") == "truth_workbench_v1"
+    gold_label_count = int(gold_review.get("labelCount") or 0)
+    gold_accepted_count = int(gold_review.get("acceptedCount") or 0)
+    gold_rejected_count = int(gold_review.get("rejectedCount") or 0)
+    gold_queue_count = int(gold_review.get("queueCount") or 0)
+    gold_accepted_audio_phrase_count = int(gold_review.get("acceptedAudioPhraseCount") or 0)
+    gold_accepted_score_phrase_count = int(gold_review.get("acceptedScorePhraseCount") or 0)
     transition_trace_count = sum(
         int((item.get("quality") if isinstance(item.get("quality"), dict) else {}).get("transitionTraceSelectedEventCount") or 0)
         for item in transcriptions
@@ -2045,13 +2054,15 @@ def build_transcription_completion(
             + (0.75 if truth_manifest_ready else 0)
             + min(0.75, truth_manifest_positive_verified_count * 0.35)
             + min(0.75, truth_manifest_rejected_blocked_count * 0.2)
+            + (0.75 if gold_queue_count else 0)
+            + min(1.5, gold_accepted_count * 0.5)
             + min(1.0, truth_queue_count * 0.25)
             + min(1.0, truth_ready_count * 0.5)
             + (0.75 if score_visual_lock_count else 0)
             + (0.75 if actual_source_score_snippet_lock_count else 0),
-            f"{benchmark_count} benchmark corrections / {rejected_score_count} wrong-score-note regressions / {truth_queue_count} queued truth checks / {truth_ready_count} accepted truth items / {truth_manifest_positive_verified_count} source-positive exact-MIDI phrases / {truth_manifest_rejected_blocked_count} rejected exact-MIDI regressions / {score_visual_lock_count} score-visual locks / {actual_source_score_snippet_lock_count} actual-source score locks",
-            "Rejected score-note mistakes can be stored as regression evidence, source-only exact-MIDI phrases can be checked against MusicXML, and score panels still require verified visible noteheads, range, spelling, an actual source-score crop, and truth-set promotion.",
-            "Build accepted truth clips for notes, rhythm, score boxes, and full phrases.",
+            f"{benchmark_count} benchmark corrections / {rejected_score_count} wrong-score-note regressions / {truth_queue_count} queued truth checks / {truth_ready_count} accepted truth items / {gold_queue_count} gold review clips / {gold_accepted_count} accepted gold labels / {truth_manifest_positive_verified_count} source-positive exact-MIDI phrases / {truth_manifest_rejected_blocked_count} rejected exact-MIDI regressions / {score_visual_lock_count} score-visual locks / {actual_source_score_snippet_lock_count} actual-source score locks",
+            "Gold review now turns queued clips into accepted or rejected labels, rejected score-note mistakes can be stored as regression evidence, and source-only exact-MIDI phrases can be checked against MusicXML.",
+            "Review queued clips into accepted audio phrases, rejected mismatches, or score phrases with exact notes and score location.",
         ),
         roadmap_gate(
             "score-truth",
@@ -2204,6 +2215,11 @@ def build_transcription_completion(
             "detail": f"{truth_manifest_rejected_blocked_count}/{truth_manifest_rejected_count} regressions blocked",
         },
         {
+            "label": "Gold review",
+            "value": f"{gold_accepted_count}/{gold_label_count}",
+            "detail": f"{gold_queue_count} queued / {gold_rejected_count} rejected",
+        },
+        {
             "label": "Long phrases",
             "value": str(long_phrase_count),
             "detail": "accepted",
@@ -2259,6 +2275,7 @@ def build_transcription_completion(
         "Likely score noteheads now receive unaccepted staff-position pitch hypotheses before MusicXML review.",
         "Staff-level source review packets now map queued hypotheses back to the scanned score.",
         "A source-only exact-MIDI truth manifest now verifies the current Wieniawski MusicXML excerpt and blocks known false phrase maps.",
+        "A gold review loop now queues clip-level candidates for accepted/rejected labels before they can train the transcription gate.",
         "Score panels require visible score noteheads, range, spelling, exact note-and-octave agreement, and an actual source-score crop before display.",
         "The rejected five-note Scherzo phrase is blocked from accepted score evidence.",
         "A truth workbench now separates queued, accepted, and rejected audio-score-transcription evidence before anything can become visible score evidence.",
@@ -2285,7 +2302,7 @@ def build_transcription_completion(
             "phase": "2",
             "label": "Truth, benchmark, and correction set",
             "status": "pending" if not (benchmark_count or rejected_score_count or score_visual_lock_count) else "partial",
-            "evidence": f"{benchmark_count} benchmark corrections / {rejected_score_count} wrong-score-note regressions / {truth_item_count} stored truth items / {truth_manifest_item_count} manifest truth checks / {truth_queue_count} queued truth checks / {score_visual_lock_count} score-visual locks / {actual_source_score_snippet_lock_count} actual-source score locks",
+            "evidence": f"{benchmark_count} benchmark corrections / {rejected_score_count} wrong-score-note regressions / {truth_item_count} stored truth items / {gold_label_count} gold labels / {gold_queue_count} queued gold clips / {truth_manifest_item_count} manifest truth checks / {truth_queue_count} queued truth checks / {score_visual_lock_count} score-visual locks / {actual_source_score_snippet_lock_count} actual-source score locks",
             "target": "Accepted truth clips for exact notes, registers, fast runs, arpeggios, repeats, rests, and score boxes.",
         },
         {
@@ -2393,6 +2410,12 @@ def build_transcription_completion(
         "truthManifestRejectedRegressionPhraseCount": truth_manifest_rejected_count,
         "truthManifestRejectedRegressionBlockedCount": truth_manifest_rejected_blocked_count,
         "truthManifestLiveAcceptedPhraseCount": truth_manifest_live_phrase_count,
+        "goldReviewLabelCount": gold_label_count,
+        "goldReviewAcceptedCount": gold_accepted_count,
+        "goldReviewRejectedCount": gold_rejected_count,
+        "goldReviewQueueCount": gold_queue_count,
+        "goldReviewAcceptedAudioPhraseCount": gold_accepted_audio_phrase_count,
+        "goldReviewAcceptedScorePhraseCount": gold_accepted_score_phrase_count,
         "transitionTraceCandidateCount": transition_trace_count,
         "pitchSequenceGroupCount": score_sequence_count,
         "checkedVideoLabel": checked_label if checked_label != "0s" else "",
@@ -2462,6 +2485,7 @@ def derive_review(
     repertoire_evidence = build_repertoire_evidence(daily_records)
     evidence_progress = build_evidence_progress(state)
     truth_workbench = build_truth_workbench(state, daily_records, evidence_progress)
+    gold_review = build_gold_review_loop(state, daily_records)
     transcription_completion = build_transcription_completion(
         training,
         daily_records,
@@ -2471,6 +2495,7 @@ def derive_review(
         media_samples,
         transcriptions,
         truth_workbench,
+        gold_review,
     )
     progress_plan = existing.get("progressPlan") if isinstance(existing.get("progressPlan"), dict) else None
     youtube_items = inventory.get("youtube", [])
@@ -2514,6 +2539,7 @@ def derive_review(
         "activePracticeCoverage": active_practice_coverage,
         "evidenceProgress": evidence_progress,
         "truthWorkbench": truth_workbench,
+        "goldReview": gold_review,
         "transcriptionCompletion": transcription_completion,
         "repertoireEvidence": repertoire_evidence,
         "progressPlan": progress_plan,

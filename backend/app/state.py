@@ -47,6 +47,10 @@ DEFAULT_STATE: dict[str, Any] = {
         "version": "truth_workbench_v1",
         "items": [],
     },
+    "goldReview": {
+        "version": "gold_review_v1",
+        "items": [],
+    },
     "activePracticeScan": {
         "version": "active_practice_scan_v1",
         "intervals": [],

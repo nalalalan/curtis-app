@@ -67,7 +67,9 @@ const elements = {
   mediaState: document.querySelector("#mediaState"),
   instagramState: document.querySelector("#instagramState"),
   transcriptionCompletionPill: document.querySelector("#transcriptionCompletionPill"),
-  transcriptionCompletion: document.querySelector("#transcriptionCompletion")
+  transcriptionCompletion: document.querySelector("#transcriptionCompletion"),
+  goldReviewCount: document.querySelector("#goldReviewCount"),
+  goldReviewPanel: document.querySelector("#goldReviewPanel")
 };
 
 function setText(element, value) {
@@ -88,7 +90,6 @@ function apiBase() {
   if (window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost") {
     return window.location.origin;
   }
-  if (window.location.hostname === "curtis.aolabs.io") return "";
   if (window.location.hostname.endsWith("up.railway.app")) return "";
   return DEFAULT_API_BASE;
 }
@@ -458,6 +459,76 @@ async function submitPieceLabel(form) {
     if (button) {
       button.disabled = false;
       button.textContent = "Save";
+    }
+  }
+}
+
+function noteInputText(value) {
+  if (Array.isArray(value)) return value.filter(Boolean).join(" ");
+  return String(value || "").trim();
+}
+
+function noteInputSequence(value) {
+  return String(value || "")
+    .replace(/,/g, " ")
+    .split(/\s+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function goldReviewState(ops) {
+  const review = ops?.review?.goldReview;
+  return review && typeof review === "object" ? review : null;
+}
+
+function goldReviewCandidates() {
+  const review = goldReviewState(backend.ops);
+  return [
+    ...(Array.isArray(review?.queue) ? review.queue : []),
+    ...(Array.isArray(review?.recentItems) ? review.recentItems : []),
+  ].filter((item) => item && typeof item === "object");
+}
+
+function findGoldReviewCandidate(id) {
+  return goldReviewCandidates().find((item) => String(item.reviewItemId || "") === String(id || "")) || null;
+}
+
+async function submitGoldReview(form, status) {
+  const candidate = findGoldReviewCandidate(form.dataset.reviewItemId);
+  const state = form.querySelector("[data-gold-review-status]");
+  if (!candidate) {
+    if (state) state.textContent = "Missing item.";
+    return;
+  }
+  const button = form.querySelector(`button[value="${status}"]`) || form.querySelector("button");
+  if (button) {
+    button.disabled = true;
+    button.textContent = status === "rejected_mismatch" ? "Rejecting" : "Accepting";
+  }
+  if (state) state.textContent = "Saving.";
+  const acceptedNotes = noteInputSequence(form.elements.acceptedNotes?.value || noteInputText(candidate.detectedNotes));
+  const scoreNotes = noteInputSequence(form.elements.scoreNotes?.value || "");
+  try {
+    const ops = await apiFetch("/api/curtis/gold-review/items", {
+      method: "POST",
+      body: JSON.stringify({
+        ...candidate,
+        type: form.elements.type?.value || candidate.reviewType || candidate.type || "audio_phrase",
+        status,
+        acceptedNotes,
+        scoreNotes,
+        scoreLocation: form.elements.scoreLocation?.value || candidate.scoreLocation || "",
+        reason: form.elements.reason?.value || "",
+      })
+    });
+    backend = { online: true, ops, lastError: "" };
+    render();
+  } catch (error) {
+    backend.lastError = String(error?.message || error || "review save failed");
+    if (state) state.textContent = "Failed.";
+    if (button) {
+      button.disabled = false;
+      button.textContent = status === "rejected_mismatch" ? "Reject" : "Accept";
     }
   }
 }
@@ -2744,6 +2815,133 @@ function truthWorkbenchStrip(workbench) {
   `;
 }
 
+function goldReviewNotationEvents(notes) {
+  return noteInputSequence(noteInputText(notes)).slice(0, 16).map((note, index) => ({
+    kind: "note",
+    note,
+    startSeconds: index * 0.25,
+    endSeconds: (index + 1) * 0.25,
+    localStartSeconds: index * 0.25,
+    localEndSeconds: (index + 1) * 0.25,
+    durationSeconds: 0.25,
+    durationKind: "quarter",
+    confidence: 1,
+    uncertain: false,
+  }));
+}
+
+function renderGoldReviewItem(item, index) {
+  const detectedNotes = noteInputText(item.detectedNotes);
+  const scoreNotes = noteInputText(item.scoreNotes);
+  const clip = item.clip && typeof item.clip === "object" ? item.clip : item;
+  const itemType = item.reviewType || item.type || "audio_phrase";
+  const typeOptions = [
+    ["audio_phrase", "audio"],
+    ["score_phrase", "score"],
+    ["audio_score_match", "audio+score"],
+    ["practice_window", "window"],
+  ];
+  const status = item.status || item.defaultStatus || "pending_review";
+  const isRecent = status !== "pending_review";
+  return `
+    <article class="gold-review-item" data-status="${escapeHtml(status)}">
+      <div class="gold-review-head">
+        <span>${escapeHtml(isRecent ? "Label" : `Queue ${index + 1}`)}</span>
+        <strong>${escapeHtml(shortText(detectedNotes || item.pieceTitle || "notes pending", 72))}</strong>
+        <em>${escapeHtml([item.practiceDay, item.detectedNoteCount ? `${item.detectedNoteCount} notes` : "", item.audioAgreed ? "audio agreed" : ""].filter(Boolean).join(" / "))}</em>
+      </div>
+      <div class="gold-review-grid">
+        ${renderEmbeddedMedia({}, clip)}
+        <section class="gold-review-notation">
+          <div class="matched-notation-head">
+            <span>Detected</span>
+            <strong>${escapeHtml(shortText(detectedNotes || "pending", 64))}</strong>
+          </div>
+          ${renderNotationSheet(goldReviewNotationEvents(item.detectedNotes), {
+            keySignature: {},
+            maxNotes: 16
+          })}
+          ${scoreNotes ? `<small>Score: ${escapeHtml(shortText(scoreNotes, 80))}</small>` : ""}
+        </section>
+        <form class="gold-review-form" data-gold-review-form data-review-item-id="${escapeHtml(item.reviewItemId || "")}">
+          <label>
+            <span>Accepted</span>
+            <input name="acceptedNotes" type="text" autocomplete="off" value="${escapeHtml(detectedNotes)}">
+          </label>
+          <label>
+            <span>Score</span>
+            <input name="scoreNotes" type="text" autocomplete="off" value="${escapeHtml(scoreNotes)}" placeholder="optional">
+          </label>
+          <label>
+            <span>Location</span>
+            <input name="scoreLocation" type="text" autocomplete="off" value="${escapeHtml(item.scoreLocation || "")}" placeholder="optional">
+          </label>
+          <label>
+            <span>Type</span>
+            <select name="type">
+              ${typeOptions.map(([value, label]) => `<option value="${escapeHtml(value)}"${value === itemType ? " selected" : ""}>${escapeHtml(label)}</option>`).join("")}
+            </select>
+          </label>
+          <label class="gold-review-reason">
+            <span>Reason</span>
+            <input name="reason" type="text" autocomplete="off" value="${escapeHtml(item.reason || "")}" placeholder="optional">
+          </label>
+          <div class="gold-review-actions">
+            <button type="submit" name="status" value="accepted_truth">Accept</button>
+            <button type="submit" name="status" value="rejected_mismatch">Reject</button>
+          </div>
+          <small data-gold-review-status>${escapeHtml(isRecent ? status.replace(/_/g, " ") : "")}</small>
+        </form>
+      </div>
+    </article>
+  `;
+}
+
+function renderGoldReview() {
+  if (!elements.goldReviewPanel) return;
+  if (!backend.online) {
+    setText(elements.goldReviewCount, "offline");
+    elements.goldReviewPanel.innerHTML = `<p class="empty">Backend offline.</p>`;
+    return;
+  }
+  const review = goldReviewState(backend.ops);
+  if (!review) {
+    setText(elements.goldReviewCount, "0 accepted / 0 queued");
+    elements.goldReviewPanel.innerHTML = `<p class="empty">Review queue pending.</p>`;
+    return;
+  }
+  const accepted = Number(review.acceptedCount) || 0;
+  const queued = Number(review.queueCount) || 0;
+  const rejected = Number(review.rejectedCount) || 0;
+  setText(elements.goldReviewCount, `${accepted} accepted / ${queued} queued`);
+  const queue = Array.isArray(review.queue) ? review.queue.slice(0, 4) : [];
+  const recent = Array.isArray(review.recentItems) ? review.recentItems.slice(0, 3) : [];
+  const items = queue.length ? queue : recent;
+  if (!items.length) {
+    elements.goldReviewPanel.innerHTML = `
+      <div class="gold-review-stats">
+        <article><span>Accepted</span><strong>${escapeHtml(String(accepted))}</strong></article>
+        <article><span>Queue</span><strong>${escapeHtml(String(queued))}</strong></article>
+        <article><span>Rejected</span><strong>${escapeHtml(String(rejected))}</strong></article>
+        <article><span>Score</span><strong>${escapeHtml(String(Number(review.acceptedScorePhraseCount) || 0))}</strong></article>
+      </div>
+      <p class="empty">No review clips queued.</p>
+    `;
+    return;
+  }
+  elements.goldReviewPanel.innerHTML = `
+    <div class="gold-review-stats">
+      <article><span>Accepted</span><strong>${escapeHtml(String(accepted))}</strong></article>
+      <article><span>Queue</span><strong>${escapeHtml(String(queued))}</strong></article>
+      <article><span>Rejected</span><strong>${escapeHtml(String(rejected))}</strong></article>
+      <article><span>Score</span><strong>${escapeHtml(String(Number(review.acceptedScorePhraseCount) || 0))}</strong></article>
+    </div>
+    <div class="gold-review-list">
+      ${items.map((item, index) => renderGoldReviewItem(item, index)).join("")}
+    </div>
+  `;
+}
+
 function renderTranscriptionCompletion() {
   if (!elements.transcriptionCompletion) return;
   if (!backend.online) {
@@ -2767,6 +2965,8 @@ function renderTranscriptionCompletion() {
     ["Practice", completion.activePracticeLabel || "pending"],
     ["Measure", `${Number(completion.acceptedMeasureMatchCount) || 0} accepted`],
     ["Phrase", `${Number(completion.longPhraseAcceptedCount) || 0} accepted`],
+    ["Gold", `${Number(completion.goldReviewAcceptedCount) || 0} accepted`],
+    ["Queue", `${Number(completion.goldReviewQueueCount) || 0} clips`],
     ["Source truth", `${Number(completion.truthManifestPositiveSourcePhraseVerifiedCount) || 0}/${Number(completion.truthManifestPositiveSourcePhraseCount) || 0}`],
     ["Blocked errors", `${Number(completion.truthManifestRejectedRegressionBlockedCount) || 0}/${Number(completion.truthManifestRejectedRegressionPhraseCount) || 0}`],
   ];
@@ -3037,6 +3237,7 @@ function render() {
   renderStudy();
   renderPieces();
   renderTranscriptionCompletion();
+  renderGoldReview();
   if (elements.highlightFrame) renderHighlight();
   if (elements.dayList) renderDays();
   if (elements.inventoryList) renderInventory();
@@ -3047,6 +3248,12 @@ if (elements.runScanButton) elements.runScanButton.addEventListener("click", run
 if (elements.probeMediaButton) elements.probeMediaButton.addEventListener("click", runMediaProbe);
 if (elements.rejectPieceButton) elements.rejectPieceButton.addEventListener("click", rejectActiveTitle);
 document.addEventListener("submit", (event) => {
+  const goldForm = event.target.closest("[data-gold-review-form]");
+  if (goldForm) {
+    event.preventDefault();
+    submitGoldReview(goldForm, event.submitter?.value || "accepted_truth");
+    return;
+  }
   const form = event.target.closest("[data-piece-label-form]");
   if (!form) return;
   event.preventDefault();

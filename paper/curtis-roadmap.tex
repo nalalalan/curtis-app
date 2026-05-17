@@ -117,6 +117,8 @@ First tracker update & This PDF now defines the full implementation plan and bec
 
 \paragraph{2026-05-16 exact-MIDI truth-manifest update} The exact-MIDI rule is now a standalone implementation asset instead of only an inline scanner condition. The new \texttt{curtis-long-phrase-gold.json} manifest verifies one source-only Wieniawski positive phrase, \texttt{G5 F5 A5 G\#5 F5}, and blocks three known false phrase families: the old \texttt{D6 C6 Bb5} source map, the rejected \texttt{Bb4 D5 C5 Bb4 D5} lane, and the current queued \texttt{G5 G5 A\#5 A\#5 A\#5 A\#5 A5} target. The shared gate now reports contiguous exact-MIDI overlap, ordered overlap, exact source sequence, and audio-agreement state. The site exposes the source-positive and blocked-regression counts in the compact solve-status panel. This is not a solved live phrase; it is the regression harness needed so the next phrase attempt cannot reuse a known wrong score map or a pitch-letter-only match.
 
+\paragraph{2026-05-16 09:07 PM EDT gold-review-loop update} Curtis now has a real review loop instead of only hidden candidates and scattered correction endpoints. The backend builds a queue from detected audio-note series and candidate score groups, choosing reviewable note windows that prefer audio-agreed, spectrally supported, non-repeated phrase material over repeated-note sludge. The new \texttt{/api/curtis/gold-review} route exposes accepted, rejected, pending, queue, score-ready, and evidence-ready counts. The \texttt{/api/curtis/gold-review/items} write path accepts pending, accepted, or rejected labels and mirrors accepted/rejected labels into the truth workbench. Audio-only accepted labels become gold audio truth; accepted score labels are refused unless the accepted audio notes and score notes match exactly by note name, octave, and MIDI sequence and include a source score coordinate. The site now includes a compact review surface with local video, audio, detected notation, editable accepted notes, optional score notes/location, and accept/reject actions. The solve-status tracker includes gold-label and queue counts. This still leaves live long phrases at zero; it creates the review data path required to make future phrase work accumulate instead of cycling through unverifiable candidates.
+
 \subsection{Definition of solved}
 
 Long-phrase transcription is solved for Curtis only when the system can take Alan's long-form practice archive and produce evidence groups that a musician can trust without manually checking every note. The complete goal is not merely a model that prints plausible notation. The solved system must satisfy all of the following conditions.
@@ -314,6 +316,8 @@ Acceptance for this phase:
 
 Fully automatic transcription will not become reliable without corrections. Curtis needs a correction UI that allows Alan to say: this note is A, this staff note is wrong, this score box points to B, this clip is non-playing, this rhythm is wrong, this is Scherzo-Tarantelle, this is a made-up exercise, or this score match is false.
 
+\textbf{Status: partially implemented.} The gold review loop now covers audio-phrase acceptance/rejection and score-phrase acceptance/rejection from queued detected clips. It is intentionally narrow: it can create accepted audio truth and exact score-ready truth, but it does not yet provide detailed onset/rhythm editing, score-box coordinate editing, batch keyboard review, waveform overlays, or full measure-level correction.
+
 Every correction should become data:
 \begin{itemize}
     \item corrected note events become gold labels;
@@ -325,8 +329,8 @@ Every correction should become data:
 
 Acceptance for this phase:
 \begin{itemize}
-    \item Alan can fix a wrong note or score box without editing code;
-    \item the corrected example appears in the benchmark set;
+    \item Alan can accept or reject queued note windows without editing code;
+    \item accepted and rejected examples appear in the gold/truth set;
     \item the same failure cannot reappear after rerendering;
     \item the PDF tracker records the correction count and benchmark count.
 \end{itemize}
@@ -468,14 +472,14 @@ M6 & Repeat grouping & Multiple attempts of the same passage group into loops, r
 M7 & Heat map & Practice density and problem density appear on verified score coordinates. & Pending. \\
 M8 & Repertoire update & Piece entries update from accepted daily evidence and show active time, clips, snippets, and blockers. & Pending. \\
 M9 & Readiness observation & Main blocker is generated from accepted evidence, not generic advice. & Pending. \\
-M10 & Regression lock & Tests prevent failed notation, wrong score boxes, and non-playing practice-time credit from returning. & Correction benchmark scaffold added; user-reviewed wrong-score regressions are stored; truth-workbench write gates reject accepted audio-score note mismatches; visible-note-sequence verification is required for accepted score panels; second-pass audio agreement now blocks weak fast-transition and reference-audio phrase candidates; the exact-MIDI truth manifest verifies one source-positive phrase and blocks three known false phrase maps. \\
+M10 & Regression lock & Tests prevent failed notation, wrong score boxes, and non-playing practice-time credit from returning. & Correction benchmark scaffold added; user-reviewed wrong-score regressions are stored; truth-workbench and gold-review write gates reject accepted audio-score note mismatches; visible-note-sequence verification is required for accepted score panels; second-pass audio agreement now blocks weak fast-transition and reference-audio phrase candidates; the exact-MIDI truth manifest verifies one source-positive phrase and blocks three known false phrase maps; queued clips can now be accepted/rejected into the gold set. \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
 \subsection{Immediate next implementation}
 
-After this PDF tracker, the first concrete implementation target is \textbf{full active-practice coverage plus benchmark/correction scaffolding}. This is the first useful code milestone because transcription cannot be trusted without knowing which source windows contain violin playing, and it cannot improve reliably without a gold correction loop.
+After this PDF tracker, the first concrete implementation target is \textbf{full active-practice coverage plus benchmark/correction scaffolding}. This is the first useful code milestone because transcription cannot be trusted without knowing which source windows contain violin playing, and it cannot improve reliably without a gold correction loop. The first gold review loop is now implemented for queued audio/score phrase labels, but the larger benchmark suite and full archive coverage remain incomplete.
 
 The 2026-05-13 11:57 AM EDT backend update completed the coverage and correction scaffolding portion:
 \begin{itemize}
