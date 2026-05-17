@@ -770,6 +770,7 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertEqual(completion["staff4AdjacentMiningStatus"], "exact_audio_candidate")
         self.assertEqual(completion["staff4AdjacentMining"]["bestCandidate"]["audioRunSource"], "staff4_source_audio_rescan")
         self.assertEqual(completion["staff4AdjacentMining"]["bestCandidate"]["windowMidiSequence"], [75, 75, 72, 75, 75, 75, 72])
+        self.assertNotIn("Convert one local source-score measure", completion["nextAction"])
 
     def test_local_source_score_pdf_advances_score_truth_without_accepting_phrase(self):
         completion = build_transcription_completion(

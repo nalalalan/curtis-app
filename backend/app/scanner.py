@@ -3700,11 +3700,7 @@ def build_transcription_completion(
             "target": "Tests fail on mismatched audio/notation, wrong score boxes, missing media, and fake practice time.",
         },
     ]
-    if not measure_match_count:
-        next_action = "Convert one local source-score measure into verified symbolic notes, then run the existing phrase matcher over hidden detected series."
-    elif not long_phrase_count:
-        next_action = "Extend the accepted source-backed measure into longer phrases and score-coordinate heat maps."
-    elif phrase_expansion_current and phrase_expansion_accepted_count == 0 and phrase_expansion_ready_count:
+    if phrase_expansion_current and phrase_expansion_accepted_count == 0 and phrase_expansion_ready_count:
         next_action = (
             "Review the ready Staff 4 expansion from the raw detected-series search; exact MIDI and audio agree, "
             "but accepted truth evidence is still required before display."
@@ -3738,12 +3734,23 @@ def build_transcription_completion(
                         f"{phrase_expansion_current.get('targetSequence') or 'adjacent'} MIDI window yet."
                     )
         else:
-            next_action = (
-                "Keep the accepted Staff 4 source lane fixed; expansion is blocked at "
-                f"{phrase_expansion_current.get('expectedNextScoreNote') or 'the next source note'} vs "
-                f"{phrase_expansion_current.get('observedNextAudioNote') or 'current audio'} after searching "
-                f"{phrase_expansion_audio_run_count} audio-note runs."
-            )
+            if staff4_mining_status == "not_found" and staff4_source_rescan_run_count:
+                next_action = (
+                    "Widen the Staff 4 source-audio rescan or improve note segmentation; exact MIDI search found no "
+                    f"{phrase_expansion_current.get('targetSequence') or 'adjacent'} window after "
+                    f"{staff4_mining_searched_count} stored/rescanned windows."
+                )
+            else:
+                next_action = (
+                    "Keep the accepted Staff 4 source lane fixed; expansion is blocked at "
+                    f"{phrase_expansion_current.get('expectedNextScoreNote') or 'the next source note'} vs "
+                    f"{phrase_expansion_current.get('observedNextAudioNote') or 'current audio'} after searching "
+                    f"{phrase_expansion_audio_run_count} audio-note runs."
+                )
+    elif not measure_match_count:
+        next_action = "Convert one local source-score measure into verified symbolic notes, then run the existing phrase matcher over hidden detected series."
+    elif not long_phrase_count:
+        next_action = "Extend the accepted source-backed measure into longer phrases and score-coordinate heat maps."
     elif source_target_sequence and source_target_checked and not source_target_verified:
         next_action = (
             "Use IMSLP staff review packets to verify score-note hypotheses into MusicXML before promoting "
