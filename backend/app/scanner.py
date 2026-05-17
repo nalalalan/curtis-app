@@ -1554,6 +1554,319 @@ def source_verification_target_top(daily_records: dict[str, Any]) -> dict[str, A
     return targets[0] if targets else {}
 
 
+def note_midi_values(notes: list[dict[str, Any]]) -> list[int]:
+    values: list[int] = []
+    for note in notes:
+        value = note_midi_value(note)
+        if value is None:
+            return []
+        values.append(value)
+    return values
+
+
+def note_exact_label(notes: list[dict[str, Any]]) -> str:
+    return " ".join(str(note.get("note") or "").strip() for note in notes if str(note.get("note") or "").strip())
+
+
+def source_snippet_for_range(target: dict[str, Any], reference_start: int, reference_end: int) -> dict[str, Any]:
+    score = target.get("symbolicScore") if isinstance(target.get("symbolicScore"), dict) else {}
+    snippets = score.get("sourceSnippets") if isinstance(score.get("sourceSnippets"), list) else []
+    for snippet in snippets:
+        if not isinstance(snippet, dict):
+            continue
+        if int(snippet.get("referenceStart") or -1) == reference_start and int(snippet.get("referenceEnd") or -1) == reference_end:
+            return snippet
+    return {}
+
+
+def exact_source_range_visually_verified(snippet: dict[str, Any]) -> bool:
+    return bool(
+        isinstance(snippet, dict)
+        and str(snippet.get("imageUrl") or "").strip()
+        and snippet.get("visualRangeAgreement") is True
+        and snippet.get("visibleScoreNoteSequenceVerified") is True
+        and snippet.get("visibleScoreExactNoteSequenceVerified") is True
+        and snippet.get("scoreBoxCenterAgreement") is True
+    )
+
+
+def detected_audio_runs_for_expansion(daily_records: dict[str, Any]) -> list[dict[str, Any]]:
+    records = daily_records.get("records") if isinstance(daily_records.get("records"), list) else []
+    runs: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, float, float, tuple[int, ...]]] = set()
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        practice_day = str(record.get("practiceDay") or record.get("date") or "")
+        for group in candidate_match_groups_for_record(record):
+            detected = group.get("detectedSeries") if isinstance(group.get("detectedSeries"), dict) else {}
+            clip = group.get("clip") if isinstance(group.get("clip"), dict) else {}
+            notes = detected.get("notes") if isinstance(detected.get("notes"), list) else []
+            if not notes:
+                notes = match_detected_note_events(group)
+            notes = [note for note in notes if isinstance(note, dict) and note_midi_value(note) is not None]
+            if not notes:
+                continue
+            notes = sorted(notes, key=lambda note: (float(note.get("startSeconds") or 0), float(note.get("endSeconds") or 0)))
+            midi = tuple(note_midi_values(notes))
+            sample_id = str(detected.get("sampleId") or clip.get("sampleId") or "")
+            source_window = str(detected.get("sourceWindow") or "")
+            start = float(notes[0].get("startSeconds") or 0)
+            end = float(notes[-1].get("endSeconds") or start)
+            identity = (practice_day, sample_id, start, end, midi)
+            if identity in seen:
+                continue
+            seen.add(identity)
+            runs.append(
+                {
+                    "practiceDay": practice_day,
+                    "sampleId": sample_id,
+                    "sourceWindow": source_window,
+                    "sourceTitle": str(detected.get("sourceTitle") or clip.get("sourceTitle") or ""),
+                    "candidateOnly": bool(detected.get("candidateOnly")),
+                    "notes": notes,
+                    "midiSequence": list(midi),
+                    "exactSequence": note_exact_label(notes),
+                    "startSeconds": group.get("startSeconds") or clip.get("startSeconds"),
+                    "endSeconds": group.get("endSeconds") or clip.get("endSeconds"),
+                    "localStartSeconds": detected.get("localStartSeconds") or clip.get("localStartSeconds"),
+                    "localEndSeconds": detected.get("localEndSeconds") or clip.get("localEndSeconds"),
+                }
+            )
+    return runs
+
+
+def best_audio_window_for_source_range(
+    runs: list[dict[str, Any]],
+    source_slice: list[dict[str, Any]],
+    *,
+    anchor_midi: list[int],
+    anchor_offset: int,
+) -> dict[str, Any]:
+    source_midi = note_midi_values(source_slice)
+    if not source_midi:
+        return {}
+    best: dict[str, Any] = {}
+    target_length = len(source_midi)
+    for run in runs:
+        notes = run.get("notes") if isinstance(run.get("notes"), list) else []
+        run_midi = note_midi_values([note for note in notes if isinstance(note, dict)])
+        if len(run_midi) < target_length:
+            continue
+        for start in range(0, len(run_midi) - target_length + 1):
+            window_midi = run_midi[start : start + target_length]
+            window_notes = notes[start : start + target_length]
+            anchor_end = anchor_offset + len(anchor_midi)
+            if anchor_midi and window_midi[anchor_offset:anchor_end] != anchor_midi:
+                continue
+            exact_count = sum(1 for observed, expected in zip(window_midi, source_midi) if observed == expected)
+            prefix_count = 0
+            for observed, expected in zip(window_midi, source_midi):
+                if observed != expected:
+                    break
+                prefix_count += 1
+            mismatch_index = next(
+                (index for index, (observed, expected) in enumerate(zip(window_midi, source_midi)) if observed != expected),
+                -1,
+            )
+            candidate_only = bool(run.get("candidateOnly"))
+            audio_agreed = notes_have_score_match_audio_agreement(window_notes, candidate_only=candidate_only)
+            current = {
+                "run": run,
+                "windowStart": start,
+                "windowEnd": start + target_length,
+                "windowNotes": window_notes,
+                "windowMidiSequence": window_midi,
+                "windowExactSequence": note_exact_label(window_notes),
+                "exactCount": exact_count,
+                "prefixCount": prefix_count,
+                "mismatchIndex": mismatch_index,
+                "audioAgreed": audio_agreed,
+                "candidateOnly": candidate_only,
+            }
+            current_key = (
+                1 if audio_agreed else 0,
+                exact_count,
+                prefix_count,
+                1 if run.get("sampleId") else 0,
+                -start,
+            )
+            best_key = (
+                1 if best.get("audioAgreed") else 0,
+                int(best.get("exactCount") or 0),
+                int(best.get("prefixCount") or 0),
+                1 if (best.get("run") or {}).get("sampleId") else 0,
+                -int(best.get("windowStart") or 0),
+            )
+            if not best or current_key > best_key:
+                best = current
+    return best
+
+
+def expansion_status_for_window(
+    *,
+    source_slice: list[dict[str, Any]],
+    source_snippet: dict[str, Any],
+    best_window: dict[str, Any],
+) -> tuple[str, str]:
+    source_midi = note_midi_values(source_slice)
+    snippet_ready = exact_source_range_visually_verified(source_snippet)
+    truth_ready = bool(source_snippet.get("truthEvidenceAccepted"))
+    if not best_window:
+        return "blocked_no_audio_candidate", "No audio-note run currently covers this adjacent source range."
+    exact_count = int(best_window.get("exactCount") or 0)
+    audio_agreed = bool(best_window.get("audioAgreed"))
+    if exact_count == len(source_midi) and audio_agreed and snippet_ready and truth_ready:
+        return "accepted_source_audio_expansion", "Exact source MIDI, paired audio, source crop, and truth gate all pass."
+    if exact_count == len(source_midi) and audio_agreed and snippet_ready:
+        return "ready_for_truth_review", "Audio and source MIDI agree; the source crop still needs accepted truth evidence before display."
+    if exact_count == len(source_midi) and audio_agreed:
+        return "blocked_source_crop_required", "Audio and source MIDI agree, but an accepted actual-score crop is still required."
+    if not audio_agreed:
+        return "blocked_audio_agreement", "Candidate notes do not all pass the paired-audio agreement gate."
+    return "blocked_audio_mismatch", "Adjacent audio notes do not match the verified source MIDI sequence."
+
+
+def source_phrase_expansion_harness(daily_records: dict[str, Any], limit: int = 8) -> dict[str, Any]:
+    records = daily_records.get("records") if isinstance(daily_records.get("records"), list) else []
+    audio_runs = detected_audio_runs_for_expansion(daily_records)
+    items: list[dict[str, Any]] = []
+    anchor_count = 0
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        practice_day = str(record.get("practiceDay") or record.get("date") or "")
+        groups = record.get("matchGroups") if isinstance(record.get("matchGroups"), list) else []
+        for match in groups:
+            if not accepted_long_phrase_match(match):
+                continue
+            target = source_reference_target_for_match(match)
+            score = symbolic_score_from_target(target) if target else {}
+            source_notes = score.get("notes") if isinstance(score.get("notes"), list) else []
+            if not source_notes:
+                continue
+            reference_start = int(match.get("referenceStart") or 0)
+            reference_end = int(match.get("referenceEnd") or reference_start)
+            if reference_end <= reference_start:
+                continue
+            anchor_slice = source_notes[reference_start:reference_end]
+            anchor_midi = note_midi_values(anchor_slice)
+            if not anchor_midi:
+                continue
+            anchor_count += 1
+            candidates: list[tuple[str, int, int]] = []
+            if reference_start > 0:
+                candidates.append(("left-1", reference_start - 1, reference_end))
+            if reference_end < len(source_notes):
+                candidates.append(("right-1", reference_start, reference_end + 1))
+            if reference_end + 1 < len(source_notes):
+                candidates.append(("right-2", reference_start, reference_end + 2))
+            for direction, start, end in candidates:
+                source_slice = source_notes[start:end]
+                source_midi = note_midi_values(source_slice)
+                if not source_midi:
+                    continue
+                anchor_offset = reference_start - start
+                source_snippet = source_snippet_for_range(target, start, end)
+                best_window = best_audio_window_for_source_range(
+                    audio_runs,
+                    source_slice,
+                    anchor_midi=anchor_midi,
+                    anchor_offset=anchor_offset,
+                )
+                status, limit_text = expansion_status_for_window(
+                    source_slice=source_slice,
+                    source_snippet=source_snippet,
+                    best_window=best_window,
+                )
+                mismatch_index = int(best_window.get("mismatchIndex") if best_window else -1)
+                expected_note = ""
+                observed_note = ""
+                expected_midi = None
+                observed_midi = None
+                if mismatch_index >= 0 and mismatch_index < len(source_slice):
+                    expected_note = str(source_slice[mismatch_index].get("note") or "")
+                    expected_midi = note_midi_value(source_slice[mismatch_index])
+                    window_notes = best_window.get("windowNotes") if isinstance(best_window.get("windowNotes"), list) else []
+                    if mismatch_index < len(window_notes):
+                        observed_note = str(window_notes[mismatch_index].get("note") or "")
+                        observed_midi = note_midi_value(window_notes[mismatch_index])
+                elif isinstance(source_snippet.get("extensionCheck"), dict):
+                    check = source_snippet["extensionCheck"]
+                    expected_note = str(check.get("expectedNextScoreNote") or "")
+                    expected_midi = check.get("expectedNextScoreMidi")
+                    observed_note = str(check.get("observedNextAudioNote") or "")
+                    observed_midi = check.get("observedNextAudioMidi")
+                    if not best_window and observed_note:
+                        status = "blocked_audio_mismatch"
+                        limit_text = "Source-lane extension is verified, but the stored adjacent audio check disagrees."
+                run = best_window.get("run") if isinstance(best_window.get("run"), dict) else {}
+                items.append(
+                    {
+                        "status": status,
+                        "direction": direction,
+                        "practiceDay": practice_day,
+                        "pieceTitle": str(match.get("pieceTitle") or score.get("title") or ""),
+                        "anchorReferenceStart": reference_start,
+                        "anchorReferenceEnd": reference_end,
+                        "targetReferenceStart": start,
+                        "targetReferenceEnd": end,
+                        "sourceNoteCount": len(source_slice),
+                        "anchorSequence": note_exact_label(anchor_slice),
+                        "targetSequence": note_exact_label(source_slice),
+                        "targetMidiSequence": source_midi,
+                        "bestAudioSequence": str(best_window.get("windowExactSequence") or ""),
+                        "bestAudioMidiSequence": best_window.get("windowMidiSequence") or [],
+                        "bestExactCount": int(best_window.get("exactCount") or 0),
+                        "bestPrefixCount": int(best_window.get("prefixCount") or 0),
+                        "expectedNextScoreNote": expected_note,
+                        "expectedNextScoreMidi": expected_midi,
+                        "observedNextAudioNote": observed_note,
+                        "observedNextAudioMidi": observed_midi,
+                        "audioAgreed": bool(best_window.get("audioAgreed")) if best_window else False,
+                        "sourceCropReady": exact_source_range_visually_verified(source_snippet),
+                        "truthEvidenceAccepted": bool(source_snippet.get("truthEvidenceAccepted")) if source_snippet else False,
+                        "sourceImageUrl": str(source_snippet.get("imageUrl") or ""),
+                        "sampleId": str(run.get("sampleId") or ""),
+                        "sourceWindow": str(run.get("sourceWindow") or ""),
+                        "limit": limit_text,
+                    }
+                )
+    items = sorted(
+        items,
+        key=lambda item: (
+            1 if item.get("status") == "accepted_source_audio_expansion" else 0,
+            1 if item.get("status") == "ready_for_truth_review" else 0,
+            int(item.get("bestExactCount") or 0),
+            int(item.get("bestPrefixCount") or 0),
+            int(item.get("sourceNoteCount") or 0),
+        ),
+        reverse=True,
+    )
+    accepted_count = sum(1 for item in items if item.get("status") == "accepted_source_audio_expansion")
+    ready_count = sum(1 for item in items if item.get("status") == "ready_for_truth_review")
+    blocked_count = sum(1 for item in items if str(item.get("status") or "").startswith("blocked"))
+    current = items[0] if items else {}
+    return {
+        "status": "accepted" if accepted_count else "ready" if items else "empty",
+        "anchorCount": anchor_count,
+        "audioRunCount": len(audio_runs),
+        "targetCount": len(items),
+        "acceptedExpansionCount": accepted_count,
+        "readyForReviewCount": ready_count,
+        "blockedExpansionCount": blocked_count,
+        "currentBest": current,
+        "items": items[: max(0, int(limit))],
+        "nextAction": (
+            "Promote the accepted expansion into the visible score/audio lane."
+            if accepted_count
+            else "Keep the accepted Staff 4 anchor fixed and search adjacent audio candidates until the next source note agrees."
+            if items
+            else "Create one accepted source/audio anchor before running expansion."
+        ),
+    }
+
+
 def build_truth_workbench(
     state: dict[str, Any],
     daily_records: dict[str, Any],
@@ -1988,6 +2301,21 @@ def build_transcription_completion(
     source_target_verified = sum(1 for target in source_targets if target.get("sourceScoreVerified"))
     source_target_best_overlap = int(source_target_top.get("sourceScoreBestOverlap") or 0)
     source_target_check_status = str(source_target_top.get("sourceScoreCheckStatus") or "")
+    phrase_expansion = source_phrase_expansion_harness(daily_records)
+    phrase_expansion_target_count = int(phrase_expansion.get("targetCount") or 0)
+    phrase_expansion_accepted_count = int(phrase_expansion.get("acceptedExpansionCount") or 0)
+    phrase_expansion_ready_count = int(phrase_expansion.get("readyForReviewCount") or 0)
+    phrase_expansion_blocked_count = int(phrase_expansion.get("blockedExpansionCount") or 0)
+    phrase_expansion_current = (
+        phrase_expansion.get("currentBest")
+        if isinstance(phrase_expansion.get("currentBest"), dict)
+        else {}
+    )
+    phrase_expansion_detail = (
+        f"{phrase_expansion_accepted_count} accepted / {phrase_expansion_blocked_count} blocked"
+        if phrase_expansion_target_count
+        else "pending anchor"
+    )
     phrase_candidate_detail = (
         f"pending: {phrase_candidate_sequence}"
         if phrase_candidate_sequence
@@ -2119,12 +2447,13 @@ def build_transcription_completion(
             8,
             (1.5 if score_sequence_match_count(daily_records) else 0)
             + min(2.5, phrase_candidate_count * 0.5)
+            + min(0.5, phrase_expansion_target_count * 0.25)
             + (1 if source_target_note_count >= 7 else 0)
             + (2 if score_verified_count else 0)
             + (1 if measure_match_count else 0)
             + min(2, long_phrase_count * 2),
-            f"{score_sequence_count} pitch-sequence groups / {phrase_candidate_count} phrase candidates / {source_target_count} source targets / {score_verified_count} exact score locations",
-            "Pitch-sequence groups are separated from exact score evidence.",
+            f"{score_sequence_count} pitch-sequence groups / {phrase_candidate_count} phrase candidates / {source_target_count} source targets / {phrase_expansion_target_count} anchored expansions / {score_verified_count} exact score locations",
+            "Pitch-sequence groups are separated from exact score evidence, and accepted anchors now feed an outward source-lane expansion gate.",
             "Promote phrase candidates only after source-score or score-free exercise verification.",
         ),
         roadmap_gate(
@@ -2226,6 +2555,11 @@ def build_transcription_completion(
             "detail": "accepted",
         },
         {
+            "label": "Expansion gate",
+            "value": f"{phrase_expansion_accepted_count}/{phrase_expansion_target_count}",
+            "detail": phrase_expansion_detail,
+        },
+        {
             "label": "Fast-note trace",
             "value": str(transition_trace_count),
             "detail": "hidden candidates",
@@ -2280,6 +2614,7 @@ def build_transcription_completion(
         "Score panels require visible score noteheads, range, spelling, exact note-and-octave agreement, and an actual source-score crop before display.",
         "The rejected five-note Scherzo phrase is blocked from accepted score evidence.",
         "A truth workbench now separates queued, accepted, and rejected audio-score-transcription evidence before anything can become visible score evidence.",
+        "Accepted source/audio anchors now feed an outward expansion gate before Curtis tries a new random match.",
     ]
     remaining_summary = [
         "Finish chronological active-practice coverage across the full archive.",
@@ -2288,6 +2623,7 @@ def build_transcription_completion(
         "Use review packets to convert queued score-note hypotheses into verified MusicXML notes before promoting source targets from reference-audio candidates to accepted score evidence.",
         "Replace short fragments with accurate phrase-level note and rhythm extraction.",
         "Build longer phrase candidates that survive the second-pass audio gate instead of relying on loose transition traces or reference-audio coincidences.",
+        "Keep extending the accepted Staff 4 anchor only when each adjacent source note agrees with paired audio.",
         "Align accepted phrases to score locations or score-free repeated exercise patterns.",
         "Generate heat maps and Curtis-level observations only from accepted evidence.",
     ]
@@ -2317,8 +2653,8 @@ def build_transcription_completion(
             "phase": "4",
             "label": "One-measure acceleration gate",
             "status": "complete" if measure_match_count else "blocked",
-            "evidence": f"{measure_match_count} accepted measures / {long_phrase_count} accepted long phrases / {score_verified_count} exact score locations",
-            "target": "First accepted measure: exact symbolic score notes, local audio/video, and matching transcription.",
+            "evidence": f"{measure_match_count} accepted measures / {long_phrase_count} accepted long phrases / {phrase_expansion_target_count} anchored expansions / {score_verified_count} exact score locations",
+            "target": "First accepted measure plus outward expansion from the same verified source lane.",
         },
         {
             "phase": "5",
@@ -2338,7 +2674,7 @@ def build_transcription_completion(
             "phase": "7",
             "label": "Score and exercise alignment",
             "status": "partial" if score_sequence_count or phrase_candidate_count else "pending",
-            "evidence": f"{score_sequence_count} pitch-sequence groups / {phrase_candidate_count} phrase candidates / {source_target_count} source targets / {score_verified_count} exact score locations",
+            "evidence": f"{score_sequence_count} pitch-sequence groups / {phrase_candidate_count} phrase candidates / {source_target_count} source targets / {phrase_expansion_target_count} anchored expansions / {score_verified_count} exact score locations",
             "target": "Accepted phrase groups paired with original score snippets or repeated exercise patterns.",
         },
         {
@@ -2356,6 +2692,28 @@ def build_transcription_completion(
             "target": "Tests fail on mismatched audio/notation, wrong score boxes, missing media, and fake practice time.",
         },
     ]
+    if not measure_match_count:
+        next_action = "Convert one local source-score measure into verified symbolic notes, then run the existing phrase matcher over hidden detected series."
+    elif not long_phrase_count:
+        next_action = "Extend the accepted source-backed measure into longer phrases and score-coordinate heat maps."
+    elif phrase_expansion_current and phrase_expansion_accepted_count == 0:
+        next_action = (
+            "Keep the accepted Staff 4 source lane fixed; expansion is blocked at "
+            f"{phrase_expansion_current.get('expectedNextScoreNote') or 'the next source note'} vs "
+            f"{phrase_expansion_current.get('observedNextAudioNote') or 'current audio'}."
+        )
+    elif source_target_sequence and source_target_checked and not source_target_verified:
+        next_action = (
+            "Use IMSLP staff review packets to verify score-note hypotheses into MusicXML before promoting "
+            f"{source_target_sequence}; current exact-MIDI source overlap is {source_target_best_overlap}/{source_target_note_count}."
+        )
+    elif source_target_sequence:
+        next_action = (
+            f"Verify the {source_target_note_count}-note source target {source_target_sequence} against the local IMSLP score, "
+            "then promote only if the score notes and crop match."
+        )
+    else:
+        next_action = "Extend the accepted score-coordinate phrase into longer passages, repeated attempts, and problem-density layers."
     return {
         "status": "partial" if completed_points else "pending",
         "completionPercent": completion_percent,
@@ -2375,6 +2733,12 @@ def build_transcription_completion(
         "acceptedMeasureMatchCount": measure_match_count,
         "scoreHeatmapFragmentCount": score_heatmap_count,
         "referencePhraseCandidateCount": phrase_candidate_count,
+        "phraseExpansionHarness": phrase_expansion,
+        "phraseExpansionTargetCount": phrase_expansion_target_count,
+        "phraseExpansionAcceptedCount": phrase_expansion_accepted_count,
+        "phraseExpansionReadyForReviewCount": phrase_expansion_ready_count,
+        "phraseExpansionBlockedCount": phrase_expansion_blocked_count,
+        "phraseExpansionCurrentStatus": str(phrase_expansion_current.get("status") or ""),
         "sourceVerificationTargetCount": source_target_count,
         "sourceVerificationTargets": source_targets,
         "sourceVerificationTargetTop": source_target_top,
@@ -2431,19 +2795,7 @@ def build_transcription_completion(
         "doneItems": [item["done"] for item in gates if item["points"] > 0],
         "remainingItems": [item["remaining"] for item in gates if item["points"] < item["weight"]],
         "gates": gates,
-        "nextAction": (
-            "Convert one local source-score measure into verified symbolic notes, then run the existing phrase matcher over hidden detected series."
-            if not measure_match_count
-            else "Extend the accepted source-backed measure into longer phrases and score-coordinate heat maps."
-            if not long_phrase_count
-            else (
-                f"Use IMSLP staff review packets to verify score-note hypotheses into MusicXML before promoting {source_target_sequence}; current exact-MIDI source overlap is {source_target_best_overlap}/{source_target_note_count}."
-                if source_target_checked and not source_target_verified and source_target_sequence
-                else f"Verify the {source_target_note_count}-note source target {source_target_sequence} against the local IMSLP score, then promote only if the score notes and crop match."
-            )
-            if source_target_sequence
-            else "Extend the accepted score-coordinate phrase into longer passages, repeated attempts, and problem-density layers."
-        ),
+        "nextAction": next_action,
     }
 
 

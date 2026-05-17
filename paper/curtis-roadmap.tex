@@ -476,7 +476,7 @@ M6 & Repeat grouping & Multiple attempts of the same passage group into loops, r
 M7 & Heat map & Practice density and problem density appear on verified score coordinates. & Pending. \\
 M8 & Repertoire update & Piece entries update from accepted daily evidence and show active time, clips, snippets, and blockers. & Pending. \\
 M9 & Readiness observation & Main blocker is generated from accepted evidence, not generic advice. & Pending. \\
-M10 & Regression lock & Tests prevent failed notation, wrong score boxes, and non-playing practice-time credit from returning. & Advanced; exact-MIDI manifest verifies three positive source phrases, accepts one live source/audio phrase, and blocks three false phrase maps. \\
+M10 & Regression lock & Tests prevent failed notation, wrong score boxes, and non-playing practice-time credit from returning. & Advanced; exact-MIDI manifest verifies three positive source phrases, accepts one live source/audio phrase, blocks three false phrase maps, and now exposes a 0/3 Staff 4 expansion gate that stops at the \texttt{Eb5} versus \texttt{D5} mismatch. \\
 \bottomrule
 \end{tabularx}
 \end{table}
@@ -544,25 +544,27 @@ The 2026-05-14 05:11 AM EDT source-score acceleration pass advanced M2 and M4 in
 
 The 2026-05-16 10:30 PM EDT source-review pass completed the next narrow lane that the roadmap called for. One queued Staff 4 review packet from the local IMSLP Scherzo-Tarantelle solo part was converted into verified MusicXML for the visible E-flat5--E-flat5--C5--E-flat5--E-flat5 source measure-window. The accepted crop is a non-generated source-score image from page 2 with boxes centered on the five noteheads. The live May 3 detected phrase \texttt{D\#5 D\#5 C5 D\#5 D\#5} is accepted against that source window because the MIDI sequence \texttt{75 75 72 75 75} matches the verified score exactly; the displayed score spelling remains \texttt{Eb5 Eb5 C5 Eb5 Eb5}. The truth manifest now verifies two source-positive exact-MIDI phrases, marks one as live accepted, and keeps the three known false phrase maps blocked. The regression subset increased this lane to 34 focused tests covering the MusicXML slice, source-snippet gate, exact-MIDI acceptance, written-flat display, source-range verification, and rejected phrase regressions. This is still not long-phrase transcription: it is one verified source/audio phrase that can be extended outward into adjacent measures.
 
+The 2026-05-17 anchored-expansion harness implements that outward-extension step as a gate rather than a manual judgment. The solve tracker now starts from the accepted Staff 4 source/audio anchor and tests the adjacent left and right source-note ranges against available audio-agreed note runs. Current result: 3 anchored expansions checked, 0 accepted. The strongest expansion target is the seven-note right-side lane \texttt{Eb5 Eb5 C5 Eb5 Eb5 Eb5 C5}; it keeps the first five MIDI values exact, then blocks at \texttt{Eb5} versus \texttt{D5}. This prevents Curtis from treating a new random phrase candidate as progress while the current accepted lane has not yet extended cleanly.
+
 The remaining M1 work is continuing the low-cost media pass over every unmeasured strict-ledger video in chronological windows, then replacing the sample-biased estimate with full-archive checked intervals. The remaining M10 work is the larger benchmark suite for repeated notes, arpeggios, fast runs, score-free exercises, score-coordinate truth, accepted notation/media completeness, and practice-time accounting regressions.
 
-The long-phrase track should now run in parallel with full-archive scanning. Waiting for all 234 h 57 min of archive coverage before attempting a single measure would be too slow. The faster strategy is a narrow accepted-measure lane:
+The long-phrase track should now run in parallel with full-archive scanning. Waiting for all 234 h 57 min of archive coverage before extending one musical lane would be too slow. The faster strategy is a narrow accepted-measure lane:
 \begin{enumerate}
-    \item select one active violin-positive window from an already captured practice day, starting with 2026-05-03 because it already has hidden detected note series;
-    \item obtain or manually verify the corresponding symbolic Scherzo-Tarantelle measure from a source-backed score;
-    \item run the existing pitch-class phrase matcher against the stored detected series;
-    \item accept the group only if the exact score notes, displayed transcription, local audio, and local video all agree;
-    \item then extend the same source-backed score map outward to adjacent measures and longer phrases.
+    \item keep the accepted 2026-05-03 Staff 4 source/audio phrase as the anchor;
+    \item keep the corresponding Scherzo-Tarantelle MusicXML measure-window and actual-score crop fixed as source truth;
+    \item search adjacent stored and newly extracted detected note series against that same source lane;
+    \item accept the expansion only if the exact score notes, displayed transcription, local audio, local video, source crop, and truth gate all agree;
+    \item extend outward one verified adjacent note group at a time until the lane becomes a phrase.
 \end{enumerate}
 
 The next coding pass should:
 \begin{enumerate}
-    \item verify one symbolic Scherzo-Tarantelle measure with exact pitch names and measure context;
-    \item feed that measure into the existing symbolic-score target path;
-    \item mine the stored 2026-05-03 detected note series for a contiguous score/audio match;
-    \item accept at most one compact grouped score--clip--audio--transcription pair if the evidence gates pass;
+    \item keep the accepted Staff 4 anchor fixed instead of starting a new random match;
+    \item search nearby stored and newly extracted audio-note runs for the adjacent \texttt{Eb5} that would extend the source lane;
+    \item accept a longer compact grouped score--clip--audio--transcription pair only if the expanded exact MIDI sequence, paired audio, source crop, and truth gate all pass;
+    \item record the first blocking note when an expansion fails so the next extraction attempt has a precise target;
     \item keep running queue-only owner-media sync in parallel, starting with \texttt{violin 1} at \texttt{*2250-2340};
     \item rerun the active-practice scan after those uploads and record checked, active, and pending totals.
 \end{enumerate}
 
-Curtis can now pursue the first verified measure before M1 is complete, but it still cannot claim a score match from guessed scanned crops, one-note anchors, or reference-audio pitch traces. The speed-up is to shrink the musical target to one verified measure and make that one measure pass the same gates that a future long phrase will need.
+Curtis now has the first verified measure-window before M1 is complete, but it still cannot claim a longer score match from guessed scanned crops, one-note anchors, reference-audio pitch traces, or a mismatched adjacent audio note. The speed-up is to keep the accepted Staff 4 lane fixed and extend it only when each added source note passes the same gates that a future long phrase will need.

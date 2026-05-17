@@ -208,6 +208,138 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertTrue(any(item["label"] == "Score heat map" and item["value"] == "1" for item in completion["implementationCurrent"]))
         self.assertGreaterEqual(completion["completionExactPercent"], 45)
 
+    def test_staff4_phrase_expansion_gate_blocks_adjacent_audio_mismatch(self):
+        daily_records = {
+            "recordCount": 1,
+            "audioEvidenceRecordCount": 1,
+            "transcribedRecordCount": 1,
+            "records": [
+                {
+                    "practiceDay": "2026-05-03",
+                    "transcription": {
+                        "scoreSequenceMatchCount": 1,
+                        "scoreLocationVerifiedCount": 1,
+                    },
+                    "matchGroups": [
+                        {
+                            "status": "symbolic_score_phrase_match",
+                            "pieceTitle": "Wieniawski Scherzo-Tarantelle, Op. 16",
+                            "matchedNoteRun": 5,
+                            "minimumMatchedNoteRun": 5,
+                            "minimumDistinctPitchClasses": 2,
+                            "detectedPitchClassSequence": "D# D# C D# D#",
+                            "detectedPitchClassSequenceCompact": "D# C D#",
+                            "scoreLocationVerified": True,
+                            "scoreVisualAgreement": True,
+                            "scoreVisualRangeAgreement": True,
+                            "scoreVisibleNoteSequenceVerified": True,
+                            "scoreVisibleExactNoteSequenceVerified": True,
+                            "scoreSpellingAgreement": True,
+                            "scoreActualPieceAgreement": True,
+                            "scoreBoxCenterAgreement": True,
+                            "audioTranscriptionAgreement": True,
+                            "transcriptionScoreAgreement": True,
+                            "truthEvidenceAccepted": True,
+                            "scoreSnippetStatus": "exact_score_location_verified",
+                            "scoreLocationStatus": "exact_score_location_verified",
+                            "scoreSequenceLabel": "m. staff4-packet-1",
+                            "referenceStart": 9,
+                            "referenceEnd": 14,
+                            "detectedSeries": {
+                                "sampleId": "Njh8_zq9_DM-8835",
+                                "sourceWindow": "*8835-8925",
+                                "notes": [
+                                    note("D#5", 0.0),
+                                    note("D#5", 0.12),
+                                    note("C5", 0.24),
+                                    note("D#5", 0.36),
+                                    note("D#5", 0.48),
+                                    note("D5", 0.60),
+                                    note("D#5", 0.72),
+                                ],
+                            },
+                            "matchedDetectedNotes": [
+                                note("D#5", 0.0),
+                                note("D#5", 0.12),
+                                note("C5", 0.24),
+                                note("D#5", 0.36),
+                                note("D#5", 0.48),
+                            ],
+                            "scoreMatchedNotes": [
+                                {"note": "Eb5", "midi": 75},
+                                {"note": "Eb5", "midi": 75},
+                                {"note": "C5", "midi": 72},
+                                {"note": "Eb5", "midi": 75},
+                                {"note": "Eb5", "midi": 75},
+                            ],
+                            "score": {
+                                "assetId": "wieniawski-scherzo-tarantelle-vln",
+                                "cropStatus": "exact_score_location_verified",
+                                "measureLabel": "m. staff4-packet-1",
+                                "imageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-verified.png",
+                                "actualSourceSnippetDisplayed": True,
+                                "visualRangeAgreement": True,
+                                "visibleScoreNoteSequenceVerified": True,
+                                "visibleScoreExactNoteSequenceVerified": True,
+                                "scoreSpellingAgreement": True,
+                                "scoreBoxCenterAgreement": True,
+                                "audioTranscriptionAgreement": True,
+                                "transcriptionScoreAgreement": True,
+                                "truthEvidenceAccepted": True,
+                            },
+                            "clip": {
+                                "mediaUrl": "/api/curtis/media/sample/Njh8_zq9_DM-8835",
+                                "audioUrl": "/api/curtis/media/sample/Njh8_zq9_DM-8835/clip?start=20.225&end=22.535",
+                            },
+                            "transcription": {"sampleId": "Njh8_zq9_DM-8835"},
+                        }
+                    ],
+                }
+            ],
+        }
+
+        completion = build_transcription_completion(
+            {"scoreReferenceTargetCount": 1},
+            daily_records,
+            {"entries": [{"title": "Wieniawski Scherzo-Tarantelle, Op. 16"}]},
+            {
+                "ledgerVideoCount": 1,
+                "uploadedVideoSeconds": 120,
+                "uploadedVideoLabel": "2m",
+                "checkedVideoSeconds": 120,
+                "checkedVideoLabel": "2m",
+                "activePracticeLabel": "2m",
+                "estimatedTotalPracticeLabel": "2m",
+                "activePracticeScan": {
+                    "activeIntervalCount": 1,
+                    "sampleResultCount": 1,
+                    "activeViolinSampleCount": 1,
+                    "checkedNoViolinSampleCount": 0,
+                    "pendingWindowCount": 0,
+                },
+            },
+            {"benchmarkCount": 1, "wrongScoreNoteRegressionCount": 1},
+            [{"id": "Njh8_zq9_DM-8835"}],
+            [{"transcriptionId": "t1"}],
+        )
+
+        harness = completion["phraseExpansionHarness"]
+        current = harness["currentBest"]
+        self.assertEqual(harness["anchorCount"], 1)
+        self.assertEqual(harness["targetCount"], 3)
+        self.assertEqual(harness["acceptedExpansionCount"], 0)
+        self.assertGreaterEqual(harness["blockedExpansionCount"], 1)
+        self.assertEqual(current["direction"], "right-2")
+        self.assertEqual(current["status"], "blocked_audio_mismatch")
+        self.assertEqual(current["targetSequence"], "Eb5 Eb5 C5 Eb5 Eb5 Eb5 C5")
+        self.assertEqual(current["bestAudioSequence"], "D#5 D#5 C5 D#5 D#5 D5 D#5")
+        self.assertEqual(current["bestPrefixCount"], 5)
+        self.assertEqual(current["expectedNextScoreNote"], "Eb5")
+        self.assertEqual(current["observedNextAudioNote"], "D5")
+        self.assertEqual(completion["phraseExpansionCurrentStatus"], "blocked_audio_mismatch")
+        self.assertTrue(any(item["label"] == "Expansion gate" and item["value"] == "0/3" for item in completion["implementationCurrent"]))
+        self.assertIn("Eb5 vs D5", completion["nextAction"])
+
     def test_local_source_score_pdf_advances_score_truth_without_accepting_phrase(self):
         completion = build_transcription_completion(
             {"scoreReferenceTargetCount": 1},
