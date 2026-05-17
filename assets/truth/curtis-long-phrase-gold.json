@@ -1,0 +1,61 @@
+{
+  "schema": "curtis_long_phrase_truth_v1",
+  "updatedAt": "2026-05-16",
+  "status": "active",
+  "minimumAcceptedEvidenceRule": "A displayed score/transcription/video/audio phrase needs exact MIDI agreement between audio-agreed detected notes and verified MusicXML source notes. Pitch letters, OCR/OMR candidates, and source crops alone are not accepted evidence.",
+  "sources": [
+    {
+      "id": "wieniawski-scherzo-tarantelle-opening-symbolic-v5",
+      "pieceTitle": "Wieniawski Scherzo-Tarantelle, Op. 16",
+      "target": "wieniawski_reference_target",
+      "status": "verified_source_excerpt",
+      "basis": "Manual source review from the local IMSLP solo-violin score page; used only as symbolic source truth until a matching audio phrase passes the audio gate.",
+      "referenceStart": 0,
+      "referenceEnd": 9,
+      "sequence": ["A5", "G5", "F5", "A5", "G5", "F5", "A5", "G#5", "F5"],
+      "midiSequence": [81, 79, 77, 81, 79, 77, 81, 80, 77],
+      "liveAccepted": false
+    }
+  ],
+  "positiveSourcePhrases": [
+    {
+      "id": "wieniawski-opening-exact-midi-source-positive",
+      "sourceId": "wieniawski-scherzo-tarantelle-opening-symbolic-v5",
+      "status": "source_only_regression",
+      "basis": "This exact MIDI phrase must be discoverable in verified MusicXML, but it is not a live accepted transcription without paired audio agreement.",
+      "minimumExactNotes": 5,
+      "sequence": ["G5", "F5", "A5", "G#5", "F5"],
+      "midiSequence": [79, 77, 81, 80, 77],
+      "liveAccepted": false
+    }
+  ],
+  "rejectedRegressionPhrases": [
+    {
+      "id": "rejected-old-false-opening-d-c-bb",
+      "sourceId": "wieniawski-scherzo-tarantelle-opening-symbolic-v5",
+      "status": "rejected",
+      "basis": "Previous false score-map candidate; must not be promoted as Wieniawski source evidence.",
+      "minimumExactNotes": 5,
+      "sequence": ["D6", "C6", "Bb5", "D6", "C6", "Bb5"],
+      "midiSequence": [86, 84, 82, 86, 84, 82]
+    },
+    {
+      "id": "rejected-user-flagged-bb-d-c-bb-d",
+      "sourceId": "wieniawski-scherzo-tarantelle-opening-symbolic-v5",
+      "status": "rejected",
+      "basis": "User-flagged mismatch where displayed transcription and score did not share the same notes.",
+      "minimumExactNotes": 5,
+      "sequence": ["Bb4", "D5", "C5", "Bb4", "D5"],
+      "midiSequence": [70, 74, 72, 70, 74]
+    },
+    {
+      "id": "rejected-current-live-target-g-g-bb-bb-bb-bb-a",
+      "sourceId": "wieniawski-scherzo-tarantelle-opening-symbolic-v5",
+      "status": "rejected",
+      "basis": "Current best live source target is an audio-agreed candidate but does not exist in the verified symbolic score excerpt.",
+      "minimumExactNotes": 5,
+      "sequence": ["G5", "G5", "A#5", "A#5", "A#5", "A#5", "A5"],
+      "midiSequence": [79, 79, 82, 82, 82, 82, 81]
+    }
+  ]
+}

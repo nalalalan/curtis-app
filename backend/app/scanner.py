@@ -50,6 +50,8 @@ from .daily_records import (
     notes_have_score_match_audio_agreement,
 )
 from .evidence_ledger import build_active_practice_coverage, build_evidence_progress, build_truth_progress
+from .gold_truth import verify_long_phrase_truth_manifest
+from .long_phrase_truth import exact_midi_phrase_gate
 from .study_packets import build_practice_study, build_practice_totals
 from .symbolic_scores import (
     longest_common_contiguous_run,
@@ -1424,20 +1426,18 @@ def source_target_score_check(match: dict[str, Any], sequence: str) -> dict[str,
         }
     candidate_only = bool((match.get("detectedSeries") if isinstance(match.get("detectedSeries"), dict) else {}).get("candidateOnly"))
     audio_agreed = notes_have_score_match_audio_agreement(query_notes, candidate_only=candidate_only)
-    query_midi_strings = [str(value) for value in query_midi_values]
-    source_midi_strings = [str(value) for value in source_midi_values]
-    midi_overlap = longest_common_contiguous_run(query_midi_strings, source_midi_strings)
-    overlap_length = int(midi_overlap.get("length") or 0)
-    verified = audio_agreed and overlap_length >= len(query_midi_values)
-    reference_start = int(midi_overlap.get("referenceStart") or 0)
-    reference_end = reference_start + overlap_length
-    check_status = (
-        "source_score_exact_midi_sequence_verified"
-        if verified
-        else "source_audio_agreement_missing"
-        if not audio_agreed
-        else "source_score_exact_midi_sequence_not_found"
+    phrase_gate = exact_midi_phrase_gate(
+        query_notes,
+        notes,
+        audio_agreed=audio_agreed,
+        min_exact_notes=5,
+        require_full_query=True,
     )
+    overlap_length = int(phrase_gate.get("bestOverlap") or 0)
+    verified = bool(phrase_gate.get("accepted"))
+    reference_start = int(phrase_gate.get("referenceStart") or 0)
+    reference_end = int(phrase_gate.get("referenceEnd") or reference_start + overlap_length)
+    check_status = str(phrase_gate.get("status") or "source_score_exact_midi_sequence_not_found")
     return {
         "sourceScoreChecked": True,
         "sourceScoreVerified": verified,
@@ -1448,6 +1448,9 @@ def source_target_score_check(match: dict[str, Any], sequence: str) -> dict[str,
         "sourceScoreExactMidiChecked": True,
         "sourceScoreAudioAgreed": audio_agreed,
         "sourceScoreMatchCriterion": "exact_midi_sequence",
+        "sourceScoreExactMidiMinimumNotes": int(phrase_gate.get("minimumExactNotes") or 5),
+        "sourceScoreExactMidiFullQueryRequired": bool(phrase_gate.get("requireFullQuery")),
+        "sourceScoreOrderedOverlap": int(phrase_gate.get("orderedOverlap") or 0),
         "sourceScoreSourceId": str(score.get("sourceId") or score_config.get("sourceId") or ""),
         "sourceScoreTitle": str(score.get("title") or target.get("work") or ""),
         "sourceScoreCandidateGlyphCount": int(candidate_audit.get("scoreMapCandidateGlyphCount") or 0),
@@ -1557,6 +1560,7 @@ def build_truth_workbench(
     limit: int = 12,
 ) -> dict[str, Any]:
     truth_progress = build_truth_progress(state)
+    long_phrase_truth = verify_long_phrase_truth_manifest()
     source_targets = source_verification_targets(daily_records, limit=limit)
     benchmarks = (
         evidence_progress.get("recentBenchmarks")
@@ -1610,7 +1614,7 @@ def build_truth_workbench(
             }
         )
     return {
-        "status": "ready" if source_targets or benchmarks or truth_progress.get("truthItemCount") else "empty",
+        "status": "ready" if source_targets or benchmarks or truth_progress.get("truthItemCount") or long_phrase_truth.get("truthManifestItemCount") else "empty",
         "version": truth_progress.get("version") or "truth_workbench_v1",
         "truthItemCount": int(truth_progress.get("truthItemCount") or 0),
         "acceptedTruthCount": int(truth_progress.get("acceptedTruthCount") or 0),
@@ -1622,8 +1626,19 @@ def build_truth_workbench(
         "wrongScoreRegressionCount": int(evidence_progress.get("wrongScoreNoteRegressionCount") or 0),
         "benchmarkCount": int(evidence_progress.get("benchmarkCount") or len(benchmarks) or 0),
         "rejectedScoreCorrectionCount": len(rejected_score_corrections),
+        "longPhraseTruth": long_phrase_truth,
+        "truthManifestStatus": str(long_phrase_truth.get("status") or ""),
+        "truthManifestItemCount": int(long_phrase_truth.get("truthManifestItemCount") or 0),
+        "truthManifestSourceCount": int(long_phrase_truth.get("sourceCount") or 0),
+        "truthManifestSourceVerifiedCount": int(long_phrase_truth.get("sourceVerifiedCount") or 0),
+        "truthManifestPositiveSourcePhraseCount": int(long_phrase_truth.get("positiveSourcePhraseCount") or 0),
+        "truthManifestPositiveSourcePhraseVerifiedCount": int(long_phrase_truth.get("positiveSourcePhraseVerifiedCount") or 0),
+        "truthManifestRejectedRegressionPhraseCount": int(long_phrase_truth.get("rejectedRegressionPhraseCount") or 0),
+        "truthManifestRejectedRegressionBlockedCount": int(long_phrase_truth.get("rejectedRegressionBlockedCount") or 0),
+        "truthManifestLiveAcceptedPhraseCount": int(long_phrase_truth.get("liveAcceptedPhraseCount") or 0),
         "queuedItems": queued_items[: max(0, int(limit))],
-        "acceptanceRule": "Accepted score evidence needs local media, accepted audio notes, verified source-score notes, exact note-and-octave agreement, and verified score coordinates.",
+        "acceptanceRule": str(long_phrase_truth.get("minimumAcceptedEvidenceRule") or "")
+        or "Accepted score evidence needs local media, accepted audio notes, verified source-score notes, exact note-and-octave agreement, and verified score coordinates.",
         "nextAction": (
             "Convert queued score-note hypotheses into verified MusicXML, then store accepted or rejected truth items for each audio-score phrase."
             if source_targets
@@ -1926,6 +1941,15 @@ def build_transcription_completion(
     truth_ready_count = int(truth_workbench.get("acceptedEvidenceReadyCount") or 0)
     score_truth_ready_count = int(truth_workbench.get("scoreReadyTruthCount") or 0)
     truth_queue_count = int(truth_workbench.get("sourceTargetQueueCount") or 0) + int(truth_workbench.get("pendingTruthCount") or 0)
+    truth_manifest_status = str(truth_workbench.get("truthManifestStatus") or "")
+    truth_manifest_item_count = int(truth_workbench.get("truthManifestItemCount") or 0)
+    truth_manifest_source_verified_count = int(truth_workbench.get("truthManifestSourceVerifiedCount") or 0)
+    truth_manifest_positive_count = int(truth_workbench.get("truthManifestPositiveSourcePhraseCount") or 0)
+    truth_manifest_positive_verified_count = int(truth_workbench.get("truthManifestPositiveSourcePhraseVerifiedCount") or 0)
+    truth_manifest_rejected_count = int(truth_workbench.get("truthManifestRejectedRegressionPhraseCount") or 0)
+    truth_manifest_rejected_blocked_count = int(truth_workbench.get("truthManifestRejectedRegressionBlockedCount") or 0)
+    truth_manifest_live_phrase_count = int(truth_workbench.get("truthManifestLiveAcceptedPhraseCount") or 0)
+    truth_manifest_ready = truth_manifest_status == "verified"
     truth_route_ready = str(truth_workbench.get("version") or "") == "truth_workbench_v1"
     transition_trace_count = sum(
         int((item.get("quality") if isinstance(item.get("quality"), dict) else {}).get("transitionTraceSelectedEventCount") or 0)
@@ -2018,12 +2042,15 @@ def build_transcription_completion(
             (1.5 if benchmark_count else 0)
             + (0.5 if rejected_score_count else 0)
             + (1.0 if truth_route_ready else 0)
+            + (0.75 if truth_manifest_ready else 0)
+            + min(0.75, truth_manifest_positive_verified_count * 0.35)
+            + min(0.75, truth_manifest_rejected_blocked_count * 0.2)
             + min(1.0, truth_queue_count * 0.25)
             + min(1.0, truth_ready_count * 0.5)
             + (0.75 if score_visual_lock_count else 0)
             + (0.75 if actual_source_score_snippet_lock_count else 0),
-            f"{benchmark_count} benchmark corrections / {rejected_score_count} wrong-score-note regressions / {truth_queue_count} queued truth checks / {truth_ready_count} accepted truth items / {score_visual_lock_count} score-visual locks / {actual_source_score_snippet_lock_count} actual-source score locks",
-            "Rejected score-note mistakes can be stored as regression evidence, and score panels now require verified visible noteheads, range, spelling, an actual source-score crop, and truth-set promotion.",
+            f"{benchmark_count} benchmark corrections / {rejected_score_count} wrong-score-note regressions / {truth_queue_count} queued truth checks / {truth_ready_count} accepted truth items / {truth_manifest_positive_verified_count} source-positive exact-MIDI phrases / {truth_manifest_rejected_blocked_count} rejected exact-MIDI regressions / {score_visual_lock_count} score-visual locks / {actual_source_score_snippet_lock_count} actual-source score locks",
+            "Rejected score-note mistakes can be stored as regression evidence, source-only exact-MIDI phrases can be checked against MusicXML, and score panels still require verified visible noteheads, range, spelling, an actual source-score crop, and truth-set promotion.",
             "Build accepted truth clips for notes, rhythm, score boxes, and full phrases.",
         ),
         roadmap_gate(
@@ -2172,6 +2199,11 @@ def build_transcription_completion(
             "detail": f"{truth_queue_count} queued / {score_truth_ready_count} score-ready",
         },
         {
+            "label": "Exact MIDI truth",
+            "value": f"{truth_manifest_positive_verified_count}/{truth_manifest_positive_count}",
+            "detail": f"{truth_manifest_rejected_blocked_count}/{truth_manifest_rejected_count} regressions blocked",
+        },
+        {
             "label": "Long phrases",
             "value": str(long_phrase_count),
             "detail": "accepted",
@@ -2226,6 +2258,7 @@ def build_transcription_completion(
         "Local score-glyph candidates are queued for verification without being accepted as score evidence.",
         "Likely score noteheads now receive unaccepted staff-position pitch hypotheses before MusicXML review.",
         "Staff-level source review packets now map queued hypotheses back to the scanned score.",
+        "A source-only exact-MIDI truth manifest now verifies the current Wieniawski MusicXML excerpt and blocks known false phrase maps.",
         "Score panels require visible score noteheads, range, spelling, exact note-and-octave agreement, and an actual source-score crop before display.",
         "The rejected five-note Scherzo phrase is blocked from accepted score evidence.",
         "A truth workbench now separates queued, accepted, and rejected audio-score-transcription evidence before anything can become visible score evidence.",
@@ -2252,7 +2285,7 @@ def build_transcription_completion(
             "phase": "2",
             "label": "Truth, benchmark, and correction set",
             "status": "pending" if not (benchmark_count or rejected_score_count or score_visual_lock_count) else "partial",
-            "evidence": f"{benchmark_count} benchmark corrections / {rejected_score_count} wrong-score-note regressions / {truth_item_count} stored truth items / {truth_queue_count} queued truth checks / {score_visual_lock_count} score-visual locks / {actual_source_score_snippet_lock_count} actual-source score locks",
+            "evidence": f"{benchmark_count} benchmark corrections / {rejected_score_count} wrong-score-note regressions / {truth_item_count} stored truth items / {truth_manifest_item_count} manifest truth checks / {truth_queue_count} queued truth checks / {score_visual_lock_count} score-visual locks / {actual_source_score_snippet_lock_count} actual-source score locks",
             "target": "Accepted truth clips for exact notes, registers, fast runs, arpeggios, repeats, rests, and score boxes.",
         },
         {
@@ -2352,6 +2385,14 @@ def build_transcription_completion(
         "acceptedTruthItemCount": truth_ready_count,
         "scoreReadyTruthItemCount": score_truth_ready_count,
         "truthQueueCount": truth_queue_count,
+        "truthManifestStatus": truth_manifest_status,
+        "truthManifestItemCount": truth_manifest_item_count,
+        "truthManifestSourceVerifiedCount": truth_manifest_source_verified_count,
+        "truthManifestPositiveSourcePhraseCount": truth_manifest_positive_count,
+        "truthManifestPositiveSourcePhraseVerifiedCount": truth_manifest_positive_verified_count,
+        "truthManifestRejectedRegressionPhraseCount": truth_manifest_rejected_count,
+        "truthManifestRejectedRegressionBlockedCount": truth_manifest_rejected_blocked_count,
+        "truthManifestLiveAcceptedPhraseCount": truth_manifest_live_phrase_count,
         "transitionTraceCandidateCount": transition_trace_count,
         "pitchSequenceGroupCount": score_sequence_count,
         "checkedVideoLabel": checked_label if checked_label != "0s" else "",

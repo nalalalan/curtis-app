@@ -86,7 +86,7 @@ function apiBase() {
   const configured = localStorage.getItem(API_BASE_KEY) || "";
   if (configured) return configured.replace(/\/$/, "");
   if (window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost") {
-    return window.location.port === "8000" ? "" : "http://127.0.0.1:8000";
+    return window.location.origin;
   }
   if (window.location.hostname.endsWith("up.railway.app")) return "";
   return DEFAULT_API_BASE;
@@ -2766,6 +2766,8 @@ function renderTranscriptionCompletion() {
     ["Practice", completion.activePracticeLabel || "pending"],
     ["Measure", `${Number(completion.acceptedMeasureMatchCount) || 0} accepted`],
     ["Phrase", `${Number(completion.longPhraseAcceptedCount) || 0} accepted`],
+    ["Source truth", `${Number(completion.truthManifestPositiveSourcePhraseVerifiedCount) || 0}/${Number(completion.truthManifestPositiveSourcePhraseCount) || 0}`],
+    ["Blocked errors", `${Number(completion.truthManifestRejectedRegressionBlockedCount) || 0}/${Number(completion.truthManifestRejectedRegressionPhraseCount) || 0}`],
   ];
   elements.transcriptionCompletion.innerHTML = `
     <div class="roadmap-score">
