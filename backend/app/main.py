@@ -44,6 +44,12 @@ from .scanner import base_ops, run_scan, transcription_items
 from .score_assets import ensure_score_page
 from .settings import MEDIA_DIR, ROOT_DIR, RUNTIME_DIR, SCAN_INTERVAL_SECONDS, SERVICE_NAME, allowed_origins, token_matches
 from .state import load_state, save_state
+from .staff4_audit import (
+    AUDIT_DIR,
+    ensure_staff4_phrase_audit_packet,
+    latest_staff4_phrase_audit_packet,
+    packet_artifact_path,
+)
 from .transcription import transcribe_media_samples
 
 
@@ -516,6 +522,8 @@ def sample_media_type(path: Path) -> str:
         return "audio/mpeg"
     if suffix == ".wav":
         return "audio/wav"
+    if suffix == ".svg":
+        return "image/svg+xml"
     return "application/octet-stream"
 
 
@@ -788,6 +796,49 @@ async def truth_workbench() -> dict[str, Any]:
 @app.get("/api/curtis/gold-review")
 async def gold_review() -> dict[str, Any]:
     return base_ops(load_state())["review"]["goldReview"]
+
+
+@app.get("/api/curtis/staff4-audit")
+async def staff4_audit() -> dict[str, Any]:
+    state = load_state()
+    return {
+        "service": SERVICE_NAME,
+        "status": "ready",
+        "auditPacket": latest_staff4_phrase_audit_packet(state),
+    }
+
+
+@app.post("/api/curtis/staff4-audit/run")
+async def staff4_audit_run(force: bool = True) -> dict[str, Any]:
+    state = load_state()
+    ops = base_ops(state)
+    packet = ensure_staff4_phrase_audit_packet(
+        state,
+        ops["review"]["transcriptionCompletion"],
+        force=force,
+    )
+    save_state(state)
+    refreshed = base_ops(load_state())
+    return {
+        "service": SERVICE_NAME,
+        "status": packet.get("status") or "generated",
+        "auditPacket": packet,
+        "review": refreshed["review"],
+    }
+
+
+@app.get("/api/curtis/staff4-audit/artifacts/{packet_id}/{filename}")
+async def staff4_audit_artifact(packet_id: str, filename: str) -> FileResponse:
+    try:
+        target = packet_artifact_path(packet_id, filename).resolve(strict=True)
+        audit_root = AUDIT_DIR.resolve()
+    except OSError as exc:
+        raise HTTPException(status_code=404, detail="audit artifact not found") from exc
+    if target != audit_root and audit_root not in target.parents:
+        raise HTTPException(status_code=404, detail="audit artifact not found")
+    if not target.is_file():
+        raise HTTPException(status_code=404, detail="audit artifact not found")
+    return FileResponse(target, media_type=sample_media_type(target))
 
 
 @app.post("/api/curtis/gold-review/items")

@@ -2942,6 +2942,46 @@ function renderGoldReview() {
   `;
 }
 
+function renderStaff4Audit(audit) {
+  if (!audit || typeof audit !== "object") return "";
+  const status = String(audit.status || "").replace(/_/g, " ");
+  if (!status || status === "not generated") return "";
+  const artifacts = audit.artifacts && typeof audit.artifacts === "object" ? audit.artifacts : {};
+  const clip = audit.clip && typeof audit.clip === "object" ? audit.clip : {};
+  const audioUrl = assetUrl(artifacts.audioClipUrl || clip.audioUrl || "");
+  const rawVideoUrl = artifacts.videoClipUrl || clip.videoUrl || clip.mediaUrl || "";
+  const videoUrl = assetUrl(rawVideoUrl);
+  const videoFragment = !artifacts.videoClipUrl && clip.videoFragment ? String(clip.videoFragment) : "";
+  const pitchTrace = assetUrl(artifacts.pitchTraceSvgUrl || "");
+  const spectrogram = assetUrl(artifacts.spectrogramSvgUrl || "");
+  const packetUrl = assetUrl(artifacts.packetJsonUrl || "");
+  const score = audit.expectedNextScoreNote || "score";
+  const audio = audit.observedNextAudioNote || "audio";
+  return `
+    <section class="staff4-audit-card" aria-label="Staff 4 audit packet">
+      <div class="staff4-audit-head">
+        <strong>${escapeHtml(status)}</strong>
+        <span>${escapeHtml(score)} / ${escapeHtml(audio)}</span>
+        ${packetUrl ? `<a href="${escapeHtml(packetUrl)}" target="_blank" rel="noreferrer">JSON</a>` : ""}
+      </div>
+      <div class="staff4-audit-grid">
+        ${videoUrl ? `
+          <div class="staff4-audit-media">
+            <video controls preload="metadata" src="${escapeHtml(videoUrl + videoFragment)}"></video>
+            ${audioUrl ? `<audio controls preload="metadata" src="${escapeHtml(audioUrl)}"></audio>` : ""}
+          </div>
+        ` : audioUrl ? `
+          <div class="staff4-audit-media">
+            <audio controls preload="metadata" src="${escapeHtml(audioUrl)}"></audio>
+          </div>
+        ` : ""}
+        ${pitchTrace ? `<img class="staff4-audit-plot" src="${escapeHtml(pitchTrace)}" alt="Staff 4 pitch trace">` : ""}
+        ${spectrogram ? `<img class="staff4-audit-plot" src="${escapeHtml(spectrogram)}" alt="Staff 4 spectrogram">` : ""}
+      </div>
+    </section>
+  `;
+}
+
 function renderTranscriptionCompletion() {
   if (!elements.transcriptionCompletion) return;
   if (!backend.online) {
@@ -2969,6 +3009,7 @@ function renderTranscriptionCompletion() {
     ["Queue", `${Number(completion.goldReviewQueueCount) || 0} clips`],
     ["Source truth", `${Number(completion.truthManifestPositiveSourcePhraseVerifiedCount) || 0}/${Number(completion.truthManifestPositiveSourcePhraseCount) || 0}`],
     ["Blocked errors", `${Number(completion.truthManifestRejectedRegressionBlockedCount) || 0}/${Number(completion.truthManifestRejectedRegressionPhraseCount) || 0}`],
+    ["Staff 4 audit", completion.staff4PhraseAuditStatus ? String(completion.staff4PhraseAuditStatus).replace(/_/g, " ") : "not generated"],
   ];
   elements.transcriptionCompletion.innerHTML = `
     <div class="roadmap-score">
@@ -2993,6 +3034,7 @@ function renderTranscriptionCompletion() {
       <span>Next</span>
       <strong>${escapeHtml(shortText(completion.nextAction || "pending", 110))}</strong>
     </div>
+    ${renderStaff4Audit(completion.staff4PhraseAudit)}
   `;
 }
 

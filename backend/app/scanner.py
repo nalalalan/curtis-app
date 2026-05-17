@@ -1792,6 +1792,29 @@ def expansion_status_for_window(
     return "blocked_audio_mismatch", "Adjacent audio notes do not match the verified source MIDI sequence."
 
 
+def expansion_window_note_summary(notes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    summary: list[dict[str, Any]] = []
+    for note in notes:
+        if not isinstance(note, dict):
+            continue
+        midi = note_midi_value(note)
+        summary.append(
+            {
+                "note": str(note.get("note") or ""),
+                "midi": midi,
+                "startSeconds": round(float(note.get("startSeconds") or 0.0), 3),
+                "endSeconds": round(float(note.get("endSeconds") or note.get("startSeconds") or 0.0), 3),
+                "durationSeconds": round(float(note.get("durationSeconds") or 0.0), 3),
+                "confidence": round(float(note.get("confidence") or 0.0), 3),
+                "audioAgreement": bool(note.get("audioAgreement")),
+                "agreementSourceCount": int(note.get("agreementSourceCount") or 0),
+                "agreementSources": note.get("agreementSources") if isinstance(note.get("agreementSources"), list) else [],
+                "detectorSource": str(note.get("detectorSource") or ""),
+            }
+        )
+    return summary
+
+
 def source_phrase_expansion_harness(daily_records: dict[str, Any], limit: int = 8) -> dict[str, Any]:
     records = daily_records.get("records") if isinstance(daily_records.get("records"), list) else []
     audio_runs = detected_audio_runs_for_expansion(daily_records)
@@ -1866,6 +1889,13 @@ def source_phrase_expansion_harness(daily_records: dict[str, Any], limit: int = 
                         status = "blocked_audio_mismatch"
                         limit_text = "Source-lane extension is verified, but the stored adjacent audio check disagrees."
                 run = best_window.get("run") if isinstance(best_window.get("run"), dict) else {}
+                window_notes = best_window.get("windowNotes") if isinstance(best_window.get("windowNotes"), list) else []
+                audio_local_start = None
+                audio_local_end = None
+                if window_notes:
+                    audio_local_start = round(float(window_notes[0].get("startSeconds") or 0.0), 3)
+                    audio_local_end = round(float(window_notes[-1].get("endSeconds") or window_notes[-1].get("startSeconds") or 0.0), 3)
+                source_window_start = parse_window_start(str(run.get("sourceWindow") or ""))
                 items.append(
                     {
                         "status": status,
@@ -1894,7 +1924,16 @@ def source_phrase_expansion_harness(daily_records: dict[str, Any], limit: int = 
                         "sourceImageUrl": str(source_snippet.get("imageUrl") or ""),
                         "sampleId": str(run.get("sampleId") or ""),
                         "sourceWindow": str(run.get("sourceWindow") or ""),
+                        "audioLocalStartSeconds": audio_local_start,
+                        "audioLocalEndSeconds": audio_local_end,
+                        "audioAbsoluteStartSeconds": round(source_window_start + audio_local_start, 3)
+                        if audio_local_start is not None
+                        else None,
+                        "audioAbsoluteEndSeconds": round(source_window_start + audio_local_end, 3)
+                        if audio_local_end is not None
+                        else None,
                         "audioRunSource": str(run.get("runSource") or ""),
+                        "bestAudioNotes": expansion_window_note_summary(window_notes),
                         "limit": limit_text,
                     }
                 )
@@ -2287,9 +2326,11 @@ def build_transcription_completion(
     transcriptions: list[dict[str, Any]],
     truth_workbench: dict[str, Any] | None = None,
     gold_review: dict[str, Any] | None = None,
+    staff4_phrase_audit: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     truth_workbench = truth_workbench or {}
     gold_review = gold_review or {}
+    staff4_audit = staff4_phrase_audit if isinstance(staff4_phrase_audit, dict) else {}
     active_scan = (
         active_practice_coverage.get("activePracticeScan")
         if isinstance(active_practice_coverage.get("activePracticeScan"), dict)
@@ -2381,6 +2422,8 @@ def build_transcription_completion(
         if isinstance(phrase_expansion.get("currentBest"), dict)
         else {}
     )
+    staff4_audit_status = str(staff4_audit.get("status") or "")
+    staff4_audit_ready = staff4_audit_status not in {"", "not_generated", "blocked_no_staff4_expansion"}
     phrase_expansion_detail = (
         f"{phrase_expansion_accepted_count} accepted / {phrase_expansion_blocked_count} blocked"
         if phrase_expansion_target_count
@@ -2519,12 +2562,13 @@ def build_transcription_completion(
             + min(2.5, phrase_candidate_count * 0.5)
             + min(0.5, phrase_expansion_target_count * 0.25)
             + (0.25 if phrase_expansion_raw_audio_run_count else 0)
+            + (0.5 if staff4_audit_ready else 0)
             + (1 if source_target_note_count >= 7 else 0)
             + (2 if score_verified_count else 0)
             + (1 if measure_match_count else 0)
             + min(2, long_phrase_count * 2),
             f"{score_sequence_count} pitch-sequence groups / {phrase_candidate_count} phrase candidates / {source_target_count} source targets / {phrase_expansion_target_count} anchored expansions / {phrase_expansion_audio_run_count} audio runs searched / {score_verified_count} exact score locations",
-            "Pitch-sequence groups are separated from exact score evidence, and accepted anchors now search raw detected note runs before any outward source-lane expansion is accepted.",
+            "Pitch-sequence groups are separated from exact score evidence, accepted anchors now search raw detected note runs before any outward source-lane expansion is accepted, and Staff 4 expansion blockers can generate audit packets.",
             "Promote phrase candidates only after source-score or score-free exercise verification.",
         ),
         roadmap_gate(
@@ -2635,6 +2679,15 @@ def build_transcription_completion(
             ),
         },
         {
+            "label": "Staff 4 audit",
+            "value": staff4_audit_status.replace("_", " ") if staff4_audit_status else "not generated",
+            "detail": (
+                f"{staff4_audit.get('expectedNextScoreNote') or 'score'} vs {staff4_audit.get('observedNextAudioNote') or 'audio'}"
+                if staff4_audit_ready
+                else "packet pending"
+            ),
+        },
+        {
             "label": "Fast-note trace",
             "value": str(transition_trace_count),
             "detail": "hidden candidates",
@@ -2691,7 +2744,10 @@ def build_transcription_completion(
         "A truth workbench now separates queued, accepted, and rejected audio-score-transcription evidence before anything can become visible score evidence.",
         "Accepted source/audio anchors now feed an outward expansion gate before Curtis tries a new random match.",
         "Expansion search now includes raw detected note series, not only already-ranked score candidate cards.",
+        "A Staff 4 audit packet generator now creates audio/video, pitch-trace, and spectrogram evidence for the exact Eb5-versus-D5 expansion blocker.",
     ]
+    if staff4_audit_ready:
+        done_summary.append(f"Latest Staff 4 audit status: {staff4_audit_status.replace('_', ' ')}.")
     remaining_summary = [
         "Finish chronological active-practice coverage across the full archive.",
         "Build benchmark clips for known notes, fast runs, arpeggios, rhythm, and score boxes.",
@@ -2701,6 +2757,7 @@ def build_transcription_completion(
         "Build longer phrase candidates that survive the second-pass audio gate instead of relying on loose transition traces or reference-audio coincidences.",
         "Keep extending the accepted Staff 4 anchor only when each adjacent source note agrees with paired audio.",
         "Use the raw detected-series expansion pool to find a real adjacent Staff 4 audio run before accepting a longer phrase.",
+        "Use the Staff 4 audit packet to either reject the current right-2 expansion or expose detector disagreement before trying to accept it.",
         "Align accepted phrases to score locations or score-free repeated exercise patterns.",
         "Generate heat maps and Curtis-level observations only from accepted evidence.",
     ]
@@ -2779,12 +2836,15 @@ def build_transcription_completion(
             "but accepted truth evidence is still required before display."
         )
     elif phrase_expansion_current and phrase_expansion_accepted_count == 0:
-        next_action = (
-            "Keep the accepted Staff 4 source lane fixed; expansion is blocked at "
-            f"{phrase_expansion_current.get('expectedNextScoreNote') or 'the next source note'} vs "
-            f"{phrase_expansion_current.get('observedNextAudioNote') or 'current audio'} after searching "
-            f"{phrase_expansion_audio_run_count} audio-note runs."
-        )
+        if staff4_audit_status == "blocked_audio_mismatch_confirmed":
+            next_action = "Record the Staff 4 right-2 expansion as rejected from the audit packet, then test the next adjacent phrase window."
+        else:
+            next_action = (
+                "Keep the accepted Staff 4 source lane fixed; expansion is blocked at "
+                f"{phrase_expansion_current.get('expectedNextScoreNote') or 'the next source note'} vs "
+                f"{phrase_expansion_current.get('observedNextAudioNote') or 'current audio'} after searching "
+                f"{phrase_expansion_audio_run_count} audio-note runs."
+            )
     elif source_target_sequence and source_target_checked and not source_target_verified:
         next_action = (
             "Use IMSLP staff review packets to verify score-note hypotheses into MusicXML before promoting "
@@ -2824,6 +2884,9 @@ def build_transcription_completion(
         "phraseExpansionAudioRunCount": phrase_expansion_audio_run_count,
         "phraseExpansionRawAudioRunCount": phrase_expansion_raw_audio_run_count,
         "phraseExpansionCurrentStatus": str(phrase_expansion_current.get("status") or ""),
+        "staff4PhraseAudit": staff4_audit,
+        "staff4PhraseAuditStatus": staff4_audit_status,
+        "staff4PhraseAuditPacketId": staff4_audit.get("packetId") or "",
         "sourceVerificationTargetCount": source_target_count,
         "sourceVerificationTargets": source_targets,
         "sourceVerificationTargetTop": source_target_top,
@@ -2924,6 +2987,11 @@ def derive_review(
     evidence_progress = build_evidence_progress(state)
     truth_workbench = build_truth_workbench(state, daily_records, evidence_progress)
     gold_review = build_gold_review_loop(state, daily_records)
+    staff4_phrase_audit = (
+        state.get("staff4PhraseAuditLatest")
+        if isinstance(state.get("staff4PhraseAuditLatest"), dict)
+        else {}
+    )
     transcription_completion = build_transcription_completion(
         training,
         daily_records,
@@ -2934,6 +3002,7 @@ def derive_review(
         transcriptions,
         truth_workbench,
         gold_review,
+        staff4_phrase_audit,
     )
     progress_plan = existing.get("progressPlan") if isinstance(existing.get("progressPlan"), dict) else None
     youtube_items = inventory.get("youtube", [])
@@ -2978,6 +3047,7 @@ def derive_review(
         "evidenceProgress": evidence_progress,
         "truthWorkbench": truth_workbench,
         "goldReview": gold_review,
+        "staff4PhraseAudit": staff4_phrase_audit,
         "transcriptionCompletion": transcription_completion,
         "repertoireEvidence": repertoire_evidence,
         "progressPlan": progress_plan,
