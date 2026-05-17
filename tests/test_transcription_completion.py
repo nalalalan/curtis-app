@@ -661,7 +661,10 @@ class TranscriptionCompletionTests(unittest.TestCase):
 
         self.assertEqual(completion["staff4SourceAudioRescanStatus"], "rescanned")
         self.assertEqual(completion["staff4SourceAudioRescanRunCount"], 5)
+        self.assertEqual(completion["staff4SourceAudioRescanAnchorStatus"], "reproduced")
+        self.assertEqual(completion["staff4SourceAudioRescanAnchorReproducedCount"], 1)
         self.assertEqual(completion["staff4SourceAudioRescan"]["scanWindowCount"], 5)
+        self.assertEqual(completion["staff4SourceAudioRescan"]["anchorReproductionStatus"], "reproduced")
         self.assertEqual(
             completion["staff4SourceAudioRescan"]["scanWindowLabels"],
             ["anchor_core", "right_1", "right_2", "right_3", "right_4"],
@@ -767,7 +770,10 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertNotEqual(completion["staff4SourceAudioRescanStatus"], "no_staff4_anchor")
         self.assertEqual(completion["staff4SourceAudioRescanStatus"], "rescanned")
         self.assertEqual(completion["staff4SourceAudioRescanRunCount"], 5)
+        self.assertEqual(completion["staff4SourceAudioRescanAnchorStatus"], "reproduced")
+        self.assertEqual(completion["staff4SourceAudioRescanAnchorReproducedCount"], 1)
         self.assertEqual(completion["staff4SourceAudioRescan"]["scanWindowCount"], 5)
+        self.assertEqual(completion["staff4SourceAudioRescan"]["anchorReproductionStatus"], "reproduced")
         self.assertGreater(completion["staff4SourceAudioRescanEventCount"], 0)
         self.assertGreaterEqual(completion["phraseExpansionHarness"]["anchorCount"], 1)
         self.assertEqual(completion["phraseExpansionHarness"]["currentBest"]["anchorSource"], "truth_manifest")

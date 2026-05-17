@@ -2168,6 +2168,7 @@ def staff4_source_audio_rescan(daily_records: dict[str, Any], media_samples: lis
         }
     records: list[dict[str, Any]] = []
     runs: list[dict[str, Any]] = []
+    anchor_reproduction_targets: list[dict[str, Any]] = []
     blocked = 0
     for anchor in anchors[: max(0, int(limit))]:
         sample_id = str(anchor.get("sampleId") or "")
@@ -2197,11 +2198,54 @@ def staff4_source_audio_rescan(daily_records: dict[str, Any], media_samples: lis
             for run in record.get("runs") if isinstance(record.get("runs"), list) else []:
                 if isinstance(run, dict):
                     runs.append(run)
+        anchor_midi = [int(value) for value in anchor.get("anchorMidiSequence") or [] if isinstance(value, int)]
+        if anchor_midi:
+            anchor_absolute_start = parse_window_start(str(anchor.get("sourceWindow") or "")) + float(anchor.get("anchorLocalStartSeconds") or 0.0)
+            reproduction = audio_window_search_for_exact_midi(
+                runs,
+                anchor_midi,
+                practice_day=str(anchor.get("practiceDay") or ""),
+                anchor_sample_id=sample_id,
+                anchor_absolute_start=anchor_absolute_start,
+            )
+            exact_candidates = reproduction.get("exactCandidates") if isinstance(reproduction.get("exactCandidates"), list) else []
+            exact_audio_candidates = [
+                item
+                for item in exact_candidates
+                if isinstance(item, dict) and item.get("audioAgreed") and item.get("sameSampleAsAnchor")
+            ]
+            nearest = reproduction.get("nearestWindow") if isinstance(reproduction.get("nearestWindow"), dict) else {}
+            anchor_reproduction_targets.append(
+                {
+                    "practiceDay": str(anchor.get("practiceDay") or ""),
+                    "sampleId": sample_id,
+                    "sourceWindow": str(anchor.get("sourceWindow") or ""),
+                    "anchorSequence": str(anchor.get("anchorSequence") or ""),
+                    "anchorMidiSequence": anchor_midi,
+                    "searchedWindowCount": int(reproduction.get("searchedWindowCount") or 0),
+                    "exactCandidateCount": len(exact_candidates),
+                    "exactAudioCandidateCount": len(exact_audio_candidates),
+                    "status": "reproduced" if exact_audio_candidates else "not_reproduced",
+                    "nearestWindow": nearest,
+                }
+            )
     status = "rescanned" if runs else "blocked_media_missing" if blocked == len(records) else "no_notes_detected"
+    anchor_reproduced_count = sum(1 for item in anchor_reproduction_targets if item.get("status") == "reproduced")
+    anchor_reproduction_status = (
+        "not_checked"
+        if not anchor_reproduction_targets
+        else "reproduced"
+        if anchor_reproduced_count == len(anchor_reproduction_targets)
+        else "not_reproduced"
+    )
     return {
         "version": STAFF4_SOURCE_AUDIO_RESCAN_VERSION,
         "status": status,
         "anchorCount": len(anchors),
+        "anchorReproductionStatus": anchor_reproduction_status,
+        "anchorReproducedCount": anchor_reproduced_count,
+        "anchorReproductionTargetCount": len(anchor_reproduction_targets),
+        "anchorReproductionTargets": anchor_reproduction_targets,
         "recordCount": len(records),
         "scanWindowCount": len(records),
         "scanWindowLabels": [
@@ -2217,7 +2261,9 @@ def staff4_source_audio_rescan(daily_records: dict[str, Any], media_samples: lis
         "records": records,
         "runs": runs,
         "nextAction": (
-            "Search exact Staff 4 MIDI phrase windows inside the rescanned source-audio runs."
+            "Fix current-detector anchor reproduction before expanding the Staff 4 phrase."
+            if anchor_reproduction_targets and not anchor_reproduced_count
+            else "Search exact Staff 4 MIDI phrase windows inside the rescanned source-audio runs."
             if runs
             else "Make the Staff 4 source media available, then rescan the source audio around the accepted anchor."
         ),
@@ -3346,6 +3392,9 @@ def build_transcription_completion(
     staff4_source_rescan_status = str(staff4_source_rescan.get("status") or "")
     staff4_source_rescan_run_count = int(staff4_source_rescan.get("runCount") or 0)
     staff4_source_rescan_event_count = int(staff4_source_rescan.get("eventCount") or 0) + int(staff4_source_rescan.get("candidateEventCount") or 0)
+    staff4_source_rescan_anchor_status = str(staff4_source_rescan.get("anchorReproductionStatus") or "")
+    staff4_source_rescan_anchor_count = int(staff4_source_rescan.get("anchorReproducedCount") or 0)
+    staff4_source_rescan_anchor_target_count = int(staff4_source_rescan.get("anchorReproductionTargetCount") or 0)
     staff4_mining_status = str(staff4_mining.get("status") or "")
     staff4_mining_searched_count = int(staff4_mining.get("searchedWindowCount") or 0)
     staff4_mining_exact_count = int(staff4_mining.get("exactCandidateCount") or 0)
@@ -3623,7 +3672,10 @@ def build_transcription_completion(
         {
             "label": "Source rescan",
             "value": staff4_source_rescan_status.replace("_", " ") if staff4_source_rescan_status else "pending",
-            "detail": f"{staff4_source_rescan_run_count} runs / {staff4_source_rescan_event_count} events",
+            "detail": (
+                f"{staff4_source_rescan_run_count} runs / {staff4_source_rescan_event_count} events / "
+                f"anchor {staff4_source_rescan_anchor_status.replace('_', ' ') or 'unchecked'}"
+            ),
         },
         {
             "label": "Staff 4 mining",
@@ -3804,7 +3856,15 @@ def build_transcription_completion(
                 f"{phrase_expansion_current.get('observedNextAudioNote') or 'current audio'} after the previous right-2 audit was locked as rejected."
             )
             if staff4_mining_status == "not_found":
-                if staff4_source_rescan_run_count:
+                if staff4_source_rescan_anchor_status == "not_reproduced":
+                    next_action = (
+                        "Fix current-detector reproduction of the accepted Staff 4 anchor before widening again; "
+                        "the fresh source-audio rescan did not recover the accepted "
+                        f"{phrase_expansion_current.get('anchorSequence') or 'anchor'} window, and adjacent mining found no exact "
+                        f"{phrase_expansion_current.get('targetSequence') or 'adjacent'} window after "
+                        f"{staff4_mining_searched_count} stored/rescanned windows."
+                    )
+                elif staff4_source_rescan_run_count:
                     next_action = (
                         "Widen the Staff 4 source-audio rescan or improve note segmentation; exact MIDI search found no "
                         f"{phrase_expansion_current.get('targetSequence') or 'adjacent'} window after "
@@ -3817,11 +3877,20 @@ def build_transcription_completion(
                     )
         else:
             if staff4_mining_status == "not_found" and staff4_source_rescan_run_count:
-                next_action = (
-                    "Widen the Staff 4 source-audio rescan or improve note segmentation; exact MIDI search found no "
-                    f"{phrase_expansion_current.get('targetSequence') or 'adjacent'} window after "
-                    f"{staff4_mining_searched_count} stored/rescanned windows."
-                )
+                if staff4_source_rescan_anchor_status == "not_reproduced":
+                    next_action = (
+                        "Fix current-detector reproduction of the accepted Staff 4 anchor before widening again; "
+                        "the fresh source-audio rescan did not recover the accepted "
+                        f"{phrase_expansion_current.get('anchorSequence') or 'anchor'} window, and adjacent mining found no exact "
+                        f"{phrase_expansion_current.get('targetSequence') or 'adjacent'} window after "
+                        f"{staff4_mining_searched_count} stored/rescanned windows."
+                    )
+                else:
+                    next_action = (
+                        "Widen the Staff 4 source-audio rescan or improve note segmentation; exact MIDI search found no "
+                        f"{phrase_expansion_current.get('targetSequence') or 'adjacent'} window after "
+                        f"{staff4_mining_searched_count} stored/rescanned windows."
+                    )
             else:
                 next_action = (
                     "Keep the accepted Staff 4 source lane fixed; expansion is blocked at "
@@ -3878,6 +3947,9 @@ def build_transcription_completion(
         "staff4SourceAudioRescanStatus": staff4_source_rescan_status,
         "staff4SourceAudioRescanRunCount": staff4_source_rescan_run_count,
         "staff4SourceAudioRescanEventCount": staff4_source_rescan_event_count,
+        "staff4SourceAudioRescanAnchorStatus": staff4_source_rescan_anchor_status,
+        "staff4SourceAudioRescanAnchorReproducedCount": staff4_source_rescan_anchor_count,
+        "staff4SourceAudioRescanAnchorTargetCount": staff4_source_rescan_anchor_target_count,
         "staff4AdjacentMining": staff4_mining,
         "staff4AdjacentMiningStatus": staff4_mining_status,
         "staff4AdjacentMiningSearchedWindowCount": staff4_mining_searched_count,
