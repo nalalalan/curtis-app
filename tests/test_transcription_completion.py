@@ -906,6 +906,132 @@ class TranscriptionCompletionTests(unittest.TestCase):
         exact_audio = [item for item in search["exactCandidates"] if item["audioAgreed"]]
         self.assertEqual(exact_audio[0]["audioRunSource"], "staff4_adjacent_guided_current_detector")
 
+    def test_staff4_adjacent_guided_phrase_sweeps_inferred_next_note_onset(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source_path = Path(temp_dir) / "staff4-source.wav"
+            write_tiny_wav(source_path)
+            calls = {"count": 0}
+
+            def fake_extract(_source, target, _start, _end):
+                write_tiny_wav(target, seconds=17)
+                return True, ""
+
+            def offset_sensitive_detector_votes(_segment, expected_midi, _sr, _librosa, _numpy):
+                calls["count"] += 1
+                if calls["count"] in {11, 18}:
+                    return [
+                        {
+                            "detector": "pyin",
+                            "midi": 74,
+                            "note": "D5",
+                            "confidence": 0.72,
+                            "exact": False,
+                            "frameCount": 6,
+                        },
+                        {
+                            "detector": "spectral_onset",
+                            "midi": 74,
+                            "note": "D5",
+                            "confidence": 0.74,
+                            "exact": False,
+                            "frameCount": 1,
+                        },
+                    ]
+                return [
+                    {
+                        "detector": "pyin",
+                        "midi": expected_midi,
+                        "note": "C5" if expected_midi == 72 else "D#5",
+                        "confidence": 0.91,
+                        "exact": True,
+                        "frameCount": 6,
+                    },
+                    {
+                        "detector": "spectral_onset",
+                        "midi": expected_midi,
+                        "note": "C5" if expected_midi == 72 else "D#5",
+                        "confidence": 0.89,
+                        "exact": True,
+                        "frameCount": 1,
+                    },
+                ]
+
+            fake_transcription = {
+                "events": [note("D5", 0.00), note("D5", 0.12), note("C5", 0.24)],
+                "scoreMatchCandidateNotes": [],
+                "quality": {
+                    "segmentationSource": "patched_staff4_source_rescan_broad_miss",
+                    "pitchEventCount": 3,
+                    "onsetEventCount": 3,
+                    "spectralEventCount": 3,
+                    "transitionTraceEventCount": 3,
+                    "audioAgreementEventCount": 3,
+                },
+            }
+            anchor_notes = [
+                note("D#5", 20.225),
+                note("D#5", 20.550),
+                note("C5", 20.817),
+                note("D#5", 21.629),
+                note("D#5", 22.361),
+            ]
+            source_notes = [
+                note("A5"),
+                note("G5"),
+                note("F5"),
+                note("D#5"),
+                note("D#5"),
+                note("C5"),
+                note("D#5"),
+                note("D#5"),
+                note("D#5"),
+                note("C5"),
+            ]
+            anchor = {
+                "practiceDay": "2026-05-03",
+                "pieceTitle": "Wieniawski Scherzo-Tarantelle, Op. 16",
+                "anchorSequence": "D#5 D#5 C5 D#5 D#5",
+                "anchorMidiSequence": [75, 75, 72, 75, 75],
+                "sourceNotes": source_notes,
+                "referenceStart": 3,
+                "referenceEnd": 8,
+                "sampleId": "accepted-anchor",
+                "sourceWindow": "*8835-8925",
+                "anchorLocalStartSeconds": 20.225,
+                "anchorLocalEndSeconds": 22.481,
+                "match": {
+                    "detectedSeries": {
+                        "sampleId": "accepted-anchor",
+                        "sourceWindow": "*8835-8925",
+                        "notes": anchor_notes,
+                    },
+                    "matchedDetectedNotes": anchor_notes,
+                },
+            }
+
+            with patch("backend.app.scanner.run_ffmpeg_extract_audio", side_effect=fake_extract), patch(
+                "backend.app.scanner.transcribe_audio_array",
+                return_value=fake_transcription,
+            ), patch("backend.app.scanner.staff4_detector_votes_for_segment", side_effect=offset_sensitive_detector_votes):
+                record = staff4_source_audio_rescan_record(
+                    anchor=anchor,
+                    sample={"id": "accepted-anchor", "path": str(source_path), "window": "*8835-8925"},
+                    source_path=source_path,
+                    scan_window={
+                        "label": "anchor_core",
+                        "scanLocalStartSeconds": 16.225,
+                        "scanLocalEndSeconds": 32.535,
+                    },
+                )
+
+        guided_runs = [run for run in record["runs"] if run.get("runSource") == "staff4_adjacent_guided_current_detector"]
+        self.assertEqual(record["guidedAdjacentStatus"], "reproduced")
+        self.assertEqual(len(guided_runs), 1)
+        self.assertEqual([item["midi"] for item in guided_runs[0]["notes"]], [75, 75, 72, 75, 75, 75, 72])
+        self.assertTrue(guided_runs[0]["notes"][5]["timingSweepUsed"])
+        self.assertEqual(guided_runs[0]["notes"][5]["timingOffsetSeconds"], -0.06)
+        self.assertGreater(len(guided_runs[0]["notes"][5]["detectorAttempts"]), 1)
+
     def test_staff4_truth_manifest_anchor_persists_without_visible_match_group(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             source_path = Path(temp_dir) / "staff4-source.wav"

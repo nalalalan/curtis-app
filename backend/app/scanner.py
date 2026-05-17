@@ -78,7 +78,7 @@ from .symbolic_scores import (
 )
 
 DEFAULT_YOUTUBE_SOURCE = "https://www.youtube.com/@nalalan"
-STAFF4_SOURCE_AUDIO_RESCAN_VERSION = "staff4_source_audio_rescan_v4"
+STAFF4_SOURCE_AUDIO_RESCAN_VERSION = "staff4_source_audio_rescan_v5"
 STAFF4_SOURCE_AUDIO_RESCAN_DIR = RUNTIME_DIR / "staff4-source-rescan"
 STAFF4_SOURCE_AUDIO_RESCAN_PAD_BEFORE_SECONDS = 4.0
 STAFF4_SOURCE_AUDIO_RESCAN_PAD_AFTER_SECONDS = 10.0
@@ -89,6 +89,7 @@ STAFF4_ACCEPTED_ANCHOR_MIDI = [75, 75, 72, 75, 75]
 STAFF4_ANCHOR_GUIDED_PAD_SECONDS = 0.03
 STAFF4_ANCHOR_GUIDED_MIN_EXACT_VOTES = 2
 STAFF4_ADJACENT_GUIDED_MAX_TARGET_NOTES = 7
+STAFF4_ADJACENT_GUIDED_SWEEP_OFFSETS_SECONDS = (0.0, -0.06, 0.06, -0.12, 0.12, -0.18, 0.18, -0.24, 0.24)
 MEDIA_REVIEW_PENDING_BLOCKERS = {"youtube_data_api_returns_metadata_not_video_media"}
 WEAK_EVIDENCE_TERMS = (
     "background noise",
@@ -2206,6 +2207,109 @@ def staff4_adjacent_guided_note_windows(anchor: dict[str, Any], target_midi: lis
     return windows
 
 
+def staff4_guided_detector_note_from_window(
+    *,
+    y: Any,
+    sr: int,
+    scan_start: float,
+    scan_end: float,
+    librosa: Any,
+    numpy: Any,
+    window: dict[str, Any],
+    expected_midi: int,
+    note_index: int,
+    allow_sweep: bool,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    base_start = float(window.get("startSeconds") or 0.0)
+    base_end = float(window.get("endSeconds") or base_start)
+    if base_end <= base_start:
+        return {}, {
+            "noteIndex": note_index,
+            "expectedMidi": expected_midi,
+            "expectedNote": note_name(expected_midi),
+            "reason": "empty_seed_window",
+        }
+    duration = base_end - base_start
+    offsets = STAFF4_ADJACENT_GUIDED_SWEEP_OFFSETS_SECONDS if allow_sweep else (0.0,)
+    attempts: list[dict[str, Any]] = []
+    for offset in offsets:
+        start = base_start + float(offset)
+        end = start + duration
+        if start < scan_start or end > scan_end:
+            attempts.append(
+                {
+                    "offsetSeconds": round(float(offset), 3),
+                    "startSeconds": round(start, 3),
+                    "endSeconds": round(end, 3),
+                    "reason": "outside_scan",
+                }
+            )
+            continue
+        padded_start = max(scan_start, start - STAFF4_ANCHOR_GUIDED_PAD_SECONDS)
+        padded_end = min(scan_end, end + STAFF4_ANCHOR_GUIDED_PAD_SECONDS)
+        start_sample = max(0, int(round((padded_start - scan_start) * sr)))
+        end_sample = min(len(y), int(round((padded_end - scan_start) * sr)))
+        if end_sample <= start_sample:
+            attempts.append(
+                {
+                    "offsetSeconds": round(float(offset), 3),
+                    "startSeconds": round(start, 3),
+                    "endSeconds": round(end, 3),
+                    "reason": "empty_seed_audio",
+                }
+            )
+            continue
+        segment = y[start_sample:end_sample]
+        votes = staff4_detector_votes_for_segment(segment, expected_midi, sr, librosa, numpy)
+        exact_votes = [vote for vote in votes if vote.get("exact")]
+        exact_sources = [str(vote.get("detector") or "") for vote in exact_votes if str(vote.get("detector") or "")]
+        attempts.append(
+            {
+                "offsetSeconds": round(float(offset), 3),
+                "startSeconds": round(start, 3),
+                "endSeconds": round(end, 3),
+                "exactSourceCount": len(set(exact_sources)),
+                "exactSources": sorted(set(exact_sources)),
+                "detectorVotes": votes,
+            }
+        )
+        if len(exact_sources) < STAFF4_ANCHOR_GUIDED_MIN_EXACT_VOTES or "spectral_onset" not in exact_sources:
+            continue
+        confidence = max([float(vote.get("confidence") or 0.0) for vote in exact_votes] + [0.86])
+        return {
+            "startSeconds": round(start, 3),
+            "endSeconds": round(end, 3),
+            "durationSeconds": round(max(0.0, end - start), 3),
+            "midi": expected_midi,
+            "note": note_name(expected_midi),
+            "confidence": round(min(0.99, confidence), 3),
+            "audioAgreement": True,
+            "agreementSources": sorted(set(exact_sources)),
+            "agreementSourceCount": len(set(exact_sources)),
+            "detectorSource": "staff4_adjacent_guided_current_detector",
+            "verification": "current_audio_pyin_yin_spectral_exact_midi_adjacent_reproduction",
+            "sourceAudioRescan": True,
+            "adjacentGuidedReproduction": True,
+            "timingOffsetSeconds": round(float(offset), 3),
+            "timingSweepUsed": bool(allow_sweep and abs(float(offset)) > 0.0001),
+            "detectorVotes": votes,
+            "detectorAttempts": attempts,
+        }, {}
+    best_attempt = max(
+        attempts,
+        key=lambda item: (int(item.get("exactSourceCount") or 0), -abs(float(item.get("offsetSeconds") or 0.0))),
+        default={},
+    )
+    return {}, {
+        "noteIndex": note_index,
+        "expectedMidi": expected_midi,
+        "expectedNote": note_name(expected_midi),
+        "reason": "current_detectors_did_not_reproduce_exact_midi",
+        "detectorAttempts": attempts,
+        "bestAttempt": best_attempt,
+    }
+
+
 def staff4_adjacent_guided_reproduction_targets(
     anchor: dict[str, Any],
     y: Any,
@@ -2222,63 +2326,23 @@ def staff4_adjacent_guided_reproduction_targets(
         notes: list[dict[str, Any]] = []
         failed: dict[str, Any] = {}
         for note_index, (window, expected_midi) in enumerate(zip(windows, target_midi)):
-            start = float(window.get("startSeconds") or 0.0)
-            end = float(window.get("endSeconds") or start)
-            if end <= start or start < scan_start or end > scan_end:
-                failed = {
-                    "noteIndex": note_index,
-                    "expectedMidi": expected_midi,
-                    "expectedNote": note_name(expected_midi),
-                    "reason": "seed_window_outside_scan",
-                    "startSeconds": round(start, 3),
-                    "endSeconds": round(end, 3),
-                }
-                break
-            padded_start = max(scan_start, start - STAFF4_ANCHOR_GUIDED_PAD_SECONDS)
-            padded_end = min(scan_end, end + STAFF4_ANCHOR_GUIDED_PAD_SECONDS)
-            start_sample = max(0, int(round((padded_start - scan_start) * sr)))
-            end_sample = min(len(y), int(round((padded_end - scan_start) * sr)))
-            if end_sample <= start_sample:
-                failed = {
-                    "noteIndex": note_index,
-                    "expectedMidi": expected_midi,
-                    "expectedNote": note_name(expected_midi),
-                    "reason": "empty_seed_audio",
-                }
-                break
-            segment = y[start_sample:end_sample]
-            votes = staff4_detector_votes_for_segment(segment, expected_midi, sr, librosa, numpy)
-            exact_votes = [vote for vote in votes if vote.get("exact")]
-            exact_sources = [str(vote.get("detector") or "") for vote in exact_votes if str(vote.get("detector") or "")]
-            if len(exact_sources) < STAFF4_ANCHOR_GUIDED_MIN_EXACT_VOTES or "spectral_onset" not in exact_sources:
-                failed = {
-                    "noteIndex": note_index,
-                    "expectedMidi": expected_midi,
-                    "expectedNote": note_name(expected_midi),
-                    "reason": "current_detectors_did_not_reproduce_exact_midi",
-                    "detectorVotes": votes,
-                }
-                break
-            confidence = max([float(vote.get("confidence") or 0.0) for vote in exact_votes] + [0.86])
-            notes.append(
-                {
-                    "startSeconds": round(start, 3),
-                    "endSeconds": round(end, 3),
-                    "durationSeconds": round(max(0.0, end - start), 3),
-                    "midi": expected_midi,
-                    "note": note_name(expected_midi),
-                    "confidence": round(min(0.99, confidence), 3),
-                    "audioAgreement": True,
-                    "agreementSources": sorted(set(exact_sources)),
-                    "agreementSourceCount": len(set(exact_sources)),
-                    "detectorSource": "staff4_adjacent_guided_current_detector",
-                    "verification": "current_audio_pyin_yin_spectral_exact_midi_adjacent_reproduction",
-                    "sourceAudioRescan": True,
-                    "adjacentGuidedReproduction": True,
-                    "targetDirection": str(target.get("direction") or ""),
-                    "detectorVotes": votes,
-                }
+            note_result, failure = staff4_guided_detector_note_from_window(
+                y=y,
+                sr=sr,
+                scan_start=scan_start,
+                scan_end=scan_end,
+                librosa=librosa,
+                numpy=numpy,
+                window=window,
+                expected_midi=expected_midi,
+                note_index=note_index,
+                allow_sweep=bool(window.get("inferredAdjacentWindow")),
             )
+            if failure:
+                failed = failure
+                break
+            note_result["targetDirection"] = str(target.get("direction") or "")
+            notes.append(note_result)
         status = "reproduced" if len(notes) == len(target_midi) and not failed else "not_reproduced"
         results.append(
             {

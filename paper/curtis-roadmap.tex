@@ -576,6 +576,8 @@ The 2026-05-17 01:43 PM EDT anchor-guided reproduction pass fixes the current-de
 
 The 2026-05-17 04:49 PM EDT adjacent-guided phrase pass is the next concrete implementation step from that state. Instead of only widening source windows again, Curtis now derives the Staff 4 right-1 and right-2 MIDI targets from the accepted source lane, infers the next note windows from the accepted anchor timing, and checks each expected note with current pYIN/YIN/spectral exact-MIDI votes. If every note reproduces, the longest adjacent target enters the hidden exact-MIDI mining pool as \texttt{staff4\_adjacent\_guided\_current\_detector}; if any note fails, the rescan record stores the first failed note, expected MIDI, detector votes, and seed window. The regression suite now proves that a broad transcription miss can still produce a seven-note adjacent phrase when current audio agrees with every source MIDI value, without allowing that phrase to bypass source crop and truth gates.
 
+The 2026-05-17 05:29 PM EDT adjacent-onset sweep pass follows the same fixed-lane rule but removes a brittle timing assumption. Inferred continuation notes now sweep bounded early and late offsets around the predicted onset before failing. The accepted five anchor notes remain fixed; only notes beyond the anchor are swept. Each attempt records the offset, note window, exact detector sources, full detector votes, and best failed attempt. A new regression proves that when the base inferred sixth note returns \texttt{D5} but a nearby offset returns source \texttt{Eb5}, the seven-note Staff 4 target can enter the hidden exact-MIDI mining pool with the nonzero timing offset recorded.
+
 The remaining M1 work is continuing the low-cost media pass over every unmeasured strict-ledger video in chronological windows, then replacing the sample-biased estimate with full-archive checked intervals. The remaining M10 work is the larger benchmark suite for repeated notes, arpeggios, fast runs, score-free exercises, score-coordinate truth, accepted notation/media completeness, and practice-time accounting regressions.
 
 The long-phrase track should now run in parallel with full-archive scanning. Waiting for all 234 h 57 min of archive coverage before extending one musical lane would be too slow. The faster strategy is a narrow accepted-measure lane:
@@ -590,8 +592,8 @@ The long-phrase track should now run in parallel with full-archive scanning. Wai
 The next coding pass should:
 \begin{enumerate}
     \item inspect the live \texttt{guidedAdjacentTargets} output and use the first failed adjacent Staff 4 note as the next detector/segmentation calibration target;
-    \item improve the adjacent note-window inference if the expected \texttt{Eb5} is being probed before or after the actual played onset;
-    \item improve detector voting if the probed audio segment visibly/audibly contains the expected adjacent source note but pYIN/YIN/spectral disagreement blocks it;
+    \item if every onset-sweep offset still fails, compare the best failed detector attempt against the Staff 4 audit packet pitch trace and decide whether the remaining error is pitch detection, onset placement, or the played note really being \texttt{D5};
+    \item improve detector voting if the swept audio segment visibly/audibly contains the expected adjacent source note but pYIN/YIN/spectral disagreement blocks it;
     \item accept a longer compact grouped score--clip--audio--transcription pair only if the expanded exact MIDI sequence, paired audio, source crop, and truth gate all pass;
     \item keep reporting the first blocking note when an expansion fails so the next extraction attempt has a precise target;
     \item keep running queue-only owner-media sync in parallel, starting with \texttt{violin 1} at \texttt{*2250-2340};
