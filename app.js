@@ -2982,16 +2982,20 @@ function renderStaff4Audit(audit) {
   `;
 }
 
-function renderStaff4Mining(mining) {
+function renderStaff4Mining(mining, sourceRescan) {
   if (!mining || typeof mining !== "object") return "";
   const status = String(mining.status || "").replace(/_/g, " ");
   if (!status || status === "no staff4 anchor") return "";
+  const rescan = sourceRescan && typeof sourceRescan === "object" ? sourceRescan : {};
   const nearest = mining.nearestWindow && typeof mining.nearestWindow === "object" ? mining.nearestWindow : {};
   const candidate = mining.bestCandidate && typeof mining.bestCandidate === "object" ? mining.bestCandidate : {};
   const target = candidate.targetSequence || nearest.targetSequence || "";
   const observed = candidate.windowSequence || nearest.windowSequence || "";
   const exact = Number(mining.exactCandidateCount) || 0;
   const searched = Number(mining.searchedWindowCount) || 0;
+  const rescanRuns = Number(mining.sourceAudioRescanRunCount || rescan.runCount) || 0;
+  const rescanEvents = Number(mining.sourceAudioRescanEventCount || (Number(rescan.eventCount) || 0) + (Number(rescan.candidateEventCount) || 0)) || 0;
+  const rescanStatus = String(mining.sourceAudioRescanStatus || rescan.status || "").replace(/_/g, " ");
   const direction = candidate.targetDirection || nearest.targetDirection || "";
   return `
     <section class="staff4-mining-card" aria-label="Staff 4 adjacent mining">
@@ -3003,6 +3007,8 @@ function renderStaff4Mining(mining) {
         <span>${escapeHtml(direction || "adjacent")}</span>
         <strong>${escapeHtml(shortText(target || "target pending", 54))}</strong>
         <em>${escapeHtml(shortText(observed || "no stored audio window", 54))}</em>
+        ${rescanStatus ? `<span>${escapeHtml(rescanStatus)}</span>` : ""}
+        ${rescanRuns || rescanEvents ? `<strong>${escapeHtml(rescanRuns)} source runs</strong><em>${escapeHtml(rescanEvents)} source events</em>` : ""}
       </div>
     </section>
   `;
@@ -3035,6 +3041,7 @@ function renderTranscriptionCompletion() {
     ["Queue", `${Number(completion.goldReviewQueueCount) || 0} clips`],
     ["Source truth", `${Number(completion.truthManifestPositiveSourcePhraseVerifiedCount) || 0}/${Number(completion.truthManifestPositiveSourcePhraseCount) || 0}`],
     ["Blocked errors", `${Number(completion.truthManifestRejectedRegressionBlockedCount) || 0}/${Number(completion.truthManifestRejectedRegressionPhraseCount) || 0}`],
+    ["Rescan", completion.staff4SourceAudioRescanStatus ? String(completion.staff4SourceAudioRescanStatus).replace(/_/g, " ") : "pending"],
     ["Mining", completion.staff4AdjacentMiningStatus ? String(completion.staff4AdjacentMiningStatus).replace(/_/g, " ") : "pending"],
     ["Staff 4 audit", completion.staff4PhraseAuditStatus ? String(completion.staff4PhraseAuditStatus).replace(/_/g, " ") : "not generated"],
   ];
@@ -3061,7 +3068,7 @@ function renderTranscriptionCompletion() {
       <span>Next</span>
       <strong>${escapeHtml(shortText(completion.nextAction || "pending", 110))}</strong>
     </div>
-    ${renderStaff4Mining(completion.staff4AdjacentMining)}
+    ${renderStaff4Mining(completion.staff4AdjacentMining, completion.staff4SourceAudioRescan)}
     ${renderStaff4Audit(completion.staff4PhraseAudit)}
   `;
 }

@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import os
 import re
+import json
+import hashlib
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -38,10 +41,15 @@ from .settings import (
     OPENAI_REASONING_EFFORT,
     OPENAI_VISION_MODEL,
     PUBLIC_REFERENCE_REFRESH_SECONDS,
+    RUNTIME_DIR,
     REQUIRE_SOURCE_CONFIRMED_PIECE_TITLES,
     SERVICE_NAME,
 )
-from .staff4_audit import latest_staff4_phrase_audit_packet_for_completion
+from .staff4_audit import (
+    latest_staff4_phrase_audit_packet_for_completion,
+    run_ffmpeg_extract_audio,
+    source_media_path,
+)
 from .state import append_run, load_state, save_state, utc_now
 from .daily_records import (
     build_daily_records,
@@ -55,6 +63,7 @@ from .gold_truth import load_long_phrase_truth, verify_long_phrase_truth_manifes
 from .gold_review import build_gold_review_loop
 from .long_phrase_truth import exact_midi_phrase_gate
 from .study_packets import build_practice_study, build_practice_totals
+from .transcription import TRANSCRIPTION_PIPELINE_VERSION, transcribe_audio_array
 from .symbolic_scores import (
     longest_common_contiguous_run,
     normalize_pitch_class,
@@ -63,6 +72,11 @@ from .symbolic_scores import (
 )
 
 DEFAULT_YOUTUBE_SOURCE = "https://www.youtube.com/@nalalan"
+STAFF4_SOURCE_AUDIO_RESCAN_VERSION = "staff4_source_audio_rescan_v1"
+STAFF4_SOURCE_AUDIO_RESCAN_DIR = RUNTIME_DIR / "staff4-source-rescan"
+STAFF4_SOURCE_AUDIO_RESCAN_PAD_BEFORE_SECONDS = 4.0
+STAFF4_SOURCE_AUDIO_RESCAN_PAD_AFTER_SECONDS = 10.0
+STAFF4_SOURCE_AUDIO_RESCAN_MAX_SECONDS = 18.0
 MEDIA_REVIEW_PENDING_BLOCKERS = {"youtube_data_api_returns_metadata_not_video_media"}
 WEAK_EVIDENCE_TERMS = (
     "background noise",
@@ -1635,7 +1649,337 @@ def expansion_audio_run_from_notes(
     }
 
 
-def detected_audio_runs_for_expansion(daily_records: dict[str, Any]) -> list[dict[str, Any]]:
+def media_sample_for_id(media_samples: list[dict[str, Any]], sample_id: str) -> dict[str, Any]:
+    for sample in media_samples:
+        if isinstance(sample, dict) and str(sample.get("id") or "") == str(sample_id or ""):
+            return sample
+    return {}
+
+
+def seconds_pair_from_url(value: str) -> tuple[float | None, float | None]:
+    if not value:
+        return None, None
+    start_match = re.search(r"(?:[?&#]|^)start=([0-9]+(?:\.[0-9]+)?)", value)
+    end_match = re.search(r"(?:[?&#]|^)end=([0-9]+(?:\.[0-9]+)?)", value)
+    try:
+        start = float(start_match.group(1)) if start_match else None
+    except (TypeError, ValueError):
+        start = None
+    try:
+        end = float(end_match.group(1)) if end_match else None
+    except (TypeError, ValueError):
+        end = None
+    return start, end
+
+
+def staff4_anchor_audio_bounds(match: dict[str, Any]) -> tuple[float, float]:
+    clip = match.get("clip") if isinstance(match.get("clip"), dict) else {}
+    for key in ("audioUrl", "videoUrl", "mediaUrl", "localAudioUrl", "localVideoUrl"):
+        start, end = seconds_pair_from_url(str(clip.get(key) or ""))
+        if start is not None and end is not None and end > start:
+            return start, end
+    start = clip.get("localStartSeconds")
+    end = clip.get("localEndSeconds")
+    try:
+        if start is not None and end is not None and float(end) > float(start):
+            return float(start), float(end)
+    except (TypeError, ValueError):
+        pass
+    notes = match_detected_note_events(match)
+    starts = [float(note.get("startSeconds") or 0.0) for note in notes if isinstance(note, dict)]
+    ends = [
+        float(note.get("endSeconds") or note.get("startSeconds") or 0.0)
+        for note in notes
+        if isinstance(note, dict)
+    ]
+    if starts and ends:
+        return min(starts), max(ends)
+    return 0.0, 2.0
+
+
+def staff4_anchor_matches(daily_records: dict[str, Any]) -> list[dict[str, Any]]:
+    records = daily_records.get("records") if isinstance(daily_records.get("records"), list) else []
+    anchors: list[dict[str, Any]] = []
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        practice_day = str(record.get("practiceDay") or record.get("date") or "")
+        groups = record.get("matchGroups") if isinstance(record.get("matchGroups"), list) else []
+        for match in groups:
+            if not accepted_long_phrase_match(match):
+                continue
+            target = source_reference_target_for_match(match)
+            score = symbolic_score_from_target(target) if target else {}
+            source_notes = score.get("notes") if isinstance(score.get("notes"), list) else []
+            if not source_notes:
+                continue
+            piece_title = str(match.get("pieceTitle") or score.get("title") or "")
+            if "wieniawski" not in piece_title.lower():
+                continue
+            reference_start = int(match.get("referenceStart") or 0)
+            reference_end = int(match.get("referenceEnd") or reference_start)
+            anchor_slice = source_notes[reference_start:reference_end]
+            anchor_midi = note_midi_values(anchor_slice)
+            if anchor_midi != [75, 75, 72, 75, 75]:
+                continue
+            detected = match.get("detectedSeries") if isinstance(match.get("detectedSeries"), dict) else {}
+            clip = match.get("clip") if isinstance(match.get("clip"), dict) else {}
+            local_start, local_end = staff4_anchor_audio_bounds(match)
+            anchors.append(
+                {
+                    "practiceDay": practice_day,
+                    "pieceTitle": piece_title,
+                    "match": match,
+                    "target": target,
+                    "score": score,
+                    "sourceNotes": source_notes,
+                    "referenceStart": reference_start,
+                    "referenceEnd": reference_end,
+                    "anchorSequence": note_exact_label(anchor_slice),
+                    "anchorMidiSequence": anchor_midi,
+                    "sampleId": str(detected.get("sampleId") or clip.get("sampleId") or ""),
+                    "sourceWindow": str(detected.get("sourceWindow") or clip.get("sourceWindow") or ""),
+                    "anchorLocalStartSeconds": round(local_start, 3),
+                    "anchorLocalEndSeconds": round(local_end, 3),
+                }
+            )
+    return anchors
+
+
+def staff4_rescan_id(sample_id: str, source_path: Path, scan_start: float, scan_end: float) -> str:
+    try:
+        stat = source_path.stat()
+        stamp = f"{stat.st_mtime_ns}:{stat.st_size}"
+    except OSError:
+        stamp = "missing"
+    raw = "|".join(
+        [
+            STAFF4_SOURCE_AUDIO_RESCAN_VERSION,
+            sample_id,
+            str(source_path),
+            f"{scan_start:.3f}",
+            f"{scan_end:.3f}",
+            stamp,
+            TRANSCRIPTION_PIPELINE_VERSION,
+        ]
+    )
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
+
+
+def shifted_rescan_notes(notes: list[dict[str, Any]], scan_start: float, *, detector_source: str) -> list[dict[str, Any]]:
+    shifted: list[dict[str, Any]] = []
+    for note in notes:
+        if not isinstance(note, dict) or note_midi_value(note) is None:
+            continue
+        item = dict(note)
+        local_start = float(item.get("startSeconds") or 0.0)
+        local_end = float(item.get("endSeconds") or local_start)
+        item["startSeconds"] = round(scan_start + local_start, 3)
+        item["endSeconds"] = round(scan_start + local_end, 3)
+        item["durationSeconds"] = round(max(0.0, local_end - local_start), 3)
+        item["detectorSource"] = str(item.get("detectorSource") or detector_source)
+        item["sourceAudioRescan"] = True
+        shifted.append(item)
+    return shifted
+
+
+def staff4_source_audio_rescan_record(
+    *,
+    anchor: dict[str, Any],
+    sample: dict[str, Any],
+    source_path: Path,
+) -> dict[str, Any]:
+    sample_id = str(anchor.get("sampleId") or sample.get("id") or "")
+    anchor_start = float(anchor.get("anchorLocalStartSeconds") or 0.0)
+    anchor_end = max(anchor_start + 0.25, float(anchor.get("anchorLocalEndSeconds") or anchor_start + 2.0))
+    scan_start = max(0.0, anchor_start - STAFF4_SOURCE_AUDIO_RESCAN_PAD_BEFORE_SECONDS)
+    scan_end = max(anchor_end + STAFF4_SOURCE_AUDIO_RESCAN_PAD_AFTER_SECONDS, scan_start + 2.0)
+    if scan_end - scan_start > STAFF4_SOURCE_AUDIO_RESCAN_MAX_SECONDS:
+        scan_end = scan_start + STAFF4_SOURCE_AUDIO_RESCAN_MAX_SECONDS
+    rescan_id = staff4_rescan_id(sample_id, source_path, scan_start, scan_end)
+    rescan_dir = STAFF4_SOURCE_AUDIO_RESCAN_DIR / rescan_id
+    result_path = rescan_dir / "rescan.json"
+    audio_path = rescan_dir / "source-window.wav"
+    if result_path.exists():
+        try:
+            cached = json.loads(result_path.read_text(encoding="utf-8"))
+            if isinstance(cached, dict) and cached.get("version") == STAFF4_SOURCE_AUDIO_RESCAN_VERSION:
+                cached["cacheHit"] = True
+                return cached
+        except (OSError, json.JSONDecodeError):
+            pass
+
+    rescan_dir.mkdir(parents=True, exist_ok=True)
+    result: dict[str, Any] = {
+        "version": STAFF4_SOURCE_AUDIO_RESCAN_VERSION,
+        "status": "started",
+        "cacheHit": False,
+        "practiceDay": anchor.get("practiceDay") or "",
+        "pieceTitle": anchor.get("pieceTitle") or "",
+        "sampleId": sample_id,
+        "sourceWindow": anchor.get("sourceWindow") or sample.get("window") or "",
+        "anchorSequence": anchor.get("anchorSequence") or "",
+        "anchorMidiSequence": anchor.get("anchorMidiSequence") or [],
+        "anchorLocalStartSeconds": round(anchor_start, 3),
+        "anchorLocalEndSeconds": round(anchor_end, 3),
+        "scanLocalStartSeconds": round(scan_start, 3),
+        "scanLocalEndSeconds": round(scan_end, 3),
+        "scanDurationSeconds": round(scan_end - scan_start, 3),
+        "runs": [],
+        "eventCount": 0,
+        "candidateEventCount": 0,
+        "audioAgreementEventCount": 0,
+        "quality": {},
+    }
+    ok, output = run_ffmpeg_extract_audio(source_path, audio_path, scan_start, scan_end)
+    if not ok:
+        result["status"] = "blocked_audio_extract_failed"
+        result["limit"] = output[-240:]
+        result_path.write_text(json.dumps(result, indent=2, sort_keys=True), encoding="utf-8")
+        return result
+
+    try:
+        import librosa  # type: ignore
+        import numpy  # type: ignore
+    except Exception as exc:  # pragma: no cover - environment boundary
+        result["status"] = "blocked_dependency"
+        result["limit"] = str(exc)[:180]
+        result_path.write_text(json.dumps(result, indent=2, sort_keys=True), encoding="utf-8")
+        return result
+
+    try:
+        y, sr = librosa.load(str(audio_path), sr=22050, mono=True)
+    except Exception as exc:
+        result["status"] = "blocked_audio_load"
+        result["limit"] = str(exc)[:180]
+        result_path.write_text(json.dumps(result, indent=2, sort_keys=True), encoding="utf-8")
+        return result
+    if y.size == 0:
+        result["status"] = "blocked_empty_audio"
+        result_path.write_text(json.dumps(result, indent=2, sort_keys=True), encoding="utf-8")
+        return result
+
+    transcription = transcribe_audio_array(y, sr, librosa, numpy)
+    primary_notes = shifted_rescan_notes(
+        transcription.get("events") if isinstance(transcription.get("events"), list) else [],
+        scan_start,
+        detector_source="staff4_source_audio_rescan",
+    )
+    candidate_notes = shifted_rescan_notes(
+        transcription.get("scoreMatchCandidateNotes")
+        if isinstance(transcription.get("scoreMatchCandidateNotes"), list)
+        else [],
+        scan_start,
+        detector_source="staff4_source_audio_rescan_candidate",
+    )
+    runs: list[dict[str, Any]] = []
+    if primary_notes:
+        runs.append(
+            expansion_audio_run_from_notes(
+                practice_day=str(anchor.get("practiceDay") or ""),
+                sample_id=sample_id,
+                source_window=str(anchor.get("sourceWindow") or sample.get("window") or ""),
+                source_title=str(sample.get("title") or anchor.get("pieceTitle") or ""),
+                notes=primary_notes,
+                candidate_only=False,
+                run_source="staff4_source_audio_rescan",
+            )
+        )
+    if candidate_notes:
+        runs.append(
+            expansion_audio_run_from_notes(
+                practice_day=str(anchor.get("practiceDay") or ""),
+                sample_id=sample_id,
+                source_window=str(anchor.get("sourceWindow") or sample.get("window") or ""),
+                source_title=str(sample.get("title") or anchor.get("pieceTitle") or ""),
+                notes=candidate_notes,
+                candidate_only=True,
+                run_source="staff4_source_audio_rescan_candidate",
+            )
+        )
+    quality = transcription.get("quality") if isinstance(transcription.get("quality"), dict) else {}
+    result.update(
+        {
+            "status": "rescanned" if runs else "no_notes_detected",
+            "eventCount": len(primary_notes),
+            "candidateEventCount": len(candidate_notes),
+            "audioAgreementEventCount": sum(1 for note in [*primary_notes, *candidate_notes] if note.get("audioAgreement") is True),
+            "quality": {
+                "segmentationSource": quality.get("segmentationSource") or "",
+                "pitchEventCount": int(quality.get("pitchEventCount") or 0),
+                "onsetEventCount": int(quality.get("onsetEventCount") or 0),
+                "spectralEventCount": int(quality.get("spectralEventCount") or 0),
+                "transitionTraceEventCount": int(quality.get("transitionTraceEventCount") or 0),
+                "audioAgreementEventCount": int(quality.get("audioAgreementEventCount") or 0),
+            },
+            "runs": runs,
+        }
+    )
+    result_path.write_text(json.dumps(result, indent=2, sort_keys=True), encoding="utf-8")
+    return result
+
+
+def staff4_source_audio_rescan(daily_records: dict[str, Any], media_samples: list[dict[str, Any]], limit: int = 2) -> dict[str, Any]:
+    anchors = staff4_anchor_matches(daily_records)
+    if not anchors:
+        return {
+            "version": STAFF4_SOURCE_AUDIO_RESCAN_VERSION,
+            "status": "no_staff4_anchor",
+            "anchorCount": 0,
+            "records": [],
+            "runs": [],
+            "nextAction": "Create one accepted Staff 4 source/audio anchor before source-audio rescanning.",
+        }
+    records: list[dict[str, Any]] = []
+    runs: list[dict[str, Any]] = []
+    blocked = 0
+    for anchor in anchors[: max(0, int(limit))]:
+        sample_id = str(anchor.get("sampleId") or "")
+        sample = media_sample_for_id(media_samples, sample_id)
+        source_path = source_media_path(sample) if sample else None
+        if not source_path:
+            blocked += 1
+            records.append(
+                {
+                    "status": "blocked_media_missing",
+                    "practiceDay": anchor.get("practiceDay") or "",
+                    "sampleId": sample_id,
+                    "anchorSequence": anchor.get("anchorSequence") or "",
+                    "limit": "The Staff 4 source sample is not present locally, so Curtis cannot rescan beyond stored note windows.",
+                    "runs": [],
+                }
+            )
+            continue
+        record = staff4_source_audio_rescan_record(anchor=anchor, sample=sample, source_path=source_path)
+        records.append(record)
+        for run in record.get("runs") if isinstance(record.get("runs"), list) else []:
+            if isinstance(run, dict):
+                runs.append(run)
+    status = "rescanned" if runs else "blocked_media_missing" if blocked == len(records) else "no_notes_detected"
+    return {
+        "version": STAFF4_SOURCE_AUDIO_RESCAN_VERSION,
+        "status": status,
+        "anchorCount": len(anchors),
+        "recordCount": len(records),
+        "runCount": len(runs),
+        "eventCount": sum(int(record.get("eventCount") or 0) for record in records if isinstance(record, dict)),
+        "candidateEventCount": sum(int(record.get("candidateEventCount") or 0) for record in records if isinstance(record, dict)),
+        "audioAgreementEventCount": sum(int(record.get("audioAgreementEventCount") or 0) for record in records if isinstance(record, dict)),
+        "cacheHitCount": sum(1 for record in records if isinstance(record, dict) and record.get("cacheHit")),
+        "records": records,
+        "runs": runs,
+        "nextAction": (
+            "Search exact Staff 4 MIDI phrase windows inside the rescanned source-audio runs."
+            if runs
+            else "Make the Staff 4 source media available, then rescan the source audio around the accepted anchor."
+        ),
+    }
+
+
+def detected_audio_runs_for_expansion(
+    daily_records: dict[str, Any],
+    extra_audio_runs: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
     records = daily_records.get("records") if isinstance(daily_records.get("records"), list) else []
     runs: list[dict[str, Any]] = []
     seen: set[tuple[str, str, float, float, tuple[int, ...]]] = set()
@@ -1698,6 +2042,9 @@ def detected_audio_runs_for_expansion(daily_records: dict[str, Any]) -> list[dic
             run["endSeconds"] = series.get("endSeconds") or run.get("endSeconds")
             run["localStartSeconds"] = series.get("localStartSeconds") or run.get("localStartSeconds")
             run["localEndSeconds"] = series.get("localEndSeconds") or run.get("localEndSeconds")
+            add_run(run)
+    for run in extra_audio_runs or []:
+        if isinstance(run, dict):
             add_run(run)
     return runs
 
@@ -1879,9 +2226,15 @@ def audio_window_search_for_exact_midi(
     }
 
 
-def staff4_adjacent_phrase_mining(daily_records: dict[str, Any], limit: int = 4) -> dict[str, Any]:
+def staff4_adjacent_phrase_mining(
+    daily_records: dict[str, Any],
+    extra_audio_runs: list[dict[str, Any]] | None = None,
+    source_audio_rescan: dict[str, Any] | None = None,
+    limit: int = 4,
+) -> dict[str, Any]:
     records = daily_records.get("records") if isinstance(daily_records.get("records"), list) else []
-    audio_runs = detected_audio_runs_for_expansion(daily_records)
+    audio_runs = detected_audio_runs_for_expansion(daily_records, extra_audio_runs)
+    source_audio_rescan = source_audio_rescan if isinstance(source_audio_rescan, dict) else {}
     target_results: list[dict[str, Any]] = []
     anchor_count = 0
     total_searched = 0
@@ -1997,13 +2350,20 @@ def staff4_adjacent_phrase_mining(daily_records: dict[str, Any], limit: int = 4)
     elif status == "exact_midi_audio_unconfirmed":
         next_action = "Run second-pass audio agreement on the exact Staff 4 MIDI candidate before review."
     elif anchor_count:
-        next_action = "No exact adjacent Staff 4 MIDI window is in the stored May 3 detected runs yet; mine more neighboring active windows."
+        if int(source_audio_rescan.get("runCount") or 0):
+            next_action = "No exact adjacent Staff 4 MIDI window was found after source-audio rescanning; widen the source window or improve note segmentation."
+        else:
+            next_action = "No exact adjacent Staff 4 MIDI window is in the stored May 3 detected runs yet; rescan the source audio around the accepted anchor."
     else:
         next_action = "Create one accepted Staff 4 source/audio anchor before adjacent mining."
     return {
         "status": status,
         "anchorCount": anchor_count,
         "audioRunCount": len(audio_runs),
+        "sourceAudioRescanStatus": source_audio_rescan.get("status") or "",
+        "sourceAudioRescanRunCount": int(source_audio_rescan.get("runCount") or 0),
+        "sourceAudioRescanEventCount": int(source_audio_rescan.get("eventCount") or 0)
+        + int(source_audio_rescan.get("candidateEventCount") or 0),
         "searchedWindowCount": total_searched,
         "exactCandidateCount": total_exact,
         "bestCandidate": best_candidate,
@@ -2119,9 +2479,13 @@ def rejected_staff4_case_for_candidate(
     return {}
 
 
-def source_phrase_expansion_harness(daily_records: dict[str, Any], limit: int = 8) -> dict[str, Any]:
+def source_phrase_expansion_harness(
+    daily_records: dict[str, Any],
+    extra_audio_runs: list[dict[str, Any]] | None = None,
+    limit: int = 8,
+) -> dict[str, Any]:
     records = daily_records.get("records") if isinstance(daily_records.get("records"), list) else []
-    audio_runs = detected_audio_runs_for_expansion(daily_records)
+    audio_runs = detected_audio_runs_for_expansion(daily_records, extra_audio_runs)
     rejected_cases = rejected_staff4_expansion_cases()
     items: list[dict[str, Any]] = []
     anchor_count = 0
@@ -2280,6 +2644,7 @@ def source_phrase_expansion_harness(daily_records: dict[str, Any], limit: int = 
         "audioRunCount": len(audio_runs),
         "rawDetectedAudioRunCount": sum(1 for run in audio_runs if run.get("runSource") == "raw_detected_series"),
         "rankedAudioRunCount": sum(1 for run in audio_runs if run.get("runSource") == "ranked_match_group"),
+        "sourceAudioRescanRunCount": sum(1 for run in audio_runs if str(run.get("runSource") or "").startswith("staff4_source_audio_rescan")),
         "targetCount": len(items),
         "acceptedExpansionCount": accepted_count,
         "readyForReviewCount": ready_count,
@@ -2733,8 +3098,14 @@ def build_transcription_completion(
     source_target_verified = sum(1 for target in source_targets if target.get("sourceScoreVerified"))
     source_target_best_overlap = int(source_target_top.get("sourceScoreBestOverlap") or 0)
     source_target_check_status = str(source_target_top.get("sourceScoreCheckStatus") or "")
-    phrase_expansion = source_phrase_expansion_harness(daily_records)
-    staff4_mining = staff4_adjacent_phrase_mining(daily_records)
+    staff4_source_rescan = staff4_source_audio_rescan(daily_records, media_samples)
+    staff4_source_rescan_runs = (
+        staff4_source_rescan.get("runs")
+        if isinstance(staff4_source_rescan.get("runs"), list)
+        else []
+    )
+    phrase_expansion = source_phrase_expansion_harness(daily_records, staff4_source_rescan_runs)
+    staff4_mining = staff4_adjacent_phrase_mining(daily_records, staff4_source_rescan_runs, staff4_source_rescan)
     phrase_expansion_target_count = int(phrase_expansion.get("targetCount") or 0)
     phrase_expansion_accepted_count = int(phrase_expansion.get("acceptedExpansionCount") or 0)
     phrase_expansion_ready_count = int(phrase_expansion.get("readyForReviewCount") or 0)
@@ -2742,6 +3113,10 @@ def build_transcription_completion(
     phrase_expansion_rejected_count = int(phrase_expansion.get("rejectedRegressionCount") or 0)
     phrase_expansion_audio_run_count = int(phrase_expansion.get("audioRunCount") or 0)
     phrase_expansion_raw_audio_run_count = int(phrase_expansion.get("rawDetectedAudioRunCount") or 0)
+    phrase_expansion_source_rescan_run_count = int(phrase_expansion.get("sourceAudioRescanRunCount") or 0)
+    staff4_source_rescan_status = str(staff4_source_rescan.get("status") or "")
+    staff4_source_rescan_run_count = int(staff4_source_rescan.get("runCount") or 0)
+    staff4_source_rescan_event_count = int(staff4_source_rescan.get("eventCount") or 0) + int(staff4_source_rescan.get("candidateEventCount") or 0)
     staff4_mining_status = str(staff4_mining.get("status") or "")
     staff4_mining_searched_count = int(staff4_mining.get("searchedWindowCount") or 0)
     staff4_mining_exact_count = int(staff4_mining.get("exactCandidateCount") or 0)
@@ -2761,6 +3136,7 @@ def build_transcription_completion(
     )
     staff4_mining_detail = (
         f"{staff4_mining_exact_count} exact / {staff4_mining_searched_count} windows"
+        + (f" / {staff4_source_rescan_run_count} source runs" if staff4_source_rescan_run_count else "")
         if staff4_mining_searched_count
         else "pending stored runs"
     )
@@ -2897,14 +3273,15 @@ def build_transcription_completion(
             + min(2.5, phrase_candidate_count * 0.5)
             + min(0.5, phrase_expansion_target_count * 0.25)
             + (0.25 if phrase_expansion_raw_audio_run_count else 0)
+            + (0.4 if phrase_expansion_source_rescan_run_count else 0)
             + (0.25 if staff4_mining_searched_count else 0)
             + (0.5 if staff4_audit_ready else 0)
             + (1 if source_target_note_count >= 7 else 0)
             + (2 if score_verified_count else 0)
             + (1 if measure_match_count else 0)
             + min(2, long_phrase_count * 2),
-            f"{score_sequence_count} pitch-sequence groups / {phrase_candidate_count} phrase candidates / {source_target_count} source targets / {phrase_expansion_target_count} anchored expansions / {phrase_expansion_audio_run_count} audio runs searched / {score_verified_count} exact score locations",
-            "Pitch-sequence groups are separated from exact score evidence, accepted anchors now search raw detected note runs and a dedicated Staff 4 adjacent-mining pass before any outward source-lane expansion is accepted, and Staff 4 expansion blockers can generate audit packets.",
+            f"{score_sequence_count} pitch-sequence groups / {phrase_candidate_count} phrase candidates / {source_target_count} source targets / {phrase_expansion_target_count} anchored expansions / {phrase_expansion_audio_run_count} audio runs searched / {phrase_expansion_source_rescan_run_count} source-rescan runs / {score_verified_count} exact score locations",
+            "Pitch-sequence groups are separated from exact score evidence, accepted anchors now search raw detected note runs, a Staff 4 source-audio rescan, and a dedicated adjacent-mining pass before any outward source-lane expansion is accepted; Staff 4 blockers can generate audit packets.",
             "Promote phrase candidates only after source-score or score-free exercise verification.",
         ),
         roadmap_gate(
@@ -3009,10 +3386,15 @@ def build_transcription_completion(
             "label": "Expansion gate",
             "value": f"{phrase_expansion_accepted_count}/{phrase_expansion_target_count}",
             "detail": (
-                f"{phrase_expansion_detail}; {phrase_expansion_raw_audio_run_count} raw runs"
+                f"{phrase_expansion_detail}; {phrase_expansion_raw_audio_run_count} raw / {phrase_expansion_source_rescan_run_count} rescan"
                 if phrase_expansion_target_count
                 else phrase_expansion_detail
             ),
+        },
+        {
+            "label": "Source rescan",
+            "value": staff4_source_rescan_status.replace("_", " ") if staff4_source_rescan_status else "pending",
+            "detail": f"{staff4_source_rescan_run_count} runs / {staff4_source_rescan_event_count} events",
         },
         {
             "label": "Staff 4 mining",
@@ -3085,6 +3467,7 @@ def build_transcription_completion(
         "A truth workbench now separates queued, accepted, and rejected audio-score-transcription evidence before anything can become visible score evidence.",
         "Accepted source/audio anchors now feed an outward expansion gate before Curtis tries a new random match.",
         "Expansion search now includes raw detected note series, not only already-ranked score candidate cards.",
+        "Staff 4 source-audio rescanning now extracts a fresh window around the accepted source/audio anchor and adds its events to the exact-MIDI search pool.",
         "Staff 4 adjacent mining now searches stored May 3 audio-note windows for the exact right-1 and right-2 MIDI sequences before accepting another expansion.",
         "A Staff 4 audit packet generator now creates audio/video, pitch-trace, and spectrogram evidence for the exact Eb5-versus-D5 expansion blocker.",
     ]
@@ -3100,7 +3483,7 @@ def build_transcription_completion(
         "Replace short fragments with accurate phrase-level note and rhythm extraction.",
         "Build longer phrase candidates that survive the second-pass audio gate instead of relying on loose transition traces or reference-audio coincidences.",
         "Keep extending the accepted Staff 4 anchor only when each adjacent source note agrees with paired audio.",
-        "Use the raw detected-series expansion pool to find a real adjacent Staff 4 audio run before accepting a longer phrase.",
+        "Use the source-audio rescan and raw detected-series expansion pool to find a real adjacent Staff 4 audio run before accepting a longer phrase.",
         "Audit the next adjacent Staff 4 phrase window before accepting, rejecting, or expanding it.",
         "Align accepted phrases to score locations or score-free repeated exercise patterns.",
         "Generate heat maps and Curtis-level observations only from accepted evidence.",
@@ -3131,7 +3514,7 @@ def build_transcription_completion(
             "phase": "4",
             "label": "One-measure acceleration gate",
             "status": "complete" if measure_match_count else "blocked",
-            "evidence": f"{measure_match_count} accepted measures / {long_phrase_count} accepted long phrases / {phrase_expansion_target_count} anchored expansions / {score_verified_count} exact score locations",
+            "evidence": f"{measure_match_count} accepted measures / {long_phrase_count} accepted long phrases / {phrase_expansion_target_count} anchored expansions / {phrase_expansion_source_rescan_run_count} source-rescan runs / {score_verified_count} exact score locations",
             "target": "First accepted measure plus outward expansion from the same verified source lane.",
         },
         {
@@ -3152,7 +3535,7 @@ def build_transcription_completion(
             "phase": "7",
             "label": "Score and exercise alignment",
             "status": "partial" if score_sequence_count or phrase_candidate_count else "pending",
-            "evidence": f"{score_sequence_count} pitch-sequence groups / {phrase_candidate_count} phrase candidates / {source_target_count} source targets / {phrase_expansion_target_count} anchored expansions / {score_verified_count} exact score locations",
+            "evidence": f"{score_sequence_count} pitch-sequence groups / {phrase_candidate_count} phrase candidates / {source_target_count} source targets / {phrase_expansion_target_count} anchored expansions / {phrase_expansion_source_rescan_run_count} source-rescan runs / {score_verified_count} exact score locations",
             "target": "Accepted phrase groups paired with original score snippets or repeated exercise patterns.",
         },
         {
@@ -3196,10 +3579,17 @@ def build_transcription_completion(
                 f"{phrase_expansion_current.get('observedNextAudioNote') or 'current audio'} after the previous right-2 audit was locked as rejected."
             )
             if staff4_mining_status == "not_found":
-                next_action = (
-                    "Mine more neighboring May 3 active windows; stored Staff 4 mining found no exact "
-                    f"{phrase_expansion_current.get('targetSequence') or 'adjacent'} MIDI window yet."
-                )
+                if staff4_source_rescan_run_count:
+                    next_action = (
+                        "Widen the Staff 4 source-audio rescan or improve note segmentation; exact MIDI search found no "
+                        f"{phrase_expansion_current.get('targetSequence') or 'adjacent'} window after "
+                        f"{staff4_mining_searched_count} stored/rescanned windows."
+                    )
+                else:
+                    next_action = (
+                        "Rescan the Staff 4 source audio around the accepted anchor; stored mining found no exact "
+                        f"{phrase_expansion_current.get('targetSequence') or 'adjacent'} MIDI window yet."
+                    )
         else:
             next_action = (
                 "Keep the accepted Staff 4 source lane fixed; expansion is blocked at "
@@ -3246,7 +3636,12 @@ def build_transcription_completion(
         "phraseExpansionRejectedRegressionCount": phrase_expansion_rejected_count,
         "phraseExpansionAudioRunCount": phrase_expansion_audio_run_count,
         "phraseExpansionRawAudioRunCount": phrase_expansion_raw_audio_run_count,
+        "phraseExpansionSourceAudioRescanRunCount": phrase_expansion_source_rescan_run_count,
         "phraseExpansionCurrentStatus": str(phrase_expansion_current.get("status") or ""),
+        "staff4SourceAudioRescan": staff4_source_rescan,
+        "staff4SourceAudioRescanStatus": staff4_source_rescan_status,
+        "staff4SourceAudioRescanRunCount": staff4_source_rescan_run_count,
+        "staff4SourceAudioRescanEventCount": staff4_source_rescan_event_count,
         "staff4AdjacentMining": staff4_mining,
         "staff4AdjacentMiningStatus": staff4_mining_status,
         "staff4AdjacentMiningSearchedWindowCount": staff4_mining_searched_count,

@@ -1,4 +1,8 @@
 import unittest
+import tempfile
+import wave
+from pathlib import Path
+from unittest.mock import patch
 
 from backend.app.scanner import (
     accepted_long_phrase_count,
@@ -45,6 +49,14 @@ def note(name, start=0.0):
         "agreementSources": ["spectral_onset"],
         "detectorSource": "spectral_onset_test",
     }
+
+
+def write_tiny_wav(path):
+    with wave.open(str(path), "wb") as handle:
+        handle.setnchannels(1)
+        handle.setsampwidth(2)
+        handle.setframerate(22050)
+        handle.writeframes(b"\x00\x00" * 22050)
 
 
 class TranscriptionCompletionTests(unittest.TestCase):
@@ -351,7 +363,7 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertEqual(mining["nearestWindow"]["prefixCount"], 5)
         self.assertEqual(completion["staff4AdjacentMiningStatus"], "not_found")
         self.assertTrue(any(item["label"] == "Expansion gate" and item["value"] == "0/3" for item in completion["implementationCurrent"]))
-        self.assertIn("Mine more neighboring May 3 active windows", completion["nextAction"])
+        self.assertIn("Rescan the Staff 4 source audio", completion["nextAction"])
 
     def test_staff4_phrase_expansion_searches_raw_detected_series(self):
         daily_records = {
@@ -500,6 +512,162 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertEqual(mining["bestCandidate"]["windowSequence"], "D#5 D#5 C5 D#5 D#5 D#5 C5")
         self.assertEqual(completion["staff4AdjacentMiningStatus"], "exact_audio_candidate")
         self.assertIn("ready Staff 4 expansion", completion["nextAction"])
+
+    def test_staff4_source_audio_rescan_feeds_exact_midi_search(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source_path = Path(temp_dir) / "staff4-source.wav"
+            write_tiny_wav(source_path)
+
+            def fake_extract(_source, target, _start, _end):
+                write_tiny_wav(target)
+                return True, ""
+
+            fake_transcription = {
+                "events": [
+                    note("D#5", 0.00),
+                    note("D#5", 0.12),
+                    note("C5", 0.24),
+                    note("D#5", 0.36),
+                    note("D#5", 0.48),
+                    note("D#5", 0.60),
+                    note("C5", 0.72),
+                ],
+                "scoreMatchCandidateNotes": [],
+                "quality": {
+                    "segmentationSource": "patched_staff4_source_rescan",
+                    "pitchEventCount": 7,
+                    "onsetEventCount": 7,
+                    "spectralEventCount": 7,
+                    "transitionTraceEventCount": 7,
+                    "audioAgreementEventCount": 7,
+                },
+            }
+
+            daily_records = {
+                "recordCount": 1,
+                "audioEvidenceRecordCount": 1,
+                "transcribedRecordCount": 1,
+                "records": [
+                    {
+                        "practiceDay": "2026-05-03",
+                        "transcription": {
+                            "scoreSequenceMatchCount": 1,
+                            "scoreLocationVerifiedCount": 1,
+                        },
+                        "matchGroups": [
+                            {
+                                "status": "symbolic_score_phrase_match",
+                                "pieceTitle": "Wieniawski Scherzo-Tarantelle, Op. 16",
+                                "matchedNoteRun": 5,
+                                "minimumMatchedNoteRun": 5,
+                                "minimumDistinctPitchClasses": 2,
+                                "detectedPitchClassSequence": "D# D# C D# D#",
+                                "detectedPitchClassSequenceCompact": "D# C D#",
+                                "scoreLocationVerified": True,
+                                "scoreVisualAgreement": True,
+                                "scoreVisualRangeAgreement": True,
+                                "scoreVisibleNoteSequenceVerified": True,
+                                "scoreVisibleExactNoteSequenceVerified": True,
+                                "scoreSpellingAgreement": True,
+                                "scoreActualPieceAgreement": True,
+                                "scoreBoxCenterAgreement": True,
+                                "audioTranscriptionAgreement": True,
+                                "transcriptionScoreAgreement": True,
+                                "truthEvidenceAccepted": True,
+                                "scoreSnippetStatus": "exact_score_location_verified",
+                                "scoreLocationStatus": "exact_score_location_verified",
+                                "scoreSequenceLabel": "m. staff4-packet-1",
+                                "referenceStart": 9,
+                                "referenceEnd": 14,
+                                "detectedSeries": {
+                                    "sampleId": "accepted-anchor",
+                                    "sourceWindow": "*8835-8925",
+                                    "notes": [
+                                        note("D#5", 20.225),
+                                        note("D#5", 20.345),
+                                        note("C5", 20.465),
+                                        note("D#5", 20.585),
+                                        note("D#5", 20.705),
+                                    ],
+                                },
+                                "matchedDetectedNotes": [
+                                    note("D#5", 20.225),
+                                    note("D#5", 20.345),
+                                    note("C5", 20.465),
+                                    note("D#5", 20.585),
+                                    note("D#5", 20.705),
+                                ],
+                                "scoreMatchedNotes": [
+                                    {"note": "Eb5", "midi": 75},
+                                    {"note": "Eb5", "midi": 75},
+                                    {"note": "C5", "midi": 72},
+                                    {"note": "Eb5", "midi": 75},
+                                    {"note": "Eb5", "midi": 75},
+                                ],
+                                "score": {
+                                    "assetId": "wieniawski-scherzo-tarantelle-vln",
+                                    "cropStatus": "exact_score_location_verified",
+                                    "imageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-verified.png",
+                                    "actualSourceSnippetDisplayed": True,
+                                    "visualRangeAgreement": True,
+                                    "visibleScoreNoteSequenceVerified": True,
+                                    "visibleScoreExactNoteSequenceVerified": True,
+                                    "scoreSpellingAgreement": True,
+                                    "scoreBoxCenterAgreement": True,
+                                    "audioTranscriptionAgreement": True,
+                                    "transcriptionScoreAgreement": True,
+                                    "truthEvidenceAccepted": True,
+                                },
+                                "clip": {
+                                    "sampleId": "accepted-anchor",
+                                    "mediaUrl": "/api/curtis/media/sample/accepted-anchor",
+                                    "audioUrl": "/api/curtis/media/sample/accepted-anchor/clip?start=20.225&end=22.535",
+                                },
+                                "transcription": {"sampleId": "accepted-anchor"},
+                            }
+                        ],
+                    }
+                ],
+            }
+
+            with patch("backend.app.scanner.run_ffmpeg_extract_audio", side_effect=fake_extract), patch(
+                "backend.app.scanner.transcribe_audio_array",
+                return_value=fake_transcription,
+            ):
+                completion = build_transcription_completion(
+                    {"scoreReferenceTargetCount": 1},
+                    daily_records,
+                    {"entries": [{"title": "Wieniawski Scherzo-Tarantelle, Op. 16"}]},
+                    {
+                        "ledgerVideoCount": 1,
+                        "uploadedVideoSeconds": 120,
+                        "uploadedVideoLabel": "2m",
+                        "checkedVideoSeconds": 120,
+                        "checkedVideoLabel": "2m",
+                        "activePracticeLabel": "2m",
+                        "estimatedTotalPracticeLabel": "2m",
+                        "activePracticeScan": {
+                            "activeIntervalCount": 1,
+                            "sampleResultCount": 1,
+                            "activeViolinSampleCount": 1,
+                            "checkedNoViolinSampleCount": 0,
+                            "pendingWindowCount": 0,
+                        },
+                    },
+                    {"benchmarkCount": 1, "wrongScoreNoteRegressionCount": 1},
+                    [{"id": "accepted-anchor", "path": str(source_path), "window": "*8835-8925"}],
+                    [{"transcriptionId": "t1"}],
+                )
+
+        self.assertEqual(completion["staff4SourceAudioRescanStatus"], "rescanned")
+        self.assertEqual(completion["staff4SourceAudioRescanRunCount"], 1)
+        self.assertEqual(completion["phraseExpansionSourceAudioRescanRunCount"], 1)
+        self.assertEqual(completion["phraseExpansionHarness"]["currentBest"]["audioRunSource"], "staff4_source_audio_rescan")
+        self.assertEqual(completion["phraseExpansionHarness"]["currentBest"]["status"], "ready_for_truth_review")
+        self.assertEqual(completion["phraseExpansionHarness"]["currentBest"]["direction"], "right-2")
+        self.assertEqual(completion["staff4AdjacentMiningStatus"], "exact_audio_candidate")
+        self.assertEqual(completion["staff4AdjacentMining"]["bestCandidate"]["audioRunSource"], "staff4_source_audio_rescan")
+        self.assertEqual(completion["staff4AdjacentMining"]["bestCandidate"]["windowSequence"], "D#5 D#5 C5 D#5 D#5 D#5 C5")
 
     def test_local_source_score_pdf_advances_score_truth_without_accepting_phrase(self):
         completion = build_transcription_completion(
