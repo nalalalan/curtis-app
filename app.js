@@ -2982,6 +2982,32 @@ function renderStaff4Audit(audit) {
   `;
 }
 
+function renderStaff4Mining(mining) {
+  if (!mining || typeof mining !== "object") return "";
+  const status = String(mining.status || "").replace(/_/g, " ");
+  if (!status || status === "no staff4 anchor") return "";
+  const nearest = mining.nearestWindow && typeof mining.nearestWindow === "object" ? mining.nearestWindow : {};
+  const candidate = mining.bestCandidate && typeof mining.bestCandidate === "object" ? mining.bestCandidate : {};
+  const target = candidate.targetSequence || nearest.targetSequence || "";
+  const observed = candidate.windowSequence || nearest.windowSequence || "";
+  const exact = Number(mining.exactCandidateCount) || 0;
+  const searched = Number(mining.searchedWindowCount) || 0;
+  const direction = candidate.targetDirection || nearest.targetDirection || "";
+  return `
+    <section class="staff4-mining-card" aria-label="Staff 4 adjacent mining">
+      <div class="staff4-mining-head">
+        <strong>${escapeHtml(status)}</strong>
+        <span>${escapeHtml(exact)} exact / ${escapeHtml(searched)} checked</span>
+      </div>
+      <div class="staff4-mining-grid">
+        <span>${escapeHtml(direction || "adjacent")}</span>
+        <strong>${escapeHtml(shortText(target || "target pending", 54))}</strong>
+        <em>${escapeHtml(shortText(observed || "no stored audio window", 54))}</em>
+      </div>
+    </section>
+  `;
+}
+
 function renderTranscriptionCompletion() {
   if (!elements.transcriptionCompletion) return;
   if (!backend.online) {
@@ -3009,6 +3035,7 @@ function renderTranscriptionCompletion() {
     ["Queue", `${Number(completion.goldReviewQueueCount) || 0} clips`],
     ["Source truth", `${Number(completion.truthManifestPositiveSourcePhraseVerifiedCount) || 0}/${Number(completion.truthManifestPositiveSourcePhraseCount) || 0}`],
     ["Blocked errors", `${Number(completion.truthManifestRejectedRegressionBlockedCount) || 0}/${Number(completion.truthManifestRejectedRegressionPhraseCount) || 0}`],
+    ["Mining", completion.staff4AdjacentMiningStatus ? String(completion.staff4AdjacentMiningStatus).replace(/_/g, " ") : "pending"],
     ["Staff 4 audit", completion.staff4PhraseAuditStatus ? String(completion.staff4PhraseAuditStatus).replace(/_/g, " ") : "not generated"],
   ];
   elements.transcriptionCompletion.innerHTML = `
@@ -3034,6 +3061,7 @@ function renderTranscriptionCompletion() {
       <span>Next</span>
       <strong>${escapeHtml(shortText(completion.nextAction || "pending", 110))}</strong>
     </div>
+    ${renderStaff4Mining(completion.staff4AdjacentMining)}
     ${renderStaff4Audit(completion.staff4PhraseAudit)}
   `;
 }

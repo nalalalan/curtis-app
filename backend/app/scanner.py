@@ -1769,6 +1769,250 @@ def best_audio_window_for_source_range(
     return best
 
 
+def audio_window_search_for_exact_midi(
+    runs: list[dict[str, Any]],
+    target_midi: list[int],
+    *,
+    practice_day: str = "",
+    anchor_sample_id: str = "",
+    anchor_absolute_start: float | None = None,
+) -> dict[str, Any]:
+    if not target_midi:
+        return {
+            "searchedWindowCount": 0,
+            "exactCandidates": [],
+            "nearestWindow": {},
+        }
+    searched = 0
+    exact_candidates: list[dict[str, Any]] = []
+    nearest: dict[str, Any] = {}
+    target_length = len(target_midi)
+
+    for run in runs:
+        if practice_day and str(run.get("practiceDay") or "") != practice_day:
+            continue
+        notes = run.get("notes") if isinstance(run.get("notes"), list) else []
+        run_midi = note_midi_values([note for note in notes if isinstance(note, dict)])
+        if len(run_midi) < target_length:
+            continue
+        source_window_start = parse_window_start(str(run.get("sourceWindow") or ""))
+        for start in range(0, len(run_midi) - target_length + 1):
+            searched += 1
+            window_midi = run_midi[start : start + target_length]
+            window_notes = notes[start : start + target_length]
+            exact_count = sum(1 for observed, expected in zip(window_midi, target_midi) if observed == expected)
+            prefix_count = 0
+            for observed, expected in zip(window_midi, target_midi):
+                if observed != expected:
+                    break
+                prefix_count += 1
+            mismatch_index = next(
+                (index for index, (observed, expected) in enumerate(zip(window_midi, target_midi)) if observed != expected),
+                -1,
+            )
+            candidate_only = bool(run.get("candidateOnly"))
+            audio_agreed = notes_have_score_match_audio_agreement(window_notes, candidate_only=candidate_only)
+            local_start = float(window_notes[0].get("startSeconds") or 0.0) if window_notes else 0.0
+            local_end = float(window_notes[-1].get("endSeconds") or local_start) if window_notes else local_start
+            absolute_start = source_window_start + local_start
+            distance = (
+                abs(absolute_start - anchor_absolute_start)
+                if anchor_absolute_start is not None
+                else 999999.0
+            )
+            item = {
+                "practiceDay": str(run.get("practiceDay") or ""),
+                "sampleId": str(run.get("sampleId") or ""),
+                "sourceWindow": str(run.get("sourceWindow") or ""),
+                "sourceTitle": str(run.get("sourceTitle") or ""),
+                "audioRunSource": str(run.get("runSource") or ""),
+                "sameSampleAsAnchor": bool(anchor_sample_id and str(run.get("sampleId") or "") == anchor_sample_id),
+                "windowStartIndex": start,
+                "windowEndIndex": start + target_length,
+                "localStartSeconds": round(local_start, 3),
+                "localEndSeconds": round(local_end, 3),
+                "absoluteStartSeconds": round(absolute_start, 3),
+                "absoluteEndSeconds": round(source_window_start + local_end, 3),
+                "neighborDistanceSeconds": round(distance, 3),
+                "windowSequence": note_exact_label(window_notes),
+                "windowMidiSequence": window_midi,
+                "exactCount": exact_count,
+                "prefixCount": prefix_count,
+                "mismatchIndex": mismatch_index,
+                "audioAgreed": audio_agreed,
+                "candidateOnly": candidate_only,
+                "windowNotes": expansion_window_note_summary(window_notes),
+            }
+            if window_midi == target_midi:
+                exact_candidates.append(item)
+            nearest_key = (
+                exact_count,
+                prefix_count,
+                1 if audio_agreed else 0,
+                1 if item["sameSampleAsAnchor"] else 0,
+                -distance,
+            )
+            current_key = (
+                int(nearest.get("exactCount") or 0),
+                int(nearest.get("prefixCount") or 0),
+                1 if nearest.get("audioAgreed") else 0,
+                1 if nearest.get("sameSampleAsAnchor") else 0,
+                -float(nearest.get("neighborDistanceSeconds") or 999999.0),
+            )
+            if not nearest or nearest_key > current_key:
+                nearest = item
+
+    exact_candidates = sorted(
+        exact_candidates,
+        key=lambda item: (
+            1 if item.get("audioAgreed") else 0,
+            1 if item.get("sameSampleAsAnchor") else 0,
+            -float(item.get("neighborDistanceSeconds") or 999999.0),
+            -float(item.get("absoluteStartSeconds") or 0.0),
+        ),
+        reverse=True,
+    )
+    return {
+        "searchedWindowCount": searched,
+        "exactCandidates": exact_candidates,
+        "nearestWindow": nearest,
+    }
+
+
+def staff4_adjacent_phrase_mining(daily_records: dict[str, Any], limit: int = 4) -> dict[str, Any]:
+    records = daily_records.get("records") if isinstance(daily_records.get("records"), list) else []
+    audio_runs = detected_audio_runs_for_expansion(daily_records)
+    target_results: list[dict[str, Any]] = []
+    anchor_count = 0
+    total_searched = 0
+    total_exact = 0
+    best_candidate: dict[str, Any] = {}
+    best_nearest: dict[str, Any] = {}
+
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        practice_day = str(record.get("practiceDay") or record.get("date") or "")
+        groups = record.get("matchGroups") if isinstance(record.get("matchGroups"), list) else []
+        for match in groups:
+            if not accepted_long_phrase_match(match):
+                continue
+            target = source_reference_target_for_match(match)
+            score = symbolic_score_from_target(target) if target else {}
+            source_notes = score.get("notes") if isinstance(score.get("notes"), list) else []
+            if not source_notes:
+                continue
+            piece_title = str(match.get("pieceTitle") or score.get("title") or "")
+            if "wieniawski" not in piece_title.lower():
+                continue
+            reference_start = int(match.get("referenceStart") or 0)
+            reference_end = int(match.get("referenceEnd") or reference_start)
+            anchor_slice = source_notes[reference_start:reference_end]
+            anchor_midi = note_midi_values(anchor_slice)
+            if anchor_midi != [75, 75, 72, 75, 75]:
+                continue
+            anchor_count += 1
+            detected = match.get("detectedSeries") if isinstance(match.get("detectedSeries"), dict) else {}
+            clip = match.get("clip") if isinstance(match.get("clip"), dict) else {}
+            anchor_sample_id = str(detected.get("sampleId") or clip.get("sampleId") or "")
+            anchor_source_window = str(detected.get("sourceWindow") or clip.get("sourceWindow") or "")
+            anchor_notes = match_detected_note_events(match)
+            anchor_absolute_start = None
+            if anchor_notes:
+                anchor_absolute_start = parse_window_start(anchor_source_window) + float(anchor_notes[0].get("startSeconds") or 0.0)
+            targets: list[tuple[str, int, int]] = []
+            if reference_end < len(source_notes):
+                targets.append(("right-1", reference_start, reference_end + 1))
+            if reference_end + 1 < len(source_notes):
+                targets.append(("right-2", reference_start, reference_end + 2))
+            for direction, start, end in targets:
+                source_slice = source_notes[start:end]
+                target_midi = note_midi_values(source_slice)
+                search = audio_window_search_for_exact_midi(
+                    audio_runs,
+                    target_midi,
+                    practice_day=practice_day,
+                    anchor_sample_id=anchor_sample_id,
+                    anchor_absolute_start=anchor_absolute_start,
+                )
+                exact_candidates = search["exactCandidates"][: max(0, int(limit))]
+                nearest = search["nearestWindow"]
+                total_searched += int(search.get("searchedWindowCount") or 0)
+                total_exact += len(search["exactCandidates"])
+                status = "exact_audio_candidate" if any(item.get("audioAgreed") for item in search["exactCandidates"]) else "exact_midi_audio_unconfirmed" if search["exactCandidates"] else "not_found"
+                if exact_candidates and (not best_candidate or len(target_midi) > int(best_candidate.get("targetNoteCount") or 0)):
+                    candidate = dict(exact_candidates[0])
+                    candidate["targetDirection"] = direction
+                    candidate["targetSequence"] = note_exact_label(source_slice)
+                    candidate["targetMidiSequence"] = target_midi
+                    candidate["targetNoteCount"] = len(target_midi)
+                    best_candidate = candidate
+                if nearest:
+                    nearest_with_target = dict(nearest)
+                    nearest_with_target["targetDirection"] = direction
+                    nearest_with_target["targetSequence"] = note_exact_label(source_slice)
+                    nearest_with_target["targetMidiSequence"] = target_midi
+                    nearest_key = (
+                        int(nearest_with_target.get("exactCount") or 0),
+                        int(nearest_with_target.get("prefixCount") or 0),
+                        len(target_midi),
+                    )
+                    best_nearest_key = (
+                        int(best_nearest.get("exactCount") or 0),
+                        int(best_nearest.get("prefixCount") or 0),
+                        len(best_nearest.get("targetMidiSequence") or []),
+                    )
+                    if not best_nearest or nearest_key > best_nearest_key:
+                        best_nearest = nearest_with_target
+                target_results.append(
+                    {
+                        "direction": direction,
+                        "practiceDay": practice_day,
+                        "pieceTitle": piece_title,
+                        "targetReferenceStart": start,
+                        "targetReferenceEnd": end,
+                        "targetSequence": note_exact_label(source_slice),
+                        "targetMidiSequence": target_midi,
+                        "targetNoteCount": len(target_midi),
+                        "status": status,
+                        "searchedWindowCount": int(search.get("searchedWindowCount") or 0),
+                        "exactCandidateCount": len(search["exactCandidates"]),
+                        "exactAudioCandidateCount": sum(1 for item in search["exactCandidates"] if item.get("audioAgreed")),
+                        "exactCandidates": exact_candidates,
+                        "nearestWindow": nearest,
+                    }
+                )
+
+    status = (
+        "exact_audio_candidate"
+        if best_candidate and best_candidate.get("audioAgreed")
+        else "exact_midi_audio_unconfirmed"
+        if best_candidate
+        else "not_found"
+        if anchor_count
+        else "no_staff4_anchor"
+    )
+    if status == "exact_audio_candidate":
+        next_action = "Audit the exact Staff 4 adjacent audio candidate before accepting it into the visible phrase lane."
+    elif status == "exact_midi_audio_unconfirmed":
+        next_action = "Run second-pass audio agreement on the exact Staff 4 MIDI candidate before review."
+    elif anchor_count:
+        next_action = "No exact adjacent Staff 4 MIDI window is in the stored May 3 detected runs yet; mine more neighboring active windows."
+    else:
+        next_action = "Create one accepted Staff 4 source/audio anchor before adjacent mining."
+    return {
+        "status": status,
+        "anchorCount": anchor_count,
+        "audioRunCount": len(audio_runs),
+        "searchedWindowCount": total_searched,
+        "exactCandidateCount": total_exact,
+        "bestCandidate": best_candidate,
+        "nearestWindow": best_nearest,
+        "targets": target_results,
+        "nextAction": next_action,
+    }
+
+
 def expansion_status_for_window(
     *,
     source_slice: list[dict[str, Any]],
@@ -2490,6 +2734,7 @@ def build_transcription_completion(
     source_target_best_overlap = int(source_target_top.get("sourceScoreBestOverlap") or 0)
     source_target_check_status = str(source_target_top.get("sourceScoreCheckStatus") or "")
     phrase_expansion = source_phrase_expansion_harness(daily_records)
+    staff4_mining = staff4_adjacent_phrase_mining(daily_records)
     phrase_expansion_target_count = int(phrase_expansion.get("targetCount") or 0)
     phrase_expansion_accepted_count = int(phrase_expansion.get("acceptedExpansionCount") or 0)
     phrase_expansion_ready_count = int(phrase_expansion.get("readyForReviewCount") or 0)
@@ -2497,6 +2742,10 @@ def build_transcription_completion(
     phrase_expansion_rejected_count = int(phrase_expansion.get("rejectedRegressionCount") or 0)
     phrase_expansion_audio_run_count = int(phrase_expansion.get("audioRunCount") or 0)
     phrase_expansion_raw_audio_run_count = int(phrase_expansion.get("rawDetectedAudioRunCount") or 0)
+    staff4_mining_status = str(staff4_mining.get("status") or "")
+    staff4_mining_searched_count = int(staff4_mining.get("searchedWindowCount") or 0)
+    staff4_mining_exact_count = int(staff4_mining.get("exactCandidateCount") or 0)
+    staff4_mining_nearest = staff4_mining.get("nearestWindow") if isinstance(staff4_mining.get("nearestWindow"), dict) else {}
     phrase_expansion_current = (
         phrase_expansion.get("currentBest")
         if isinstance(phrase_expansion.get("currentBest"), dict)
@@ -2509,6 +2758,11 @@ def build_transcription_completion(
         + (f" / {phrase_expansion_rejected_count} rejected" if phrase_expansion_rejected_count else "")
         if phrase_expansion_target_count
         else "pending anchor"
+    )
+    staff4_mining_detail = (
+        f"{staff4_mining_exact_count} exact / {staff4_mining_searched_count} windows"
+        if staff4_mining_searched_count
+        else "pending stored runs"
     )
     phrase_candidate_detail = (
         f"pending: {phrase_candidate_sequence}"
@@ -2643,13 +2897,14 @@ def build_transcription_completion(
             + min(2.5, phrase_candidate_count * 0.5)
             + min(0.5, phrase_expansion_target_count * 0.25)
             + (0.25 if phrase_expansion_raw_audio_run_count else 0)
+            + (0.25 if staff4_mining_searched_count else 0)
             + (0.5 if staff4_audit_ready else 0)
             + (1 if source_target_note_count >= 7 else 0)
             + (2 if score_verified_count else 0)
             + (1 if measure_match_count else 0)
             + min(2, long_phrase_count * 2),
             f"{score_sequence_count} pitch-sequence groups / {phrase_candidate_count} phrase candidates / {source_target_count} source targets / {phrase_expansion_target_count} anchored expansions / {phrase_expansion_audio_run_count} audio runs searched / {score_verified_count} exact score locations",
-            "Pitch-sequence groups are separated from exact score evidence, accepted anchors now search raw detected note runs before any outward source-lane expansion is accepted, and Staff 4 expansion blockers can generate audit packets.",
+            "Pitch-sequence groups are separated from exact score evidence, accepted anchors now search raw detected note runs and a dedicated Staff 4 adjacent-mining pass before any outward source-lane expansion is accepted, and Staff 4 expansion blockers can generate audit packets.",
             "Promote phrase candidates only after source-score or score-free exercise verification.",
         ),
         roadmap_gate(
@@ -2760,6 +3015,11 @@ def build_transcription_completion(
             ),
         },
         {
+            "label": "Staff 4 mining",
+            "value": staff4_mining_status.replace("_", " ") if staff4_mining_status else "pending",
+            "detail": staff4_mining_detail,
+        },
+        {
             "label": "Staff 4 audit",
             "value": staff4_audit_status.replace("_", " ") if staff4_audit_status else "not generated",
             "detail": (
@@ -2825,6 +3085,7 @@ def build_transcription_completion(
         "A truth workbench now separates queued, accepted, and rejected audio-score-transcription evidence before anything can become visible score evidence.",
         "Accepted source/audio anchors now feed an outward expansion gate before Curtis tries a new random match.",
         "Expansion search now includes raw detected note series, not only already-ranked score candidate cards.",
+        "Staff 4 adjacent mining now searches stored May 3 audio-note windows for the exact right-1 and right-2 MIDI sequences before accepting another expansion.",
         "A Staff 4 audit packet generator now creates audio/video, pitch-trace, and spectrogram evidence for the exact Eb5-versus-D5 expansion blocker.",
     ]
     if phrase_expansion_rejected_count:
@@ -2918,6 +3179,12 @@ def build_transcription_completion(
             "Review the ready Staff 4 expansion from the raw detected-series search; exact MIDI and audio agree, "
             "but accepted truth evidence is still required before display."
         )
+    elif staff4_mining_status == "exact_audio_candidate":
+        candidate = staff4_mining.get("bestCandidate") if isinstance(staff4_mining.get("bestCandidate"), dict) else {}
+        next_action = (
+            f"Audit the exact Staff 4 {candidate.get('targetDirection') or 'adjacent'} mining candidate "
+            f"{candidate.get('targetSequence') or ''} before accepting it."
+        )
     elif phrase_expansion_current and phrase_expansion_accepted_count == 0:
         current_direction = str(phrase_expansion_current.get("direction") or "")
         if staff4_audit_status == "blocked_audio_mismatch_confirmed" and current_direction == "right-2":
@@ -2928,6 +3195,11 @@ def build_transcription_completion(
                 f"{phrase_expansion_current.get('expectedNextScoreNote') or 'the next source note'} vs "
                 f"{phrase_expansion_current.get('observedNextAudioNote') or 'current audio'} after the previous right-2 audit was locked as rejected."
             )
+            if staff4_mining_status == "not_found":
+                next_action = (
+                    "Mine more neighboring May 3 active windows; stored Staff 4 mining found no exact "
+                    f"{phrase_expansion_current.get('targetSequence') or 'adjacent'} MIDI window yet."
+                )
         else:
             next_action = (
                 "Keep the accepted Staff 4 source lane fixed; expansion is blocked at "
@@ -2975,6 +3247,11 @@ def build_transcription_completion(
         "phraseExpansionAudioRunCount": phrase_expansion_audio_run_count,
         "phraseExpansionRawAudioRunCount": phrase_expansion_raw_audio_run_count,
         "phraseExpansionCurrentStatus": str(phrase_expansion_current.get("status") or ""),
+        "staff4AdjacentMining": staff4_mining,
+        "staff4AdjacentMiningStatus": staff4_mining_status,
+        "staff4AdjacentMiningSearchedWindowCount": staff4_mining_searched_count,
+        "staff4AdjacentMiningExactCandidateCount": staff4_mining_exact_count,
+        "staff4AdjacentMiningNearestSequence": str(staff4_mining_nearest.get("windowSequence") or ""),
         "staff4PhraseAudit": staff4_audit,
         "staff4PhraseAuditStatus": staff4_audit_status,
         "staff4PhraseAuditPacketId": staff4_audit.get("packetId") or "",

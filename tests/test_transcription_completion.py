@@ -343,8 +343,15 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertEqual(current["observedNextAudioNote"], "D5")
         self.assertEqual(completion["phraseExpansionCurrentStatus"], "blocked_audio_mismatch")
         self.assertEqual(completion["phraseExpansionRejectedRegressionCount"], 1)
+        mining = completion["staff4AdjacentMining"]
+        self.assertEqual(mining["status"], "not_found")
+        self.assertEqual(mining["exactCandidateCount"], 0)
+        self.assertEqual(mining["searchedWindowCount"], 3)
+        self.assertEqual(mining["nearestWindow"]["windowSequence"], "D#5 D#5 C5 D#5 D#5 D5 D#5")
+        self.assertEqual(mining["nearestWindow"]["prefixCount"], 5)
+        self.assertEqual(completion["staff4AdjacentMiningStatus"], "not_found")
         self.assertTrue(any(item["label"] == "Expansion gate" and item["value"] == "0/3" for item in completion["implementationCurrent"]))
-        self.assertIn("Eb5 vs D5", completion["nextAction"])
+        self.assertIn("Mine more neighboring May 3 active windows", completion["nextAction"])
 
     def test_staff4_phrase_expansion_searches_raw_detected_series(self):
         daily_records = {
@@ -486,6 +493,12 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertEqual(current["audioRunSource"], "raw_detected_series")
         self.assertEqual(completion["phraseExpansionReadyForReviewCount"], 1)
         self.assertEqual(completion["phraseExpansionAcceptedCount"], 0)
+        mining = completion["staff4AdjacentMining"]
+        self.assertEqual(mining["status"], "exact_audio_candidate")
+        self.assertEqual(mining["exactCandidateCount"], 2)
+        self.assertEqual(mining["bestCandidate"]["targetDirection"], "right-2")
+        self.assertEqual(mining["bestCandidate"]["windowSequence"], "D#5 D#5 C5 D#5 D#5 D#5 C5")
+        self.assertEqual(completion["staff4AdjacentMiningStatus"], "exact_audio_candidate")
         self.assertIn("ready Staff 4 expansion", completion["nextAction"])
 
     def test_local_source_score_pdf_advances_score_truth_without_accepting_phrase(self):

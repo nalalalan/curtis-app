@@ -4397,6 +4397,47 @@ h2 {
   background: var(--surface);
 }
 
+.staff4-mining-card {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.staff4-mining-head,
+.staff4-mining-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.staff4-mining-head strong,
+.staff4-mining-grid strong {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 760;
+  line-height: 1.15;
+}
+
+.staff4-mining-head span,
+.staff4-mining-grid span,
+.staff4-mining-grid em {
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 740;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.staff4-mining-grid em {
+  grid-column: 1 / -1;
+  text-transform: none;
+}
+
 .staff4-audit-head {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
