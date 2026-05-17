@@ -524,6 +524,8 @@ def sample_media_type(path: Path) -> str:
         return "audio/wav"
     if suffix == ".svg":
         return "image/svg+xml"
+    if suffix == ".json":
+        return "application/json"
     return "application/octet-stream"
 
 
