@@ -27,9 +27,10 @@ class LongPhraseTruthTests(unittest.TestCase):
         self.assertEqual(result["status"], "verified")
         self.assertEqual(result["sourceVerifiedCount"], 3)
         self.assertEqual(result["positiveSourcePhraseVerifiedCount"], 3)
-        self.assertEqual(result["rejectedRegressionPhraseCount"], 3)
-        self.assertEqual(result["rejectedRegressionBlockedCount"], 3)
+        self.assertEqual(result["rejectedRegressionPhraseCount"], 4)
+        self.assertEqual(result["rejectedRegressionBlockedCount"], 4)
         self.assertEqual(result["liveAcceptedPhraseCount"], 1)
+        self.assertIn("rejected-staff4-right2-audit-eb-vs-d", result["blockedRegressionIds"])
 
     def test_current_wieniawski_source_map_has_the_reviewed_exact_midi_sequence(self):
         score = symbolic_score_from_target(wieniawski_reference_target())

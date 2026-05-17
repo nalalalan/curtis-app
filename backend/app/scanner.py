@@ -50,7 +50,7 @@ from .daily_records import (
     notes_have_score_match_audio_agreement,
 )
 from .evidence_ledger import build_active_practice_coverage, build_evidence_progress, build_truth_progress
-from .gold_truth import verify_long_phrase_truth_manifest
+from .gold_truth import load_long_phrase_truth, verify_long_phrase_truth_manifest
 from .gold_review import build_gold_review_loop
 from .long_phrase_truth import exact_midi_phrase_gate
 from .study_packets import build_practice_study, build_practice_totals
@@ -1815,9 +1815,69 @@ def expansion_window_note_summary(notes: list[dict[str, Any]]) -> list[dict[str,
     return summary
 
 
+def rejected_staff4_expansion_cases() -> list[dict[str, Any]]:
+    manifest = load_long_phrase_truth()
+    rejected = manifest.get("rejectedRegressionPhrases") if isinstance(manifest.get("rejectedRegressionPhrases"), list) else []
+    cases: list[dict[str, Any]] = []
+    for item in rejected:
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("rejectionKind") or "") != "staff4_expansion_audio_mismatch":
+            continue
+        cases.append(item)
+    return cases
+
+
+def int_sequence(value: Any) -> list[int]:
+    if not isinstance(value, list):
+        return []
+    out: list[int] = []
+    for item in value:
+        try:
+            out.append(int(item))
+        except (TypeError, ValueError):
+            return []
+    return out
+
+
+def rejected_staff4_case_for_candidate(
+    cases: list[dict[str, Any]],
+    *,
+    direction: str,
+    start: int,
+    end: int,
+    source_midi: list[int],
+    best_window: dict[str, Any],
+) -> dict[str, Any]:
+    if not best_window:
+        return {}
+    run = best_window.get("run") if isinstance(best_window.get("run"), dict) else {}
+    observed_midi = int_sequence(best_window.get("windowMidiSequence"))
+    for case in cases:
+        if str(case.get("direction") or "") != direction:
+            continue
+        if int(case.get("targetReferenceStart") or -1) != start:
+            continue
+        if int(case.get("targetReferenceEnd") or -1) != end:
+            continue
+        if str(case.get("sampleId") or "") and str(case.get("sampleId") or "") != str(run.get("sampleId") or ""):
+            continue
+        if str(case.get("sourceWindow") or "") and str(case.get("sourceWindow") or "") != str(run.get("sourceWindow") or ""):
+            continue
+        expected_source = int_sequence(case.get("expectedSourceMidiSequence"))
+        if expected_source and expected_source != source_midi:
+            continue
+        rejected_observed = int_sequence(case.get("midiSequence"))
+        if rejected_observed and rejected_observed != observed_midi:
+            continue
+        return case
+    return {}
+
+
 def source_phrase_expansion_harness(daily_records: dict[str, Any], limit: int = 8) -> dict[str, Any]:
     records = daily_records.get("records") if isinstance(daily_records.get("records"), list) else []
     audio_runs = detected_audio_runs_for_expansion(daily_records)
+    rejected_cases = rejected_staff4_expansion_cases()
     items: list[dict[str, Any]] = []
     anchor_count = 0
     for record in records:
@@ -1867,6 +1927,20 @@ def source_phrase_expansion_harness(daily_records: dict[str, Any], limit: int = 
                     source_snippet=source_snippet,
                     best_window=best_window,
                 )
+                rejected_case = rejected_staff4_case_for_candidate(
+                    rejected_cases,
+                    direction=direction,
+                    start=start,
+                    end=end,
+                    source_midi=source_midi,
+                    best_window=best_window,
+                )
+                if rejected_case:
+                    status = "rejected_regression"
+                    limit_text = str(
+                        rejected_case.get("basis")
+                        or "Rejected by the Staff 4 audit packet; this exact source/audio expansion must not be retried as accepted evidence."
+                    )
                 mismatch_index = int(best_window.get("mismatchIndex") if best_window else -1)
                 expected_note = ""
                 observed_note = ""
@@ -1934,12 +2008,14 @@ def source_phrase_expansion_harness(daily_records: dict[str, Any], limit: int = 
                         else None,
                         "audioRunSource": str(run.get("runSource") or ""),
                         "bestAudioNotes": expansion_window_note_summary(window_notes),
+                        "rejectedRegressionId": str(rejected_case.get("id") or "") if rejected_case else "",
                         "limit": limit_text,
                     }
                 )
     items = sorted(
         items,
         key=lambda item: (
+            0 if item.get("status") == "rejected_regression" else 1,
             1 if item.get("status") == "accepted_source_audio_expansion" else 0,
             1 if item.get("status") == "ready_for_truth_review" else 0,
             int(item.get("bestExactCount") or 0),
@@ -1950,7 +2026,8 @@ def source_phrase_expansion_harness(daily_records: dict[str, Any], limit: int = 
     )
     accepted_count = sum(1 for item in items if item.get("status") == "accepted_source_audio_expansion")
     ready_count = sum(1 for item in items if item.get("status") == "ready_for_truth_review")
-    blocked_count = sum(1 for item in items if str(item.get("status") or "").startswith("blocked"))
+    rejected_count = sum(1 for item in items if item.get("status") == "rejected_regression")
+    blocked_count = sum(1 for item in items if str(item.get("status") or "").startswith("blocked") or item.get("status") == "rejected_regression")
     current = items[0] if items else {}
     return {
         "status": "accepted" if accepted_count else "ready" if items else "empty",
@@ -1962,6 +2039,7 @@ def source_phrase_expansion_harness(daily_records: dict[str, Any], limit: int = 
         "acceptedExpansionCount": accepted_count,
         "readyForReviewCount": ready_count,
         "blockedExpansionCount": blocked_count,
+        "rejectedRegressionCount": rejected_count,
         "currentBest": current,
         "items": items[: max(0, int(limit))],
         "nextAction": (
@@ -2415,6 +2493,7 @@ def build_transcription_completion(
     phrase_expansion_accepted_count = int(phrase_expansion.get("acceptedExpansionCount") or 0)
     phrase_expansion_ready_count = int(phrase_expansion.get("readyForReviewCount") or 0)
     phrase_expansion_blocked_count = int(phrase_expansion.get("blockedExpansionCount") or 0)
+    phrase_expansion_rejected_count = int(phrase_expansion.get("rejectedRegressionCount") or 0)
     phrase_expansion_audio_run_count = int(phrase_expansion.get("audioRunCount") or 0)
     phrase_expansion_raw_audio_run_count = int(phrase_expansion.get("rawDetectedAudioRunCount") or 0)
     phrase_expansion_current = (
@@ -2426,6 +2505,7 @@ def build_transcription_completion(
     staff4_audit_ready = staff4_audit_status not in {"", "not_generated", "blocked_no_staff4_expansion"}
     phrase_expansion_detail = (
         f"{phrase_expansion_accepted_count} accepted / {phrase_expansion_blocked_count} blocked"
+        + (f" / {phrase_expansion_rejected_count} rejected" if phrase_expansion_rejected_count else "")
         if phrase_expansion_target_count
         else "pending anchor"
     )
@@ -2746,6 +2826,8 @@ def build_transcription_completion(
         "Expansion search now includes raw detected note series, not only already-ranked score candidate cards.",
         "A Staff 4 audit packet generator now creates audio/video, pitch-trace, and spectrogram evidence for the exact Eb5-versus-D5 expansion blocker.",
     ]
+    if phrase_expansion_rejected_count:
+        done_summary.append(f"{phrase_expansion_rejected_count} Staff 4 audited expansion is now locked as a rejected regression case.")
     if staff4_audit_ready:
         done_summary.append(f"Latest Staff 4 audit status: {staff4_audit_status.replace('_', ' ')}.")
     remaining_summary = [
@@ -2757,7 +2839,7 @@ def build_transcription_completion(
         "Build longer phrase candidates that survive the second-pass audio gate instead of relying on loose transition traces or reference-audio coincidences.",
         "Keep extending the accepted Staff 4 anchor only when each adjacent source note agrees with paired audio.",
         "Use the raw detected-series expansion pool to find a real adjacent Staff 4 audio run before accepting a longer phrase.",
-        "Use the Staff 4 audit packet to either reject the current right-2 expansion or expose detector disagreement before trying to accept it.",
+        "Audit the next adjacent Staff 4 phrase window before accepting, rejecting, or expanding it.",
         "Align accepted phrases to score locations or score-free repeated exercise patterns.",
         "Generate heat maps and Curtis-level observations only from accepted evidence.",
     ]
@@ -2836,8 +2918,15 @@ def build_transcription_completion(
             "but accepted truth evidence is still required before display."
         )
     elif phrase_expansion_current and phrase_expansion_accepted_count == 0:
-        if staff4_audit_status == "blocked_audio_mismatch_confirmed":
+        current_direction = str(phrase_expansion_current.get("direction") or "")
+        if staff4_audit_status == "blocked_audio_mismatch_confirmed" and current_direction == "right-2":
             next_action = "Record the Staff 4 right-2 expansion as rejected from the audit packet, then test the next adjacent phrase window."
+        elif phrase_expansion_rejected_count:
+            next_action = (
+                f"Audit the current Staff 4 {current_direction or 'adjacent'} window; it is blocked at "
+                f"{phrase_expansion_current.get('expectedNextScoreNote') or 'the next source note'} vs "
+                f"{phrase_expansion_current.get('observedNextAudioNote') or 'current audio'} after the previous right-2 audit was locked as rejected."
+            )
         else:
             next_action = (
                 "Keep the accepted Staff 4 source lane fixed; expansion is blocked at "
@@ -2881,6 +2970,7 @@ def build_transcription_completion(
         "phraseExpansionAcceptedCount": phrase_expansion_accepted_count,
         "phraseExpansionReadyForReviewCount": phrase_expansion_ready_count,
         "phraseExpansionBlockedCount": phrase_expansion_blocked_count,
+        "phraseExpansionRejectedRegressionCount": phrase_expansion_rejected_count,
         "phraseExpansionAudioRunCount": phrase_expansion_audio_run_count,
         "phraseExpansionRawAudioRunCount": phrase_expansion_raw_audio_run_count,
         "phraseExpansionCurrentStatus": str(phrase_expansion_current.get("status") or ""),

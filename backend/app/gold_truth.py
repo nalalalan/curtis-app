@@ -153,4 +153,5 @@ def verify_long_phrase_truth_manifest(path: str | Path | None = None) -> dict[st
         "sourceResults": source_results,
         "positiveSourcePhraseResults": positive_results,
         "rejectedRegressionResults": rejected_results,
+        "blockedRegressionIds": [str(item.get("id") or "") for item in rejected_results if item.get("status") == "blocked"],
     }

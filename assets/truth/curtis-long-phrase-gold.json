@@ -107,6 +107,30 @@
       "minimumExactNotes": 5,
       "sequence": ["G5", "G5", "A#5", "A#5", "A#5", "A#5", "A5"],
       "midiSequence": [79, 79, 82, 82, 82, 82, 81]
+    },
+    {
+      "id": "rejected-staff4-right2-audit-eb-vs-d",
+      "sourceId": "wieniawski-staff4-eb-eb-c-eb-eb-eb-c-symbolic-v1",
+      "status": "rejected",
+      "rejectionKind": "staff4_expansion_audio_mismatch",
+      "basis": "The Staff 4 audit packet staff4-2026-05-03-Njh8_zq9_DM-8835-9-16 confirmed that the right-2 source expansion expects Eb5 at the sixth note, but the paired May 3 audio run supplies D5. This exact source/audio expansion is a rejected regression and must not be retried as accepted evidence.",
+      "practiceDay": "2026-05-03",
+      "sampleId": "Njh8_zq9_DM-8835",
+      "sourceWindow": "*8835-8925",
+      "direction": "right-2",
+      "targetReferenceStart": 9,
+      "targetReferenceEnd": 16,
+      "expectedSourceSequence": ["Eb5", "Eb5", "C5", "Eb5", "Eb5", "Eb5", "C5"],
+      "expectedSourceMidiSequence": [75, 75, 72, 75, 75, 75, 72],
+      "sequence": ["D#5", "D#5", "C5", "D#5", "D#5", "D5", "D#5"],
+      "midiSequence": [75, 75, 72, 75, 75, 74, 75],
+      "minimumExactNotes": 7,
+      "auditPacketId": "staff4-2026-05-03-Njh8_zq9_DM-8835-9-16",
+      "expectedNextScoreNote": "Eb5",
+      "expectedNextScoreMidi": 75,
+      "observedNextAudioNote": "D5",
+      "observedNextAudioMidi": 74,
+      "audioAgreed": true
     }
   ]
 }
