@@ -14,6 +14,7 @@ const skillDimensions = [
 
 let backend = {
   online: false,
+  loading: true,
   ops: null,
   lastError: ""
 };
@@ -78,6 +79,14 @@ function setText(element, value) {
 
 function setHtml(element, value) {
   if (element) element.innerHTML = value;
+}
+
+function backendEmptyText() {
+  return backend.loading ? "Loading." : "Backend offline.";
+}
+
+function backendStateText() {
+  return backend.loading ? "Loading evidence." : `Backend offline: ${backend.lastError || "offline"}`;
 }
 
 function apiBase() {
@@ -355,15 +364,19 @@ function sourcePayload() {
 }
 
 async function loadBackendState() {
+  backend = { ...backend, loading: true, lastError: "" };
+  render();
   try {
     backend = {
       online: true,
+      loading: false,
       ops: await apiFetch("/api/curtis/ops-check"),
       lastError: ""
     };
   } catch (error) {
     backend = {
       online: false,
+      loading: false,
       ops: null,
       lastError: String(error?.message || error || "offline")
     };
@@ -377,6 +390,7 @@ async function runBackendScan() {
   try {
     backend = {
       online: true,
+      loading: false,
       ops: await apiFetch("/api/curtis/scan/run", {
         method: "POST",
         body: JSON.stringify(sourcePayload())
@@ -386,6 +400,7 @@ async function runBackendScan() {
   } catch (error) {
     backend = {
       online: false,
+      loading: false,
       ops: null,
       lastError: String(error?.message || error || "offline")
     };
@@ -451,7 +466,7 @@ async function submitPieceLabel(form) {
         note: "Manual source label from Curtis daily record."
       })
     });
-    backend = { online: true, ops, lastError: "" };
+    backend = { online: true, loading: false, ops, lastError: "" };
     render();
   } catch (error) {
     backend.lastError = String(error?.message || error || "label save failed");
@@ -539,6 +554,7 @@ async function runMediaProbe() {
   try {
     backend = {
       online: true,
+      loading: false,
       ops: await apiFetch("/api/curtis/media/probe", {
         method: "POST",
         body: JSON.stringify({})
@@ -548,6 +564,7 @@ async function runMediaProbe() {
   } catch (error) {
     backend = {
       online: false,
+      loading: false,
       ops: null,
       lastError: String(error?.message || error || "offline")
     };
@@ -582,7 +599,7 @@ function automationLabel(ops) {
 }
 
 function currentStateText(ops) {
-  if (!backend.online) return `Backend offline: ${backend.lastError}`;
+  if (!backend.online) return backendStateText();
   const inventoryTotal = inventoryItems(ops).length;
   const records = dailyRecords(ops);
   const recordCount = Number(records.recordCount) || 0;
@@ -2674,7 +2691,7 @@ function renderStudy() {
   const analyzed = orderedAnalyzedRecords(backend.ops);
   const pendingCount = Math.max(0, records.length - analyzed.length);
   if (!backend.online) {
-    elements.studyList.innerHTML = `<p class="empty">Backend offline.</p>`;
+    elements.studyList.innerHTML = `<p class="empty">${backendEmptyText()}</p>`;
     return;
   }
   if (!analyzed.length) {
@@ -2696,7 +2713,7 @@ function renderPieces() {
   if (!elements.pieceList) return;
   const list = repertoireEntries(backend.ops);
   if (!backend.online) {
-    elements.pieceList.innerHTML = `<p class="empty">Backend offline.</p>`;
+    elements.pieceList.innerHTML = `<p class="empty">${backendEmptyText()}</p>`;
     return;
   }
   if (!list.length) {
@@ -2900,8 +2917,8 @@ function renderGoldReviewItem(item, index) {
 function renderGoldReview() {
   if (!elements.goldReviewPanel) return;
   if (!backend.online) {
-    setText(elements.goldReviewCount, "offline");
-    elements.goldReviewPanel.innerHTML = `<p class="empty">Backend offline.</p>`;
+    setText(elements.goldReviewCount, backend.loading ? "loading" : "offline");
+    elements.goldReviewPanel.innerHTML = `<p class="empty">${backendEmptyText()}</p>`;
     return;
   }
   const review = goldReviewState(backend.ops);
@@ -3017,7 +3034,7 @@ function renderStaff4Mining(mining, sourceRescan) {
 function renderTranscriptionCompletion() {
   if (!elements.transcriptionCompletion) return;
   if (!backend.online) {
-    elements.transcriptionCompletion.innerHTML = `<p class="empty">Backend offline.</p>`;
+    elements.transcriptionCompletion.innerHTML = `<p class="empty">${backendEmptyText()}</p>`;
     return;
   }
   const completion = transcriptionCompletionState(backend.ops);
@@ -3133,7 +3150,7 @@ function renderInventory() {
   const inventory = inventoryItems(backend.ops);
   const candidates = inventory.filter((item) => item.practiceCandidate);
   if (!backend.online) {
-    elements.inventoryList.innerHTML = `<p class="empty">Backend offline.</p>`;
+    elements.inventoryList.innerHTML = `<p class="empty">${backendEmptyText()}</p>`;
     return;
   }
   if (!inventory.length) {
@@ -3241,7 +3258,7 @@ function renderHighlight() {
     if (frameShell) frameShell.hidden = true;
     elements.highlightFrame.hidden = true;
     elements.highlightFrame.removeAttribute("src");
-    elements.highlightMeta.textContent = backend.online ? "Clip pending." : "Backend offline.";
+    elements.highlightMeta.textContent = backend.online ? "Clip pending." : backendEmptyText();
     elements.highlightWindow.textContent = "No evidence window.";
     elements.highlightLink.hidden = true;
     elements.highlightLink.removeAttribute("href");
@@ -3266,7 +3283,7 @@ function renderHighlight() {
 function renderDays() {
   const days = practiceDays(backend.ops);
   if (!backend.online) {
-    elements.dayList.innerHTML = `<p class="empty">Backend offline.</p>`;
+    elements.dayList.innerHTML = `<p class="empty">${backendEmptyText()}</p>`;
     return;
   }
   if (!days.length) {
