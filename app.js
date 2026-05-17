@@ -88,6 +88,7 @@ function apiBase() {
   if (window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost") {
     return window.location.origin;
   }
+  if (window.location.hostname === "curtis.aolabs.io") return "";
   if (window.location.hostname.endsWith("up.railway.app")) return "";
   return DEFAULT_API_BASE;
 }
