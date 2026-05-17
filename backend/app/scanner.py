@@ -78,7 +78,7 @@ from .symbolic_scores import (
 )
 
 DEFAULT_YOUTUBE_SOURCE = "https://www.youtube.com/@nalalan"
-STAFF4_SOURCE_AUDIO_RESCAN_VERSION = "staff4_source_audio_rescan_v3"
+STAFF4_SOURCE_AUDIO_RESCAN_VERSION = "staff4_source_audio_rescan_v4"
 STAFF4_SOURCE_AUDIO_RESCAN_DIR = RUNTIME_DIR / "staff4-source-rescan"
 STAFF4_SOURCE_AUDIO_RESCAN_PAD_BEFORE_SECONDS = 4.0
 STAFF4_SOURCE_AUDIO_RESCAN_PAD_AFTER_SECONDS = 10.0
@@ -88,6 +88,7 @@ STAFF4_SOURCE_AUDIO_RESCAN_MAX_WINDOWS = 5
 STAFF4_ACCEPTED_ANCHOR_MIDI = [75, 75, 72, 75, 75]
 STAFF4_ANCHOR_GUIDED_PAD_SECONDS = 0.03
 STAFF4_ANCHOR_GUIDED_MIN_EXACT_VOTES = 2
+STAFF4_ADJACENT_GUIDED_MAX_TARGET_NOTES = 7
 MEDIA_REVIEW_PENDING_BLOCKERS = {"youtube_data_api_returns_metadata_not_video_media"}
 WEAK_EVIDENCE_TERMS = (
     "background noise",
@@ -2131,6 +2132,179 @@ def staff4_anchor_guided_reproduction_notes(
     return notes
 
 
+def staff4_adjacent_source_targets(anchor: dict[str, Any]) -> list[dict[str, Any]]:
+    source_notes = anchor.get("sourceNotes") if isinstance(anchor.get("sourceNotes"), list) else []
+    if not source_notes:
+        return []
+    reference_start = int(anchor.get("referenceStart") or 0)
+    reference_end = int(anchor.get("referenceEnd") or reference_start)
+    anchor_midi = [int(value) for value in anchor.get("anchorMidiSequence") or [] if isinstance(value, int)]
+    anchor_slice = source_notes[reference_start:reference_end]
+    if not anchor_midi:
+        anchor_midi = note_midi_values(anchor_slice)
+    if anchor_midi != STAFF4_ACCEPTED_ANCHOR_MIDI:
+        return []
+    targets: list[dict[str, Any]] = []
+    max_end = min(len(source_notes), reference_start + STAFF4_ADJACENT_GUIDED_MAX_TARGET_NOTES)
+    if reference_end < max_end:
+        targets.append({"direction": "right-1", "start": reference_start, "end": reference_end + 1})
+    if reference_end + 1 < max_end:
+        targets.append({"direction": "right-2", "start": reference_start, "end": reference_end + 2})
+    for target in targets:
+        source_slice = source_notes[int(target["start"]) : int(target["end"])]
+        target["sourceSlice"] = source_slice
+        target["targetMidiSequence"] = note_midi_values(source_slice)
+        target["targetSequence"] = note_exact_label(source_slice)
+        target["anchorMidiSequence"] = anchor_midi
+    return [target for target in targets if target.get("targetMidiSequence")]
+
+
+def median_float(values: list[float], fallback: float) -> float:
+    cleaned = sorted(value for value in values if value > 0)
+    if not cleaned:
+        return fallback
+    middle = len(cleaned) // 2
+    if len(cleaned) % 2:
+        return cleaned[middle]
+    return (cleaned[middle - 1] + cleaned[middle]) / 2.0
+
+
+def staff4_adjacent_guided_note_windows(anchor: dict[str, Any], target_midi: list[int]) -> list[dict[str, Any]]:
+    seed_windows = staff4_anchor_seed_note_windows(anchor)
+    anchor_midi = [int(value) for value in anchor.get("anchorMidiSequence") or [] if isinstance(value, int)]
+    if not seed_windows or not anchor_midi or target_midi[: len(anchor_midi)] != anchor_midi:
+        return []
+    if len(target_midi) < len(anchor_midi):
+        return []
+    durations = [
+        float(seed.get("endSeconds") or seed.get("startSeconds") or 0.0) - float(seed.get("startSeconds") or 0.0)
+        for seed in seed_windows
+    ]
+    starts = [float(seed.get("startSeconds") or 0.0) for seed in seed_windows]
+    onset_deltas = [starts[index + 1] - starts[index] for index in range(0, len(starts) - 1)]
+    duration = min(0.45, max(0.06, median_float(durations, 0.12)))
+    onset_delta = min(0.75, max(duration * 0.75, median_float(onset_deltas, duration)))
+    windows = [dict(seed) for seed in seed_windows]
+    last_start = starts[-1]
+    last_end = float(seed_windows[-1].get("endSeconds") or last_start + duration)
+    for index in range(len(seed_windows), len(target_midi)):
+        next_start = last_start + onset_delta
+        if next_start <= last_end:
+            next_start = last_end + max(0.01, onset_delta - duration)
+        next_end = next_start + duration
+        windows.append(
+            {
+                "startSeconds": round(next_start, 3),
+                "endSeconds": round(next_end, 3),
+                "durationSeconds": round(duration, 3),
+                "inferredAdjacentWindow": True,
+                "timingSource": "accepted_staff4_anchor_median_onset_delta",
+            }
+        )
+        last_start = next_start
+        last_end = next_end
+    return windows
+
+
+def staff4_adjacent_guided_reproduction_targets(
+    anchor: dict[str, Any],
+    y: Any,
+    sr: int,
+    scan_start: float,
+    scan_end: float,
+    librosa: Any,
+    numpy: Any,
+) -> list[dict[str, Any]]:
+    results: list[dict[str, Any]] = []
+    for target in staff4_adjacent_source_targets(anchor):
+        target_midi = [int(value) for value in target.get("targetMidiSequence") or [] if isinstance(value, int)]
+        windows = staff4_adjacent_guided_note_windows(anchor, target_midi)
+        notes: list[dict[str, Any]] = []
+        failed: dict[str, Any] = {}
+        for note_index, (window, expected_midi) in enumerate(zip(windows, target_midi)):
+            start = float(window.get("startSeconds") or 0.0)
+            end = float(window.get("endSeconds") or start)
+            if end <= start or start < scan_start or end > scan_end:
+                failed = {
+                    "noteIndex": note_index,
+                    "expectedMidi": expected_midi,
+                    "expectedNote": note_name(expected_midi),
+                    "reason": "seed_window_outside_scan",
+                    "startSeconds": round(start, 3),
+                    "endSeconds": round(end, 3),
+                }
+                break
+            padded_start = max(scan_start, start - STAFF4_ANCHOR_GUIDED_PAD_SECONDS)
+            padded_end = min(scan_end, end + STAFF4_ANCHOR_GUIDED_PAD_SECONDS)
+            start_sample = max(0, int(round((padded_start - scan_start) * sr)))
+            end_sample = min(len(y), int(round((padded_end - scan_start) * sr)))
+            if end_sample <= start_sample:
+                failed = {
+                    "noteIndex": note_index,
+                    "expectedMidi": expected_midi,
+                    "expectedNote": note_name(expected_midi),
+                    "reason": "empty_seed_audio",
+                }
+                break
+            segment = y[start_sample:end_sample]
+            votes = staff4_detector_votes_for_segment(segment, expected_midi, sr, librosa, numpy)
+            exact_votes = [vote for vote in votes if vote.get("exact")]
+            exact_sources = [str(vote.get("detector") or "") for vote in exact_votes if str(vote.get("detector") or "")]
+            if len(exact_sources) < STAFF4_ANCHOR_GUIDED_MIN_EXACT_VOTES or "spectral_onset" not in exact_sources:
+                failed = {
+                    "noteIndex": note_index,
+                    "expectedMidi": expected_midi,
+                    "expectedNote": note_name(expected_midi),
+                    "reason": "current_detectors_did_not_reproduce_exact_midi",
+                    "detectorVotes": votes,
+                }
+                break
+            confidence = max([float(vote.get("confidence") or 0.0) for vote in exact_votes] + [0.86])
+            notes.append(
+                {
+                    "startSeconds": round(start, 3),
+                    "endSeconds": round(end, 3),
+                    "durationSeconds": round(max(0.0, end - start), 3),
+                    "midi": expected_midi,
+                    "note": note_name(expected_midi),
+                    "confidence": round(min(0.99, confidence), 3),
+                    "audioAgreement": True,
+                    "agreementSources": sorted(set(exact_sources)),
+                    "agreementSourceCount": len(set(exact_sources)),
+                    "detectorSource": "staff4_adjacent_guided_current_detector",
+                    "verification": "current_audio_pyin_yin_spectral_exact_midi_adjacent_reproduction",
+                    "sourceAudioRescan": True,
+                    "adjacentGuidedReproduction": True,
+                    "targetDirection": str(target.get("direction") or ""),
+                    "detectorVotes": votes,
+                }
+            )
+        status = "reproduced" if len(notes) == len(target_midi) and not failed else "not_reproduced"
+        results.append(
+            {
+                "status": status,
+                "direction": str(target.get("direction") or ""),
+                "targetReferenceStart": int(target.get("start") or 0),
+                "targetReferenceEnd": int(target.get("end") or 0),
+                "targetSequence": str(target.get("targetSequence") or ""),
+                "targetMidiSequence": target_midi,
+                "targetNoteCount": len(target_midi),
+                "reproducedNoteCount": len(notes),
+                "notes": notes if status == "reproduced" else [],
+                "failedAt": failed,
+                "seedWindows": [
+                    {
+                        "startSeconds": round(float(window.get("startSeconds") or 0.0), 3),
+                        "endSeconds": round(float(window.get("endSeconds") or 0.0), 3),
+                        "inferredAdjacentWindow": bool(window.get("inferredAdjacentWindow")),
+                    }
+                    for window in windows
+                ],
+            }
+        )
+    return results
+
+
 def audio_agreed_midi_sequence_exists_in_runs(runs: list[dict[str, Any]], target_midi: list[int]) -> bool:
     if not target_midi:
         return False
@@ -2314,6 +2488,35 @@ def staff4_source_audio_rescan_record(
         librosa,
         numpy,
     )
+    adjacent_guided_targets = staff4_adjacent_guided_reproduction_targets(
+        anchor,
+        y,
+        sr,
+        scan_start,
+        scan_end,
+        librosa,
+        numpy,
+    )
+    reproduced_adjacent_targets = [
+        item
+        for item in adjacent_guided_targets
+        if isinstance(item, dict) and item.get("status") == "reproduced" and isinstance(item.get("notes"), list)
+    ]
+    best_adjacent_target = max(
+        reproduced_adjacent_targets,
+        key=lambda item: int(item.get("targetNoteCount") or 0),
+        default={},
+    )
+    guided_adjacent_notes = (
+        best_adjacent_target.get("notes")
+        if isinstance(best_adjacent_target.get("notes"), list)
+        else []
+    )
+    guided_adjacent_midi = [
+        int(value)
+        for value in best_adjacent_target.get("targetMidiSequence") or []
+        if isinstance(value, int)
+    ]
     if primary_notes:
         runs.append(
             expansion_audio_run_from_notes(
@@ -2350,6 +2553,18 @@ def staff4_source_audio_rescan_record(
                 run_source="staff4_anchor_guided_current_detector",
             )
         )
+    if guided_adjacent_notes and not audio_agreed_midi_sequence_exists_in_runs(runs, guided_adjacent_midi):
+        runs.append(
+            expansion_audio_run_from_notes(
+                practice_day=str(anchor.get("practiceDay") or ""),
+                sample_id=sample_id,
+                source_window=str(anchor.get("sourceWindow") or sample.get("window") or ""),
+                source_title=str(sample.get("title") or anchor.get("pieceTitle") or ""),
+                notes=guided_adjacent_notes,
+                candidate_only=False,
+                run_source="staff4_adjacent_guided_current_detector",
+            )
+        )
     quality = transcription.get("quality") if isinstance(transcription.get("quality"), dict) else {}
     result.update(
         {
@@ -2357,7 +2572,24 @@ def staff4_source_audio_rescan_record(
             "eventCount": len(primary_notes),
             "candidateEventCount": len(candidate_notes),
             "guidedAnchorEventCount": len(guided_notes),
-            "audioAgreementEventCount": sum(1 for note in [*primary_notes, *candidate_notes, *guided_notes] if note.get("audioAgreement") is True),
+            "guidedAdjacentEventCount": len(guided_adjacent_notes),
+            "guidedAdjacentTargetCount": len(adjacent_guided_targets),
+            "guidedAdjacentReproducedCount": len(reproduced_adjacent_targets),
+            "guidedAdjacentStatus": "reproduced" if reproduced_adjacent_targets else "not_reproduced" if adjacent_guided_targets else "not_checked",
+            "guidedAdjacentTargets": [
+                {
+                    key: value
+                    for key, value in item.items()
+                    if key != "notes" or item.get("status") == "reproduced"
+                }
+                for item in adjacent_guided_targets
+                if isinstance(item, dict)
+            ],
+            "audioAgreementEventCount": sum(
+                1
+                for note in [*primary_notes, *candidate_notes, *guided_notes, *guided_adjacent_notes]
+                if note.get("audioAgreement") is True
+            ),
             "quality": {
                 "segmentationSource": quality.get("segmentationSource") or "",
                 "pitchEventCount": int(quality.get("pitchEventCount") or 0),
@@ -2367,6 +2599,8 @@ def staff4_source_audio_rescan_record(
                 "audioAgreementEventCount": int(quality.get("audioAgreementEventCount") or 0),
                 "guidedAnchorEventCount": len(guided_notes),
                 "guidedAnchorStatus": "reproduced" if guided_notes else "not_reproduced",
+                "guidedAdjacentEventCount": len(guided_adjacent_notes),
+                "guidedAdjacentStatus": "reproduced" if reproduced_adjacent_targets else "not_reproduced" if adjacent_guided_targets else "not_checked",
             },
             "runs": runs,
         }
@@ -2458,6 +2692,21 @@ def staff4_source_audio_rescan(daily_records: dict[str, Any], media_samples: lis
         if anchor_reproduced_count == len(anchor_reproduction_targets)
         else "not_reproduced"
     )
+    adjacent_targets = [
+        target
+        for record in records
+        if isinstance(record, dict)
+        for target in (record.get("guidedAdjacentTargets") if isinstance(record.get("guidedAdjacentTargets"), list) else [])
+        if isinstance(target, dict)
+    ]
+    adjacent_reproduced_count = sum(1 for target in adjacent_targets if target.get("status") == "reproduced")
+    adjacent_reproduction_status = (
+        "not_checked"
+        if not adjacent_targets
+        else "reproduced"
+        if adjacent_reproduced_count
+        else "not_reproduced"
+    )
     return {
         "version": STAFF4_SOURCE_AUDIO_RESCAN_VERSION,
         "status": status,
@@ -2477,6 +2726,11 @@ def staff4_source_audio_rescan(daily_records: dict[str, Any], media_samples: lis
         "eventCount": sum(int(record.get("eventCount") or 0) for record in records if isinstance(record, dict)),
         "candidateEventCount": sum(int(record.get("candidateEventCount") or 0) for record in records if isinstance(record, dict)),
         "guidedAnchorEventCount": sum(int(record.get("guidedAnchorEventCount") or 0) for record in records if isinstance(record, dict)),
+        "guidedAdjacentEventCount": sum(int(record.get("guidedAdjacentEventCount") or 0) for record in records if isinstance(record, dict)),
+        "guidedAdjacentTargetCount": len(adjacent_targets),
+        "guidedAdjacentReproducedCount": adjacent_reproduced_count,
+        "guidedAdjacentStatus": adjacent_reproduction_status,
+        "guidedAdjacentTargets": adjacent_targets,
         "audioAgreementEventCount": sum(int(record.get("audioAgreementEventCount") or 0) for record in records if isinstance(record, dict)),
         "cacheHitCount": sum(1 for record in records if isinstance(record, dict) and record.get("cacheHit")),
         "records": records,
@@ -2484,6 +2738,10 @@ def staff4_source_audio_rescan(daily_records: dict[str, Any], media_samples: lis
         "nextAction": (
             "Fix current-detector anchor reproduction before expanding the Staff 4 phrase."
             if anchor_reproduction_targets and not anchor_reproduced_count
+            else "Audit the adjacent-guided Staff 4 phrase reproduced by current audio detectors."
+            if adjacent_reproduced_count
+            else "Improve note-window segmentation for the next Staff 4 source notes; adjacent-guided current detectors did not reproduce the exact source phrase."
+            if adjacent_targets
             else "Search exact Staff 4 MIDI phrase windows inside the rescanned source-audio runs."
             if runs
             else "Make the Staff 4 source media available, then rescan the source audio around the accepted anchor."
@@ -2850,7 +3108,12 @@ def staff4_adjacent_phrase_mining(
     elif status == "exact_midi_audio_unconfirmed":
         next_action = "Run second-pass audio agreement on the exact Staff 4 MIDI candidate before review."
     elif anchor_count:
-        if int(source_audio_rescan.get("runCount") or 0):
+        if (
+            int(source_audio_rescan.get("guidedAdjacentTargetCount") or 0)
+            and str(source_audio_rescan.get("guidedAdjacentStatus") or "") == "not_reproduced"
+        ):
+            next_action = "Adjacent-guided Staff 4 source-note windows were tested, but current detectors did not reproduce exact MIDI; improve note segmentation around the next source notes."
+        elif int(source_audio_rescan.get("runCount") or 0):
             next_action = "No exact adjacent Staff 4 MIDI window was found after source-audio rescanning; widen the source window or improve note segmentation."
         else:
             next_action = "No exact adjacent Staff 4 MIDI window is in the stored May 3 detected runs yet; rescan the source audio around the accepted anchor."
@@ -2863,7 +3126,12 @@ def staff4_adjacent_phrase_mining(
         "sourceAudioRescanStatus": source_audio_rescan.get("status") or "",
         "sourceAudioRescanRunCount": int(source_audio_rescan.get("runCount") or 0),
         "sourceAudioRescanEventCount": int(source_audio_rescan.get("eventCount") or 0)
-        + int(source_audio_rescan.get("candidateEventCount") or 0),
+        + int(source_audio_rescan.get("candidateEventCount") or 0)
+        + int(source_audio_rescan.get("guidedAnchorEventCount") or 0)
+        + int(source_audio_rescan.get("guidedAdjacentEventCount") or 0),
+        "sourceAudioRescanGuidedAdjacentStatus": str(source_audio_rescan.get("guidedAdjacentStatus") or ""),
+        "sourceAudioRescanGuidedAdjacentTargetCount": int(source_audio_rescan.get("guidedAdjacentTargetCount") or 0),
+        "sourceAudioRescanGuidedAdjacentReproducedCount": int(source_audio_rescan.get("guidedAdjacentReproducedCount") or 0),
         "searchedWindowCount": total_searched,
         "exactCandidateCount": total_exact,
         "bestCandidate": best_candidate,
@@ -3616,10 +3884,14 @@ def build_transcription_completion(
         int(staff4_source_rescan.get("eventCount") or 0)
         + int(staff4_source_rescan.get("candidateEventCount") or 0)
         + int(staff4_source_rescan.get("guidedAnchorEventCount") or 0)
+        + int(staff4_source_rescan.get("guidedAdjacentEventCount") or 0)
     )
     staff4_source_rescan_anchor_status = str(staff4_source_rescan.get("anchorReproductionStatus") or "")
     staff4_source_rescan_anchor_count = int(staff4_source_rescan.get("anchorReproducedCount") or 0)
     staff4_source_rescan_anchor_target_count = int(staff4_source_rescan.get("anchorReproductionTargetCount") or 0)
+    staff4_source_rescan_adjacent_status = str(staff4_source_rescan.get("guidedAdjacentStatus") or "")
+    staff4_source_rescan_adjacent_count = int(staff4_source_rescan.get("guidedAdjacentReproducedCount") or 0)
+    staff4_source_rescan_adjacent_target_count = int(staff4_source_rescan.get("guidedAdjacentTargetCount") or 0)
     staff4_mining_status = str(staff4_mining.get("status") or "")
     staff4_mining_searched_count = int(staff4_mining.get("searchedWindowCount") or 0)
     staff4_mining_exact_count = int(staff4_mining.get("exactCandidateCount") or 0)
@@ -4089,6 +4361,11 @@ def build_transcription_completion(
                         f"{phrase_expansion_current.get('targetSequence') or 'adjacent'} window after "
                         f"{staff4_mining_searched_count} stored/rescanned windows."
                     )
+                elif staff4_source_rescan_adjacent_target_count and staff4_source_rescan_adjacent_status == "not_reproduced":
+                    next_action = (
+                        "Improve the Staff 4 note-window segmentation; source-audio rescan reproduces the anchor, "
+                        "but adjacent-guided current detectors still did not reproduce the exact next source phrase."
+                    )
                 elif staff4_source_rescan_run_count:
                     next_action = (
                         "Widen the Staff 4 source-audio rescan or improve note segmentation; exact MIDI search found no "
@@ -4109,6 +4386,11 @@ def build_transcription_completion(
                         f"{phrase_expansion_current.get('anchorSequence') or 'anchor'} window, and adjacent mining found no exact "
                         f"{phrase_expansion_current.get('targetSequence') or 'adjacent'} window after "
                         f"{staff4_mining_searched_count} stored/rescanned windows."
+                    )
+                elif staff4_source_rescan_adjacent_target_count and staff4_source_rescan_adjacent_status == "not_reproduced":
+                    next_action = (
+                        "Improve the Staff 4 note-window segmentation; source-audio rescan reproduces the anchor, "
+                        "but adjacent-guided current detectors still did not reproduce the exact next source phrase."
                     )
                 else:
                     next_action = (
@@ -4175,6 +4457,9 @@ def build_transcription_completion(
         "staff4SourceAudioRescanAnchorStatus": staff4_source_rescan_anchor_status,
         "staff4SourceAudioRescanAnchorReproducedCount": staff4_source_rescan_anchor_count,
         "staff4SourceAudioRescanAnchorTargetCount": staff4_source_rescan_anchor_target_count,
+        "staff4SourceAudioRescanAdjacentStatus": staff4_source_rescan_adjacent_status,
+        "staff4SourceAudioRescanAdjacentReproducedCount": staff4_source_rescan_adjacent_count,
+        "staff4SourceAudioRescanAdjacentTargetCount": staff4_source_rescan_adjacent_target_count,
         "staff4AdjacentMining": staff4_mining,
         "staff4AdjacentMiningStatus": staff4_mining_status,
         "staff4AdjacentMiningSearchedWindowCount": staff4_mining_searched_count,
