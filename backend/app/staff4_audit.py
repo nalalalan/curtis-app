@@ -752,3 +752,30 @@ def latest_staff4_phrase_audit_packet(state: dict[str, Any]) -> dict[str, Any]:
         "status": "not_generated",
         "limit": "Run the Staff 4 phrase audit packet generator.",
     }
+
+
+def latest_staff4_phrase_audit_packet_for_completion(state: dict[str, Any], completion: dict[str, Any]) -> dict[str, Any]:
+    current = current_staff4_expansion(completion)
+    if not current:
+        return latest_staff4_phrase_audit_packet(state)
+    current_packet_id = packet_id_for_current(current)
+    packet = state.get("staff4PhraseAuditLatest") if isinstance(state.get("staff4PhraseAuditLatest"), dict) else {}
+    if packet and str(packet.get("packetId") or "") == current_packet_id:
+        return packet
+    packet_path = packet_json_path(current_packet_id)
+    if packet_path.exists():
+        try:
+            packet = json.loads(packet_path.read_text(encoding="utf-8"))
+            if isinstance(packet, dict):
+                state["staff4PhraseAuditLatest"] = packet
+                return packet
+        except (OSError, json.JSONDecodeError):
+            pass
+    return {
+        "version": STAFF4_AUDIT_VERSION,
+        "status": "not_generated",
+        "packetId": "",
+        "currentPacketId": current_packet_id,
+        "stalePacketId": str(packet.get("packetId") or "") if packet else "",
+        "limit": "Run the Staff 4 phrase audit packet generator for the current adjacent phrase window.",
+    }

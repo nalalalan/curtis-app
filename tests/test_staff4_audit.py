@@ -1,8 +1,15 @@
 import tempfile
 import unittest
+import json
 from pathlib import Path
 
-from backend.app.staff4_audit import ensure_staff4_phrase_audit_packet, latest_staff4_phrase_audit_packet
+import backend.app.staff4_audit as staff4_audit
+from backend.app.staff4_audit import (
+    ensure_staff4_phrase_audit_packet,
+    latest_staff4_phrase_audit_packet,
+    latest_staff4_phrase_audit_packet_for_completion,
+    packet_id_for_current,
+)
 
 
 def current_best():
@@ -37,6 +44,21 @@ def current_best():
             {"note": "D#5", "midi": 75, "startSeconds": 1.22, "endSeconds": 1.34, "audioAgreement": True},
         ],
     }
+
+
+def current_best_right1():
+    value = dict(current_best())
+    value.update(
+        {
+            "targetReferenceEnd": 15,
+            "targetSequence": "Eb5 Eb5 C5 Eb5 Eb5 Eb5",
+            "targetMidiSequence": [75, 75, 72, 75, 75, 75],
+            "bestAudioSequence": "D#5 D#5 C5 D#5 D#5 D5",
+            "bestAudioMidiSequence": [75, 75, 72, 75, 75, 74],
+            "bestAudioNotes": value["bestAudioNotes"][:6],
+        }
+    )
+    return value
 
 
 def completion_state():
@@ -77,6 +99,50 @@ class Staff4AuditTests(unittest.TestCase):
 
         self.assertEqual(packet["status"], "blocked_no_staff4_expansion")
         self.assertEqual(latest_staff4_phrase_audit_packet(state)["status"], "blocked_no_staff4_expansion")
+
+    def test_completion_latest_does_not_return_stale_adjacent_window_packet(self):
+        old_audit_dir = staff4_audit.AUDIT_DIR
+        temp_dir = Path(tempfile.mkdtemp())
+        try:
+            staff4_audit.AUDIT_DIR = temp_dir
+            right1 = current_best_right1()
+            right1_packet_id = packet_id_for_current(right1)
+            packet_path = staff4_audit.packet_json_path(right1_packet_id)
+            packet_path.parent.mkdir(parents=True, exist_ok=True)
+            packet_path.write_text(
+                json.dumps(
+                    {
+                        "version": "staff4_phrase_audit_v1",
+                        "packetId": right1_packet_id,
+                        "status": "blocked_audio_mismatch_confirmed",
+                        "truthDecision": "not_accepted",
+                        "targetReferenceStart": 9,
+                        "targetReferenceEnd": 15,
+                        "targetSequence": "Eb5 Eb5 C5 Eb5 Eb5 Eb5",
+                        "bestAudioSequence": "D#5 D#5 C5 D#5 D#5 D5",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            state = {
+                "staff4PhraseAuditLatest": {
+                    "version": "staff4_phrase_audit_v1",
+                    "packetId": "staff4-2026-05-03-Njh8_zq9_DM-8835-9-16",
+                    "status": "blocked_audio_mismatch_confirmed",
+                    "targetReferenceEnd": 16,
+                }
+            }
+
+            packet = latest_staff4_phrase_audit_packet_for_completion(
+                state,
+                {"phraseExpansionHarness": {"currentBest": right1}},
+            )
+
+            self.assertEqual(packet["packetId"], right1_packet_id)
+            self.assertEqual(packet["targetReferenceEnd"], 15)
+            self.assertEqual(state["staff4PhraseAuditLatest"]["packetId"], right1_packet_id)
+        finally:
+            staff4_audit.AUDIT_DIR = old_audit_dir
 
 
 if __name__ == "__main__":

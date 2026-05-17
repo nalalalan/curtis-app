@@ -41,6 +41,7 @@ from .settings import (
     REQUIRE_SOURCE_CONFIRMED_PIECE_TITLES,
     SERVICE_NAME,
 )
+from .staff4_audit import latest_staff4_phrase_audit_packet_for_completion
 from .state import append_run, load_state, save_state, utc_now
 from .daily_records import (
     build_daily_records,
@@ -3094,6 +3095,21 @@ def derive_review(
         gold_review,
         staff4_phrase_audit,
     )
+    current_staff4_phrase_audit = latest_staff4_phrase_audit_packet_for_completion(state, transcription_completion)
+    if current_staff4_phrase_audit != staff4_phrase_audit:
+        staff4_phrase_audit = current_staff4_phrase_audit
+        transcription_completion = build_transcription_completion(
+            training,
+            daily_records,
+            repertoire_evidence,
+            active_practice_coverage,
+            evidence_progress,
+            media_samples,
+            transcriptions,
+            truth_workbench,
+            gold_review,
+            staff4_phrase_audit,
+        )
     progress_plan = existing.get("progressPlan") if isinstance(existing.get("progressPlan"), dict) else None
     youtube_items = inventory.get("youtube", [])
     practice_candidates = [
