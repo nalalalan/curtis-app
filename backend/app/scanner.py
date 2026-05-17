@@ -1590,10 +1590,65 @@ def exact_source_range_visually_verified(snippet: dict[str, Any]) -> bool:
     )
 
 
+def expansion_audio_run_identity(run: dict[str, Any]) -> tuple[str, str, float, float, tuple[int, ...]]:
+    notes = run.get("notes") if isinstance(run.get("notes"), list) else []
+    midi = tuple(note_midi_values([note for note in notes if isinstance(note, dict)]))
+    return (
+        str(run.get("practiceDay") or ""),
+        str(run.get("sampleId") or ""),
+        float(run.get("localStartSeconds") or run.get("startSeconds") or 0),
+        float(run.get("localEndSeconds") or run.get("endSeconds") or 0),
+        midi,
+    )
+
+
+def expansion_audio_run_from_notes(
+    *,
+    practice_day: str,
+    sample_id: str,
+    source_window: str,
+    source_title: str,
+    notes: list[dict[str, Any]],
+    candidate_only: bool = False,
+    run_source: str,
+) -> dict[str, Any]:
+    clean_notes = [note for note in notes if isinstance(note, dict) and note_midi_value(note) is not None]
+    clean_notes = sorted(clean_notes, key=lambda note: (float(note.get("startSeconds") or 0), float(note.get("endSeconds") or 0)))
+    midi = note_midi_values(clean_notes)
+    start = float(clean_notes[0].get("startSeconds") or 0) if clean_notes else 0.0
+    end = float(clean_notes[-1].get("endSeconds") or start) if clean_notes else start
+    return {
+        "practiceDay": practice_day,
+        "sampleId": sample_id,
+        "sourceWindow": source_window,
+        "sourceTitle": source_title,
+        "candidateOnly": candidate_only,
+        "runSource": run_source,
+        "notes": clean_notes,
+        "midiSequence": midi,
+        "exactSequence": note_exact_label(clean_notes),
+        "startSeconds": round(start, 3),
+        "endSeconds": round(end, 3),
+        "localStartSeconds": round(start, 3),
+        "localEndSeconds": round(end, 3),
+    }
+
+
 def detected_audio_runs_for_expansion(daily_records: dict[str, Any]) -> list[dict[str, Any]]:
     records = daily_records.get("records") if isinstance(daily_records.get("records"), list) else []
     runs: list[dict[str, Any]] = []
     seen: set[tuple[str, str, float, float, tuple[int, ...]]] = set()
+
+    def add_run(run: dict[str, Any]) -> None:
+        notes = run.get("notes") if isinstance(run.get("notes"), list) else []
+        if not notes:
+            return
+        identity = expansion_audio_run_identity(run)
+        if not identity[-1] or identity in seen:
+            return
+        seen.add(identity)
+        runs.append(run)
+
     for record in records:
         if not isinstance(record, dict):
             continue
@@ -1607,32 +1662,42 @@ def detected_audio_runs_for_expansion(daily_records: dict[str, Any]) -> list[dic
             notes = [note for note in notes if isinstance(note, dict) and note_midi_value(note) is not None]
             if not notes:
                 continue
-            notes = sorted(notes, key=lambda note: (float(note.get("startSeconds") or 0), float(note.get("endSeconds") or 0)))
-            midi = tuple(note_midi_values(notes))
-            sample_id = str(detected.get("sampleId") or clip.get("sampleId") or "")
-            source_window = str(detected.get("sourceWindow") or "")
-            start = float(notes[0].get("startSeconds") or 0)
-            end = float(notes[-1].get("endSeconds") or start)
-            identity = (practice_day, sample_id, start, end, midi)
-            if identity in seen:
-                continue
-            seen.add(identity)
-            runs.append(
-                {
-                    "practiceDay": practice_day,
-                    "sampleId": sample_id,
-                    "sourceWindow": source_window,
-                    "sourceTitle": str(detected.get("sourceTitle") or clip.get("sourceTitle") or ""),
-                    "candidateOnly": bool(detected.get("candidateOnly")),
-                    "notes": notes,
-                    "midiSequence": list(midi),
-                    "exactSequence": note_exact_label(notes),
-                    "startSeconds": group.get("startSeconds") or clip.get("startSeconds"),
-                    "endSeconds": group.get("endSeconds") or clip.get("endSeconds"),
-                    "localStartSeconds": detected.get("localStartSeconds") or clip.get("localStartSeconds"),
-                    "localEndSeconds": detected.get("localEndSeconds") or clip.get("localEndSeconds"),
-                }
+            run = expansion_audio_run_from_notes(
+                practice_day=practice_day,
+                sample_id=str(detected.get("sampleId") or clip.get("sampleId") or ""),
+                source_window=str(detected.get("sourceWindow") or ""),
+                source_title=str(detected.get("sourceTitle") or clip.get("sourceTitle") or ""),
+                notes=notes,
+                candidate_only=bool(detected.get("candidateOnly")),
+                run_source="ranked_match_group",
             )
+            if clip.get("startSeconds") is not None:
+                run["startSeconds"] = clip.get("startSeconds")
+            if clip.get("endSeconds") is not None:
+                run["endSeconds"] = clip.get("endSeconds")
+            add_run(run)
+        transcription = record.get("transcription") if isinstance(record.get("transcription"), dict) else {}
+        raw_series = transcription.get("detectedSeries") if isinstance(transcription.get("detectedSeries"), list) else []
+        for series in raw_series:
+            if not isinstance(series, dict):
+                continue
+            notes = series.get("notes") if isinstance(series.get("notes"), list) else []
+            run = expansion_audio_run_from_notes(
+                practice_day=practice_day,
+                sample_id=str(series.get("sampleId") or ""),
+                source_window=str(series.get("sourceWindow") or ""),
+                source_title=str(series.get("sourceTitle") or ""),
+                notes=[note for note in notes if isinstance(note, dict)],
+                candidate_only=bool(series.get("candidateOnly")),
+                run_source="raw_detected_series",
+            )
+            if not run.get("notes"):
+                continue
+            run["startSeconds"] = series.get("startSeconds") or run.get("startSeconds")
+            run["endSeconds"] = series.get("endSeconds") or run.get("endSeconds")
+            run["localStartSeconds"] = series.get("localStartSeconds") or run.get("localStartSeconds")
+            run["localEndSeconds"] = series.get("localEndSeconds") or run.get("localEndSeconds")
+            add_run(run)
     return runs
 
 
@@ -1829,6 +1894,7 @@ def source_phrase_expansion_harness(daily_records: dict[str, Any], limit: int = 
                         "sourceImageUrl": str(source_snippet.get("imageUrl") or ""),
                         "sampleId": str(run.get("sampleId") or ""),
                         "sourceWindow": str(run.get("sourceWindow") or ""),
+                        "audioRunSource": str(run.get("runSource") or ""),
                         "limit": limit_text,
                     }
                 )
@@ -1851,6 +1917,8 @@ def source_phrase_expansion_harness(daily_records: dict[str, Any], limit: int = 
         "status": "accepted" if accepted_count else "ready" if items else "empty",
         "anchorCount": anchor_count,
         "audioRunCount": len(audio_runs),
+        "rawDetectedAudioRunCount": sum(1 for run in audio_runs if run.get("runSource") == "raw_detected_series"),
+        "rankedAudioRunCount": sum(1 for run in audio_runs if run.get("runSource") == "ranked_match_group"),
         "targetCount": len(items),
         "acceptedExpansionCount": accepted_count,
         "readyForReviewCount": ready_count,
@@ -2306,6 +2374,8 @@ def build_transcription_completion(
     phrase_expansion_accepted_count = int(phrase_expansion.get("acceptedExpansionCount") or 0)
     phrase_expansion_ready_count = int(phrase_expansion.get("readyForReviewCount") or 0)
     phrase_expansion_blocked_count = int(phrase_expansion.get("blockedExpansionCount") or 0)
+    phrase_expansion_audio_run_count = int(phrase_expansion.get("audioRunCount") or 0)
+    phrase_expansion_raw_audio_run_count = int(phrase_expansion.get("rawDetectedAudioRunCount") or 0)
     phrase_expansion_current = (
         phrase_expansion.get("currentBest")
         if isinstance(phrase_expansion.get("currentBest"), dict)
@@ -2448,12 +2518,13 @@ def build_transcription_completion(
             (1.5 if score_sequence_match_count(daily_records) else 0)
             + min(2.5, phrase_candidate_count * 0.5)
             + min(0.5, phrase_expansion_target_count * 0.25)
+            + (0.25 if phrase_expansion_raw_audio_run_count else 0)
             + (1 if source_target_note_count >= 7 else 0)
             + (2 if score_verified_count else 0)
             + (1 if measure_match_count else 0)
             + min(2, long_phrase_count * 2),
-            f"{score_sequence_count} pitch-sequence groups / {phrase_candidate_count} phrase candidates / {source_target_count} source targets / {phrase_expansion_target_count} anchored expansions / {score_verified_count} exact score locations",
-            "Pitch-sequence groups are separated from exact score evidence, and accepted anchors now feed an outward source-lane expansion gate.",
+            f"{score_sequence_count} pitch-sequence groups / {phrase_candidate_count} phrase candidates / {source_target_count} source targets / {phrase_expansion_target_count} anchored expansions / {phrase_expansion_audio_run_count} audio runs searched / {score_verified_count} exact score locations",
+            "Pitch-sequence groups are separated from exact score evidence, and accepted anchors now search raw detected note runs before any outward source-lane expansion is accepted.",
             "Promote phrase candidates only after source-score or score-free exercise verification.",
         ),
         roadmap_gate(
@@ -2557,7 +2628,11 @@ def build_transcription_completion(
         {
             "label": "Expansion gate",
             "value": f"{phrase_expansion_accepted_count}/{phrase_expansion_target_count}",
-            "detail": phrase_expansion_detail,
+            "detail": (
+                f"{phrase_expansion_detail}; {phrase_expansion_raw_audio_run_count} raw runs"
+                if phrase_expansion_target_count
+                else phrase_expansion_detail
+            ),
         },
         {
             "label": "Fast-note trace",
@@ -2615,6 +2690,7 @@ def build_transcription_completion(
         "The rejected five-note Scherzo phrase is blocked from accepted score evidence.",
         "A truth workbench now separates queued, accepted, and rejected audio-score-transcription evidence before anything can become visible score evidence.",
         "Accepted source/audio anchors now feed an outward expansion gate before Curtis tries a new random match.",
+        "Expansion search now includes raw detected note series, not only already-ranked score candidate cards.",
     ]
     remaining_summary = [
         "Finish chronological active-practice coverage across the full archive.",
@@ -2624,6 +2700,7 @@ def build_transcription_completion(
         "Replace short fragments with accurate phrase-level note and rhythm extraction.",
         "Build longer phrase candidates that survive the second-pass audio gate instead of relying on loose transition traces or reference-audio coincidences.",
         "Keep extending the accepted Staff 4 anchor only when each adjacent source note agrees with paired audio.",
+        "Use the raw detected-series expansion pool to find a real adjacent Staff 4 audio run before accepting a longer phrase.",
         "Align accepted phrases to score locations or score-free repeated exercise patterns.",
         "Generate heat maps and Curtis-level observations only from accepted evidence.",
     ]
@@ -2696,11 +2773,17 @@ def build_transcription_completion(
         next_action = "Convert one local source-score measure into verified symbolic notes, then run the existing phrase matcher over hidden detected series."
     elif not long_phrase_count:
         next_action = "Extend the accepted source-backed measure into longer phrases and score-coordinate heat maps."
+    elif phrase_expansion_current and phrase_expansion_accepted_count == 0 and phrase_expansion_ready_count:
+        next_action = (
+            "Review the ready Staff 4 expansion from the raw detected-series search; exact MIDI and audio agree, "
+            "but accepted truth evidence is still required before display."
+        )
     elif phrase_expansion_current and phrase_expansion_accepted_count == 0:
         next_action = (
             "Keep the accepted Staff 4 source lane fixed; expansion is blocked at "
             f"{phrase_expansion_current.get('expectedNextScoreNote') or 'the next source note'} vs "
-            f"{phrase_expansion_current.get('observedNextAudioNote') or 'current audio'}."
+            f"{phrase_expansion_current.get('observedNextAudioNote') or 'current audio'} after searching "
+            f"{phrase_expansion_audio_run_count} audio-note runs."
         )
     elif source_target_sequence and source_target_checked and not source_target_verified:
         next_action = (
@@ -2738,6 +2821,8 @@ def build_transcription_completion(
         "phraseExpansionAcceptedCount": phrase_expansion_accepted_count,
         "phraseExpansionReadyForReviewCount": phrase_expansion_ready_count,
         "phraseExpansionBlockedCount": phrase_expansion_blocked_count,
+        "phraseExpansionAudioRunCount": phrase_expansion_audio_run_count,
+        "phraseExpansionRawAudioRunCount": phrase_expansion_raw_audio_run_count,
         "phraseExpansionCurrentStatus": str(phrase_expansion_current.get("status") or ""),
         "sourceVerificationTargetCount": source_target_count,
         "sourceVerificationTargets": source_targets,

@@ -476,7 +476,7 @@ M6 & Repeat grouping & Multiple attempts of the same passage group into loops, r
 M7 & Heat map & Practice density and problem density appear on verified score coordinates. & Pending. \\
 M8 & Repertoire update & Piece entries update from accepted daily evidence and show active time, clips, snippets, and blockers. & Pending. \\
 M9 & Readiness observation & Main blocker is generated from accepted evidence, not generic advice. & Pending. \\
-M10 & Regression lock & Tests prevent failed notation, wrong score boxes, and non-playing practice-time credit from returning. & Advanced; exact-MIDI manifest verifies three positive source phrases, accepts one live source/audio phrase, blocks three false phrase maps, and now exposes a 0/3 Staff 4 expansion gate that stops at the \texttt{Eb5} versus \texttt{D5} mismatch. \\
+M10 & Regression lock & Tests prevent failed notation, wrong score boxes, and non-playing practice-time credit from returning. & Advanced; exact-MIDI manifest verifies three positive source phrases, accepts one live source/audio phrase, blocks three false phrase maps, and now exposes a 0/3 Staff 4 expansion gate that searches raw detected note series before stopping at the \texttt{Eb5} versus \texttt{D5} mismatch. \\
 \bottomrule
 \end{tabularx}
 \end{table}
@@ -546,6 +546,8 @@ The 2026-05-16 10:30 PM EDT source-review pass completed the next narrow lane th
 
 The 2026-05-17 anchored-expansion harness implements that outward-extension step as a gate rather than a manual judgment. The solve tracker now starts from the accepted Staff 4 source/audio anchor and tests the adjacent left and right source-note ranges against available audio-agreed note runs. Current result: 3 anchored expansions checked, 0 accepted. The strongest expansion target is the seven-note right-side lane \texttt{Eb5 Eb5 C5 Eb5 Eb5 Eb5 C5}; it keeps the first five MIDI values exact, then blocks at \texttt{Eb5} versus \texttt{D5}. This prevents Curtis from treating a new random phrase candidate as progress while the current accepted lane has not yet extended cleanly.
 
+The next 2026-05-17 expansion-search pass completes the first search-pool improvement requested by that gate. The expansion harness now searches raw detected note series from the daily record in addition to already-ranked score-candidate cards, records whether the best run came from the raw series or ranked group pool, reports raw-run counts in the tracker, and has a regression test proving that a raw exact seven-note Staff 4 run becomes \texttt{ready\_for\_truth\_review} rather than being missed. This still does not accept a longer phrase automatically; the expanded phrase remains hidden until exact MIDI, paired audio, source crop, and truth evidence all pass.
+
 The remaining M1 work is continuing the low-cost media pass over every unmeasured strict-ledger video in chronological windows, then replacing the sample-biased estimate with full-archive checked intervals. The remaining M10 work is the larger benchmark suite for repeated notes, arpeggios, fast runs, score-free exercises, score-coordinate truth, accepted notation/media completeness, and practice-time accounting regressions.
 
 The long-phrase track should now run in parallel with full-archive scanning. Waiting for all 234 h 57 min of archive coverage before extending one musical lane would be too slow. The faster strategy is a narrow accepted-measure lane:
@@ -559,10 +561,10 @@ The long-phrase track should now run in parallel with full-archive scanning. Wai
 
 The next coding pass should:
 \begin{enumerate}
-    \item keep the accepted Staff 4 anchor fixed instead of starting a new random match;
-    \item search nearby stored and newly extracted audio-note runs for the adjacent \texttt{Eb5} that would extend the source lane;
+    \item run the targeted production transcription refresh for the accepted Staff 4 sample and its neighboring May 3 windows so the raw detected-series pool is rebuilt with the current extractor;
+    \item inspect whether any rebuilt raw run contains the adjacent \texttt{Eb5} after the accepted anchor;
     \item accept a longer compact grouped score--clip--audio--transcription pair only if the expanded exact MIDI sequence, paired audio, source crop, and truth gate all pass;
-    \item record the first blocking note when an expansion fails so the next extraction attempt has a precise target;
+    \item keep reporting the first blocking note when an expansion fails so the next extraction attempt has a precise target;
     \item keep running queue-only owner-media sync in parallel, starting with \texttt{violin 1} at \texttt{*2250-2340};
     \item rerun the active-practice scan after those uploads and record checked, active, and pending totals.
 \end{enumerate}
