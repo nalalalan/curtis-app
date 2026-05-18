@@ -2,6 +2,7 @@ import tempfile
 import unittest
 import json
 from pathlib import Path
+from unittest.mock import patch
 
 import backend.app.staff4_audit as staff4_audit
 from backend.app.staff4_audit import (
@@ -87,6 +88,40 @@ def current_best_right1_exact():
     return value
 
 
+def current_best_seven_exact_pending_source():
+    value = dict(current_best())
+    value.update(
+        {
+            "status": "ready_for_truth_review",
+            "bestAudioSequence": "D#5 D#5 C5 D#5 D#5 D#5 C5",
+            "bestAudioMidiSequence": [75, 75, 72, 75, 75, 75, 72],
+            "expectedNextScoreNote": "",
+            "expectedNextScoreMidi": None,
+            "observedNextAudioNote": "",
+            "observedNextAudioMidi": None,
+            "audioAgreed": True,
+            "audioRunSource": "staff4_adjacent_guided_current_detector",
+            "audioLocalStartSeconds": 20.225,
+            "audioLocalEndSeconds": 23.280,
+            "audioAbsoluteStartSeconds": 8855.225,
+            "audioAbsoluteEndSeconds": 8858.280,
+            "sourceCropReady": True,
+            "truthEvidenceAccepted": False,
+            "limit": "Audio and source MIDI agree; the source crop still needs accepted truth evidence before display.",
+            "bestAudioNotes": [
+                {"note": "D#5", "midi": 75, "startSeconds": 20.225, "endSeconds": 20.422, "audioAgreement": True},
+                {"note": "D#5", "midi": 75, "startSeconds": 20.550, "endSeconds": 20.689, "audioAgreement": True},
+                {"note": "C5", "midi": 72, "startSeconds": 20.817, "endSeconds": 20.898, "audioAgreement": True},
+                {"note": "D#5", "midi": 75, "startSeconds": 21.629, "endSeconds": 21.792, "audioAgreement": True},
+                {"note": "D#5", "midi": 75, "startSeconds": 22.361, "endSeconds": 22.535, "audioAgreement": True},
+                {"note": "D#5", "midi": 75, "startSeconds": 22.829, "endSeconds": 22.992, "audioAgreement": True},
+                {"note": "C5", "midi": 72, "startSeconds": 23.117, "endSeconds": 23.280, "audioAgreement": True},
+            ],
+        }
+    )
+    return value
+
+
 def staff4_first_failure(**overrides):
     failure = {
         "direction": "right-1",
@@ -146,7 +181,7 @@ def completion_state_without_stored_audio_run():
 def first_failure_completion_state(failure=None):
     return {
         "phraseExpansionHarness": {
-            "currentBest": current_best_right1_exact(),
+            "currentBest": current_best_right1(),
         },
         "staff4SourceAudioRescanAdjacentFirstFailure": failure or staff4_first_failure(),
     }
@@ -248,6 +283,51 @@ class Staff4AuditTests(unittest.TestCase):
         self.assertIn("regressionCase", packet)
         self.assertIn("Eb5-vs-D5", packet["regressionCase"]["regressionId"])
 
+    def test_exact_current_phrase_ignores_stale_first_failure_and_audits_full_window(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source_path = Path(temp_dir) / "sample.mp4"
+            source_path.write_bytes(b"not-a-real-video")
+            state = {
+                "mediaSamples": [
+                    {
+                        "id": "sample-staff4",
+                        "path": str(source_path),
+                    }
+                ]
+            }
+            completion = {
+                "phraseExpansionHarness": {
+                    "currentBest": current_best_seven_exact_pending_source(),
+                },
+                "staff4SourceAudioRescanAdjacentFirstFailure": staff4_first_failure(
+                    targetReferenceEnd=16,
+                    targetMidiSequence=[75, 75, 72, 75, 75, 75, 72],
+                    targetNoteCount=7,
+                    bestAttemptStartSeconds=20.225,
+                    bestAttemptEndSeconds=20.422,
+                ),
+            }
+
+            with patch("backend.app.staff4_audit.run_ffmpeg_extract_audio", return_value=(True, "")), patch(
+                "backend.app.staff4_audit.run_ffmpeg_extract_video",
+                return_value=(True, ""),
+            ), patch("backend.app.staff4_audit.analyze_audio_clip", return_value={"status": "needs_manual_audio_review"}), patch(
+                "backend.app.staff4_audit.write_pitch_trace_svg"
+            ), patch(
+                "backend.app.staff4_audit.write_spectrogram_svg", return_value=True
+            ):
+                packet = ensure_staff4_phrase_audit_packet(state, completion, force=True)
+
+        self.assertEqual(packet["auditFocus"], "staff4_full_exact_phrase")
+        self.assertEqual(packet["firstFailure"], {})
+        self.assertEqual(packet["status"], "pending_source_lock")
+        self.assertEqual(packet["truthDecision"], "pending_review")
+        self.assertTrue(packet["fullPhraseCheck"]["exactAudio"])
+        self.assertEqual(packet["fullPhraseCheck"]["targetNoteCount"], 7)
+        self.assertEqual(packet["clip"]["noteLocalStartSeconds"], 20.225)
+        self.assertEqual(packet["clip"]["noteLocalEndSeconds"], 23.28)
+        self.assertEqual(packet["goldReviewCandidate"]["kind"], "staff4_full_phrase_audio_score_audit")
+
     def test_first_failure_exact_audio_and_source_truth_accepts_right1_lane(self):
         packet = {
             "practiceDay": "2026-05-03",
@@ -334,9 +414,9 @@ class Staff4AuditTests(unittest.TestCase):
                 {"phraseExpansionHarness": {"currentBest": right1}},
             )
 
-            self.assertEqual(packet["packetId"], right1_packet_id)
-            self.assertEqual(packet["targetReferenceEnd"], 15)
-            self.assertEqual(state["staff4PhraseAuditLatest"]["packetId"], right1_packet_id)
+            self.assertEqual(packet["status"], "not_generated")
+            self.assertEqual(packet["currentPacketId"], right1_packet_id)
+            self.assertEqual(packet["stalePacketId"], right1_packet_id)
         finally:
             staff4_audit.AUDIT_DIR = old_audit_dir
 

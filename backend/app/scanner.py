@@ -4526,7 +4526,7 @@ def build_transcription_completion(
         "Expansion search now includes raw detected note series, not only already-ranked score candidate cards.",
         "Staff 4 source-audio rescanning now extracts a fresh window around the accepted source/audio anchor and adds its events to the exact-MIDI search pool.",
         "Staff 4 adjacent mining now searches stored May 3 audio-note windows for the exact right-1 and right-2 MIDI sequences before accepting another expansion.",
-        "A Staff 4 audit packet generator now creates audio/video, pitch-trace, and spectrogram evidence for the exact Eb5-versus-D5 expansion blocker.",
+        "A Staff 4 audit packet generator now ignores stale failed-note metadata when the current expansion already has full exact-MIDI audio, so the truth packet covers the whole seven-note phrase instead of only one clipped note.",
     ]
     if phrase_expansion_rejected_count:
         done_summary.append(f"{phrase_expansion_rejected_count} Staff 4 audited expansion is now locked as a rejected regression case.")

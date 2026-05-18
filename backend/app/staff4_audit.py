@@ -12,7 +12,7 @@ from .state import utc_now
 
 
 AUDIT_DIR = RUNTIME_DIR / "staff4-audit"
-STAFF4_AUDIT_VERSION = "staff4_phrase_audit_v2"
+STAFF4_AUDIT_VERSION = "staff4_phrase_audit_v3"
 
 
 def safe_slug(value: Any, fallback: str = "packet") -> str:
@@ -219,6 +219,96 @@ def list_int_at(values: Any, index: int | None) -> int | None:
     return int_or_none(values[index])
 
 
+def int_list(values: Any) -> list[int]:
+    if not isinstance(values, list):
+        return []
+    out: list[int] = []
+    for value in values:
+        parsed = int_or_none(value)
+        if parsed is None:
+            return []
+        out.append(parsed)
+    return out
+
+
+def staff4_current_has_exact_audio_phrase(current: dict[str, Any]) -> bool:
+    target_midis = int_list(current.get("targetMidiSequence"))
+    audio_midis = int_list(current.get("bestAudioMidiSequence"))
+    if len(target_midis) < 5 or target_midis != audio_midis:
+        return False
+    notes = current.get("bestAudioNotes") if isinstance(current.get("bestAudioNotes"), list) else []
+    if len(notes) < len(target_midis):
+        return bool(current.get("audioAgreed"))
+    note_midis = [int_or_none(note.get("midi")) if isinstance(note, dict) else None for note in notes[: len(target_midis)]]
+    if note_midis != target_midis:
+        return False
+    return all(isinstance(note, dict) and note.get("audioAgreement") is True for note in notes[: len(target_midis)])
+
+
+def staff4_audit_failure_for_completion(completion: dict[str, Any], current: dict[str, Any]) -> dict[str, Any]:
+    if staff4_current_has_exact_audio_phrase(current):
+        return {}
+    return first_failure_from_completion(completion) or failure_from_current_expansion(current)
+
+
+def staff4_full_phrase_audit_decision(packet: dict[str, Any]) -> dict[str, Any]:
+    target_midis = int_list(packet.get("targetMidiSequence"))
+    audio_midis = int_list(packet.get("bestAudioMidiSequence"))
+    stored_notes = packet.get("storedAudioNotes") if isinstance(packet.get("storedAudioNotes"), list) else []
+    stored_midis = [
+        int_or_none(note.get("midi")) if isinstance(note, dict) else None for note in stored_notes[: len(target_midis)]
+    ]
+    stored_audio_ready = (
+        len(target_midis) >= 5
+        and target_midis == audio_midis
+        and stored_midis == target_midis
+        and all(isinstance(note, dict) and note.get("audioAgreement") is True for note in stored_notes[: len(target_midis)])
+    )
+    source_crop_ready = bool(packet.get("score", {}).get("sourceCropReady")) if isinstance(packet.get("score"), dict) else False
+    truth_ready = bool(packet.get("score", {}).get("truthEvidenceAccepted")) if isinstance(packet.get("score"), dict) else False
+    status = "queued_gold_review"
+    outcome = "manual_review_required"
+    truth_decision = "pending_review"
+    accepted = False
+    can_extend = False
+    if stored_audio_ready and source_crop_ready and truth_ready:
+        status = "accepted_truth_candidate"
+        outcome = "accept_full_audio_agreed_source_phrase"
+        truth_decision = "accepted"
+        accepted = True
+        can_extend = True
+    elif stored_audio_ready and source_crop_ready:
+        status = "pending_source_lock"
+        outcome = "full_audio_agreed_source_phrase_pending_truth_lock"
+    elif stored_audio_ready:
+        status = "blocked_source_crop_required"
+        outcome = "full_audio_agreed_phrase_missing_source_crop"
+    elif target_midis and audio_midis:
+        status = "queued_gold_review"
+        outcome = "full_phrase_audio_sequence_needs_review"
+    return {
+        "status": status,
+        "outcome": outcome,
+        "truthDecision": truth_decision,
+        "accepted": accepted,
+        "rejected": False,
+        "canExtendStaff4Lane": can_extend,
+        "fullPhraseExactAudio": stored_audio_ready,
+        "targetNoteCount": len(target_midis),
+        "audioNoteCount": len(audio_midis),
+        "targetMidiSequence": target_midis,
+        "audioMidiSequence": audio_midis,
+        "goldReviewRequired": status in {"pending_source_lock", "queued_gold_review", "blocked_source_crop_required"},
+        "limit": (
+            "Accepted extension requires exact full-phrase audio, source crop, and truth lock."
+            if status == "pending_source_lock"
+            else "Full phrase accepted from exact audio, source crop, and truth lock."
+            if accepted
+            else "No full-phrase acceptance without exact audio and source evidence."
+        ),
+    }
+
+
 def staff4_audit_decision(packet: dict[str, Any], analysis: dict[str, Any], failure: dict[str, Any]) -> dict[str, Any]:
     expected_midi = int_or_none(failure.get("expectedMidi")) or int_or_none(packet.get("expectedNextScoreMidi"))
     expected_note = failure_source_note(failure) or str(packet.get("expectedNextScoreNote") or "")
@@ -348,6 +438,37 @@ def attach_staff4_audit_decision(
             "bestAudioSequence": packet.get("bestAudioSequence") or "",
             "clip": packet.get("clip") if isinstance(packet.get("clip"), dict) else {},
             "reason": decision.get("outcome") or decision.get("reason") or "",
+        }
+    if str(packet.get("status") or "") in {"generated", "needs_manual_audio_review", "detectors_disagree_with_stored_run", "detector_split_review_required"}:
+        packet["status"] = str(decision.get("status") or packet.get("status") or "queued_gold_review")
+    return packet
+
+
+def attach_staff4_full_phrase_decision(packet: dict[str, Any]) -> dict[str, Any]:
+    decision = staff4_full_phrase_audit_decision(packet)
+    packet["decision"] = decision
+    packet["truthDecision"] = decision.get("truthDecision") or "pending_review"
+    packet["canExtendStaff4Lane"] = bool(decision.get("canExtendStaff4Lane"))
+    packet["fullPhraseCheck"] = {
+        "targetNoteCount": decision.get("targetNoteCount"),
+        "audioNoteCount": decision.get("audioNoteCount"),
+        "targetMidiSequence": decision.get("targetMidiSequence") or [],
+        "audioMidiSequence": decision.get("audioMidiSequence") or [],
+        "exactAudio": bool(decision.get("fullPhraseExactAudio")),
+        "sourceCropReady": bool(packet.get("score", {}).get("sourceCropReady")) if isinstance(packet.get("score"), dict) else False,
+        "truthEvidenceAccepted": bool(packet.get("score", {}).get("truthEvidenceAccepted")) if isinstance(packet.get("score"), dict) else False,
+    }
+    if decision.get("goldReviewRequired"):
+        packet["goldReviewCandidate"] = {
+            "status": "queued",
+            "packetId": packet.get("packetId") or "",
+            "kind": "staff4_full_phrase_audio_score_audit",
+            "targetSequence": packet.get("targetSequence") or "",
+            "bestAudioSequence": packet.get("bestAudioSequence") or "",
+            "targetMidiSequence": decision.get("targetMidiSequence") or [],
+            "audioMidiSequence": decision.get("audioMidiSequence") or [],
+            "clip": packet.get("clip") if isinstance(packet.get("clip"), dict) else {},
+            "reason": decision.get("outcome") or "",
         }
     if str(packet.get("status") or "") in {"generated", "needs_manual_audio_review", "detectors_disagree_with_stored_run", "detector_split_review_required"}:
         packet["status"] = str(decision.get("status") or packet.get("status") or "queued_gold_review")
@@ -895,7 +1016,7 @@ def ensure_staff4_phrase_audit_packet(
         state["staff4PhraseAuditLatest"] = packet
         return packet
 
-    first_failure = first_failure_from_completion(completion) or failure_from_current_expansion(current)
+    first_failure = staff4_audit_failure_for_completion(completion, current)
     packet_id = packet_id_for_current(current, first_failure)
     existing_path = packet_json_path(packet_id)
     if existing_path.exists() and not force:
@@ -965,7 +1086,7 @@ def ensure_staff4_phrase_audit_packet(
         "sourceTitle": sample.get("title") or current.get("sourceTitle") or "",
         "sourceUrl": sample.get("url") or "",
         "status": "generated",
-        "auditFocus": "staff4_first_failed_adjacent_note" if first_failure else "staff4_current_expansion",
+        "auditFocus": "staff4_first_failed_adjacent_note" if first_failure else "staff4_full_exact_phrase",
         "truthDecision": "not_accepted",
         "gate": current.get("status") or "",
         "limit": current.get("limit") or "",
@@ -1010,7 +1131,10 @@ def ensure_staff4_phrase_audit_packet(
     if not source_path:
         packet["status"] = "blocked_media_missing"
         packet["limit"] = "The current Staff 4 sample is not present in runtime media storage, so audio/video artifacts cannot be generated."
-        attach_staff4_audit_decision(packet, {}, first_failure)
+        if first_failure:
+            attach_staff4_audit_decision(packet, {}, first_failure)
+        else:
+            attach_staff4_full_phrase_decision(packet)
         existing_path.write_text(json.dumps(packet, indent=2, sort_keys=True), encoding="utf-8")
         state["staff4PhraseAuditLatest"] = packet
         return packet
@@ -1026,7 +1150,10 @@ def ensure_staff4_phrase_audit_packet(
     if not audio_ok:
         packet["status"] = "blocked_audio_extract_failed"
         packet["limit"] = f"Audit audio extraction failed: {audio_output[-180:]}"
-        attach_staff4_audit_decision(packet, {}, first_failure)
+        if first_failure:
+            attach_staff4_audit_decision(packet, {}, first_failure)
+        else:
+            attach_staff4_full_phrase_decision(packet)
         existing_path.write_text(json.dumps(packet, indent=2, sort_keys=True), encoding="utf-8")
         state["staff4PhraseAuditLatest"] = packet
         return packet
@@ -1044,7 +1171,10 @@ def ensure_staff4_phrase_audit_packet(
     packet["artifacts"]["pitchTraceSvgUrl"] = artifact_url(packet_id, pitch_name)
     if write_spectrogram_svg(spectrogram_path, audio_path):
         packet["artifacts"]["spectrogramSvgUrl"] = artifact_url(packet_id, spectrogram_name)
-    attach_staff4_audit_decision(packet, analysis, first_failure)
+    if first_failure:
+        attach_staff4_audit_decision(packet, analysis, first_failure)
+    else:
+        attach_staff4_full_phrase_decision(packet)
     packet["nextAction"] = (
         "Lock this Staff 4 failure as rejected; do not extend the lane from this window."
         if packet.get("decision", {}).get("rejected")
@@ -1070,15 +1200,15 @@ def latest_staff4_phrase_audit_packet_for_completion(state: dict[str, Any], comp
     current = current_staff4_expansion(completion)
     if not current:
         return latest_staff4_phrase_audit_packet(state)
-    current_packet_id = packet_id_for_current(current, first_failure_from_completion(completion))
+    current_packet_id = packet_id_for_current(current, staff4_audit_failure_for_completion(completion, current))
     packet = state.get("staff4PhraseAuditLatest") if isinstance(state.get("staff4PhraseAuditLatest"), dict) else {}
-    if packet and str(packet.get("packetId") or "") == current_packet_id:
+    if packet and str(packet.get("packetId") or "") == current_packet_id and packet.get("version") == STAFF4_AUDIT_VERSION:
         return packet
     packet_path = packet_json_path(current_packet_id)
     if packet_path.exists():
         try:
             packet = json.loads(packet_path.read_text(encoding="utf-8"))
-            if isinstance(packet, dict):
+            if isinstance(packet, dict) and packet.get("version") == STAFF4_AUDIT_VERSION:
                 state["staff4PhraseAuditLatest"] = packet
                 return packet
         except (OSError, json.JSONDecodeError):
