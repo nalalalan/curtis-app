@@ -1167,7 +1167,7 @@ class TranscriptionCompletionTests(unittest.TestCase):
             "bestAttemptObservedConsensusNote": "D5",
         }
         fake_rescan = {
-            "version": "staff4_source_audio_rescan_v6",
+            "version": "staff4_source_audio_rescan_v7",
             "status": "rescanned",
             "runCount": 1,
             "eventCount": 0,

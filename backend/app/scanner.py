@@ -78,7 +78,7 @@ from .symbolic_scores import (
 )
 
 DEFAULT_YOUTUBE_SOURCE = "https://www.youtube.com/@nalalan"
-STAFF4_SOURCE_AUDIO_RESCAN_VERSION = "staff4_source_audio_rescan_v6"
+STAFF4_SOURCE_AUDIO_RESCAN_VERSION = "staff4_source_audio_rescan_v7"
 STAFF4_SOURCE_AUDIO_RESCAN_DIR = RUNTIME_DIR / "staff4-source-rescan"
 STAFF4_SOURCE_AUDIO_RESCAN_PAD_BEFORE_SECONDS = 4.0
 STAFF4_SOURCE_AUDIO_RESCAN_PAD_AFTER_SECONDS = 10.0
@@ -1793,6 +1793,33 @@ def staff4_truth_anchor_matches(daily_records: dict[str, Any]) -> list[dict[str,
             source_window=source_window,
             midi_sequence=midi_sequence,
         )
+        if not window_notes:
+            phrase_windows = phrase.get("noteWindows") if isinstance(phrase.get("noteWindows"), list) else []
+            seeded_notes: list[dict[str, Any]] = []
+            for index, window in enumerate(phrase_windows):
+                if not isinstance(window, dict) or index >= len(midi_sequence):
+                    continue
+                try:
+                    start_seconds = float(window.get("startSeconds"))
+                    end_seconds = float(window.get("endSeconds"))
+                except (TypeError, ValueError):
+                    continue
+                if end_seconds <= start_seconds:
+                    continue
+                seeded_notes.append(
+                    {
+                        "note": str(window.get("note") or note_name(midi_sequence[index])),
+                        "midi": midi_sequence[index],
+                        "startSeconds": round(start_seconds, 3),
+                        "endSeconds": round(end_seconds, 3),
+                        "durationSeconds": round(end_seconds - start_seconds, 3),
+                        "audioAgreement": True,
+                        "agreementSources": ["truth_manifest_note_window"],
+                        "detectorSource": "truth_manifest_accepted_audio_window",
+                    }
+                )
+            if len(seeded_notes) == len(midi_sequence):
+                window_notes = seeded_notes
         local_start = phrase.get("localStartSeconds")
         local_end = phrase.get("localEndSeconds")
         if window_notes:

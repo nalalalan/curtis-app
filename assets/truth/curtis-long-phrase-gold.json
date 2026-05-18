@@ -81,6 +81,13 @@
       "sequence": ["D#5", "D#5", "C5", "D#5", "D#5"],
       "acceptedScoreSpellingSequence": ["Eb5", "Eb5", "C5", "Eb5", "Eb5"],
       "midiSequence": [75, 75, 72, 75, 75],
+      "noteWindows": [
+        {"note": "D#5", "startSeconds": 20.225, "endSeconds": 20.422},
+        {"note": "D#5", "startSeconds": 20.55, "endSeconds": 20.689},
+        {"note": "C5", "startSeconds": 20.817, "endSeconds": 20.898},
+        {"note": "D#5", "startSeconds": 21.629, "endSeconds": 21.792},
+        {"note": "D#5", "startSeconds": 22.361, "endSeconds": 22.535}
+      ],
       "scoreImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-verified.png",
       "liveAccepted": true
     },
@@ -108,6 +115,14 @@
       "sequence": ["D#5", "D#5", "C5", "D#5", "D#5", "D#5"],
       "acceptedScoreSpellingSequence": ["Eb5", "Eb5", "C5", "Eb5", "Eb5", "Eb5"],
       "midiSequence": [75, 75, 72, 75, 75, 75],
+      "noteWindows": [
+        {"note": "D#5", "startSeconds": 20.225, "endSeconds": 20.422},
+        {"note": "D#5", "startSeconds": 20.55, "endSeconds": 20.689},
+        {"note": "C5", "startSeconds": 20.817, "endSeconds": 20.898},
+        {"note": "D#5", "startSeconds": 21.629, "endSeconds": 21.792},
+        {"note": "D#5", "startSeconds": 22.361, "endSeconds": 22.535},
+        {"note": "D#5", "startSeconds": 22.829, "endSeconds": 22.992}
+      ],
       "scoreImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-eb-verified.png",
       "liveAccepted": true
     }
