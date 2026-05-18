@@ -1742,6 +1742,13 @@ def staff4_anchor_audio_window_from_runs(
     return {}, []
 
 
+def staff4_anchor_midi_supported(anchor_midi: list[int]) -> bool:
+    return (
+        len(anchor_midi) >= len(STAFF4_ACCEPTED_ANCHOR_MIDI)
+        and anchor_midi[: len(STAFF4_ACCEPTED_ANCHOR_MIDI)] == STAFF4_ACCEPTED_ANCHOR_MIDI
+    )
+
+
 def staff4_truth_anchor_matches(daily_records: dict[str, Any]) -> list[dict[str, Any]]:
     truth = load_long_phrase_truth()
     phrases = truth.get("positiveSourcePhrases") if isinstance(truth.get("positiveSourcePhrases"), list) else []
@@ -1755,13 +1762,17 @@ def staff4_truth_anchor_matches(daily_records: dict[str, Any]) -> list[dict[str,
     }
     target, score, source_notes = staff4_truth_anchor_source()
     anchors: list[dict[str, Any]] = []
-    for phrase in phrases:
+    for phrase in sorted(
+        (item for item in phrases if isinstance(item, dict)),
+        key=lambda item: len([value for value in item.get("midiSequence") or [] if isinstance(value, int)]),
+        reverse=True,
+    ):
         if not isinstance(phrase, dict):
             continue
         if phrase.get("liveAccepted") is not True and str(phrase.get("status") or "") != "accepted_truth":
             continue
         midi_sequence = [int(value) for value in phrase.get("midiSequence") or [] if isinstance(value, int)]
-        if midi_sequence != STAFF4_ACCEPTED_ANCHOR_MIDI:
+        if not staff4_anchor_midi_supported(midi_sequence):
             continue
         source = sources_by_id.get(str(phrase.get("sourceId") or ""))
         if not isinstance(source, dict):
@@ -1772,7 +1783,7 @@ def staff4_truth_anchor_matches(daily_records: dict[str, Any]) -> list[dict[str,
         reference_start = int(source.get("referenceStart") or 0)
         reference_end = int(source.get("referenceEnd") or reference_start)
         anchor_slice = source_notes[reference_start:reference_end] if source_notes else []
-        if note_midi_values(anchor_slice) != STAFF4_ACCEPTED_ANCHOR_MIDI:
+        if note_midi_values(anchor_slice) != midi_sequence:
             continue
         sample_id = str(phrase.get("sampleId") or "")
         source_window = str(phrase.get("sourceWindow") or "")
@@ -1780,7 +1791,7 @@ def staff4_truth_anchor_matches(daily_records: dict[str, Any]) -> list[dict[str,
             daily_records,
             sample_id=sample_id,
             source_window=source_window,
-            midi_sequence=STAFF4_ACCEPTED_ANCHOR_MIDI,
+            midi_sequence=midi_sequence,
         )
         local_start = phrase.get("localStartSeconds")
         local_end = phrase.get("localEndSeconds")
@@ -1823,7 +1834,7 @@ def staff4_truth_anchor_matches(daily_records: dict[str, Any]) -> list[dict[str,
                 "referenceStart": reference_start,
                 "referenceEnd": reference_end,
                 "anchorSequence": note_exact_label(anchor_slice),
-                "anchorMidiSequence": STAFF4_ACCEPTED_ANCHOR_MIDI,
+                "anchorMidiSequence": midi_sequence,
                 "sampleId": sample_id,
                 "sourceWindow": source_window,
                 "anchorLocalStartSeconds": round(local_start, 3),
@@ -1833,6 +1844,31 @@ def staff4_truth_anchor_matches(daily_records: dict[str, Any]) -> list[dict[str,
             }
         )
     return anchors
+
+
+def prefer_longest_staff4_anchors(anchors: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    preferred: dict[tuple[str, str, str, int], dict[str, Any]] = {}
+    others: list[dict[str, Any]] = []
+    for anchor in anchors:
+        midi = [int(value) for value in anchor.get("anchorMidiSequence") or [] if isinstance(value, int)]
+        key = (
+            str(anchor.get("practiceDay") or ""),
+            str(anchor.get("sampleId") or ""),
+            str(anchor.get("sourceWindow") or ""),
+            int(anchor.get("referenceStart") or 0),
+        )
+        if staff4_anchor_midi_supported(midi):
+            current = preferred.get(key)
+            current_midi = (
+                [int(value) for value in current.get("anchorMidiSequence") or [] if isinstance(value, int)]
+                if isinstance(current, dict)
+                else []
+            )
+            if current is None or len(midi) > len(current_midi):
+                preferred[key] = anchor
+        else:
+            others.append(anchor)
+    return others + list(preferred.values())
 
 
 def staff4_anchor_matches(daily_records: dict[str, Any]) -> list[dict[str, Any]]:
@@ -1858,7 +1894,7 @@ def staff4_anchor_matches(daily_records: dict[str, Any]) -> list[dict[str, Any]]
             reference_end = int(match.get("referenceEnd") or reference_start)
             anchor_slice = source_notes[reference_start:reference_end]
             anchor_midi = note_midi_values(anchor_slice)
-            if anchor_midi != STAFF4_ACCEPTED_ANCHOR_MIDI:
+            if not staff4_anchor_midi_supported(anchor_midi):
                 continue
             detected = match.get("detectedSeries") if isinstance(match.get("detectedSeries"), dict) else {}
             clip = match.get("clip") if isinstance(match.get("clip"), dict) else {}
@@ -1921,7 +1957,7 @@ def staff4_anchor_matches(daily_records: dict[str, Any]) -> list[dict[str, Any]]
         seen.add(identity)
         source_seen.add(source_identity)
         anchors.append(anchor)
-    return anchors
+    return prefer_longest_staff4_anchors(anchors)
 
 
 def staff4_rescan_id(sample_id: str, source_path: Path, scan_start: float, scan_end: float, scan_label: str = "") -> str:
@@ -2143,7 +2179,7 @@ def staff4_adjacent_source_targets(anchor: dict[str, Any]) -> list[dict[str, Any
     anchor_slice = source_notes[reference_start:reference_end]
     if not anchor_midi:
         anchor_midi = note_midi_values(anchor_slice)
-    if anchor_midi != STAFF4_ACCEPTED_ANCHOR_MIDI:
+    if not staff4_anchor_midi_supported(anchor_midi):
         return []
     targets: list[dict[str, Any]] = []
     max_end = min(len(source_notes), reference_start + STAFF4_ADJACENT_GUIDED_MAX_TARGET_NOTES)
@@ -3211,7 +3247,7 @@ def staff4_adjacent_phrase_mining(
         reference_start = int(anchor.get("referenceStart") or 0)
         reference_end = int(anchor.get("referenceEnd") or reference_start)
         anchor_midi = [int(value) for value in anchor.get("anchorMidiSequence") or [] if isinstance(value, int)]
-        if anchor_midi != STAFF4_ACCEPTED_ANCHOR_MIDI:
+        if not staff4_anchor_midi_supported(anchor_midi):
             continue
         anchor_count += 1
         anchor_sample_id = str(anchor.get("sampleId") or "")
@@ -3428,15 +3464,9 @@ def rejected_staff4_case_for_candidate(
     run = best_window.get("run") if isinstance(best_window.get("run"), dict) else {}
     observed_midi = int_sequence(best_window.get("windowMidiSequence"))
     for case in cases:
-        if str(case.get("direction") or "") != direction:
-            continue
         if int(case.get("targetReferenceStart") or -1) != start:
             continue
         if int(case.get("targetReferenceEnd") or -1) != end:
-            continue
-        if str(case.get("sampleId") or "") and str(case.get("sampleId") or "") != str(run.get("sampleId") or ""):
-            continue
-        if str(case.get("sourceWindow") or "") and str(case.get("sourceWindow") or "") != str(run.get("sourceWindow") or ""):
             continue
         expected_source = int_sequence(case.get("expectedSourceMidiSequence"))
         if expected_source and expected_source != source_midi:
@@ -3476,8 +3506,6 @@ def source_phrase_expansion_harness(
             continue
         anchor_count += 1
         candidates: list[tuple[str, int, int]] = []
-        if reference_start > 0:
-            candidates.append(("left-1", reference_start - 1, reference_end))
         if reference_end < len(source_notes):
             candidates.append(("right-1", reference_start, reference_end + 1))
         if reference_end + 1 < len(source_notes):
@@ -3602,7 +3630,17 @@ def source_phrase_expansion_harness(
     ready_count = sum(1 for item in items if item.get("status") == "ready_for_truth_review")
     rejected_count = sum(1 for item in items if item.get("status") == "rejected_regression")
     blocked_count = sum(1 for item in items if str(item.get("status") or "").startswith("blocked") or item.get("status") == "rejected_regression")
-    current = items[0] if items else {}
+    accepted_note_count = max(
+        [int(item.get("sourceNoteCount") or 0) for item in items if item.get("status") == "accepted_source_audio_expansion"]
+        + [0]
+    )
+    open_extension_items = [
+        item
+        for item in items
+        if item.get("status") not in {"accepted_source_audio_expansion", "rejected_regression"}
+        and int(item.get("sourceNoteCount") or 0) > accepted_note_count
+    ]
+    current = open_extension_items[0] if open_extension_items else items[0] if items else {}
     return {
         "status": "accepted" if accepted_count else "ready" if items else "empty",
         "anchorCount": anchor_count,
@@ -3618,7 +3656,9 @@ def source_phrase_expansion_harness(
         "currentBest": current,
         "items": items[: max(0, int(limit))],
         "nextAction": (
-            "Promote the accepted expansion into the visible score/audio lane."
+            f"Audit the next Staff 4 {current.get('sourceNoteCount')}-note expansion from the accepted lane."
+            if accepted_count and current in open_extension_items
+            else "Promote the accepted expansion into the visible score/audio lane."
             if accepted_count
             else "Keep the accepted Staff 4 anchor fixed and search adjacent audio candidates until the next source note agrees."
             if items
@@ -4543,7 +4583,13 @@ def build_transcription_completion(
             "target": "Tests fail on mismatched audio/notation, wrong score boxes, missing media, and fake practice time.",
         },
     ]
-    if phrase_expansion_current and phrase_expansion_accepted_count:
+    phrase_expansion_current_status = str(phrase_expansion_current.get("status") or "") if phrase_expansion_current else ""
+    if phrase_expansion_current and phrase_expansion_current_status == "ready_for_truth_review":
+        next_action = (
+            f"Audit the next Staff 4 {phrase_expansion_current.get('sourceNoteCount') or ''}-note expansion; "
+            "exact MIDI and audio agree, but accepted truth evidence is still required before display."
+        )
+    elif phrase_expansion_current and phrase_expansion_current_status == "accepted_source_audio_expansion":
         next_action = (
             f"Promote the accepted Staff 4 {phrase_expansion_current.get('direction') or 'adjacent'} "
             f"{phrase_expansion_current.get('sourceNoteCount') or ''}-note expansion, then audit the next adjacent source window."

@@ -586,6 +586,8 @@ The 2026-05-17 08:40 PM EDT Staff 4 first-failure audit gate adds the review loo
 
 The 2026-05-17 10:46 PM EDT Staff 4 right-1 promotion converts the current exact audio candidate into accepted source/audio truth. The accepted phrase is source \texttt{Eb5 Eb5 C5 Eb5 Eb5 Eb5}, detected audio \texttt{D\#5 D\#5 C5 D\#5 D\#5 D\#5}, exact MIDI \texttt{75 75 72 75 75 75}, local \texttt{20.225--22.992} inside \texttt{Njh8\_zq9\_DM-8835}, with the new actual-source crop \texttt{wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-eb-verified.png}. The truth manifest now has two live accepted Staff 4 source/audio phrases and four verified positive source phrases. The right-2 seven-note lane remains the next audit target; it cannot inherit acceptance from the six-note prefix.
 
+The 2026-05-17 11:34 PM EDT anchor-advancement pass fixes the next source of circular work. The Staff 4 harness now prefers the longest accepted source/audio phrase that begins with the verified Staff 4 MIDI prefix, so the six-note accepted lane becomes the expansion base instead of the older five-note anchor. Expansion now moves rightward from that accepted lane; the previous left-side or shorter-prefix windows are no longer treated as the current task. The next source target is therefore exactly the seven-note lane \texttt{Eb5 Eb5 C5 Eb5 Eb5 Eb5 C5}. If audio evidence for that full MIDI sequence is found, it can become \texttt{ready\_for\_truth\_review}; it still cannot display as accepted until the exact source crop, local audio/video, transcription glyphs, and truth gate all agree. The stale sixth-note failure wording was also retired because the sixth note is now accepted; the unresolved boundary is the seventh source note, \texttt{C5}.
+
 The remaining M1 work is continuing the low-cost media pass over every unmeasured strict-ledger video in chronological windows, then replacing the sample-biased estimate with full-archive checked intervals. The remaining M10 work is the larger benchmark suite for repeated notes, arpeggios, fast runs, score-free exercises, score-coordinate truth, accepted notation/media completeness, and practice-time accounting regressions.
 
 The long-phrase track should now run in parallel with full-archive scanning. Waiting for all 234 h 57 min of archive coverage before extending one musical lane would be too slow. The faster strategy is a narrow accepted-measure lane:
@@ -599,8 +601,8 @@ The long-phrase track should now run in parallel with full-archive scanning. Wai
 
 The next coding pass should:
 \begin{enumerate}
-    \item promote the accepted six-note Staff 4 lane into the visible compact grouped score--clip--audio--transcription pair after live deploy verification;
-    \item generate or update the next Staff 4 right-2 audit packet for \texttt{Eb5 Eb5 C5 Eb5 Eb5 Eb5 C5};
+    \item keep the accepted six-note Staff 4 lane as the only expansion base;
+    \item generate or update the next Staff 4 seven-note audit packet for \texttt{Eb5 Eb5 C5 Eb5 Eb5 Eb5 C5};
     \item compare the right-2 source sequence, detected sequence, source crop range, pitch trace, and local audio/video before any acceptance;
     \item accept a longer compact grouped score--clip--audio--transcription pair only if the expanded exact MIDI sequence, paired audio, source crop, and truth gate all pass;
     \item keep reporting the first blocking note when an expansion fails so the next extraction attempt has a precise target;

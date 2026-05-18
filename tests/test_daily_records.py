@@ -1257,8 +1257,8 @@ class DailyRecordTests(unittest.TestCase):
         self.assertTrue(extension_source["visibleScoreExactNoteSequenceVerified"])
         self.assertTrue(extension_source["scoreBoxCenterAgreement"])
         self.assertFalse(extension_source["truthEvidenceAccepted"])
-        self.assertEqual(extension_source["extensionCheck"]["expectedNextScoreNote"], "Eb5")
-        self.assertEqual(extension_source["extensionCheck"]["observedNextAudioNote"], "D5")
+        self.assertEqual(extension_source["extensionCheck"]["expectedNextScoreNote"], "C5")
+        self.assertEqual(extension_source["extensionCheck"]["observedNextAudioNote"], "")
         accepted_source = next(
             item
             for item in target["symbolicScore"]["sourceSnippets"]

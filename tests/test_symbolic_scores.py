@@ -426,8 +426,8 @@ class SymbolicScoreTests(unittest.TestCase):
         )
         self.assertEqual(extension["visibleScoreExactNoteSequence"], ["Eb5", "Eb5", "C5", "Eb5", "Eb5", "Eb5", "C5"])
         self.assertFalse(extension["truthEvidenceAccepted"])
-        self.assertEqual(extension["extensionCheck"]["expectedNextScoreNote"], "Eb5")
-        self.assertEqual(extension["extensionCheck"]["observedNextAudioNote"], "D5")
+        self.assertEqual(extension["extensionCheck"]["expectedNextScoreNote"], "C5")
+        self.assertEqual(extension["extensionCheck"]["observedNextAudioNote"], "")
 
     def test_wieniawski_lower_octave_opening_map_is_rejected(self):
         target = wieniawski_reference_target()
