@@ -15,6 +15,7 @@ from backend.app.scanner import (
     reference_phrase_candidate_top,
     source_verification_target_count,
     source_verification_target_top,
+    staff4_continuity_probe_for_anchor,
     staff4_source_audio_rescan_record,
 )
 
@@ -223,7 +224,7 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertTrue(any(item["label"] == "Score heat map" and item["value"] == "1" for item in completion["implementationCurrent"]))
         self.assertGreaterEqual(completion["completionExactPercent"], 45)
 
-    def test_staff4_phrase_expansion_gate_blocks_adjacent_audio_mismatch(self):
+    def test_staff4_rejected_visible_source_range_blocks_adjacent_expansion(self):
         daily_records = {
             "recordCount": 1,
             "audioEvidenceRecordCount": 1,
@@ -343,35 +344,25 @@ class TranscriptionCompletionTests(unittest.TestCase):
 
         harness = completion["phraseExpansionHarness"]
         current = harness["currentBest"]
-        self.assertEqual(harness["anchorCount"], 1)
-        self.assertEqual(harness["status"], "ready")
-        self.assertEqual(harness["acceptedAnchorNoteCount"], 7)
-        self.assertEqual(harness["targetCount"], 1)
+        self.assertEqual(harness["anchorCount"], 0)
+        self.assertEqual(harness["status"], "empty")
+        self.assertEqual(harness["acceptedAnchorNoteCount"], 0)
+        self.assertEqual(harness["targetCount"], 0)
         self.assertEqual(harness["acceptedExpansionCount"], 0)
-        self.assertEqual(harness["blockedExpansionCount"], 1)
+        self.assertEqual(harness["blockedExpansionCount"], 0)
         self.assertEqual(harness["rejectedRegressionCount"], 0)
-        rejected = [item for item in harness["items"] if item["status"] == "rejected_regression"]
-        self.assertEqual(len(rejected), 0)
-        self.assertEqual(current["status"], "blocked_audio_mismatch")
-        self.assertEqual(current["direction"], "right-1")
-        self.assertEqual(current["targetSequence"], "Eb5 Eb5 C5 Eb5 Eb5 Eb5 C5 A4")
-        self.assertEqual(current["targetMidiSequence"], [75, 75, 72, 75, 75, 75, 72, 69])
-        self.assertEqual(current["expectedNextScoreNote"], "A4")
-        self.assertEqual(current["expectedNextScoreMidi"], 69)
-        self.assertEqual(current["bestAudioSequence"], "")
-        self.assertEqual(current["sourceImageUrl"], "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-eb-c-a-source.png")
-        self.assertFalse(current["truthEvidenceAccepted"])
-        self.assertEqual(completion["phraseExpansionCurrentStatus"], "blocked_audio_mismatch")
+        self.assertEqual(current, {})
+        self.assertEqual(completion["phraseExpansionCurrentStatus"], "empty")
         self.assertEqual(completion["phraseExpansionRejectedRegressionCount"], 0)
         mining = completion["staff4AdjacentMining"]
-        self.assertEqual(mining["status"], "not_found")
+        self.assertEqual(mining["status"], "no_staff4_anchor")
         self.assertEqual(mining["exactCandidateCount"], 0)
         self.assertEqual(mining["searchedWindowCount"], 0)
         self.assertEqual(mining.get("nearestWindow") or {}, {})
-        self.assertEqual(completion["staff4AdjacentMiningStatus"], "not_found")
-        self.assertIn("A4", completion["nextAction"])
+        self.assertEqual(completion["staff4AdjacentMiningStatus"], "no_staff4_anchor")
+        self.assertIn("Reverify one May 3 source-score crop", completion["nextAction"])
 
-    def test_staff4_phrase_expansion_searches_raw_detected_series(self):
+    def test_staff4_rejected_anchor_blocks_raw_detected_series_promotion(self):
         daily_records = {
             "recordCount": 1,
             "audioEvidenceRecordCount": 1,
@@ -503,23 +494,17 @@ class TranscriptionCompletionTests(unittest.TestCase):
         harness = completion["phraseExpansionHarness"]
         current = harness["currentBest"]
         self.assertEqual(harness["rawDetectedAudioRunCount"], 1)
-        self.assertEqual(current["status"], "ready_for_truth_review")
-        self.assertEqual(current["direction"], "right-1")
-        self.assertEqual(current["targetSequence"], "Eb5 Eb5 C5 Eb5 Eb5 Eb5 C5 A4")
-        self.assertEqual(current["bestAudioSequence"], "D#5 D#5 C5 D#5 D#5 D#5 C5 A4")
-        self.assertEqual(current["bestExactCount"], 8)
-        self.assertEqual(current["bestPrefixCount"], 8)
-        self.assertEqual(current["audioRunSource"], "raw_detected_series")
-        self.assertEqual(current["sourceImageUrl"], "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-eb-c-a-source.png")
-        self.assertEqual(completion["phraseExpansionReadyForReviewCount"], 1)
-        self.assertGreaterEqual(completion["phraseExpansionAcceptedCount"], 2)
+        self.assertEqual(harness["anchorCount"], 0)
+        self.assertEqual(harness["status"], "empty")
+        self.assertEqual(current, {})
+        self.assertEqual(completion["phraseExpansionReadyForReviewCount"], 0)
+        self.assertEqual(completion["phraseExpansionAcceptedCount"], 0)
         mining = completion["staff4AdjacentMining"]
-        self.assertEqual(mining["status"], "exact_audio_candidate")
-        self.assertGreaterEqual(mining["exactCandidateCount"], 3)
-        self.assertEqual(mining["bestCandidate"]["targetDirection"], "right-1")
-        self.assertEqual(mining["bestCandidate"]["windowSequence"], "D#5 D#5 C5 D#5 D#5 D#5 C5 A4")
-        self.assertEqual(completion["staff4AdjacentMiningStatus"], "exact_audio_candidate")
-        self.assertIn("Audit the next Staff 4 8-note expansion", completion["nextAction"])
+        self.assertEqual(mining["status"], "no_staff4_anchor")
+        self.assertEqual(mining["exactCandidateCount"], 0)
+        self.assertEqual(mining["bestCandidate"], {})
+        self.assertEqual(completion["staff4AdjacentMiningStatus"], "no_staff4_anchor")
+        self.assertIn("Reverify one May 3 source-score crop", completion["nextAction"])
 
     def test_staff4_exact_midi_search_rejects_stitched_discontinuous_phrase(self):
         runs = [
@@ -554,7 +539,160 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertFalse(search["exactCandidates"][0]["phraseContinuous"])
         self.assertGreater(search["exactCandidates"][0]["phraseContinuity"]["maxInterNoteGapSeconds"], 8.0)
 
-    def test_staff4_source_audio_rescan_feeds_exact_midi_search(self):
+    def test_staff4_continuity_probe_rescans_late_note_without_truth_stitching(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source_path = Path(temp_dir) / "staff4-source.wav"
+            write_tiny_wav(source_path)
+
+            def fake_extract(_source, target, _start, _end):
+                write_tiny_wav(target, seconds=5)
+                return True, ""
+
+            fake_transcription = {
+                "events": [note("G4", 0.10), note("A4", 3.20)],
+                "scoreMatchCandidateNotes": [],
+                "quality": {"segmentationSource": "raw_probe_negative", "audioAgreementEventCount": 2},
+            }
+            anchor = {
+                "practiceDay": "2026-05-03",
+                "pieceTitle": "Wieniawski Scherzo-Tarantelle, Op. 16",
+                "anchorSequence": "Eb5 Eb5 C5 Eb5 Eb5 Eb5 C5",
+                "anchorMidiSequence": [75, 75, 72, 75, 75, 75, 72],
+                "sourceNotes": [
+                    {"note": "Eb5", "midi": 75},
+                    {"note": "Eb5", "midi": 75},
+                    {"note": "C5", "midi": 72},
+                    {"note": "Eb5", "midi": 75},
+                    {"note": "Eb5", "midi": 75},
+                    {"note": "Eb5", "midi": 75},
+                    {"note": "C5", "midi": 72},
+                    {"note": "A4", "midi": 69},
+                ],
+                "referenceStart": 0,
+                "referenceEnd": 7,
+                "sampleId": "accepted-anchor",
+                "sourceWindow": "*8835-8925",
+                "anchorLocalStartSeconds": 20.225,
+                "anchorLocalEndSeconds": 23.280,
+            }
+            stitched_runs = [
+                {
+                    "practiceDay": "2026-05-03",
+                    "sampleId": "accepted-anchor",
+                    "sourceWindow": "*8835-8925",
+                    "runSource": "truth_manifest_accepted_audio_window",
+                    "notes": [
+                        note("D#5", 20.225),
+                        note("D#5", 20.550),
+                        note("C5", 20.817),
+                        note("D#5", 21.629),
+                        note("D#5", 22.361),
+                        note("D#5", 22.829),
+                        note("C5", 23.117),
+                        note("A4", 32.265),
+                    ],
+                }
+            ]
+
+            with patch("backend.app.scanner.run_ffmpeg_extract_audio", side_effect=fake_extract), patch(
+                "backend.app.scanner.transcribe_audio_array",
+                return_value=fake_transcription,
+            ):
+                probes = staff4_continuity_probe_for_anchor(
+                    anchor,
+                    {"id": "accepted-anchor", "path": str(source_path), "window": "*8835-8925"},
+                    source_path,
+                    stitched_runs,
+                )
+
+        self.assertEqual(probes[0]["status"], "no_continuous_exact_midi_in_probe")
+        self.assertEqual(probes[0]["probeWindow"]["label"], "continuity_probe_raw_right-1")
+        self.assertFalse(probes[0]["record"]["guidedContext"])
+        self.assertGreater(probes[0]["triggerCandidate"]["phraseContinuity"]["maxInterNoteGapSeconds"], 8.0)
+        run_sources = {run.get("runSource") for run in probes[0]["record"]["runs"]}
+        self.assertNotIn("truth_manifest_accepted_audio_window", run_sources)
+        self.assertEqual(probes[0]["probeSearch"]["exactCandidateCount"], 0)
+
+    def test_staff4_continuity_probe_accepts_only_continuous_exact_audio_candidate(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source_path = Path(temp_dir) / "staff4-source.wav"
+            write_tiny_wav(source_path)
+
+            def fake_extract(_source, target, _start, _end):
+                write_tiny_wav(target, seconds=5)
+                return True, ""
+
+            fake_transcription = {
+                "events": [
+                    note("D#5", 0.00),
+                    note("D#5", 0.16),
+                    note("C5", 0.32),
+                    note("D#5", 0.48),
+                    note("D#5", 0.64),
+                    note("D#5", 0.80),
+                    note("C5", 0.96),
+                    note("A4", 1.12),
+                ],
+                "scoreMatchCandidateNotes": [],
+                "quality": {"segmentationSource": "raw_probe_positive", "audioAgreementEventCount": 8},
+            }
+            anchor = {
+                "practiceDay": "2026-05-03",
+                "pieceTitle": "Wieniawski Scherzo-Tarantelle, Op. 16",
+                "anchorSequence": "Eb5 Eb5 C5 Eb5 Eb5 Eb5 C5",
+                "anchorMidiSequence": [75, 75, 72, 75, 75, 75, 72],
+                "sourceNotes": [
+                    {"note": "Eb5", "midi": 75},
+                    {"note": "Eb5", "midi": 75},
+                    {"note": "C5", "midi": 72},
+                    {"note": "Eb5", "midi": 75},
+                    {"note": "Eb5", "midi": 75},
+                    {"note": "Eb5", "midi": 75},
+                    {"note": "C5", "midi": 72},
+                    {"note": "A4", "midi": 69},
+                ],
+                "referenceStart": 0,
+                "referenceEnd": 7,
+                "sampleId": "accepted-anchor",
+                "sourceWindow": "*8835-8925",
+                "anchorLocalStartSeconds": 20.225,
+                "anchorLocalEndSeconds": 23.280,
+            }
+            stitched_runs = [
+                {
+                    "practiceDay": "2026-05-03",
+                    "sampleId": "accepted-anchor",
+                    "sourceWindow": "*8835-8925",
+                    "runSource": "truth_manifest_accepted_audio_window",
+                    "notes": [
+                        note("D#5", 20.225),
+                        note("D#5", 20.550),
+                        note("C5", 20.817),
+                        note("D#5", 21.629),
+                        note("D#5", 22.361),
+                        note("D#5", 22.829),
+                        note("C5", 23.117),
+                        note("A4", 32.265),
+                    ],
+                }
+            ]
+
+            with patch("backend.app.scanner.run_ffmpeg_extract_audio", side_effect=fake_extract), patch(
+                "backend.app.scanner.transcribe_audio_array",
+                return_value=fake_transcription,
+            ):
+                probes = staff4_continuity_probe_for_anchor(
+                    anchor,
+                    {"id": "accepted-anchor", "path": str(source_path), "window": "*8835-8925"},
+                    source_path,
+                    stitched_runs,
+                )
+
+        self.assertEqual(probes[0]["status"], "continuous_exact_audio_candidate")
+        self.assertEqual(probes[0]["probeSearch"]["exactCandidateCount"], 1)
+        self.assertTrue(probes[0]["probeSearch"]["bestExactContinuous"])
+
+    def test_staff4_source_audio_rescan_requires_non_rejected_anchor(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             source_path = Path(temp_dir) / "staff4-source.wav"
             write_tiny_wav(source_path)
@@ -704,25 +842,17 @@ class TranscriptionCompletionTests(unittest.TestCase):
                     [{"transcriptionId": "t1"}],
                 )
 
-        self.assertEqual(completion["staff4SourceAudioRescanStatus"], "rescanned")
-        self.assertEqual(completion["staff4SourceAudioRescanRunCount"], 5)
-        self.assertEqual(completion["staff4SourceAudioRescanAnchorStatus"], "reproduced")
-        self.assertEqual(completion["staff4SourceAudioRescanAnchorReproducedCount"], 1)
-        self.assertEqual(completion["staff4SourceAudioRescan"]["scanWindowCount"], 6)
-        self.assertEqual(completion["staff4SourceAudioRescan"]["anchorReproductionStatus"], "reproduced")
-        self.assertEqual(
-            completion["staff4SourceAudioRescan"]["scanWindowLabels"],
-            ["anchor_core", "right_1", "right_2", "right_3", "right_4"],
-        )
-        self.assertEqual(completion["phraseExpansionSourceAudioRescanRunCount"], 5)
-        self.assertEqual(completion["phraseExpansionHarness"]["currentBest"]["audioRunSource"], "staff4_source_audio_rescan")
-        self.assertEqual(completion["phraseExpansionHarness"]["currentBest"]["status"], "ready_for_truth_review")
-        self.assertEqual(completion["phraseExpansionHarness"]["currentBest"]["direction"], "right-1")
-        self.assertEqual(completion["phraseExpansionHarness"]["currentBest"]["targetSequence"], "Eb5 Eb5 C5 Eb5 Eb5 Eb5 C5 A4")
-        self.assertEqual(completion["phraseExpansionHarness"]["currentBest"]["sourceImageUrl"], "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-eb-c-a-source.png")
-        self.assertEqual(completion["staff4AdjacentMiningStatus"], "exact_audio_candidate")
-        self.assertEqual(completion["staff4AdjacentMining"]["bestCandidate"]["audioRunSource"], "staff4_source_audio_rescan")
-        self.assertEqual(completion["staff4AdjacentMining"]["bestCandidate"]["windowSequence"], "D#5 D#5 C5 D#5 D#5 D#5 C5 A4")
+        self.assertEqual(completion["staff4SourceAudioRescanStatus"], "no_staff4_anchor")
+        self.assertEqual(completion["staff4SourceAudioRescanRunCount"], 0)
+        self.assertEqual(completion["staff4SourceAudioRescanAnchorStatus"], "missing")
+        self.assertEqual(completion["staff4SourceAudioRescanAnchorReproducedCount"], 0)
+        self.assertEqual(completion["staff4SourceAudioRescan"]["scanWindowCount"], 0)
+        self.assertEqual(completion["phraseExpansionSourceAudioRescanRunCount"], 0)
+        self.assertEqual(completion["phraseExpansionHarness"]["anchorCount"], 0)
+        self.assertEqual(completion["phraseExpansionHarness"]["currentBest"], {})
+        self.assertEqual(completion["staff4AdjacentMiningStatus"], "no_staff4_anchor")
+        self.assertEqual(completion["staff4AdjacentMining"]["bestCandidate"], {})
+        self.assertIn("Reverify one May 3 source-score crop", completion["nextAction"])
 
     def test_staff4_source_audio_rescan_guided_anchor_reproduces_when_broad_pass_misses(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1568,7 +1698,7 @@ class TranscriptionCompletionTests(unittest.TestCase):
             "bestAttemptObservedConsensusNote": "D5",
         }
         fake_rescan = {
-            "version": "staff4_source_audio_rescan_v11",
+            "version": "staff4_source_audio_rescan_v12",
             "status": "rescanned",
             "runCount": 1,
             "eventCount": 0,
@@ -1644,7 +1774,7 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertIn("Eb5", completion["nextAction"])
         self.assertIn("D5", completion["nextAction"])
 
-    def test_staff4_truth_manifest_anchor_persists_without_visible_match_group(self):
+    def test_staff4_truth_manifest_anchor_is_not_live_after_visible_mismatch_rejection(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             source_path = Path(temp_dir) / "staff4-source.wav"
             write_tiny_wav(source_path)
@@ -1734,24 +1864,20 @@ class TranscriptionCompletionTests(unittest.TestCase):
                     [{"transcriptionId": "t1"}],
                 )
 
-        self.assertNotEqual(completion["staff4SourceAudioRescanStatus"], "no_staff4_anchor")
-        self.assertEqual(completion["staff4SourceAudioRescanStatus"], "rescanned")
-        self.assertEqual(completion["staff4SourceAudioRescanRunCount"], 5)
-        self.assertEqual(completion["staff4SourceAudioRescanAnchorStatus"], "reproduced")
-        self.assertEqual(completion["staff4SourceAudioRescanAnchorReproducedCount"], 1)
-        self.assertEqual(completion["staff4SourceAudioRescan"]["scanWindowCount"], 5)
-        self.assertEqual(completion["staff4SourceAudioRescan"]["anchorReproductionStatus"], "reproduced")
-        self.assertGreater(completion["staff4SourceAudioRescanEventCount"], 0)
-        self.assertGreaterEqual(completion["phraseExpansionHarness"]["anchorCount"], 1)
-        self.assertEqual(completion["phraseExpansionHarness"]["status"], "ready")
-        self.assertEqual(completion["phraseExpansionHarness"]["acceptedAnchorNoteCount"], 7)
-        self.assertEqual(completion["phraseExpansionHarness"]["currentBest"]["status"], "blocked_audio_mismatch")
-        self.assertEqual(completion["phraseExpansionHarness"]["currentBest"]["targetSequence"], "Eb5 Eb5 C5 Eb5 Eb5 Eb5 C5 A4")
-        self.assertEqual(completion["phraseExpansionHarness"]["currentBest"]["expectedNextScoreNote"], "A4")
-        self.assertEqual(completion["staff4AdjacentMining"]["anchorCount"], 1)
-        self.assertEqual(completion["staff4AdjacentMiningStatus"], "not_found")
+        self.assertEqual(completion["staff4SourceAudioRescanStatus"], "no_staff4_anchor")
+        self.assertEqual(completion["staff4SourceAudioRescanRunCount"], 0)
+        self.assertEqual(completion["staff4SourceAudioRescanAnchorStatus"], "missing")
+        self.assertEqual(completion["staff4SourceAudioRescanAnchorReproducedCount"], 0)
+        self.assertEqual(completion["staff4SourceAudioRescan"]["scanWindowCount"], 0)
+        self.assertEqual(completion["staff4SourceAudioRescanEventCount"], 0)
+        self.assertEqual(completion["phraseExpansionHarness"]["anchorCount"], 0)
+        self.assertEqual(completion["phraseExpansionHarness"]["status"], "empty")
+        self.assertEqual(completion["phraseExpansionHarness"]["acceptedAnchorNoteCount"], 0)
+        self.assertEqual(completion["phraseExpansionHarness"]["currentBest"], {})
+        self.assertEqual(completion["staff4AdjacentMining"]["anchorCount"], 0)
+        self.assertEqual(completion["staff4AdjacentMiningStatus"], "no_staff4_anchor")
         self.assertEqual(completion["staff4AdjacentMining"]["exactCandidateCount"], 0)
-        self.assertNotIn("Convert one local source-score measure", completion["nextAction"])
+        self.assertIn("Reverify one May 3 source-score crop", completion["nextAction"])
 
     def test_local_source_score_pdf_advances_score_truth_without_accepting_phrase(self):
         completion = build_transcription_completion(

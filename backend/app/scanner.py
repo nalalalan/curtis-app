@@ -76,11 +76,12 @@ from .symbolic_scores import (
     longest_common_contiguous_run,
     normalize_pitch_class,
     score_map_candidate_audit,
+    source_range_rejected,
     symbolic_score_from_target,
 )
 
 DEFAULT_YOUTUBE_SOURCE = "https://www.youtube.com/@nalalan"
-STAFF4_SOURCE_AUDIO_RESCAN_VERSION = "staff4_source_audio_rescan_v11"
+STAFF4_SOURCE_AUDIO_RESCAN_VERSION = "staff4_source_audio_rescan_v12"
 STAFF4_SOURCE_AUDIO_RESCAN_DIR = RUNTIME_DIR / "staff4-source-rescan"
 STAFF4_SOURCE_AUDIO_RESCAN_PAD_BEFORE_SECONDS = 4.0
 STAFF4_SOURCE_AUDIO_RESCAN_PAD_AFTER_SECONDS = 10.0
@@ -99,6 +100,9 @@ STAFF4_CONTINUATION_SEARCH_MAX_PREFILTER_CANDIDATES = 8
 STAFF4_CONTINUATION_SEARCH_MIN_EXPECTED_ENERGY = 0.000001
 STAFF4_CONTINUATION_SEARCH_MIN_EXPECTED_TO_DOMINANT_RATIO = 0.48
 STAFF4_CONTINUATION_SEARCH_MAX_EXPECTED_RANK = 3
+STAFF4_CONTINUITY_PROBE_BEFORE_SECONDS = 3.25
+STAFF4_CONTINUITY_PROBE_AFTER_SECONDS = 0.75
+STAFF4_CONTINUITY_PROBE_MAX_SECONDS = 5.0
 MEDIA_REVIEW_PENDING_BLOCKERS = {"youtube_data_api_returns_metadata_not_video_media"}
 WEAK_EVIDENCE_TERMS = (
     "background noise",
@@ -1606,6 +1610,8 @@ def note_exact_label(notes: list[dict[str, Any]]) -> str:
 
 
 def source_snippet_for_range(target: dict[str, Any], reference_start: int, reference_end: int) -> dict[str, Any]:
+    if source_range_rejected(target, reference_start, reference_end):
+        return {}
     score = target.get("symbolicScore") if isinstance(target.get("symbolicScore"), dict) else {}
     snippets = score.get("sourceSnippets") if isinstance(score.get("sourceSnippets"), list) else []
     for snippet in snippets:
@@ -1932,6 +1938,8 @@ def staff4_anchor_matches(daily_records: dict[str, Any]) -> list[dict[str, Any]]
                 continue
             reference_start = int(match.get("referenceStart") or 0)
             reference_end = int(match.get("referenceEnd") or reference_start)
+            if source_range_rejected(target, reference_start, reference_end):
+                continue
             anchor_slice = source_notes[reference_start:reference_end]
             anchor_midi = note_midi_values(anchor_slice)
             if not staff4_anchor_midi_supported(anchor_midi):
@@ -2921,6 +2929,7 @@ def staff4_source_audio_rescan_record(
     sample: dict[str, Any],
     source_path: Path,
     scan_window: dict[str, Any] | None = None,
+    guided_context: bool = True,
 ) -> dict[str, Any]:
     sample_id = str(anchor.get("sampleId") or sample.get("id") or "")
     anchor_start = float(anchor.get("anchorLocalStartSeconds") or 0.0)
@@ -2938,7 +2947,11 @@ def staff4_source_audio_rescan_record(
     if result_path.exists():
         try:
             cached = json.loads(result_path.read_text(encoding="utf-8"))
-            if isinstance(cached, dict) and cached.get("version") == STAFF4_SOURCE_AUDIO_RESCAN_VERSION:
+            if (
+                isinstance(cached, dict)
+                and cached.get("version") == STAFF4_SOURCE_AUDIO_RESCAN_VERSION
+                and bool(cached.get("guidedContext", True)) == bool(guided_context)
+            ):
                 cached["cacheHit"] = True
                 return cached
         except (OSError, json.JSONDecodeError):
@@ -2949,6 +2962,7 @@ def staff4_source_audio_rescan_record(
         "version": STAFF4_SOURCE_AUDIO_RESCAN_VERSION,
         "status": "started",
         "cacheHit": False,
+        "guidedContext": bool(guided_context),
         "practiceDay": anchor.get("practiceDay") or "",
         "pieceTitle": anchor.get("pieceTitle") or "",
         "sampleId": sample_id,
@@ -3015,24 +3029,32 @@ def staff4_source_audio_rescan_record(
         detector_source="staff4_source_audio_rescan_candidate",
     )
     runs: list[dict[str, Any]] = []
-    truth_seed_anchor_notes = staff4_truth_seed_anchor_notes(anchor)
-    guided_notes = [] if truth_seed_anchor_notes else staff4_anchor_guided_reproduction_notes(
-        anchor,
-        y,
-        sr,
-        scan_start,
-        scan_end,
-        librosa,
-        numpy,
+    truth_seed_anchor_notes = staff4_truth_seed_anchor_notes(anchor) if guided_context else []
+    guided_notes = (
+        []
+        if truth_seed_anchor_notes or not guided_context
+        else staff4_anchor_guided_reproduction_notes(
+            anchor,
+            y,
+            sr,
+            scan_start,
+            scan_end,
+            librosa,
+            numpy,
+        )
     )
-    adjacent_guided_targets = staff4_adjacent_guided_reproduction_targets(
-        anchor,
-        y,
-        sr,
-        scan_start,
-        scan_end,
-        librosa,
-        numpy,
+    adjacent_guided_targets = (
+        staff4_adjacent_guided_reproduction_targets(
+            anchor,
+            y,
+            sr,
+            scan_start,
+            scan_end,
+            librosa,
+            numpy,
+        )
+        if guided_context
+        else []
     )
     reproduced_adjacent_targets = [
         item
@@ -3174,6 +3196,198 @@ def staff4_source_audio_rescan_record(
     return result
 
 
+def staff4_continuity_probe_window_from_candidate(
+    anchor: dict[str, Any],
+    sample: dict[str, Any],
+    target: dict[str, Any],
+    candidate: dict[str, Any],
+) -> dict[str, Any]:
+    notes = candidate.get("windowNotes") if isinstance(candidate.get("windowNotes"), list) else []
+    notes = [note for note in notes if isinstance(note, dict)]
+    if not notes:
+        return {}
+    continuity = candidate.get("phraseContinuity") if isinstance(candidate.get("phraseContinuity"), dict) else {}
+    try:
+        gap_after = int(continuity.get("largestGapAfterIndex"))
+    except (TypeError, ValueError):
+        gap_after = len(notes) - 2
+    focus_index = min(len(notes) - 1, max(0, gap_after + 1))
+    focus = notes[focus_index]
+    try:
+        focus_start = float(focus.get("startSeconds"))
+    except (TypeError, ValueError):
+        return {}
+    try:
+        focus_end = float(focus.get("endSeconds"))
+    except (TypeError, ValueError):
+        focus_end = focus_start
+    if focus_end < focus_start:
+        focus_end = focus_start
+    source_window = str(anchor.get("sourceWindow") or sample.get("window") or "")
+    source_window_start, source_window_end = parse_window_bounds(source_window)
+    source_duration = float(source_window_end - source_window_start) if source_window_end > source_window_start else 0.0
+    probe_start = max(0.0, focus_start - STAFF4_CONTINUITY_PROBE_BEFORE_SECONDS)
+    probe_end = focus_end + STAFF4_CONTINUITY_PROBE_AFTER_SECONDS
+    if probe_end - probe_start > STAFF4_CONTINUITY_PROBE_MAX_SECONDS:
+        probe_start = max(0.0, probe_end - STAFF4_CONTINUITY_PROBE_MAX_SECONDS)
+    if source_duration:
+        probe_end = min(source_duration, probe_end)
+        probe_start = min(max(0.0, probe_start), max(0.0, probe_end - 0.25))
+    if probe_end - probe_start < 0.5:
+        return {}
+    target_midi = [int(value) for value in target.get("targetMidiSequence") or [] if isinstance(value, int)]
+    return {
+        "label": f"continuity_probe_raw_{target.get('direction') or 'adjacent'}",
+        "scanLocalStartSeconds": round(probe_start, 3),
+        "scanLocalEndSeconds": round(probe_end, 3),
+        "scanDurationSeconds": round(probe_end - probe_start, 3),
+        "probeKind": "raw_continuity_repair",
+        "guidedContext": False,
+        "triggerWindowSequence": str(candidate.get("windowSequence") or ""),
+        "triggerLocalStartSeconds": candidate.get("localStartSeconds"),
+        "triggerLocalEndSeconds": candidate.get("localEndSeconds"),
+        "triggerMaxInterNoteGapSeconds": continuity.get("maxInterNoteGapSeconds"),
+        "triggerLargestGapAfterIndex": gap_after,
+        "focusNote": {
+            "note": str(focus.get("note") or ""),
+            "midi": note_midi_value(focus),
+            "startSeconds": round(focus_start, 3),
+            "endSeconds": round(focus_end, 3),
+        },
+        "targetDirection": str(target.get("direction") or ""),
+        "targetSequence": str(target.get("targetSequence") or ""),
+        "targetMidiSequence": target_midi,
+    }
+
+
+def staff4_compact_exact_search(search: dict[str, Any]) -> dict[str, Any]:
+    candidates = search.get("exactCandidates") if isinstance(search.get("exactCandidates"), list) else []
+    nearest = search.get("nearestWindow") if isinstance(search.get("nearestWindow"), dict) else {}
+    best = candidates[0] if candidates and isinstance(candidates[0], dict) else {}
+    return {
+        "searchedWindowCount": int(search.get("searchedWindowCount") or 0),
+        "exactCandidateCount": len(candidates),
+        "bestExactSequence": str(best.get("windowSequence") or ""),
+        "bestExactContinuous": bool(best.get("phraseContinuous")) if best else False,
+        "bestExactMaxGapSeconds": (
+            (best.get("phraseContinuity") or {}).get("maxInterNoteGapSeconds")
+            if isinstance(best.get("phraseContinuity"), dict)
+            else None
+        ) if best else None,
+        "nearestSequence": str(nearest.get("windowSequence") or ""),
+        "nearestExactCount": int(nearest.get("exactCount") or 0) if nearest else 0,
+        "nearestPrefixCount": int(nearest.get("prefixCount") or 0) if nearest else 0,
+    }
+
+
+def staff4_continuity_probe_for_anchor(
+    anchor: dict[str, Any],
+    sample: dict[str, Any],
+    source_path: Path,
+    runs: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    probes: list[dict[str, Any]] = []
+    sample_id = str(anchor.get("sampleId") or sample.get("id") or "")
+    practice_day = str(anchor.get("practiceDay") or "")
+    anchor_absolute_start = parse_window_start(str(anchor.get("sourceWindow") or sample.get("window") or "")) + float(
+        anchor.get("anchorLocalStartSeconds") or 0.0
+    )
+    for target in staff4_adjacent_source_targets(anchor):
+        target_midi = [int(value) for value in target.get("targetMidiSequence") or [] if isinstance(value, int)]
+        if not target_midi:
+            continue
+        trigger_search = audio_window_search_for_exact_midi(
+            runs,
+            target_midi,
+            practice_day=practice_day,
+            anchor_sample_id=sample_id,
+            anchor_absolute_start=anchor_absolute_start,
+        )
+        exact_candidates = trigger_search.get("exactCandidates") if isinstance(trigger_search.get("exactCandidates"), list) else []
+        exact_audio = [
+            item
+            for item in exact_candidates
+            if isinstance(item, dict) and item.get("audioAgreed") and item.get("sameSampleAsAnchor")
+        ]
+        continuous = [item for item in exact_audio if item.get("phraseContinuous")]
+        if continuous:
+            probes.append(
+                {
+                    "status": "not_needed_continuous_exact_audio_candidate_exists",
+                    "targetDirection": str(target.get("direction") or ""),
+                    "targetSequence": str(target.get("targetSequence") or ""),
+                    "targetMidiSequence": target_midi,
+                    "triggerSearch": staff4_compact_exact_search(trigger_search),
+                }
+            )
+            continue
+        discontinuous = [item for item in exact_audio if item.get("phraseContinuous") is False]
+        if not discontinuous:
+            continue
+        trigger = discontinuous[0]
+        probe_window = staff4_continuity_probe_window_from_candidate(anchor, sample, target, trigger)
+        if not probe_window:
+            probes.append(
+                {
+                    "status": "blocked_probe_window_missing",
+                    "targetDirection": str(target.get("direction") or ""),
+                    "targetSequence": str(target.get("targetSequence") or ""),
+                    "targetMidiSequence": target_midi,
+                    "triggerSearch": staff4_compact_exact_search(trigger_search),
+                    "triggerCandidate": {
+                        key: value
+                        for key, value in trigger.items()
+                        if key not in {"windowNotes", "run"}
+                    },
+                }
+            )
+            continue
+        record = staff4_source_audio_rescan_record(
+            anchor=anchor,
+            sample=sample,
+            source_path=source_path,
+            scan_window=probe_window,
+            guided_context=False,
+        )
+        probe_search = audio_window_search_for_exact_midi(
+            record.get("runs") if isinstance(record.get("runs"), list) else [],
+            target_midi,
+            practice_day=practice_day,
+            anchor_sample_id=sample_id,
+            anchor_absolute_start=anchor_absolute_start,
+        )
+        probe_exact = probe_search.get("exactCandidates") if isinstance(probe_search.get("exactCandidates"), list) else []
+        probe_exact_audio = [
+            item for item in probe_exact if isinstance(item, dict) and item.get("audioAgreed") and item.get("sameSampleAsAnchor")
+        ]
+        probe_continuous = [item for item in probe_exact_audio if item.get("phraseContinuous")]
+        status = (
+            "continuous_exact_audio_candidate"
+            if probe_continuous
+            else "exact_midi_discontinuous"
+            if probe_exact_audio
+            else "no_continuous_exact_midi_in_probe"
+        )
+        probes.append(
+            {
+                "status": status,
+                "targetDirection": str(target.get("direction") or ""),
+                "targetSequence": str(target.get("targetSequence") or ""),
+                "targetMidiSequence": target_midi,
+                "triggerSearch": staff4_compact_exact_search(trigger_search),
+                "probeSearch": staff4_compact_exact_search(probe_search),
+                "probeWindow": probe_window,
+                "triggerCandidate": {
+                    key: value
+                    for key, value in trigger.items()
+                    if key not in {"windowNotes", "run"}
+                },
+                "record": record,
+            }
+        )
+    return probes
+
+
 def staff4_source_audio_rescan(daily_records: dict[str, Any], media_samples: list[dict[str, Any]], limit: int = 2) -> dict[str, Any]:
     anchors = staff4_anchor_matches(daily_records)
     if not anchors:
@@ -3181,6 +3395,19 @@ def staff4_source_audio_rescan(daily_records: dict[str, Any], media_samples: lis
             "version": STAFF4_SOURCE_AUDIO_RESCAN_VERSION,
             "status": "no_staff4_anchor",
             "anchorCount": 0,
+            "anchorReproductionStatus": "missing",
+            "anchorReproducedCount": 0,
+            "scanWindowCount": 0,
+            "scanWindowLabels": [],
+            "runCount": 0,
+            "eventCount": 0,
+            "candidateEventCount": 0,
+            "truthManifestAnchorSeedEventCount": 0,
+            "guidedAnchorEventCount": 0,
+            "guidedAdjacentEventCount": 0,
+            "continuityProbeStatus": "not_checked",
+            "continuityProbeCount": 0,
+            "continuityProbeContinuousCandidateCount": 0,
             "records": [],
             "runs": [],
             "nextAction": "Create one accepted Staff 4 source/audio anchor before source-audio rescanning.",
@@ -3188,6 +3415,7 @@ def staff4_source_audio_rescan(daily_records: dict[str, Any], media_samples: lis
     records: list[dict[str, Any]] = []
     runs: list[dict[str, Any]] = []
     anchor_reproduction_targets: list[dict[str, Any]] = []
+    continuity_probes: list[dict[str, Any]] = []
     blocked = 0
     for anchor in anchors[: max(0, int(limit))]:
         sample_id = str(anchor.get("sampleId") or "")
@@ -3248,6 +3476,14 @@ def staff4_source_audio_rescan(daily_records: dict[str, Any], media_samples: lis
                     "nearestWindow": nearest,
                 }
             )
+            for probe in staff4_continuity_probe_for_anchor(anchor, sample, source_path, runs):
+                continuity_probes.append(probe)
+                record = probe.get("record") if isinstance(probe.get("record"), dict) else {}
+                if record:
+                    records.append(record)
+                    for run in record.get("runs") if isinstance(record.get("runs"), list) else []:
+                        if isinstance(run, dict):
+                            runs.append(run)
     status = "rescanned" if runs else "blocked_media_missing" if blocked == len(records) else "no_notes_detected"
     anchor_reproduced_count = sum(1 for item in anchor_reproduction_targets if item.get("status") == "reproduced")
     anchor_reproduction_status = (
@@ -3275,6 +3511,27 @@ def staff4_source_audio_rescan(daily_records: dict[str, Any], media_samples: lis
     adjacent_first_failure = staff4_first_adjacent_failure(adjacent_targets)
     adjacent_failure_label = str(adjacent_first_failure.get("expectedNote") or "")
     adjacent_failure_offset = adjacent_first_failure.get("bestAttemptOffsetSeconds")
+    continuity_probe_continuous_count = sum(
+        1 for probe in continuity_probes if isinstance(probe, dict) and probe.get("status") == "continuous_exact_audio_candidate"
+    )
+    continuity_probe_record_count = sum(
+        1 for probe in continuity_probes if isinstance(probe, dict) and isinstance(probe.get("record"), dict)
+    )
+    continuity_probe_status = (
+        "continuous_exact_audio_candidate"
+        if continuity_probe_continuous_count
+        else "no_continuous_exact_midi_in_probe"
+        if any(probe.get("status") == "no_continuous_exact_midi_in_probe" for probe in continuity_probes if isinstance(probe, dict))
+        else "exact_midi_discontinuous"
+        if any(probe.get("status") == "exact_midi_discontinuous" for probe in continuity_probes if isinstance(probe, dict))
+        else "not_needed"
+        if any(str(probe.get("status") or "").startswith("not_needed") for probe in continuity_probes if isinstance(probe, dict))
+        else "not_checked"
+    )
+    continuity_probe_best = next(
+        (probe for probe in continuity_probes if isinstance(probe, dict) and probe.get("status") == "continuous_exact_audio_candidate"),
+        next((probe for probe in continuity_probes if isinstance(probe, dict)), {}),
+    )
     adjacent_failure_action = (
         "Improve note-window segmentation for the next Staff 4 source note "
         f"{adjacent_failure_label or 'unknown'}; the best swept offset "
@@ -3309,6 +3566,24 @@ def staff4_source_audio_rescan(daily_records: dict[str, Any], media_samples: lis
         "guidedAdjacentStatus": adjacent_reproduction_status,
         "guidedAdjacentFirstFailure": adjacent_first_failure,
         "guidedAdjacentTargets": adjacent_targets,
+        "continuityProbeStatus": continuity_probe_status,
+        "continuityProbeCount": len(continuity_probes),
+        "continuityProbeRecordCount": continuity_probe_record_count,
+        "continuityProbeContinuousCandidateCount": continuity_probe_continuous_count,
+        "continuityProbeTargets": [
+            {
+                key: value
+                for key, value in probe.items()
+                if key != "record"
+            }
+            for probe in continuity_probes
+            if isinstance(probe, dict)
+        ],
+        "continuityProbeBest": {
+            key: value
+            for key, value in continuity_probe_best.items()
+            if key != "record"
+        } if isinstance(continuity_probe_best, dict) else {},
         "audioAgreementEventCount": sum(int(record.get("audioAgreementEventCount") or 0) for record in records if isinstance(record, dict)),
         "cacheHitCount": sum(1 for record in records if isinstance(record, dict) and record.get("cacheHit")),
         "records": records,
@@ -3316,6 +3591,10 @@ def staff4_source_audio_rescan(daily_records: dict[str, Any], media_samples: lis
         "nextAction": (
             "Fix current-detector anchor reproduction before expanding the Staff 4 phrase."
             if anchor_reproduction_targets and not anchor_reproduced_count
+            else "Audit the continuous Staff 4 continuity-probe candidate before accepting the next phrase."
+            if continuity_probe_continuous_count
+            else "Continuity probe checked the late Staff 4 note neighborhood; no continuous exact MIDI phrase was found there."
+            if continuity_probe_status == "no_continuous_exact_midi_in_probe"
             else "Audit the adjacent-guided Staff 4 phrase reproduced by current audio detectors."
             if adjacent_reproduced_count
             else adjacent_failure_action
@@ -4573,6 +4852,11 @@ def build_transcription_completion(
     staff4_source_rescan_adjacent_failure_offset = staff4_source_rescan_adjacent_first_failure.get(
         "bestAttemptOffsetSeconds"
     )
+    staff4_source_rescan_continuity_probe_status = str(staff4_source_rescan.get("continuityProbeStatus") or "")
+    staff4_source_rescan_continuity_probe_count = int(staff4_source_rescan.get("continuityProbeCount") or 0)
+    staff4_source_rescan_continuity_probe_continuous_count = int(
+        staff4_source_rescan.get("continuityProbeContinuousCandidateCount") or 0
+    )
     staff4_mining_status = str(staff4_mining.get("status") or "")
     staff4_mining_searched_count = int(staff4_mining.get("searchedWindowCount") or 0)
     staff4_mining_exact_count = int(staff4_mining.get("exactCandidateCount") or 0)
@@ -4855,6 +5139,11 @@ def build_transcription_completion(
             "detail": (
                 f"{staff4_source_rescan_run_count} runs / {staff4_source_rescan_event_count} events / "
                 f"anchor {staff4_source_rescan_anchor_status.replace('_', ' ') or 'unchecked'}"
+                + (
+                    f" / probe {staff4_source_rescan_continuity_probe_status.replace('_', ' ')}"
+                    if staff4_source_rescan_continuity_probe_count
+                    else ""
+                )
             ),
         },
         {
@@ -4933,9 +5222,13 @@ def build_transcription_completion(
         "A Staff 4 audit packet generator now ignores stale failed-note metadata when the current expansion already has full exact-MIDI audio, so the truth packet covers the whole seven-note phrase instead of only one clipped note.",
         "Staff 4 continuation search now scans beyond a failed inferred adjacent window with a harmonic expected-pitch prefilter, then requires exact pYIN/YIN/spectral agreement before any longer candidate enters review.",
     ]
+    if staff4_source_rescan_continuity_probe_count:
+        done_summary.append("Staff 4 continuity probing now rescans the late-note neighborhood without truth-anchor or guided-note stitching before any longer phrase can enter review.")
+    if truth_manifest_live_phrase_count == 0 and staff4_source_rescan_status == "no_staff4_anchor":
+        done_summary.append("The May 3 Staff 4 visible score/transcription mismatch is now a rejected regression, so the old accepted Staff 4 lanes are blocked from display.")
     if phrase_expansion_rejected_count:
         done_summary.append(f"{phrase_expansion_rejected_count} Staff 4 audited expansion is now locked as a rejected regression case.")
-    if staff4_audit_ready:
+    if staff4_audit_ready and truth_manifest_live_phrase_count:
         done_summary.append(f"Latest Staff 4 audit status: {staff4_audit_status.replace('_', ' ')}.")
     remaining_summary = [
         "Finish chronological active-practice coverage across the full archive.",
@@ -4947,6 +5240,7 @@ def build_transcription_completion(
         "Keep extending the accepted Staff 4 anchor only when each adjacent source note agrees with paired audio.",
         "Lock the eight-note Staff 4 continuation candidate only if the full source crop, local media, transcription, and truth review agree.",
         "Continue using source-audio rescan and continuation search to find real adjacent Staff 4 audio runs without accepting wrong-window matches.",
+        "Reverify the May 3 Staff 4 visible source crop before using that lane as an accepted long-phrase anchor again.",
         "Align accepted phrases to score locations or score-free repeated exercise patterns.",
         "Generate heat maps and Curtis-level observations only from accepted evidence.",
     ]
@@ -5022,11 +5316,20 @@ def build_transcription_completion(
             "exact MIDI and audio agree, but accepted truth evidence is still required before display."
         )
     elif phrase_expansion_current and phrase_expansion_current_status == "blocked_discontinuous_audio_phrase":
-        next_action = (
-            "Do not accept the current Staff 4 exact-MIDI run as a phrase; "
-            f"its largest internal note gap is {phrase_expansion_current.get('maxInterNoteGapSeconds')}s. "
-            "Search for a continuous audio window that matches the next source notes."
-        )
+        if staff4_source_rescan_continuity_probe_status == "no_continuous_exact_midi_in_probe":
+            next_action = (
+                "Do not accept the current Staff 4 exact-MIDI run as a phrase; "
+                f"its largest internal note gap is {phrase_expansion_current.get('maxInterNoteGapSeconds')}s. "
+                "A raw continuity probe checked the late-note neighborhood and found no continuous exact MIDI phrase there."
+            )
+        elif staff4_source_rescan_continuity_probe_status == "continuous_exact_audio_candidate":
+            next_action = "Audit the continuous Staff 4 continuity-probe candidate before accepting any longer phrase."
+        else:
+            next_action = (
+                "Do not accept the current Staff 4 exact-MIDI run as a phrase; "
+                f"its largest internal note gap is {phrase_expansion_current.get('maxInterNoteGapSeconds')}s. "
+                "Search for a continuous audio window that matches the next source notes."
+            )
     elif phrase_expansion_current and phrase_expansion_current_status == "accepted_source_audio_expansion":
         next_action = (
             f"Promote the accepted Staff 4 {phrase_expansion_current.get('direction') or 'adjacent'} "
@@ -5122,8 +5425,12 @@ def build_transcription_completion(
                     f"{phrase_expansion_current.get('observedNextAudioNote') or 'current audio'} after searching "
                     f"{phrase_expansion_audio_run_count} audio-note runs."
                 )
+    elif truth_manifest_live_phrase_count == 0 and staff4_source_rescan_status == "no_staff4_anchor":
+        next_action = "Reverify one May 3 source-score crop against the transcription and paired audio, then allow phrase matching to restart from that accepted anchor."
     elif not measure_match_count:
-        next_action = "Convert one local source-score measure into verified symbolic notes, then run the existing phrase matcher over hidden detected series."
+        next_action = (
+            "Convert one local source-score measure into verified symbolic notes, then run the existing phrase matcher over hidden detected series."
+        )
     elif not long_phrase_count:
         next_action = "Extend the accepted source-backed measure into longer phrases and score-coordinate heat maps."
     elif source_target_sequence and source_target_checked and not source_target_verified:
@@ -5178,6 +5485,9 @@ def build_transcription_completion(
         "staff4SourceAudioRescanAdjacentReproducedCount": staff4_source_rescan_adjacent_count,
         "staff4SourceAudioRescanAdjacentTargetCount": staff4_source_rescan_adjacent_target_count,
         "staff4SourceAudioRescanAdjacentFirstFailure": staff4_source_rescan_adjacent_first_failure,
+        "staff4SourceAudioRescanContinuityProbeStatus": staff4_source_rescan_continuity_probe_status,
+        "staff4SourceAudioRescanContinuityProbeCount": staff4_source_rescan_continuity_probe_count,
+        "staff4SourceAudioRescanContinuityProbeContinuousCandidateCount": staff4_source_rescan_continuity_probe_continuous_count,
         "staff4AdjacentMining": staff4_mining,
         "staff4AdjacentMiningStatus": staff4_mining_status,
         "staff4AdjacentMiningSearchedWindowCount": staff4_mining_searched_count,

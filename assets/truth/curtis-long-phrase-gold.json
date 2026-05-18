@@ -2,7 +2,7 @@
   "schema": "curtis_long_phrase_truth_v1",
   "updatedAt": "2026-05-18",
   "status": "active",
-  "minimumAcceptedEvidenceRule": "A displayed score/transcription/video/audio phrase needs exact MIDI agreement between a temporally continuous audio-agreed detected note window and verified MusicXML source notes. Pitch letters, OCR/OMR candidates, source crops alone, and stitched notes from separate attempts are not accepted evidence.",
+  "minimumAcceptedEvidenceRule": "A displayed score/transcription/video/audio phrase needs exact MIDI agreement between a temporally continuous audio-agreed detected note window and verified MusicXML source notes, plus a non-rejected visible score crop whose boxed noteheads match the transcription. Pitch letters, OCR/OMR candidates, source crops alone, stitched notes from separate attempts, and user-rejected visible score crops are not accepted evidence.",
   "sources": [
     {
       "id": "wieniawski-scherzo-tarantelle-opening-symbolic-v7",
@@ -21,26 +21,26 @@
       "pieceTitle": "Wieniawski Scherzo-Tarantelle, Op. 16",
       "target": "wieniawski_reference_target",
       "status": "verified_source_excerpt",
-      "basis": "Queued Staff 4 score review packet converted into MusicXML from the local IMSLP solo-violin page. The accepted source crop boxes are centered on the five visible noteheads.",
+      "basis": "Queued Staff 4 score review packet converted into MusicXML from the local IMSLP solo-violin page. Alan's 2026-05-18 visible review rejected the displayed May 3 Staff 4 score/transcription pair, so this source range is retained as a regression/review fixture, not live accepted evidence.",
       "referenceStart": 9,
       "referenceEnd": 14,
       "sequence": ["Eb5", "Eb5", "C5", "Eb5", "Eb5"],
       "midiSequence": [75, 75, 72, 75, 75],
       "sourceCropImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-verified.png",
-      "liveAccepted": true
+      "liveAccepted": false
     },
     {
       "id": "wieniawski-staff4-eb-eb-c-eb-eb-eb-c-symbolic-v1",
       "pieceTitle": "Wieniawski Scherzo-Tarantelle, Op. 16",
       "target": "wieniawski_reference_target",
       "status": "verified_source_excerpt",
-      "basis": "The current accepted Staff 4 lane extended outward into the two immediate right-adjacent source notes from the same local IMSLP solo-violin page. The full seven-note phrase now has accepted source/audio truth after the v3 full-phrase audit proved exact MIDI agreement across the complete local 20.225-23.280 audio window.",
+      "basis": "This Staff 4 range extends the May 3 Staff 4 source lane. Alan's 2026-05-18 visible review rejected the displayed source/transcription pair, so the range is retained as source-review material and cannot be live accepted until a new visible crop review proves the boxed score notes match the transcription.",
       "referenceStart": 9,
       "referenceEnd": 16,
       "sequence": ["Eb5", "Eb5", "C5", "Eb5", "Eb5", "Eb5", "C5"],
       "midiSequence": [75, 75, 72, 75, 75, 75, 72],
       "sourceCropImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-eb-c-source.png",
-      "liveAccepted": true
+      "liveAccepted": false
     },
     {
       "id": "wieniawski-staff4-eb-eb-c-eb-eb-eb-c-a-symbolic-v1",
@@ -60,13 +60,13 @@
       "pieceTitle": "Wieniawski Scherzo-Tarantelle, Op. 16",
       "target": "wieniawski_reference_target",
       "status": "verified_source_excerpt",
-      "basis": "The accepted Staff 4 source lane extended one note to the right. The six visible noteheads are cropped from the same local IMSLP solo-violin page, and the current May 3 audio run agrees with the exact MIDI sequence.",
+      "basis": "This six-note Staff 4 range extends the May 3 Staff 4 source lane. Alan's 2026-05-18 visible review rejected the displayed source/transcription pair, so the range is retained as source-review material and cannot be live accepted until a new visible crop review proves the boxed score notes match the transcription.",
       "referenceStart": 9,
       "referenceEnd": 15,
       "sequence": ["Eb5", "Eb5", "C5", "Eb5", "Eb5", "Eb5"],
       "midiSequence": [75, 75, 72, 75, 75, 75],
       "sourceCropImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-eb-verified.png",
-      "liveAccepted": true
+      "liveAccepted": false
     }
   ],
   "positiveSourcePhrases": [
@@ -83,8 +83,8 @@
     {
       "id": "wieniawski-staff4-live-audio-exact-midi-positive",
       "sourceId": "wieniawski-staff4-eb-eb-c-eb-eb-symbolic-v1",
-      "status": "accepted_truth",
-      "basis": "May 3 detected phrase from sample Njh8_zq9_DM-8835 has audio-agreed D#5-D#5-C5-D#5-D#5; the verified source spelling is Eb5-Eb5-C5-Eb5-Eb5 and the MIDI sequence is identical.",
+      "status": "superseded_by_user_visible_mismatch_review",
+      "basis": "May 3 detected phrase from sample Njh8_zq9_DM-8835 has audio-agreed D#5-D#5-C5-D#5-D#5 against the symbolic MIDI sequence, but Alan's 2026-05-18 visible review rejected the displayed source score/transcription pair. This remains a regression fixture, not live accepted evidence.",
       "practiceDay": "2026-05-03",
       "sampleId": "Njh8_zq9_DM-8835",
       "sourceWindow": "*8835-8925",
@@ -102,13 +102,13 @@
         {"note": "D#5", "startSeconds": 22.361, "endSeconds": 22.535}
       ],
       "scoreImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-verified.png",
-      "liveAccepted": true
+      "liveAccepted": false
     },
     {
       "id": "wieniawski-staff4-source-extension-positive",
       "sourceId": "wieniawski-staff4-eb-eb-c-eb-eb-eb-c-symbolic-v1",
-      "status": "accepted_truth",
-      "basis": "The Staff 4 source lane now contains seven verified source notes, and the v3 Staff 4 full-phrase audit found the paired May 3 audio run with the identical exact MIDI sequence across local 20.225-23.280.",
+      "status": "superseded_by_user_visible_mismatch_review",
+      "basis": "The Staff 4 source lane contains seven symbolic notes and the v3 Staff 4 audit found the paired May 3 audio run with identical exact MIDI across local 20.225-23.280, but Alan's 2026-05-18 visible review rejected the displayed source score/transcription pair. This remains a regression fixture, not live accepted evidence.",
       "practiceDay": "2026-05-03",
       "sampleId": "Njh8_zq9_DM-8835",
       "sourceWindow": "*8835-8925",
@@ -129,13 +129,13 @@
       ],
       "scoreImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-eb-c-source.png",
       "auditPacketId": "staff4-2026-05-03-Njh8_zq9_DM-8835-9-16",
-      "liveAccepted": true
+      "liveAccepted": false
     },
     {
       "id": "wieniawski-staff4-live-audio-six-note-exact-midi-positive",
       "sourceId": "wieniawski-staff4-eb-eb-c-eb-eb-eb-symbolic-v1",
-      "status": "accepted_truth",
-      "basis": "May 3 current-detector Staff 4 right-1 phrase from sample Njh8_zq9_DM-8835 has audio-agreed D#5-D#5-C5-D#5-D#5-D#5; the verified source spelling is Eb5-Eb5-C5-Eb5-Eb5-Eb5 and the MIDI sequence is identical.",
+      "status": "superseded_by_user_visible_mismatch_review",
+      "basis": "May 3 current-detector Staff 4 right-1 phrase from sample Njh8_zq9_DM-8835 has audio-agreed D#5-D#5-C5-D#5-D#5-D#5 against the symbolic MIDI sequence, but Alan's 2026-05-18 visible review rejected the displayed source score/transcription pair. This remains a regression fixture, not live accepted evidence.",
       "practiceDay": "2026-05-03",
       "sampleId": "Njh8_zq9_DM-8835",
       "sourceWindow": "*8835-8925",
@@ -154,7 +154,7 @@
         {"note": "D#5", "startSeconds": 22.829, "endSeconds": 22.992}
       ],
       "scoreImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-eb-verified.png",
-      "liveAccepted": true
+      "liveAccepted": false
     }
   ],
   "rejectedRegressionPhrases": [
@@ -208,6 +208,31 @@
       "observedNextAudioNote": "D5",
       "observedNextAudioMidi": 74,
       "audioAgreed": true
+    },
+    {
+      "id": "rejected-user-flagged-staff4-visible-score-transcription-mismatch",
+      "sourceId": "wieniawski-staff4-eb-eb-c-eb-eb-symbolic-v1",
+      "status": "rejected",
+      "rejectionKind": "visible_score_transcription_mismatch",
+      "basis": "Alan reviewed the live 2026-05-03 Staff 4 score/transcription/video group and reported that the visible score notes and displayed transcription do not match. The range is blocked even though the symbolic MIDI fixture can still be parsed.",
+      "practiceDay": "2026-05-03",
+      "sampleId": "Njh8_zq9_DM-8835",
+      "sourceWindow": "*8835-8925",
+      "expectedSourceSequence": ["Eb5", "Eb5", "C5", "Eb5", "Eb5"],
+      "expectedSourceMidiSequence": [75, 75, 72, 75, 75],
+      "sequence": ["D#5", "D#5", "C5", "D#5", "D#5"],
+      "acceptedScoreSpellingSequence": ["Eb5", "Eb5", "C5", "Eb5", "Eb5"],
+      "midiSequence": [75, 75, 72, 75, 75],
+      "minimumExactNotes": 5,
+      "audioAgreed": false,
+      "reviewOutcome": "visible_score_crop_rejected_by_alan_2026_05_18",
+      "noteWindows": [
+        {"note": "D#5", "startSeconds": 20.225, "endSeconds": 20.422},
+        {"note": "D#5", "startSeconds": 20.55, "endSeconds": 20.689},
+        {"note": "C5", "startSeconds": 20.817, "endSeconds": 20.898},
+        {"note": "D#5", "startSeconds": 21.629, "endSeconds": 21.792},
+        {"note": "D#5", "startSeconds": 22.361, "endSeconds": 22.535}
+      ]
     },
     {
       "id": "rejected-staff4-stitched-a4-continuation",

@@ -17,6 +17,7 @@ from .study_packets import (
 from .symbolic_scores import (
     render_symbolic_score_svg,
     score_map_candidate_audit,
+    source_range_rejected,
     symbolic_score_audit,
     symbolic_score_from_target,
 )
@@ -1254,6 +1255,8 @@ def symbolic_source_snippet_for_range(
     score_note_sequence: list[str] | None = None,
     score_exact_sequence: list[str] | None = None,
 ) -> dict[str, Any]:
+    if source_range_rejected(target, reference_start, reference_end):
+        return {}
     score_config = target.get("symbolicScore") if isinstance(target.get("symbolicScore"), dict) else {}
     snippets = score_config.get("sourceSnippets") if isinstance(score_config.get("sourceSnippets"), list) else []
     for snippet in snippets:

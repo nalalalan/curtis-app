@@ -261,7 +261,7 @@ def source_key_from_item(item: dict[str, Any] | None) -> str:
 
 
 def wieniawski_reference_target() -> dict[str, Any]:
-    return {
+    target = {
         "status": "reference_target_ready",
         "composer": "Henryk Wieniawski",
         "work": "Scherzo-Tarantelle, Op. 16",
@@ -291,7 +291,7 @@ def wieniawski_reference_target() -> dict[str, Any]:
             "partId": "P1",
             "musicXmlPath": "assets/score/wieniawski-scherzo-tarantelle-symbolic-opening.musicxml",
             "candidateMapPath": "assets/score/wieniawski-scherzo-tarantelle-page2-score-map-candidates.json",
-            "source": "Manually verified symbolic excerpts from the local IMSLP solo-violin PDF, page 2. The visible opening phrase begins A5-G5-F5-A5-G5-F5-A5-G#5-F5. The accepted Staff 4 lane has three exact-MIDI source/audio windows from the same local IMSLP staff: Eb5-Eb5-C5-Eb5-Eb5, Eb5-Eb5-C5-Eb5-Eb5-Eb5, and Eb5-Eb5-C5-Eb5-Eb5-Eb5-C5. The source map now extends one more verified source-only note to Eb5-Eb5-C5-Eb5-Eb5-Eb5-C5-A4; the v11 audio search finds those MIDI values only by stitching an A4 8.985 seconds after the accepted seven-note phrase, so this eighth note is not accepted evidence. The previous D6-C6-Bb5 source sequence, lower-octave D5-C5-Bb4 map, D-Bb-G-D source sequence, stale Staff 4 D5 mismatch run, stitched A4 continuation, and user-rejected Bb-D-C-Bb-D lane remain rejected.",
+            "source": "Manually reviewed symbolic excerpts from the local IMSLP solo-violin PDF, page 2. The visible opening phrase begins A5-G5-F5-A5-G5-F5-A5-G#5-F5. Alan's 2026-05-18 visual review rejected the displayed May 3 Staff 4 score/transcription pair as a visible note mismatch, so the Eb5-Eb5-C5-Eb5-Eb5 Staff 4 lane and its dependent six-, seven-, and eight-note extensions are blocked from live accepted display until a new source-crop review proves the visible score notes, boxed noteheads, transcription, and paired audio all agree. The previous D6-C6-Bb5 source sequence, lower-octave D5-C5-Bb4 map, D-Bb-G-D source sequence, stale Staff 4 D5 mismatch run, stitched A4 continuation, Staff 4 visible mismatch, and user-rejected Bb-D-C-Bb-D lane remain rejected.",
             "sourcePdfLocalPath": "assets/score/wieniawski-scherzo-tarantelle-solo-imslp.pdf",
             "candidateMapStatus": "unaccepted_score_glyph_verification_queue",
             "verification": "source_score_note_sequence_verified_before_matching",
@@ -577,6 +577,36 @@ def wieniawski_reference_target() -> dict[str, Any]:
                     "verificationLimit": "Do not re-promote this five-note lane without new independent audio, transcription, source-score, and musician review.",
                 }
             ],
+            "rejectedSourceSnippetRanges": [
+                {
+                    "referenceStart": 9,
+                    "referenceEnd": 14,
+                    "status": "alan_rejected_visible_score_transcription_mismatch_2026_05_18",
+                    "reason": "The live May 3 Staff 4 five-note score/transcription/video group was reviewed in the site and the visible score notes did not match the transcription closely enough to remain accepted evidence.",
+                    "blockedImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-verified.png",
+                },
+                {
+                    "referenceStart": 9,
+                    "referenceEnd": 15,
+                    "status": "blocked_dependent_on_rejected_staff4_visible_anchor_2026_05_18",
+                    "reason": "This six-note Staff 4 range extends the rejected five-note visible anchor and cannot be accepted until the source crop and transcription are reverified.",
+                    "blockedImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-eb-verified.png",
+                },
+                {
+                    "referenceStart": 9,
+                    "referenceEnd": 16,
+                    "status": "blocked_dependent_on_rejected_staff4_visible_anchor_2026_05_18",
+                    "reason": "This seven-note Staff 4 range extends the rejected five-note visible anchor and cannot be accepted until the source crop and transcription are reverified.",
+                    "blockedImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-eb-c-source.png",
+                },
+                {
+                    "referenceStart": 9,
+                    "referenceEnd": 17,
+                    "status": "blocked_dependent_on_rejected_staff4_visible_anchor_2026_05_18",
+                    "reason": "This eight-note Staff 4 source-only range extends the rejected visible anchor and the current audio search is discontinuous.",
+                    "blockedImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-eb-c-a-source.png",
+                },
+            ],
         },
         "rejectedScorePhraseSequences": [
             {
@@ -639,6 +669,33 @@ def wieniawski_reference_target() -> dict[str, Any]:
             "returning refrain and coda",
         ],
     }
+    rejected_ranges = {
+        (
+            int(item.get("referenceStart") or -1),
+            int(item.get("referenceEnd") or -1),
+        )
+        for item in target["symbolicScore"].get("rejectedSourceSnippetRanges", [])
+        if isinstance(item, dict)
+    }
+    for snippet in target["symbolicScore"].get("sourceSnippets", []):
+        if not isinstance(snippet, dict):
+            continue
+        identity = (int(snippet.get("referenceStart") or -1), int(snippet.get("referenceEnd") or -1))
+        if identity not in rejected_ranges:
+            continue
+        snippet["status"] = "source_score_phrase_review_rejected"
+        snippet["verification"] = "alan_rejected_visible_score_transcription_mismatch_2026_05_18"
+        snippet["visualRangeAgreement"] = False
+        snippet["visibleScoreNoteSequenceVerified"] = False
+        snippet["visibleScoreExactNoteSequenceVerified"] = False
+        snippet["scoreBoxCenterAgreement"] = False
+        snippet["audioTranscriptionAgreement"] = False
+        snippet["transcriptionScoreAgreement"] = False
+        snippet["truthEvidenceAccepted"] = False
+        snippet["rejectionReason"] = (
+            "Alan reviewed the live displayed Staff 4 score/transcription pair and reported that the notes do not match."
+        )
+    return target
 
 
 def builtin_correction(key: str) -> dict[str, Any] | None:

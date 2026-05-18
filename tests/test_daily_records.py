@@ -10,6 +10,7 @@ from backend.app.daily_records import (
 )
 from backend.app.corrections import wieniawski_reference_target
 from backend.app.media import practice_candidates
+from backend.app.symbolic_scores import source_range_rejected
 from backend.app.transcription import TRANSCRIPTION_PIPELINE_VERSION
 
 
@@ -1216,7 +1217,7 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(target["scoreNoteCropStatus"], "actual_source_phrase_review_pending")
         self.assertEqual(audit["sourcePdfLocalReadyCount"], 1)
         self.assertEqual(audit["symbolicScoreNoteCount"], 17)
-        self.assertEqual(audit["symbolicScoreSourceSnippetCount"], 3)
+        self.assertEqual(audit["symbolicScoreSourceSnippetCount"], 0)
         self.assertGreaterEqual(audit["scoreMapCandidateGlyphCount"], 1)
         self.assertGreaterEqual(audit["scoreMapCandidateStaffCount"], 1)
         self.assertGreaterEqual(audit["scoreMapNoteHypothesisCount"], 1)
@@ -1229,34 +1230,35 @@ class DailyRecordTests(unittest.TestCase):
         )
         self.assertEqual(target["scorePitchClassAnchors"], [])
         verified_source = target["symbolicScore"]["sourceSnippets"][0]
-        self.assertEqual(verified_source["status"], "source_score_exact_midi_sequence_verified")
+        self.assertEqual(verified_source["status"], "source_score_phrase_review_rejected")
         self.assertEqual(verified_source["visibleScoreExactNoteSequence"], ["Eb5", "Eb5", "C5", "Eb5", "Eb5"])
-        self.assertTrue(verified_source["visibleScoreExactNoteSequenceVerified"])
-        self.assertTrue(verified_source["scoreBoxCenterAgreement"])
-        self.assertTrue(verified_source["truthEvidenceAccepted"])
+        self.assertFalse(verified_source["visibleScoreExactNoteSequenceVerified"])
+        self.assertFalse(verified_source["scoreBoxCenterAgreement"])
+        self.assertFalse(verified_source["truthEvidenceAccepted"])
+        self.assertTrue(source_range_rejected(target, 9, 14))
         self.assertEqual(verified_source["acceptedAudioPhrase"]["midiSequence"], [75, 75, 72, 75, 75])
         six_note_source = next(
             item
             for item in target["symbolicScore"]["sourceSnippets"]
             if item.get("referenceStart") == 9 and item.get("referenceEnd") == 15
         )
-        self.assertEqual(six_note_source["status"], "source_score_exact_midi_sequence_verified")
+        self.assertEqual(six_note_source["status"], "source_score_phrase_review_rejected")
         self.assertEqual(
             six_note_source["visibleScoreExactNoteSequence"],
             ["Eb5", "Eb5", "C5", "Eb5", "Eb5", "Eb5"],
         )
-        self.assertTrue(six_note_source["truthEvidenceAccepted"])
+        self.assertTrue(source_range_rejected(target, 9, 15))
         self.assertEqual(six_note_source["acceptedAudioPhrase"]["midiSequence"], [75, 75, 72, 75, 75, 75])
         extension_source = next(
             item
             for item in target["symbolicScore"]["sourceSnippets"]
             if item.get("referenceStart") == 9 and item.get("referenceEnd") == 16
         )
-        self.assertEqual(extension_source["status"], "source_score_exact_midi_sequence_verified")
+        self.assertEqual(extension_source["status"], "source_score_phrase_review_rejected")
         self.assertEqual(extension_source["visibleScoreExactNoteSequence"], ["Eb5", "Eb5", "C5", "Eb5", "Eb5", "Eb5", "C5"])
-        self.assertTrue(extension_source["visibleScoreExactNoteSequenceVerified"])
-        self.assertTrue(extension_source["scoreBoxCenterAgreement"])
-        self.assertTrue(extension_source["truthEvidenceAccepted"])
+        self.assertFalse(extension_source["visibleScoreExactNoteSequenceVerified"])
+        self.assertFalse(extension_source["scoreBoxCenterAgreement"])
+        self.assertTrue(source_range_rejected(target, 9, 16))
         self.assertEqual(extension_source["acceptedAudioPhrase"]["midiSequence"], [75, 75, 72, 75, 75, 75, 72])
         self.assertEqual(extension_source["extensionCheck"]["expectedNextScoreNote"], "C5")
         self.assertEqual(extension_source["extensionCheck"]["observedNextAudioNote"], "C5")

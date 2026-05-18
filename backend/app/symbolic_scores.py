@@ -266,6 +266,7 @@ def symbolic_score_audit(target: dict[str, Any]) -> dict[str, Any]:
         item
         for item in score_config.get("sourceSnippets", [])
         if isinstance(item, dict)
+        and not source_range_rejected(target, item.get("referenceStart"), item.get("referenceEnd"))
         and str(item.get("imageUrl") or "").strip()
         and item.get("visualRangeAgreement") is True
         and item.get("visibleScoreNoteSequenceVerified") is True
@@ -284,6 +285,32 @@ def symbolic_score_audit(target: dict[str, Any]) -> dict[str, Any]:
         "symbolicScoreTitle": score.get("title") or "",
         "symbolicScorePartId": score.get("partId") or "",
     }
+
+
+def source_range_rejected(target: dict[str, Any], reference_start: Any, reference_end: Any) -> bool:
+    score_config = target.get("symbolicScore") if isinstance(target.get("symbolicScore"), dict) else {}
+    rejected = score_config.get("rejectedSourceSnippetRanges")
+    if not isinstance(rejected, list):
+        return False
+    try:
+        start = int(reference_start)
+        end = int(reference_end)
+    except (TypeError, ValueError):
+        return False
+    for item in rejected:
+        if not isinstance(item, dict):
+            continue
+        try:
+            rejected_start = int(item.get("referenceStart"))
+            rejected_end = int(item.get("referenceEnd"))
+        except (TypeError, ValueError):
+            continue
+        if rejected_start != start or rejected_end != end:
+            continue
+        status = str(item.get("status") or "").lower()
+        if "rejected" in status or "mismatch" in status or "blocked" in status:
+            return True
+    return False
 
 
 def score_map_candidate_audit(target: dict[str, Any]) -> dict[str, Any]:
