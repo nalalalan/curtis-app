@@ -30,6 +30,17 @@ NOTE_CLASS_VALUES = {
 
 PITCH_CLASS_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 TREBLE_NOTE_ORDER = {"C": 0, "D": 1, "E": 2, "F": 3, "G": 4, "A": 5, "B": 6}
+SYMBOLIC_STAFF_TOP = 40.0
+SYMBOLIC_STAFF_LINE_GAP = 12.0
+SYMBOLIC_STAFF_BOTTOM = SYMBOLIC_STAFF_TOP + (SYMBOLIC_STAFF_LINE_GAP * 4)
+SYMBOLIC_G4_Y = SYMBOLIC_STAFF_TOP + (SYMBOLIC_STAFF_LINE_GAP * 3)
+SYMBOLIC_STAFF_STEP_Y = SYMBOLIC_STAFF_LINE_GAP / 2
+SYMBOLIC_LEDGER_HALF_WIDTH = 12.5
+SYMBOLIC_KEY_SIGNATURE_START_X = 96
+SYMBOLIC_KEY_SIGNATURE_STEP_X = 16
+SYMBOLIC_NOTEHEAD_FONT_SIZE = 40
+SYMBOLIC_ACCIDENTAL_FONT_SIZE = 36
+SYMBOLIC_CLEF_FONT_SIZE = 66
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -363,30 +374,23 @@ def _natural_note_step(note_name: str) -> int | None:
 
 
 def _staff_y(note_name: str) -> float:
-    staff_top = 40.0
-    line_gap = 12.0
-    g4_y = staff_top + (line_gap * 3)
-    step_y = line_gap / 2
     step = _natural_note_step(note_name)
     if step is None:
-        return staff_top + (line_gap * 2)
+        return SYMBOLIC_STAFF_TOP + (SYMBOLIC_STAFF_LINE_GAP * 2)
     g4_step = (4 * 7) + TREBLE_NOTE_ORDER["G"]
-    return g4_y - ((step - g4_step) * step_y)
+    return SYMBOLIC_G4_Y - ((step - g4_step) * SYMBOLIC_STAFF_STEP_Y)
 
 
 def _ledger_lines(y: float, x: float) -> str:
     lines: list[str] = []
-    staff_top = 40.0
-    line_gap = 12.0
-    staff_bottom = staff_top + (line_gap * 4)
-    line_y = staff_bottom + line_gap
+    line_y = SYMBOLIC_STAFF_BOTTOM + SYMBOLIC_STAFF_LINE_GAP
     while line_y <= y + 0.1:
-        lines.append(f'<line class="ledger" x1="{x - 13:.1f}" x2="{x + 13:.1f}" y1="{line_y:.1f}" y2="{line_y:.1f}" />')
-        line_y += line_gap
-    line_y = staff_top - line_gap
+        lines.append(f'<line class="ledger" x1="{x - SYMBOLIC_LEDGER_HALF_WIDTH:.1f}" x2="{x + SYMBOLIC_LEDGER_HALF_WIDTH:.1f}" y1="{line_y:.1f}" y2="{line_y:.1f}" />')
+        line_y += SYMBOLIC_STAFF_LINE_GAP
+    line_y = SYMBOLIC_STAFF_TOP - SYMBOLIC_STAFF_LINE_GAP
     while line_y >= y - 0.1:
-        lines.append(f'<line class="ledger" x1="{x - 13:.1f}" x2="{x + 13:.1f}" y1="{line_y:.1f}" y2="{line_y:.1f}" />')
-        line_y -= line_gap
+        lines.append(f'<line class="ledger" x1="{x - SYMBOLIC_LEDGER_HALF_WIDTH:.1f}" x2="{x + SYMBOLIC_LEDGER_HALF_WIDTH:.1f}" y1="{line_y:.1f}" y2="{line_y:.1f}" />')
+        line_y -= SYMBOLIC_STAFF_LINE_GAP
     return "".join(lines)
 
 
@@ -425,9 +429,9 @@ def _key_signature_marks(key_signature: dict[str, Any] | None) -> tuple[str, flo
         y = treble_positions.get(accidental)
         if y is None:
             continue
-        x = 96 + (index * 16)
+        x = SYMBOLIC_KEY_SIGNATURE_START_X + (index * SYMBOLIC_KEY_SIGNATURE_STEP_X)
         marks.append(f'<text class="key-signature" x="{x}" y="{y:.1f}">{glyph}</text>')
-    return "".join(marks), float(len(marks) * 16)
+    return "".join(marks), float(len(marks) * SYMBOLIC_KEY_SIGNATURE_STEP_X)
 
 
 def render_symbolic_score_svg(
@@ -468,9 +472,9 @@ def render_symbolic_score_svg(
         "svg{background:#fffdf8;color:#1b2524;font-family:Georgia,'Times New Roman',serif}"
         ".staff line,.ledger{stroke:#1f2928;stroke-width:1.45;stroke-linecap:square}"
         ".note line{fill:#1f2928;stroke:#1f2928;stroke-width:1.8;stroke-linecap:round}"
-        ".clef{font-family:'Bravura','Noto Music','Segoe UI Symbol',serif;font-size:64px;fill:#1f2928}"
-        ".key-signature{font-family:'Bravura','Noto Music','Segoe UI Symbol',serif;font-size:40px;font-weight:400;fill:#1f2928;dominant-baseline:central;text-anchor:middle}"
-        ".notehead{font-family:'Bravura','Noto Music','Segoe UI Symbol',serif;font-size:42px;fill:#1f2928;dominant-baseline:central;text-anchor:middle}"
+        f".clef{{font-family:'CurtisBravura','Bravura','Noto Music','Segoe UI Symbol',serif;font-size:{SYMBOLIC_CLEF_FONT_SIZE}px;fill:#1f2928;text-rendering:geometricPrecision}}"
+        f".key-signature{{font-family:'CurtisBravura','Bravura','Noto Music','Segoe UI Symbol',serif;font-size:{SYMBOLIC_ACCIDENTAL_FONT_SIZE}px;font-weight:400;fill:#1f2928;dominant-baseline:central;text-anchor:middle;text-rendering:geometricPrecision}}"
+        f".notehead{{font-family:'CurtisBravura','Bravura','Noto Music','Segoe UI Symbol',serif;font-size:{SYMBOLIC_NOTEHEAD_FONT_SIZE}px;fill:#1f2928;dominant-baseline:central;text-anchor:middle;text-rendering:geometricPrecision}}"
         ".title{font-size:16px;font-weight:600}.label{font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}"
         "</style>"
     )

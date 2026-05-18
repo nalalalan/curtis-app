@@ -1389,6 +1389,19 @@ const TREBLE_CLEF_BASELINE_Y = 67;
 const NOTATION_VIEWBOX_MIN_Y = -18;
 const NOTATION_VIEWBOX_HEIGHT = 150;
 const NOTATION_VIEWBOX = `0 ${NOTATION_VIEWBOX_MIN_Y} 720 ${NOTATION_VIEWBOX_HEIGHT}`;
+const NOTATION_STAFF_LINE_X1 = 22;
+const NOTATION_STAFF_LINE_X2 = 698;
+const NOTATION_NOTE_START_X = 98;
+const NOTATION_NOTE_END_X = 682;
+const NOTATION_STEM_OFFSET_X = 7.2;
+const NOTATION_LEDGER_HALF_WIDTH = 12;
+const NOTATION_NOTE_ACCIDENTAL_X_OFFSET = 14;
+const NOTATION_NOTE_ACCIDENTAL_Y_OFFSET = { flat: -1, sharp: 0 };
+const NOTATION_ACCIDENTAL_SAFE_TOP_Y = NOTATION_VIEWBOX_MIN_Y + 12;
+const NOTATION_ACCIDENTAL_SAFE_BOTTOM_Y = TREBLE_STAFF_BOTTOM_Y + 24;
+const NOTATION_KEY_SIGNATURE_START_X = 63;
+const NOTATION_KEY_SIGNATURE_STEP_X = 16;
+const NOTATION_KEY_SIGNATURE_WIDTH_PAD = 18;
 const SHARP_TO_FLAT_NOTE = { "C#": "Db", "D#": "Eb", "F#": "Gb", "G#": "Ab", "A#": "Bb" };
 const FLAT_TO_SHARP_NOTE = { Db: "C#", Eb: "D#", Gb: "F#", Ab: "G#", Bb: "A#" };
 
@@ -1456,8 +1469,9 @@ function renderNoteAccidental(spelledNote, signature, x, y) {
   const parsed = parseExactNote(spelledNote);
   if (!parsed || !parsed.accidental || keySignatureCoversNote(spelledNote, signature)) return "";
   const type = parsed.accidental === "b" ? "flat" : "sharp";
-  const safeY = Math.max(type === "flat" ? 18 : 15, Math.min(88, y));
-  const accidentalX = x - (type === "sharp" ? 17 : 16);
+  const rawY = y + (NOTATION_NOTE_ACCIDENTAL_Y_OFFSET[type] || 0);
+  const safeY = Math.max(NOTATION_ACCIDENTAL_SAFE_TOP_Y, Math.min(NOTATION_ACCIDENTAL_SAFE_BOTTOM_Y, rawY));
+  const accidentalX = x - NOTATION_NOTE_ACCIDENTAL_X_OFFSET;
   return renderAccidentalGlyph(type, accidentalX, safeY, "note-accidental");
 }
 
@@ -1587,14 +1601,14 @@ function renderKeySignatureMarks(signature) {
       const letter = String(item || "").trim().charAt(0).toUpperCase();
       const y = positions[letter];
       if (!Number.isFinite(y)) return "";
-      const x = 63 + (index * 16);
+      const x = NOTATION_KEY_SIGNATURE_START_X + (index * NOTATION_KEY_SIGNATURE_STEP_X);
       return renderAccidentalGlyph(normalized.accidentalType, x, y, "key-signature-mark");
     })
     .filter(Boolean)
     .join("");
   return {
     svg: marks ? `<g class="key-signature" aria-label="${escapeHtml(normalized.label)}">${marks}</g>` : "",
-    width: marks ? 18 + (normalized.accidentals.length * 16) : 0,
+    width: marks ? NOTATION_KEY_SIGNATURE_WIDTH_PAD + (normalized.accidentals.length * NOTATION_KEY_SIGNATURE_STEP_X) : 0,
     label: normalized.label,
   };
 }
@@ -1612,14 +1626,14 @@ function renderLedgerLines(y, x) {
     lines.push(lineY);
   }
   return lines.map((lineY) => (
-    `<line class="ledger-line" x1="${(x - 13).toFixed(1)}" x2="${(x + 13).toFixed(1)}" y1="${lineY.toFixed(1)}" y2="${lineY.toFixed(1)}"></line>`
+    `<line class="ledger-line" x1="${(x - NOTATION_LEDGER_HALF_WIDTH).toFixed(1)}" x2="${(x + NOTATION_LEDGER_HALF_WIDTH).toFixed(1)}" y1="${lineY.toFixed(1)}" y2="${lineY.toFixed(1)}"></line>`
   )).join("");
 }
 
 function renderNotationSheet(events, options = {}) {
   const maxNotes = Number(options?.maxNotes) > 0 ? Number(options.maxNotes) : 32;
   const items = Array.isArray(events) ? events.slice(0, maxNotes) : [];
-  const staffLines = [30, 40, 50, 60, 70].map((y) => `<line x1="22" x2="698" y1="${y}" y2="${y}" />`).join("");
+  const staffLines = [30, 40, 50, 60, 70].map((y) => `<line x1="${NOTATION_STAFF_LINE_X1}" x2="${NOTATION_STAFF_LINE_X2}" y1="${y}" y2="${y}" />`).join("");
   const repeatGroup = options?.repeatGroup && typeof options.repeatGroup === "object" ? options.repeatGroup : null;
   const normalizedSignature = normalizedKeySignature(options?.keySignature || {});
   const keySignature = renderKeySignatureMarks(normalizedSignature);
@@ -1665,8 +1679,8 @@ function renderNotationSheet(events, options = {}) {
       </div>
     `;
   }
-  const noteStartX = 78 + keySignature.width;
-  const noteEndX = 682;
+  const noteStartX = NOTATION_NOTE_START_X + keySignature.width;
+  const noteEndX = NOTATION_NOTE_END_X;
   const step = items.length > 1 ? (noteEndX - noteStartX) / (items.length - 1) : 0;
   const marks = items.map((event, index) => {
     const x = noteStartX + (step * index);
@@ -1682,7 +1696,7 @@ function renderNotationSheet(events, options = {}) {
     const displayNote = notationDisplayNote(event.note, normalizedSignature);
     const y = staffNoteY(displayNote);
     const stemUp = y >= TREBLE_STAFF_TOP_Y + (TREBLE_STAFF_LINE_GAP * 2);
-    const stemX = x + (stemUp ? 7.2 : -7.2);
+    const stemX = x + (stemUp ? NOTATION_STEM_OFFSET_X : -NOTATION_STEM_OFFSET_X);
     const stemEndY = stemUp ? Math.max(10, y - 30) : Math.min(94, y + 30);
     const isUncertain = Boolean(event.uncertain || options?.forceUncertain);
     const uncertain = isUncertain ? " notation-uncertain" : "";
@@ -1722,7 +1736,7 @@ function renderVerifiedNotationGate(
   detail = "Only audio-checked notes render here.",
   keySignature = {}
 ) {
-  const staffLines = [30, 40, 50, 60, 70].map((y) => `<line x1="22" x2="698" y1="${y}" y2="${y}" />`).join("");
+  const staffLines = [30, 40, 50, 60, 70].map((y) => `<line x1="${NOTATION_STAFF_LINE_X1}" x2="${NOTATION_STAFF_LINE_X2}" y1="${y}" y2="${y}" />`).join("");
   const signature = renderKeySignatureMarks(keySignature);
   return `
     <div class="notation-gate" aria-label="${escapeHtml(title)}">

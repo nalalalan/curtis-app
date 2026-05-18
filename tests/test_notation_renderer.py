@@ -1,8 +1,11 @@
 import subprocess
 import textwrap
+from pathlib import Path
 
 
 def test_notation_renderer_draws_exact_accidentals():
+    assert Path("assets/fonts/Bravura.woff2").is_file(), "notation font must be local, not CDN-only"
+
     script = textwrap.dedent(
         r"""
         const fs = require("fs");
@@ -53,7 +56,7 @@ def test_notation_renderer_draws_exact_accidentals():
         assert(noKey.includes('font-size: 70px') === false, "notation renderer should not inline clef styling");
         assert(noKey.includes('aria-label="A#4"'), "A# must not render as natural A in aria label");
         assert(noKey.includes('aria-label="D#6"'), "D# must not render as natural D in aria label");
-        assert(noKey.includes('class="note-accidental accidental-glyph accidental-sharp" x="262.3" y="15.0"'), "high D# sharp must be kept inside the SVG viewBox");
+        assert(noKey.includes('class="note-accidental accidental-glyph accidental-sharp" x="278.7" y="5.0"'), "high D# sharp must stay vertically aligned with the high notehead");
 
         const flatKey = vm.runInContext(
           `renderNotationSheet([
@@ -72,3 +75,15 @@ def test_notation_renderer_draws_exact_accidentals():
     )
     completed = subprocess.run(["node", "-e", script], cwd=".", text=True, capture_output=True)
     assert completed.returncode == 0, completed.stderr
+
+
+def test_notation_styles_use_local_music_font_and_professional_glyph_sizes():
+    css = Path("styles.css").read_text(encoding="utf-8")
+    assert 'url("/assets/fonts/Bravura.woff2") format("woff2")' in css
+    assert ".notation-sheet .treble-clef" in css
+    assert "font-size: 68px;" in css
+    assert ".notation-sheet .accidental-flat" in css
+    assert "font-size: 36px;" in css
+    assert ".notation-sheet .accidental-sharp" in css
+    assert "font-size: 32px;" in css
+    assert "text-rendering: geometricPrecision;" in css
