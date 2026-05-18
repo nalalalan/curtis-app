@@ -119,6 +119,18 @@ def rounded_midi(value: float | None) -> int | None:
     return int(round(float(value)))
 
 
+def frequency_for_midi(midi: int | float | None) -> float | None:
+    if midi is None:
+        return None
+    try:
+        value = float(midi)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(value):
+        return None
+    return 440.0 * (2.0 ** ((value - 69.0) / 12.0))
+
+
 def median(values: list[float]) -> float | None:
     clean = sorted(value for value in values if math.isfinite(value))
     if not clean:
@@ -357,6 +369,11 @@ def staff4_audit_decision(packet: dict[str, Any], analysis: dict[str, Any], fail
     observed_note = failure_observed_note(failure) or str(packet.get("observedNextAudioNote") or "")
     mismatch = analysis.get("mismatchWindow") if isinstance(analysis.get("mismatchWindow"), dict) else {}
     detector_votes = mismatch.get("detectorVotes") if isinstance(mismatch.get("detectorVotes"), dict) else {}
+    pitch_diagnostic = (
+        packet.get("failedNotePitchDiagnostic")
+        if isinstance(packet.get("failedNotePitchDiagnostic"), dict)
+        else {}
+    )
     exact_expected_votes = int(detector_votes.get("expected") or 0)
     exact_observed_votes = int(detector_votes.get("observed") or 0)
     failure_kind = str(failure.get("failureKind") or "")
@@ -437,6 +454,8 @@ def staff4_audit_decision(packet: dict[str, Any], analysis: dict[str, Any], fail
         "failureKind": failure_kind,
         "reason": reason,
         "detectorVotes": detector_votes,
+        "pitchDiagnosticClass": pitch_diagnostic.get("diagnosticClass") or "",
+        "pitchDiagnosticConclusion": pitch_diagnostic.get("conclusion") or "",
         "regressionCase": regression_case,
         "goldReviewRequired": status == "queued_gold_review",
         "limit": (
@@ -902,6 +921,179 @@ def analyze_audio_clip(
     }
 
 
+def harmonic_pitch_energy(
+    y: Any,
+    sr: int,
+    midi: int,
+    np: Any,
+    *,
+    harmonics: int = 5,
+    bandwidth_ratio: float = 0.015,
+) -> dict[str, Any]:
+    if len(y) < 32:
+        return {
+            "midi": midi,
+            "note": note_label_for_midi(midi, prefer_flats=True),
+            "fundamentalHz": frequency_for_midi(midi),
+            "fundamentalEnergy": 0.0,
+            "harmonicEnergy": 0.0,
+            "harmonicCount": 0,
+        }
+    fft_size = 1
+    while fft_size < len(y) * 8:
+        fft_size *= 2
+    window = np.hanning(len(y))
+    magnitude = np.abs(np.fft.rfft(y * window, n=fft_size))
+    freqs = np.fft.rfftfreq(fft_size, 1.0 / float(sr))
+    fundamental = frequency_for_midi(midi)
+    if not fundamental:
+        return {
+            "midi": midi,
+            "note": note_label_for_midi(midi, prefer_flats=True),
+            "fundamentalHz": None,
+            "fundamentalEnergy": 0.0,
+            "harmonicEnergy": 0.0,
+            "harmonicCount": 0,
+        }
+    harmonic_energy = 0.0
+    fundamental_energy = 0.0
+    harmonic_count = 0
+    nyquist = float(sr) / 2.0
+    for harmonic in range(1, harmonics + 1):
+        target = fundamental * harmonic
+        if target >= nyquist:
+            continue
+        low = target * (1.0 - bandwidth_ratio)
+        high = target * (1.0 + bandwidth_ratio)
+        mask = (freqs >= low) & (freqs <= high)
+        peak = float(magnitude[mask].max(initial=0.0))
+        if harmonic == 1:
+            fundamental_energy = peak
+        harmonic_energy += peak / math.sqrt(harmonic)
+        harmonic_count += 1
+    return {
+        "midi": midi,
+        "note": note_label_for_midi(midi, prefer_flats=True),
+        "fundamentalHz": round(fundamental, 3),
+        "fundamentalEnergy": round(fundamental_energy, 6),
+        "harmonicEnergy": round(harmonic_energy, 6),
+        "harmonicCount": harmonic_count,
+    }
+
+
+def failed_note_pitch_diagnostic(
+    audio_path: Path,
+    failure: dict[str, Any],
+    clip_start: float,
+) -> dict[str, Any]:
+    expected_midi = int_or_none(failure.get("expectedMidi"))
+    observed_midi = failure_observed_midi(failure)
+    if expected_midi is None:
+        return {"status": "unavailable", "reason": "missing_expected_midi"}
+    if not audio_path.exists():
+        return {"status": "unavailable", "reason": "audit_audio_missing"}
+    try:
+        import librosa
+        import numpy as np
+    except Exception as exc:  # pragma: no cover - environment boundary
+        return {"status": "unavailable", "reason": "dependency_unavailable", "detail": str(exc)[:180]}
+    try:
+        y, sr = librosa.load(str(audio_path), sr=22050, mono=True)
+    except Exception as exc:
+        return {"status": "unavailable", "reason": "audio_load_failed", "detail": str(exc)[:180]}
+    if getattr(y, "size", 0) == 0:
+        return {"status": "unavailable", "reason": "empty_audio"}
+
+    failure_start = number_or_none(failure.get("bestAttemptStartSeconds"))
+    failure_end = number_or_none(failure.get("bestAttemptEndSeconds"))
+    local_start = max(0.0, (failure_start if failure_start is not None else clip_start) - clip_start)
+    local_end = max(local_start + 0.08, (failure_end if failure_end is not None else failure_start or clip_start) - clip_start)
+    duration = float(librosa.get_duration(y=y, sr=sr))
+    local_start = max(0.0, min(duration, local_start))
+    local_end = max(local_start + 0.08, min(duration, local_end))
+    segment = y[int(local_start * sr) : int(local_end * sr)]
+    if len(segment) < 32:
+        return {
+            "status": "unavailable",
+            "reason": "analysis_window_too_short",
+            "analysisWindow": {
+                "clipLocalStartSeconds": round(local_start, 3),
+                "clipLocalEndSeconds": round(local_end, 3),
+            },
+        }
+
+    candidate_midis = set(range(max(43, expected_midi - 12), min(97, expected_midi + 13)))
+    if observed_midi is not None:
+        candidate_midis.update(range(max(43, observed_midi - 3), min(97, observed_midi + 4)))
+    target_midis = failure.get("targetMidiSequence") if isinstance(failure.get("targetMidiSequence"), list) else []
+    for midi in target_midis:
+        value = int_or_none(midi)
+        if value is not None:
+            candidate_midis.add(value)
+    energies = [harmonic_pitch_energy(segment, sr, midi, np) for midi in sorted(candidate_midis)]
+    ranked = sorted(energies, key=lambda item: float(item.get("harmonicEnergy") or 0.0), reverse=True)
+    expected_energy = next((item for item in energies if item.get("midi") == expected_midi), {})
+    observed_energy = next((item for item in energies if item.get("midi") == observed_midi), {}) if observed_midi is not None else {}
+    dominant = ranked[0] if ranked else {}
+
+    expected_value = float(expected_energy.get("harmonicEnergy") or 0.0)
+    observed_value = float(observed_energy.get("harmonicEnergy") or 0.0)
+    dominant_value = float(dominant.get("harmonicEnergy") or 0.0)
+    observed_neighbor_value = 0.0
+    if observed_midi is not None:
+        observed_neighbor_value = max(
+            float(item.get("harmonicEnergy") or 0.0)
+            for item in energies
+            if abs(int(item.get("midi") or 0) - observed_midi) <= 1
+        )
+    expected_to_observed = expected_value / observed_value if observed_value > 0 else None
+    expected_to_dominant = expected_value / dominant_value if dominant_value > 0 else None
+
+    diagnostic_class = "insufficient_pitch_energy"
+    conclusion = "Expected source pitch is not supported strongly enough to decide."
+    if expected_value > 0 and observed_neighbor_value >= expected_value * 3.0:
+        diagnostic_class = "observed_region_dominates"
+        conclusion = "The failed window is dominated by the observed audio pitch region, not the expected source pitch."
+    elif expected_to_observed is not None and expected_to_observed >= 0.65:
+        diagnostic_class = "expected_pitch_present"
+        conclusion = "Expected source pitch is present strongly enough for manual review before rejection."
+    elif expected_to_observed is not None and expected_to_observed >= 0.25:
+        diagnostic_class = "expected_pitch_possible_under_observed"
+        conclusion = "Expected source pitch may be present under a stronger neighboring pitch and needs gold review."
+    elif dominant_value > 0:
+        diagnostic_class = "expected_pitch_not_supported"
+        conclusion = "Expected source pitch is far weaker than the dominant pitch evidence."
+
+    return {
+        "status": "ready",
+        "diagnosticClass": diagnostic_class,
+        "conclusion": conclusion,
+        "analysisWindow": {
+            "clipLocalStartSeconds": round(local_start, 3),
+            "clipLocalEndSeconds": round(local_end, 3),
+            "durationSeconds": round(max(0.0, local_end - local_start), 3),
+        },
+        "expectedMidi": expected_midi,
+        "expectedNote": failure_source_note(failure) or note_label_for_midi(expected_midi, prefer_flats=True),
+        "observedMidi": observed_midi,
+        "observedNote": note_label_for_midi(observed_midi, prefer_flats=True) if observed_midi is not None else "",
+        "expectedHarmonicEnergy": expected_energy,
+        "observedHarmonicEnergy": observed_energy,
+        "dominantPitch": dominant,
+        "expectedToObservedRatio": round(expected_to_observed, 6) if expected_to_observed is not None else None,
+        "expectedToDominantRatio": round(expected_to_dominant, 6) if expected_to_dominant is not None else None,
+        "rankedPitchEnergies": [
+            {
+                **item,
+                "relativeToDominant": round((float(item.get("harmonicEnergy") or 0.0) / dominant_value), 6)
+                if dominant_value > 0
+                else None,
+            }
+            for item in ranked[:12]
+        ],
+    }
+
+
 def first_mismatch_index(current: dict[str, Any]) -> int:
     target = current.get("targetMidiSequence") if isinstance(current.get("targetMidiSequence"), list) else []
     observed = current.get("bestAudioMidiSequence") if isinstance(current.get("bestAudioMidiSequence"), list) else []
@@ -1211,6 +1403,8 @@ def ensure_staff4_phrase_audit_packet(
 
     analysis = analyze_audio_clip(audio_path, current, clip_start, first_failure)
     packet["audioAnalysis"] = analysis
+    if first_failure:
+        packet["failedNotePitchDiagnostic"] = failed_note_pitch_diagnostic(audio_path, first_failure, clip_start)
     if analysis.get("status") in {
         "blocked_audio_mismatch_confirmed",
         "detectors_disagree_with_stored_run",

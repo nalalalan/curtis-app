@@ -1,6 +1,9 @@
 import tempfile
 import unittest
 import json
+import math
+import struct
+import wave
 from pathlib import Path
 from unittest.mock import patch
 
@@ -8,12 +11,26 @@ import backend.app.staff4_audit as staff4_audit
 from backend.app.staff4_audit import (
     attach_staff4_audit_decision,
     ensure_staff4_phrase_audit_packet,
+    failed_note_pitch_diagnostic,
     latest_staff4_phrase_audit_packet,
     latest_staff4_phrase_audit_packet_for_completion,
     media_sample_for_id,
     packet_id_for_current,
     source_media_path,
 )
+
+
+def write_sine_wav(path: Path, midi: int, duration: float = 0.35, sample_rate: int = 22050) -> None:
+    frequency = staff4_audit.frequency_for_midi(midi) or 440.0
+    samples = bytearray()
+    for index in range(int(duration * sample_rate)):
+        value = int(0.45 * 32767 * math.sin((2.0 * math.pi * frequency * index) / sample_rate))
+        samples.extend(struct.pack("<h", value))
+    with wave.open(str(path), "wb") as handle:
+        handle.setnchannels(1)
+        handle.setsampwidth(2)
+        handle.setframerate(sample_rate)
+        handle.writeframes(bytes(samples))
 
 
 def current_best():
@@ -190,6 +207,61 @@ def first_failure_completion_state(failure=None):
 
 
 class Staff4AuditTests(unittest.TestCase):
+    def test_failed_note_pitch_diagnostic_rejects_observed_dominant_audio(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            audio_path = Path(temp_dir) / "d5.wav"
+            write_sine_wav(audio_path, 74)
+
+            diagnostic = failed_note_pitch_diagnostic(
+                audio_path,
+                staff4_first_failure(
+                    targetSequence="A4",
+                    targetMidiSequence=[69],
+                    expectedMidi=69,
+                    expectedNote="A4",
+                    failureKind="wrong_midi_detected",
+                    bestAttemptStartSeconds=0.0,
+                    bestAttemptEndSeconds=0.35,
+                    bestAttemptObservedMidi=[74],
+                    bestAttemptObservedConsensusMidi=74,
+                    bestAttemptObservedConsensusNote="D5",
+                ),
+                0.0,
+            )
+
+        self.assertEqual(diagnostic["status"], "ready")
+        self.assertEqual(diagnostic["diagnosticClass"], "observed_region_dominates")
+        self.assertEqual(diagnostic["expectedNote"], "A4")
+        self.assertEqual(diagnostic["observedNote"], "D5")
+        self.assertLess(diagnostic["expectedToObservedRatio"], 0.2)
+        self.assertEqual(diagnostic["dominantPitch"]["midi"], 74)
+
+    def test_failed_note_pitch_diagnostic_keeps_exact_expected_audio_reviewable(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            audio_path = Path(temp_dir) / "a4.wav"
+            write_sine_wav(audio_path, 69)
+
+            diagnostic = failed_note_pitch_diagnostic(
+                audio_path,
+                staff4_first_failure(
+                    targetSequence="A4",
+                    targetMidiSequence=[69],
+                    expectedMidi=69,
+                    expectedNote="A4",
+                    bestAttemptStartSeconds=0.0,
+                    bestAttemptEndSeconds=0.35,
+                    bestAttemptObservedMidi=[74],
+                    bestAttemptObservedConsensusMidi=74,
+                    bestAttemptObservedConsensusNote="D5",
+                ),
+                0.0,
+            )
+
+        self.assertEqual(diagnostic["status"], "ready")
+        self.assertEqual(diagnostic["diagnosticClass"], "expected_pitch_present")
+        self.assertGreater(diagnostic["expectedToObservedRatio"], 3.0)
+        self.assertEqual(diagnostic["dominantPitch"]["midi"], 69)
+
     def test_owner_media_sample_fallback_resolves_existing_browser_export(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             owner_dir = Path(temp_dir) / "owner-media"
