@@ -46,6 +46,7 @@ from .settings import (
     SERVICE_NAME,
 )
 from .staff4_audit import (
+    harmonic_pitch_energy,
     latest_staff4_phrase_audit_packet_for_completion,
     owner_media_sample_for_id,
     run_ffmpeg_extract_audio,
@@ -79,7 +80,7 @@ from .symbolic_scores import (
 )
 
 DEFAULT_YOUTUBE_SOURCE = "https://www.youtube.com/@nalalan"
-STAFF4_SOURCE_AUDIO_RESCAN_VERSION = "staff4_source_audio_rescan_v10"
+STAFF4_SOURCE_AUDIO_RESCAN_VERSION = "staff4_source_audio_rescan_v11"
 STAFF4_SOURCE_AUDIO_RESCAN_DIR = RUNTIME_DIR / "staff4-source-rescan"
 STAFF4_SOURCE_AUDIO_RESCAN_PAD_BEFORE_SECONDS = 4.0
 STAFF4_SOURCE_AUDIO_RESCAN_PAD_AFTER_SECONDS = 10.0
@@ -91,6 +92,13 @@ STAFF4_ANCHOR_GUIDED_PAD_SECONDS = 0.03
 STAFF4_ANCHOR_GUIDED_MIN_EXACT_VOTES = 2
 STAFF4_ADJACENT_GUIDED_MAX_TARGET_NOTES = 8
 STAFF4_ADJACENT_GUIDED_SWEEP_OFFSETS_SECONDS = (0.0, -0.06, 0.06, -0.12, 0.12, -0.18, 0.18, -0.24, 0.24)
+STAFF4_CONTINUATION_SEARCH_AFTER_SECONDS = 2.5
+STAFF4_CONTINUATION_SEARCH_STEP_SECONDS = 0.04
+STAFF4_CONTINUATION_SEARCH_DURATIONS_SECONDS = (0.12, 0.16, 0.22)
+STAFF4_CONTINUATION_SEARCH_MAX_PREFILTER_CANDIDATES = 8
+STAFF4_CONTINUATION_SEARCH_MIN_EXPECTED_ENERGY = 0.000001
+STAFF4_CONTINUATION_SEARCH_MIN_EXPECTED_TO_DOMINANT_RATIO = 0.48
+STAFF4_CONTINUATION_SEARCH_MAX_EXPECTED_RANK = 3
 MEDIA_REVIEW_PENDING_BLOCKERS = {"youtube_data_api_returns_metadata_not_video_media"}
 WEAK_EVIDENCE_TERMS = (
     "background noise",
@@ -2317,6 +2325,111 @@ def staff4_adjacent_guided_note_windows(anchor: dict[str, Any], target_midi: lis
     return windows
 
 
+def staff4_expected_pitch_prefilter_candidates(
+    *,
+    y: Any,
+    sr: int,
+    scan_start: float,
+    scan_end: float,
+    expected_midi: int,
+    search_start: float,
+    search_end: float,
+    numpy: Any,
+) -> list[dict[str, Any]]:
+    bounded_start = max(float(scan_start), float(search_start))
+    bounded_end = min(float(scan_end), float(search_end))
+    if bounded_end <= bounded_start + 0.06:
+        return []
+
+    comparison_midis = list(range(max(43, int(expected_midi) - 12), min(97, int(expected_midi) + 13)))
+    if int(expected_midi) not in comparison_midis:
+        comparison_midis.append(int(expected_midi))
+    candidates_by_window: dict[tuple[float, float], dict[str, Any]] = {}
+
+    for duration in STAFF4_CONTINUATION_SEARCH_DURATIONS_SECONDS:
+        duration = float(duration)
+        if duration <= 0.0 or bounded_start + duration > bounded_end:
+            continue
+        current = bounded_start
+        while current + duration <= bounded_end + 0.0001:
+            start = round(current, 3)
+            end = round(current + duration, 3)
+            start_sample = max(0, int(round((start - scan_start) * sr)))
+            end_sample = min(len(y), int(round((end - scan_start) * sr)))
+            current += float(STAFF4_CONTINUATION_SEARCH_STEP_SECONDS)
+            if end_sample <= start_sample:
+                continue
+            segment = y[start_sample:end_sample]
+            expected_energy = harmonic_pitch_energy(segment, sr, int(expected_midi), numpy)
+            expected_harmonic = float(expected_energy.get("harmonicEnergy") or 0.0)
+            if expected_harmonic < STAFF4_CONTINUATION_SEARCH_MIN_EXPECTED_ENERGY:
+                continue
+            ranked = sorted(
+                [
+                    harmonic_pitch_energy(segment, sr, midi, numpy)
+                    for midi in comparison_midis
+                ],
+                key=lambda item: float(item.get("harmonicEnergy") or 0.0),
+                reverse=True,
+            )
+            if not ranked:
+                continue
+            dominant = ranked[0]
+            dominant_energy = float(dominant.get("harmonicEnergy") or 0.0)
+            if dominant_energy <= 0.0:
+                continue
+            expected_rank = next(
+                (
+                    index + 1
+                    for index, item in enumerate(ranked)
+                    if int(item.get("midi") or -1) == int(expected_midi)
+                ),
+                len(ranked) + 1,
+            )
+            expected_to_dominant = expected_harmonic / dominant_energy if dominant_energy else 0.0
+            if (
+                expected_to_dominant < STAFF4_CONTINUATION_SEARCH_MIN_EXPECTED_TO_DOMINANT_RATIO
+                and expected_rank > STAFF4_CONTINUATION_SEARCH_MAX_EXPECTED_RANK
+            ):
+                continue
+            key = (start, end)
+            candidate = {
+                "startSeconds": start,
+                "endSeconds": end,
+                "durationSeconds": round(duration, 3),
+                "expectedMidi": int(expected_midi),
+                "expectedNote": note_name(int(expected_midi)),
+                "expectedHarmonicEnergy": round(expected_harmonic, 6),
+                "dominantMidi": int(dominant.get("midi") or 0),
+                "dominantNote": str(dominant.get("note") or note_name(int(dominant.get("midi") or 0))),
+                "dominantHarmonicEnergy": round(dominant_energy, 6),
+                "expectedRank": int(expected_rank),
+                "expectedToDominantRatio": round(expected_to_dominant, 6),
+                "prefilterSource": "staff4_harmonic_expected_pitch_continuation_scan",
+            }
+            previous = candidates_by_window.get(key)
+            if previous is None or (
+                float(candidate["expectedToDominantRatio"]),
+                float(candidate["expectedHarmonicEnergy"]),
+                -int(candidate["expectedRank"]),
+            ) > (
+                float(previous.get("expectedToDominantRatio") or 0.0),
+                float(previous.get("expectedHarmonicEnergy") or 0.0),
+                -int(previous.get("expectedRank") or 999),
+            ):
+                candidates_by_window[key] = candidate
+
+    return sorted(
+        candidates_by_window.values(),
+        key=lambda item: (
+            float(item.get("expectedToDominantRatio") or 0.0),
+            -int(item.get("expectedRank") or 999),
+            float(item.get("expectedHarmonicEnergy") or 0.0),
+        ),
+        reverse=True,
+    )[:STAFF4_CONTINUATION_SEARCH_MAX_PREFILTER_CANDIDATES]
+
+
 def staff4_guided_detector_note_from_window(
     *,
     y: Any,
@@ -2329,6 +2442,8 @@ def staff4_guided_detector_note_from_window(
     expected_midi: int,
     note_index: int,
     allow_sweep: bool,
+    continuation_search_start_seconds: float | None = None,
+    continuation_search_end_seconds: float | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     base_start = float(window.get("startSeconds") or 0.0)
     base_end = float(window.get("endSeconds") or base_start)
@@ -2405,9 +2520,94 @@ def staff4_guided_detector_note_from_window(
             "detectorVotes": votes,
             "detectorAttempts": attempts,
         }, {}
+    continuation_search: dict[str, Any] = {}
+    continuation_attempts: list[dict[str, Any]] = []
+    if (
+        allow_sweep
+        and continuation_search_start_seconds is not None
+        and continuation_search_end_seconds is not None
+    ):
+        continuation_candidates = staff4_expected_pitch_prefilter_candidates(
+            y=y,
+            sr=sr,
+            scan_start=scan_start,
+            scan_end=scan_end,
+            expected_midi=expected_midi,
+            search_start=float(continuation_search_start_seconds),
+            search_end=float(continuation_search_end_seconds),
+            numpy=numpy,
+        )
+        for candidate_rank, candidate in enumerate(continuation_candidates, start=1):
+            start = float(candidate.get("startSeconds") or 0.0)
+            end = float(candidate.get("endSeconds") or start)
+            start_sample = max(0, int(round((start - scan_start) * sr)))
+            end_sample = min(len(y), int(round((end - scan_start) * sr)))
+            if end_sample <= start_sample:
+                continuation_attempts.append(
+                    {
+                        **candidate,
+                        "candidateRank": candidate_rank,
+                        "reason": "empty_candidate_audio",
+                    }
+                )
+                continue
+            segment = y[start_sample:end_sample]
+            votes = staff4_detector_votes_for_segment(segment, expected_midi, sr, librosa, numpy)
+            exact_votes = [vote for vote in votes if vote.get("exact")]
+            exact_sources = [str(vote.get("detector") or "") for vote in exact_votes if str(vote.get("detector") or "")]
+            attempt = {
+                **candidate,
+                "candidateRank": candidate_rank,
+                "exactSourceCount": len(set(exact_sources)),
+                "exactSources": sorted(set(exact_sources)),
+                "detectorVotes": votes,
+                "continuationSearchCandidate": True,
+            }
+            continuation_attempts.append(attempt)
+            if len(exact_sources) < STAFF4_ANCHOR_GUIDED_MIN_EXACT_VOTES or "spectral_onset" not in exact_sources:
+                continue
+            confidence = max([float(vote.get("confidence") or 0.0) for vote in exact_votes] + [0.86])
+            detector_attempts = [*attempts, *continuation_attempts]
+            return {
+                "startSeconds": round(start, 3),
+                "endSeconds": round(end, 3),
+                "durationSeconds": round(max(0.0, end - start), 3),
+                "midi": expected_midi,
+                "note": note_name(expected_midi),
+                "confidence": round(min(0.99, confidence), 3),
+                "audioAgreement": True,
+                "agreementSources": sorted(set(exact_sources)),
+                "agreementSourceCount": len(set(exact_sources)),
+                "detectorSource": "staff4_adjacent_continuation_search",
+                "verification": "current_audio_pyin_yin_spectral_exact_midi_continuation_search",
+                "sourceAudioRescan": True,
+                "adjacentGuidedReproduction": True,
+                "timingOffsetSeconds": round(start - base_start, 3),
+                "timingSweepUsed": True,
+                "continuationSearchUsed": True,
+                "continuationCandidateRank": candidate_rank,
+                "continuationCandidateCount": len(continuation_candidates),
+                "prefilterCandidate": candidate,
+                "detectorVotes": votes,
+                "detectorAttempts": detector_attempts,
+            }, {}
+        continuation_search = {
+            "status": "checked_candidates_not_reproduced" if continuation_candidates else "no_prefilter_candidates",
+            "candidateCount": len(continuation_candidates),
+            "checkedCount": len(continuation_attempts),
+            "searchStartSeconds": round(float(continuation_search_start_seconds), 3),
+            "searchEndSeconds": round(float(continuation_search_end_seconds), 3),
+            "bestCandidate": continuation_candidates[0] if continuation_candidates else {},
+        }
+
+    all_attempts = [*attempts, *continuation_attempts]
     best_attempt = max(
-        attempts,
-        key=lambda item: (int(item.get("exactSourceCount") or 0), -abs(float(item.get("offsetSeconds") or 0.0))),
+        all_attempts,
+        key=lambda item: (
+            int(item.get("exactSourceCount") or 0),
+            float(item.get("expectedToDominantRatio") or 0.0),
+            -abs(float(item.get("offsetSeconds") or 0.0)),
+        ),
         default={},
     )
     return {}, {
@@ -2415,8 +2615,9 @@ def staff4_guided_detector_note_from_window(
         "expectedMidi": expected_midi,
         "expectedNote": note_name(expected_midi),
         "reason": "current_detectors_did_not_reproduce_exact_midi",
-        "detectorAttempts": attempts,
+        "detectorAttempts": all_attempts,
         "bestAttempt": best_attempt,
+        "continuationSearch": continuation_search,
     }
 
 
@@ -2462,6 +2663,15 @@ def staff4_adjacent_guided_reproduction_targets(
                 break
             window = windows[note_index]
             expected_midi = target_midi[note_index]
+            continuation_search_start: float | None = None
+            continuation_search_end: float | None = None
+            if bool(window.get("inferredAdjacentWindow")) and notes:
+                previous_end = float(notes[-1].get("endSeconds") or notes[-1].get("startSeconds") or scan_start)
+                continuation_search_start = max(scan_start, previous_end + 0.01)
+                continuation_search_end = min(
+                    scan_end,
+                    continuation_search_start + STAFF4_CONTINUATION_SEARCH_AFTER_SECONDS,
+                )
             note_result, failure = staff4_guided_detector_note_from_window(
                 y=y,
                 sr=sr,
@@ -2473,6 +2683,8 @@ def staff4_adjacent_guided_reproduction_targets(
                 expected_midi=expected_midi,
                 note_index=note_index,
                 allow_sweep=bool(window.get("inferredAdjacentWindow")),
+                continuation_search_start_seconds=continuation_search_start,
+                continuation_search_end_seconds=continuation_search_end,
             )
             if failure:
                 failed = failure
@@ -2520,6 +2732,7 @@ def compact_staff4_adjacent_failure(target: dict[str, Any]) -> dict[str, Any]:
     failed_note_index = int(failed.get("noteIndex") or 0)
     best_attempt = failed.get("bestAttempt") if isinstance(failed.get("bestAttempt"), dict) else {}
     detector_attempts = failed.get("detectorAttempts") if isinstance(failed.get("detectorAttempts"), list) else []
+    continuation_search = failed.get("continuationSearch") if isinstance(failed.get("continuationSearch"), dict) else {}
     best_votes = best_attempt.get("detectorVotes") if isinstance(best_attempt.get("detectorVotes"), list) else []
     expected_midi = int(failed.get("expectedMidi") or 0)
     expected_detector_note = str(failed.get("expectedNote") or note_name(expected_midi))
@@ -2594,6 +2807,12 @@ def compact_staff4_adjacent_failure(target: dict[str, Any]) -> dict[str, Any]:
         "bestAttemptObservedConsensusMidi": observed_consensus_midi,
         "bestAttemptObservedConsensusNote": note_name(observed_consensus_midi) if observed_consensus_midi else "",
         "bestAttemptDetectorVotes": best_votes,
+        "continuationSearchStatus": str(continuation_search.get("status") or ""),
+        "continuationSearchCandidateCount": int(continuation_search.get("candidateCount") or 0),
+        "continuationSearchCheckedCount": int(continuation_search.get("checkedCount") or 0),
+        "continuationSearchBestCandidate": continuation_search.get("bestCandidate")
+        if isinstance(continuation_search.get("bestCandidate"), dict)
+        else {},
     }
 
 
@@ -4650,6 +4869,7 @@ def build_transcription_completion(
         "Staff 4 source-audio rescanning now extracts a fresh window around the accepted source/audio anchor and adds its events to the exact-MIDI search pool.",
         "Staff 4 adjacent mining now searches stored May 3 audio-note windows for the exact right-1 and right-2 MIDI sequences before accepting another expansion.",
         "A Staff 4 audit packet generator now ignores stale failed-note metadata when the current expansion already has full exact-MIDI audio, so the truth packet covers the whole seven-note phrase instead of only one clipped note.",
+        "Staff 4 continuation search now scans beyond a failed inferred adjacent window with a harmonic expected-pitch prefilter, then requires exact pYIN/YIN/spectral agreement before any longer candidate enters review.",
     ]
     if phrase_expansion_rejected_count:
         done_summary.append(f"{phrase_expansion_rejected_count} Staff 4 audited expansion is now locked as a rejected regression case.")
@@ -4663,8 +4883,8 @@ def build_transcription_completion(
         "Replace short fragments with accurate phrase-level note and rhythm extraction.",
         "Build longer phrase candidates that survive the second-pass audio gate instead of relying on loose transition traces or reference-audio coincidences.",
         "Keep extending the accepted Staff 4 anchor only when each adjacent source note agrees with paired audio.",
-        "Use the source-audio rescan and raw detected-series expansion pool to find a real adjacent Staff 4 audio run before accepting a longer phrase.",
-        "Audit the next adjacent Staff 4 phrase window before accepting, rejecting, or expanding it.",
+        "Lock the eight-note Staff 4 continuation candidate only if the full source crop, local media, transcription, and truth review agree.",
+        "Continue using source-audio rescan and continuation search to find real adjacent Staff 4 audio runs without accepting wrong-window matches.",
         "Align accepted phrases to score locations or score-free repeated exercise patterns.",
         "Generate heat maps and Curtis-level observations only from accepted evidence.",
     ]

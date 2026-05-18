@@ -1258,6 +1258,8 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertEqual(failure["expectedMidi"], midi_for_note("A4"))
         self.assertEqual(failure["expectedNote"], "A4")
         self.assertEqual(failure["targetMidiSequence"], [75, 75, 72, 75, 75, 75, 72, 69])
+        self.assertEqual(failure["continuationSearchStatus"], "no_prefilter_candidates")
+        self.assertEqual(failure["continuationSearchCandidateCount"], 0)
         self.assertEqual(calls["count"], 9)
 
     def test_staff4_truth_manifest_adjacent_probe_can_promote_exact_a4_extension(self):
@@ -1374,6 +1376,151 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertEqual(exact_audio[0]["audioRunSource"], "staff4_adjacent_guided_current_detector")
         self.assertEqual(calls["count"], 1)
 
+    def test_staff4_truth_manifest_adjacent_probe_searches_beyond_bad_inferred_a4_window(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source_path = Path(temp_dir) / "staff4-source.wav"
+            write_tiny_wav(source_path)
+            calls = {"count": 0}
+
+            def fake_extract(_source, target, _start, _end):
+                write_tiny_wav(target, seconds=17)
+                return True, ""
+
+            def staged_a4_detector_votes(_segment, expected_midi, _sr, _librosa, _numpy):
+                calls["count"] += 1
+                self.assertEqual(expected_midi, midi_for_note("A4"))
+                if calls["count"] <= 9:
+                    return [
+                        {
+                            "detector": "pyin",
+                            "midi": midi_for_note("D5"),
+                            "note": "D5",
+                            "confidence": 0.81,
+                            "exact": False,
+                            "frameCount": 5,
+                        },
+                        {
+                            "detector": "spectral_onset",
+                            "midi": midi_for_note("D5"),
+                            "note": "D5",
+                            "confidence": 0.79,
+                            "exact": False,
+                            "frameCount": 1,
+                        },
+                    ]
+                return [
+                    {
+                        "detector": "pyin",
+                        "midi": expected_midi,
+                        "note": "A4",
+                        "confidence": 0.92,
+                        "exact": True,
+                        "frameCount": 6,
+                    },
+                    {
+                        "detector": "spectral_onset",
+                        "midi": expected_midi,
+                        "note": "A4",
+                        "confidence": 0.9,
+                        "exact": True,
+                        "frameCount": 1,
+                    },
+                ]
+
+            def continuation_candidates(**kwargs):
+                self.assertEqual(kwargs["expected_midi"], midi_for_note("A4"))
+                self.assertGreaterEqual(kwargs["search_start"], 23.0)
+                return [
+                    {
+                        "startSeconds": 24.02,
+                        "endSeconds": 24.18,
+                        "durationSeconds": 0.16,
+                        "expectedMidi": midi_for_note("A4"),
+                        "expectedNote": "A4",
+                        "expectedHarmonicEnergy": 0.8,
+                        "dominantMidi": midi_for_note("A4"),
+                        "dominantNote": "A4",
+                        "dominantHarmonicEnergy": 0.8,
+                        "expectedRank": 1,
+                        "expectedToDominantRatio": 1.0,
+                        "prefilterSource": "test_prefilter",
+                    }
+                ]
+
+            def score_note(label, midi):
+                item = note("C5")
+                item["note"] = label
+                item["midi"] = midi
+                return item
+
+            source_notes = [score_note("A5", midi_for_note("A5")) for _ in range(9)] + [
+                score_note("Eb5", midi_for_note("D#5")),
+                score_note("Eb5", midi_for_note("D#5")),
+                score_note("C5", midi_for_note("C5")),
+                score_note("Eb5", midi_for_note("D#5")),
+                score_note("Eb5", midi_for_note("D#5")),
+                score_note("Eb5", midi_for_note("D#5")),
+                score_note("C5", midi_for_note("C5")),
+                score_note("A4", midi_for_note("A4")),
+            ]
+            anchor_notes = [
+                note("D#5", 20.225),
+                note("D#5", 20.550),
+                note("C5", 20.817),
+                note("D#5", 21.629),
+                note("D#5", 22.361),
+                note("D#5", 22.829),
+                note("C5", 23.117),
+            ]
+            anchor = {
+                "practiceDay": "2026-05-03",
+                "pieceTitle": "Wieniawski Scherzo-Tarantelle, Op. 16",
+                "anchorSequence": "Eb5 Eb5 C5 Eb5 Eb5 Eb5 C5",
+                "anchorMidiSequence": [75, 75, 72, 75, 75, 75, 72],
+                "sourceNotes": source_notes,
+                "referenceStart": 9,
+                "referenceEnd": 16,
+                "sampleId": "Njh8_zq9_DM-8835",
+                "sourceWindow": "*8835-8925",
+                "anchorLocalStartSeconds": 20.225,
+                "anchorLocalEndSeconds": 23.280,
+                "anchorSource": "truth_manifest",
+                "match": {
+                    "detectedSeries": {
+                        "sampleId": "Njh8_zq9_DM-8835",
+                        "sourceWindow": "*8835-8925",
+                        "notes": anchor_notes,
+                    },
+                    "matchedDetectedNotes": anchor_notes,
+                },
+            }
+
+            with patch("backend.app.scanner.run_ffmpeg_extract_audio", side_effect=fake_extract), patch(
+                "backend.app.scanner.transcribe_audio_array",
+                return_value={"events": [], "scoreMatchCandidateNotes": [], "quality": {}},
+            ), patch("backend.app.scanner.staff4_expected_pitch_prefilter_candidates", side_effect=continuation_candidates), patch(
+                "backend.app.scanner.staff4_detector_votes_for_segment", side_effect=staged_a4_detector_votes
+            ):
+                record = staff4_source_audio_rescan_record(
+                    anchor=anchor,
+                    sample={"id": "Njh8_zq9_DM-8835", "path": str(source_path), "window": "*8835-8925"},
+                    source_path=source_path,
+                    scan_window={
+                        "label": "anchor_core",
+                        "scanLocalStartSeconds": 16.225,
+                        "scanLocalEndSeconds": 32.535,
+                    },
+                )
+
+        guided_runs = [run for run in record["runs"] if run.get("runSource") == "staff4_adjacent_guided_current_detector"]
+        self.assertEqual(record["guidedAdjacentStatus"], "reproduced")
+        self.assertEqual(record["guidedAdjacentReproducedCount"], 1)
+        self.assertEqual(len(guided_runs), 1)
+        self.assertEqual([item["midi"] for item in guided_runs[0]["notes"]], [75, 75, 72, 75, 75, 75, 72, 69])
+        self.assertEqual(guided_runs[0]["notes"][-1]["detectorSource"], "staff4_adjacent_continuation_search")
+        self.assertTrue(guided_runs[0]["notes"][-1]["continuationSearchUsed"])
+        self.assertEqual(calls["count"], 10)
+
     def test_completion_surfaces_staff4_adjacent_failure_without_losing_detector_detail(self):
         failure = {
             "direction": "right-1",
@@ -1388,7 +1535,7 @@ class TranscriptionCompletionTests(unittest.TestCase):
             "bestAttemptObservedConsensusNote": "D5",
         }
         fake_rescan = {
-            "version": "staff4_source_audio_rescan_v10",
+            "version": "staff4_source_audio_rescan_v11",
             "status": "rescanned",
             "runCount": 1,
             "eventCount": 0,
