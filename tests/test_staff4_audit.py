@@ -5,6 +5,7 @@ from pathlib import Path
 
 import backend.app.staff4_audit as staff4_audit
 from backend.app.staff4_audit import (
+    attach_staff4_audit_decision,
     ensure_staff4_phrase_audit_packet,
     latest_staff4_phrase_audit_packet,
     latest_staff4_phrase_audit_packet_for_completion,
@@ -246,6 +247,46 @@ class Staff4AuditTests(unittest.TestCase):
         self.assertFalse(packet["canExtendStaff4Lane"])
         self.assertIn("regressionCase", packet)
         self.assertIn("Eb5-vs-D5", packet["regressionCase"]["regressionId"])
+
+    def test_first_failure_exact_audio_and_source_truth_accepts_right1_lane(self):
+        packet = {
+            "practiceDay": "2026-05-03",
+            "sampleId": "Njh8_zq9_DM-8835",
+            "targetReferenceStart": 9,
+            "targetReferenceEnd": 15,
+            "targetSequence": "Eb5 Eb5 C5 Eb5 Eb5 Eb5",
+            "targetMidiSequence": [75, 75, 72, 75, 75, 75],
+            "bestAudioMidiSequence": [75, 75, 72, 75, 75, 75],
+            "score": {
+                "sourceCropReady": True,
+                "truthEvidenceAccepted": True,
+            },
+            "status": "generated",
+        }
+        failure = staff4_first_failure(
+            bestAttemptObservedMidi=[],
+            bestAttemptObservedNotes=[],
+            bestAttemptObservedConsensusMidi=0,
+            bestAttemptObservedConsensusNote="",
+        )
+        analysis = {
+            "mismatchWindow": {
+                "detectorVotes": {
+                    "expected": 3,
+                    "observed": 0,
+                    "missing": 0,
+                    "other": 0,
+                }
+            }
+        }
+
+        attach_staff4_audit_decision(packet, analysis, failure)
+
+        self.assertEqual(packet["status"], "accepted_truth_candidate")
+        self.assertEqual(packet["truthDecision"], "accepted")
+        self.assertTrue(packet["canExtendStaff4Lane"])
+        self.assertEqual(packet["decision"]["outcome"], "accept_audio_agreed_source_note")
+        self.assertEqual(packet["expectedFailedScoreNote"], "Eb5")
 
     def test_no_current_expansion_is_not_generated(self):
         state = {}

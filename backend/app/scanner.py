@@ -4543,7 +4543,12 @@ def build_transcription_completion(
             "target": "Tests fail on mismatched audio/notation, wrong score boxes, missing media, and fake practice time.",
         },
     ]
-    if phrase_expansion_current and phrase_expansion_accepted_count == 0 and phrase_expansion_ready_count:
+    if phrase_expansion_current and phrase_expansion_accepted_count:
+        next_action = (
+            f"Promote the accepted Staff 4 {phrase_expansion_current.get('direction') or 'adjacent'} "
+            f"{phrase_expansion_current.get('sourceNoteCount') or ''}-note expansion, then audit the next adjacent source window."
+        )
+    elif phrase_expansion_current and phrase_expansion_accepted_count == 0 and phrase_expansion_ready_count:
         next_action = (
             "Review the ready Staff 4 expansion from the raw detected-series search; exact MIDI and audio agree, "
             "but accepted truth evidence is still required before display."

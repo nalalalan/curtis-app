@@ -291,7 +291,7 @@ def wieniawski_reference_target() -> dict[str, Any]:
             "partId": "P1",
             "musicXmlPath": "assets/score/wieniawski-scherzo-tarantelle-symbolic-opening.musicxml",
             "candidateMapPath": "assets/score/wieniawski-scherzo-tarantelle-page2-score-map-candidates.json",
-            "source": "Manually verified symbolic excerpts from the local IMSLP solo-violin PDF, page 2. The visible opening phrase begins A5-G5-F5-A5-G5-F5-A5-G#5-F5. The current accepted Staff 4 review packet remains accepted only for the exact Eb5-Eb5-C5-Eb5-Eb5 source/audio window. That same Staff 4 source lane is now extended outward into the two immediate right-adjacent verified source notes, giving the source-only Eb5-Eb5-C5-Eb5-Eb5-Eb5-C5 lane; it is not accepted as live evidence because the current May 3 audio phrase diverges at the sixth note. The previous D6-C6-Bb5 source sequence, lower-octave D5-C5-Bb4 map, D-Bb-G-D source sequence, and user-rejected Bb-D-C-Bb-D lane remain rejected.",
+            "source": "Manually verified symbolic excerpts from the local IMSLP solo-violin PDF, page 2. The visible opening phrase begins A5-G5-F5-A5-G5-F5-A5-G#5-F5. The accepted Staff 4 lane now has two exact-MIDI source/audio windows from the same local IMSLP staff: Eb5-Eb5-C5-Eb5-Eb5 and the one-note-right extension Eb5-Eb5-C5-Eb5-Eb5-Eb5. The seven-note Staff 4 lane Eb5-Eb5-C5-Eb5-Eb5-Eb5-C5 remains source-only until paired audio agrees with the seventh C5. The previous D6-C6-Bb5 source sequence, lower-octave D5-C5-Bb4 map, D-Bb-G-D source sequence, and user-rejected Bb-D-C-Bb-D lane remain rejected.",
             "sourcePdfLocalPath": "assets/score/wieniawski-scherzo-tarantelle-solo-imslp.pdf",
             "candidateMapStatus": "unaccepted_score_glyph_verification_queue",
             "verification": "source_score_note_sequence_verified_before_matching",
@@ -335,6 +335,51 @@ def wieniawski_reference_target() -> dict[str, Any]:
                             {"note": "C5", "x": 2153.0, "y": 1455.5},
                             {"note": "Eb5", "x": 2204.0, "y": 1435.0},
                             {"note": "Eb5", "x": 2250.5, "y": 1435.0}
+                        ]
+                    }
+                },
+                {
+                    "referenceStart": 9,
+                    "referenceEnd": 15,
+                    "label": "Staff 4 verified source window Eb-Eb-C-Eb-Eb-Eb",
+                    "pitchClassSequence": ["D#", "D#", "C", "D#", "D#", "D#"],
+                    "imageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-eb-verified.png",
+                    "sourcePdfPage": 2,
+                    "status": "source_score_exact_midi_sequence_verified",
+                    "verification": "verified_from_staff4_right1_source_crop_and_audio_agreed_2026_05_17",
+                    "visualRangeAgreement": True,
+                    "visibleScoreNoteSequenceVerified": True,
+                    "visibleScoreExactNoteSequenceVerified": True,
+                    "scoreBoxCenterAgreement": True,
+                    "audioTranscriptionAgreement": True,
+                    "transcriptionScoreAgreement": True,
+                    "truthEvidenceAccepted": True,
+                    "sourceCropKind": "actual_source_score_exact_note_range",
+                    "minimumDistinctPitchClasses": 2,
+                    "scoreSpellingSequence": ["Eb", "Eb", "C", "Eb", "Eb", "Eb"],
+                    "visibleScoreNoteSequence": ["Eb", "Eb", "C", "Eb", "Eb", "Eb"],
+                    "visibleScoreExactNoteSequence": ["Eb5", "Eb5", "C5", "Eb5", "Eb5", "Eb5"],
+                    "acceptedAudioPhrase": {
+                        "practiceDay": "2026-05-03",
+                        "sampleId": "Njh8_zq9_DM-8835",
+                        "sourceWindow": "*8835-8925",
+                        "detectedExactNoteSequence": ["D#5", "D#5", "C5", "D#5", "D#5", "D#5"],
+                        "acceptedScoreSpellingSequence": ["Eb5", "Eb5", "C5", "Eb5", "Eb5", "Eb5"],
+                        "midiSequence": [75, 75, 72, 75, 75, 75],
+                        "localStartSeconds": 20.225,
+                        "localEndSeconds": 22.992,
+                        "audioAgreement": True
+                    },
+                    "sourceCropCoordinates": {
+                        "sourceImage": "verification/wieniawski-page2-300.png",
+                        "pagePixels": {"x": 1995, "y": 1275, "width": 360, "height": 270},
+                        "matchedNoteheadCenters": [
+                            {"note": "Eb5", "x": 2061.0, "y": 1435.0},
+                            {"note": "Eb5", "x": 2108.5, "y": 1435.0},
+                            {"note": "C5", "x": 2153.0, "y": 1455.5},
+                            {"note": "Eb5", "x": 2204.0, "y": 1435.0},
+                            {"note": "Eb5", "x": 2250.5, "y": 1435.0},
+                            {"note": "Eb5", "x": 2322.5, "y": 1435.0}
                         ]
                     }
                 },
