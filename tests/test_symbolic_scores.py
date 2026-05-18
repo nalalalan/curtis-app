@@ -215,7 +215,7 @@ class SymbolicScoreTests(unittest.TestCase):
         candidate_audit = score_map_candidate_audit(target)
 
         self.assertEqual(audit["status"], "symbolic_score_ready")
-        self.assertEqual(audit["symbolicScoreNoteCount"], 16)
+        self.assertEqual(audit["symbolicScoreNoteCount"], 17)
         self.assertEqual(audit["symbolicScoreSourceSnippetCount"], 3)
         self.assertEqual(candidate_audit["status"], "score_map_candidates_ready")
         self.assertGreaterEqual(candidate_audit["scoreMapCandidateGlyphCount"], 1)
@@ -228,14 +228,14 @@ class SymbolicScoreTests(unittest.TestCase):
             [item["note"] for item in score["notes"]],
             [
                 "A5", "G5", "F5", "A5", "G5", "F5", "A5", "G#5", "F5",
-                "Eb5", "Eb5", "C5", "Eb5", "Eb5", "Eb5", "C5",
+                "Eb5", "Eb5", "C5", "Eb5", "Eb5", "Eb5", "C5", "A4",
             ],
         )
         self.assertEqual(
             [item["pitchClass"] for item in score["notes"]],
             [
                 "A", "G", "F", "A", "G", "F", "A", "G#", "F",
-                "D#", "D#", "C", "D#", "D#", "D#", "C",
+                "D#", "D#", "C", "D#", "D#", "D#", "C", "A",
             ],
         )
 

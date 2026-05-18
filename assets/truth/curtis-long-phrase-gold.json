@@ -43,6 +43,19 @@
       "liveAccepted": true
     },
     {
+      "id": "wieniawski-staff4-eb-eb-c-eb-eb-eb-c-a-symbolic-v1",
+      "pieceTitle": "Wieniawski Scherzo-Tarantelle, Op. 16",
+      "target": "wieniawski_reference_target",
+      "status": "verified_source_excerpt",
+      "basis": "The current accepted Staff 4 lane extends one additional right-adjacent source note from the same local IMSLP solo-violin page. This is verified source map material only; it is not live accepted until the paired audio reproduces the added A4 under the exact-MIDI gate.",
+      "referenceStart": 9,
+      "referenceEnd": 17,
+      "sequence": ["Eb5", "Eb5", "C5", "Eb5", "Eb5", "Eb5", "C5", "A4"],
+      "midiSequence": [75, 75, 72, 75, 75, 75, 72, 69],
+      "sourceCropImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-eb-c-a-source.png",
+      "liveAccepted": false
+    },
+    {
       "id": "wieniawski-staff4-eb-eb-c-eb-eb-eb-symbolic-v1",
       "pieceTitle": "Wieniawski Scherzo-Tarantelle, Op. 16",
       "target": "wieniawski_reference_target",

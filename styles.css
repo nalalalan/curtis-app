@@ -2372,8 +2372,8 @@ h2 {
 
 .notation-sheet .treble-clef {
   fill: var(--ink);
-  font-family: "Noto Music", "Segoe UI Symbol", "Apple Symbols", Georgia, "Times New Roman", serif;
-  font-size: 76px;
+  font-family: "CurtisBravura", "Bravura", "Noto Music", "Segoe UI Symbol", "Apple Symbols", Georgia, "Times New Roman", serif;
+  font-size: 70px;
   font-weight: 400;
 }
 
@@ -2387,44 +2387,32 @@ h2 {
 .notation-sheet .note-accidental {
   fill: var(--ink);
   font-family: "CurtisBravura", "Bravura", "Noto Music", "Segoe UI Symbol", "Apple Symbols", Georgia, "Times New Roman", serif;
-  font-size: 24px;
+  font-size: 25px;
   font-weight: 400;
 }
 
 .notation-sheet .accidental-glyph {
-  fill: none;
-  stroke: var(--ink);
-  stroke-linecap: butt;
-  stroke-linejoin: miter;
-}
-
-.notation-sheet .note-accidental .accidental-stroke {
-  stroke-width: 1.65;
-}
-
-.notation-sheet .key-signature-mark .accidental-stroke {
-  stroke-width: 1.5;
-}
-
-.notation-sheet .accidental-sharp .accidental-sharp-stem {
-  stroke-width: 1.55;
-}
-
-.notation-sheet .accidental-sharp .accidental-sharp-bar {
   fill: var(--ink);
   stroke: none;
+  dominant-baseline: central;
+  text-anchor: middle;
 }
 
-.notation-sheet .accidental-flat .accidental-flat-stem {
-  fill: none;
-  stroke: var(--ink);
-  stroke-width: 1.7;
-  stroke-linecap: round;
+.notation-sheet .accidental-flat {
+  font-size: 38px;
 }
 
-.notation-sheet .accidental-flat .accidental-flat-bowl {
+.notation-sheet .accidental-sharp {
+  font-size: 34px;
+}
+
+.notation-sheet .notehead {
   fill: var(--ink);
   stroke: none;
+  font-family: "CurtisBravura", "Bravura", "Noto Music", "Segoe UI Symbol", "Apple Symbols", Georgia, "Times New Roman", serif;
+  font-size: 38px;
+  dominant-baseline: central;
+  text-anchor: middle;
 }
 
 .staff-lines line {
@@ -2484,10 +2472,6 @@ h2 {
   color: var(--clay);
 }
 
-.notation-note ellipse {
-  fill: #253330;
-}
-
 .notation-note line {
   stroke: #253330;
   stroke-width: 2;
@@ -2505,11 +2489,12 @@ h2 {
   stroke-width: 2.2;
 }
 
-.notation-uncertain ellipse {
-  fill: rgba(166, 111, 86, .2);
+.notation-uncertain .notehead {
+  fill: var(--clay);
+  fill-opacity: .42;
   stroke: var(--clay);
   stroke-dasharray: 3 2;
-  stroke-width: 2;
+  stroke-width: .6;
 }
 
 .notation-rest rect,
@@ -2556,7 +2541,7 @@ h2 {
 }
 
 .notation-gate .treble-clef {
-  font-size: 50px;
+  font-size: 70px;
   font-weight: 400;
 }
 
@@ -4306,7 +4291,7 @@ h2 {
 
 .notation-sheet .treble-clef {
   font-family: "CurtisBravura", "Bravura", "Noto Music", "Segoe UI Symbol", "Apple Symbols", serif;
-  font-size: 76px;
+  font-size: 70px;
 }
 
 .notation-sheet .key-signature-mark {
@@ -4317,23 +4302,32 @@ h2 {
 
 .notation-sheet .note-accidental {
   font-family: "CurtisBravura", "Bravura", "Noto Music", "Segoe UI Symbol", "Apple Symbols", serif;
-  font-size: 24px;
+  font-size: 25px;
   font-weight: 400;
 }
 
 .notation-sheet .accidental-glyph {
-  fill: none;
-  stroke: var(--ink);
-  stroke-linecap: butt;
-  stroke-linejoin: miter;
+  fill: var(--ink);
+  stroke: none;
+  dominant-baseline: central;
+  text-anchor: middle;
 }
 
-.notation-sheet .note-accidental .accidental-stroke {
-  stroke-width: 1.65;
+.notation-sheet .accidental-flat {
+  font-size: 38px;
 }
 
-.notation-sheet .key-signature-mark .accidental-stroke {
-  stroke-width: 1.5;
+.notation-sheet .accidental-sharp {
+  font-size: 34px;
+}
+
+.notation-sheet .notehead {
+  fill: var(--ink);
+  stroke: none;
+  font-family: "CurtisBravura", "Bravura", "Noto Music", "Segoe UI Symbol", "Apple Symbols", serif;
+  font-size: 38px;
+  dominant-baseline: central;
+  text-anchor: middle;
 }
 
 .staff-lines line {

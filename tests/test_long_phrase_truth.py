@@ -25,11 +25,15 @@ class LongPhraseTruthTests(unittest.TestCase):
         result = verify_long_phrase_truth_manifest()
 
         self.assertEqual(result["status"], "verified")
-        self.assertEqual(result["sourceVerifiedCount"], 4)
+        self.assertEqual(result["sourceVerifiedCount"], 5)
         self.assertEqual(result["positiveSourcePhraseVerifiedCount"], 4)
         self.assertEqual(result["rejectedRegressionPhraseCount"], 4)
         self.assertEqual(result["rejectedRegressionBlockedCount"], 4)
         self.assertEqual(result["liveAcceptedPhraseCount"], 3)
+        source_ids = {item["id"] for item in result["sourceResults"]}
+        self.assertIn("wieniawski-staff4-eb-eb-c-eb-eb-eb-c-a-symbolic-v1", source_ids)
+        accepted_source_ids = {item["sourceId"] for item in result["positiveSourcePhraseResults"] if item["liveAccepted"]}
+        self.assertNotIn("wieniawski-staff4-eb-eb-c-eb-eb-eb-c-a-symbolic-v1", accepted_source_ids)
         self.assertIn("rejected-staff4-right2-audit-eb-vs-d", result["blockedRegressionIds"])
 
     def test_current_wieniawski_source_map_has_the_reviewed_exact_midi_sequence(self):
@@ -40,10 +44,10 @@ class LongPhraseTruthTests(unittest.TestCase):
             [note["note"] for note in notes],
             [
                 "A5", "G5", "F5", "A5", "G5", "F5", "A5", "G#5", "F5",
-                "Eb5", "Eb5", "C5", "Eb5", "Eb5", "Eb5", "C5",
+                "Eb5", "Eb5", "C5", "Eb5", "Eb5", "Eb5", "C5", "A4",
             ],
         )
-        self.assertEqual(note_midi_sequence(notes), [81, 79, 77, 81, 79, 77, 81, 80, 77, 75, 75, 72, 75, 75, 75, 72])
+        self.assertEqual(note_midi_sequence(notes), [81, 79, 77, 81, 79, 77, 81, 80, 77, 75, 75, 72, 75, 75, 75, 72, 69])
 
     def test_gate_accepts_only_full_audio_agreed_exact_midi_phrase(self):
         source_notes = symbolic_score_from_target(wieniawski_reference_target())["notes"]
@@ -150,7 +154,7 @@ class LongPhraseTruthTests(unittest.TestCase):
         detected = [
             detected_note("G4", 67, 0.00),
             detected_note("F4", 65, 0.12),
-            detected_note("A4", 69, 0.24),
+            detected_note("A#4", 70, 0.24),
             detected_note("G#4", 68, 0.36),
             detected_note("F4", 65, 0.48),
         ]

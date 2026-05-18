@@ -417,7 +417,7 @@ def _key_signature_marks(key_signature: dict[str, Any] | None) -> tuple[str, flo
         "E#": _staff_y("E5"),
         "B#": _staff_y("B4"),
     }
-    glyph = "&#9837;" if accidental_type == "flat" else "&#9839;" if accidental_type == "sharp" else ""
+    glyph = "&#xE260;" if accidental_type == "flat" else "&#xE262;" if accidental_type == "sharp" else ""
     if not glyph:
         return "", 0.0
     marks: list[str] = []
@@ -426,7 +426,7 @@ def _key_signature_marks(key_signature: dict[str, Any] | None) -> tuple[str, flo
         if y is None:
             continue
         x = 96 + (index * 16)
-        marks.append(f'<text class="key-signature" x="{x}" y="{y + 2:.1f}">{glyph}</text>')
+        marks.append(f'<text class="key-signature" x="{x}" y="{y:.1f}">{glyph}</text>')
     return "".join(marks), float(len(marks) * 16)
 
 
@@ -450,14 +450,14 @@ def render_symbolic_score_svg(
         x = start_x + (index * step_x)
         y = _staff_y(str(note.get("note") or ""))
         stem_up = y >= 64
-        stem_x = x + (6 if stem_up else -6)
+        stem_x = x + (7.2 if stem_up else -7.2)
         stem_y = max(15, y - 34) if stem_up else min(108, y + 34)
         marks.append(
             "".join(
                 [
                     f'<g class="note" aria-label="{escape(str(note.get("note") or ""))}">',
                     _ledger_lines(y, x),
-                    f'<ellipse cx="{x:.1f}" cy="{y:.1f}" rx="7.0" ry="4.6" transform="rotate(-16 {x:.1f} {y:.1f})" />',
+                    f'<text class="notehead" x="{x:.1f}" y="{y:.1f}">&#xE0A4;</text>',
                     f'<line x1="{stem_x:.1f}" x2="{stem_x:.1f}" y1="{y:.1f}" y2="{stem_y:.1f}" />',
                     "</g>",
                 ]
@@ -467,15 +467,16 @@ def render_symbolic_score_svg(
         "<style>"
         "svg{background:#fffdf8;color:#1b2524;font-family:Georgia,'Times New Roman',serif}"
         ".staff line,.ledger{stroke:#1f2928;stroke-width:1.45;stroke-linecap:square}"
-        ".note ellipse,.note line{fill:#1f2928;stroke:#1f2928;stroke-width:1.2}"
-        ".clef{font-family:'Bravura','Noto Music','Segoe UI Symbol',serif;font-size:68px;fill:#1f2928}"
-        ".key-signature{font-family:Georgia,'Times New Roman',serif;font-size:34px;font-weight:700;fill:#1f2928}"
+        ".note line{fill:#1f2928;stroke:#1f2928;stroke-width:1.8;stroke-linecap:round}"
+        ".clef{font-family:'Bravura','Noto Music','Segoe UI Symbol',serif;font-size:64px;fill:#1f2928}"
+        ".key-signature{font-family:'Bravura','Noto Music','Segoe UI Symbol',serif;font-size:40px;font-weight:400;fill:#1f2928;dominant-baseline:central;text-anchor:middle}"
+        ".notehead{font-family:'Bravura','Noto Music','Segoe UI Symbol',serif;font-size:42px;fill:#1f2928;dominant-baseline:central;text-anchor:middle}"
         ".title{font-size:16px;font-weight:600}.label{font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}"
         "</style>"
     )
     return (
-        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} 124" role="img">'
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -24 {width} 148" role="img">'
         f"{css}{title_markup}{label_markup}<g class=\"staff\">{staff_lines}</g>"
-        f'<text class="clef" x="48" y="80">&#119070;</text>{key_marks}'
+        f'<text class="clef" x="48" y="78">&#xE050;</text>{key_marks}'
         f"{''.join(marks)}</svg>"
     )

@@ -1385,8 +1385,10 @@ const TREBLE_STAFF_BOTTOM_Y = TREBLE_STAFF_TOP_Y + (TREBLE_STAFF_LINE_GAP * 4);
 const TREBLE_G4_Y = TREBLE_STAFF_TOP_Y + (TREBLE_STAFF_LINE_GAP * 3);
 const TREBLE_STAFF_STEP_Y = TREBLE_STAFF_LINE_GAP / 2;
 const TREBLE_NOTE_ORDER = { C: 0, D: 1, E: 2, F: 3, G: 4, A: 5, B: 6 };
-const TREBLE_CLEF_BASELINE_Y = 72;
-const NOTATION_VIEWBOX_HEIGHT = 128;
+const TREBLE_CLEF_BASELINE_Y = 67;
+const NOTATION_VIEWBOX_MIN_Y = -18;
+const NOTATION_VIEWBOX_HEIGHT = 150;
+const NOTATION_VIEWBOX = `0 ${NOTATION_VIEWBOX_MIN_Y} 720 ${NOTATION_VIEWBOX_HEIGHT}`;
 const SHARP_TO_FLAT_NOTE = { "C#": "Db", "D#": "Eb", "F#": "Gb", "G#": "Ab", "A#": "Bb" };
 const FLAT_TO_SHARP_NOTE = { Db: "C#", Eb: "D#", Gb: "F#", Ab: "G#", Bb: "A#" };
 
@@ -1445,21 +1447,8 @@ function keySignatureCoversNote(spelledNote, signature) {
 
 function renderAccidentalGlyph(type, x, y, className) {
   const safeType = type === "flat" ? "flat" : "sharp";
-  if (safeType === "flat") {
-    return `
-      <g class="${className} accidental-glyph accidental-flat" aria-label="flat" transform="translate(${x.toFixed(1)} ${y.toFixed(1)})">
-        <path class="accidental-flat-stem" d="M-4.0 -18.2 C-3.6 -10.0 -3.4 -2.0 -3.8 8.6"></path>
-        <path class="accidental-flat-bowl" d="M-3.7 4.9 C1.4 0.2 7.5 -2.1 8.0 -7.0 C8.4 -11.2 4.8 -13.7 0.6 -11.9 C-2.8 -10.4 -4.2 -6.4 -3.7 4.9 Z"></path>
-      </g>
-    `;
-  }
   return `
-    <g class="${className} accidental-glyph accidental-sharp" aria-label="sharp" transform="translate(${x.toFixed(1)} ${y.toFixed(1)})">
-      <path class="accidental-stroke accidental-sharp-stem" d="M-4.2 -13.6 L-4.2 12.4"></path>
-      <path class="accidental-stroke accidental-sharp-stem" d="M4.2 -14.6 L4.2 11.4"></path>
-      <path class="accidental-sharp-bar" d="M-9.2 -6.9 L9.2 -9.8 L9.2 -6.2 L-9.2 -3.3 Z"></path>
-      <path class="accidental-sharp-bar" d="M-9.2 5.1 L9.2 2.2 L9.2 5.8 L-9.2 8.7 Z"></path>
-    </g>
+    <text class="${className} accidental-glyph accidental-${safeType}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" aria-label="${safeType}">${safeType === "flat" ? "&#xE260;" : "&#xE262;"}</text>
   `;
 }
 
@@ -1468,7 +1457,7 @@ function renderNoteAccidental(spelledNote, signature, x, y) {
   if (!parsed || !parsed.accidental || keySignatureCoversNote(spelledNote, signature)) return "";
   const type = parsed.accidental === "b" ? "flat" : "sharp";
   const safeY = Math.max(type === "flat" ? 18 : 15, Math.min(88, y));
-  const accidentalX = x - (type === "sharp" ? 18 : 21);
+  const accidentalX = x - (type === "sharp" ? 17 : 16);
   return renderAccidentalGlyph(type, accidentalX, safeY, "note-accidental");
 }
 
@@ -1611,7 +1600,7 @@ function renderKeySignatureMarks(signature) {
 }
 
 function renderTrebleClef() {
-  return `<text class="treble-clef" x="24" y="${TREBLE_CLEF_BASELINE_Y}">&#119070;</text>`;
+  return `<text class="treble-clef" x="24" y="${TREBLE_CLEF_BASELINE_Y}" aria-label="treble clef">&#xE050;</text>`;
 }
 
 function renderLedgerLines(y, x) {
@@ -1660,7 +1649,7 @@ function renderNotationSheet(events, options = {}) {
   if (!items.length) {
     return `
       <div class="notation-sheet notation-empty${repeatClass}${draftClass}" aria-label="Sheet-music-style transcription pending">
-        <svg viewBox="0 0 720 ${NOTATION_VIEWBOX_HEIGHT}" role="img">
+        <svg viewBox="${NOTATION_VIEWBOX}" role="img">
         <g class="staff-lines">${staffLines}</g>
           ${renderTrebleClef()}
           ${keySignature.svg}
@@ -1693,24 +1682,25 @@ function renderNotationSheet(events, options = {}) {
     const displayNote = notationDisplayNote(event.note, normalizedSignature);
     const y = staffNoteY(displayNote);
     const stemUp = y >= TREBLE_STAFF_TOP_Y + (TREBLE_STAFF_LINE_GAP * 2);
-    const stemX = x + (stemUp ? 6 : -6);
+    const stemX = x + (stemUp ? 7.2 : -7.2);
     const stemEndY = stemUp ? Math.max(10, y - 30) : Math.min(94, y + 30);
     const isUncertain = Boolean(event.uncertain || options?.forceUncertain);
     const uncertain = isUncertain ? " notation-uncertain" : "";
     const raw = event.rawNote ? `raw ${event.rawNote}` : event.note && displayNote !== event.note ? `detected ${event.note}` : "";
     const label = escapeHtml([displayNote, raw, isUncertain ? "uncertain" : ""].filter(Boolean).join(" / "));
+    const notehead = durationClass === "whole" ? "&#xE0A2;" : durationClass === "half" ? "&#xE0A3;" : "&#xE0A4;";
     return `
       <g class="notation-note ${durationClass}${uncertain}" aria-label="${label}">
         ${renderLedgerLines(y, x)}
         ${renderNoteAccidental(displayNote, normalizedSignature, x, y)}
-        <ellipse cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" rx="6.6" ry="4.4" transform="rotate(-16 ${x.toFixed(1)} ${y.toFixed(1)})"></ellipse>
+        <text class="notehead" x="${x.toFixed(1)}" y="${y.toFixed(1)}">${notehead}</text>
         ${durationClass === "whole" ? "" : `<line class="note-stem" x1="${stemX.toFixed(1)}" x2="${stemX.toFixed(1)}" y1="${y.toFixed(1)}" y2="${stemEndY.toFixed(1)}"></line>`}
       </g>
     `;
   }).join("");
   return `
     <div class="notation-sheet${repeatClass}${draftClass}" aria-label="Sheet-music-style machine transcription">
-      <svg viewBox="0 0 720 ${NOTATION_VIEWBOX_HEIGHT}" role="img">
+      <svg viewBox="${NOTATION_VIEWBOX}" role="img">
         <g class="staff-lines">${staffLines}</g>
         ${renderTrebleClef()}
         ${keySignature.svg}
@@ -1736,7 +1726,7 @@ function renderVerifiedNotationGate(
   const signature = renderKeySignatureMarks(keySignature);
   return `
     <div class="notation-gate" aria-label="${escapeHtml(title)}">
-      <svg viewBox="0 0 720 ${NOTATION_VIEWBOX_HEIGHT}" role="img">
+      <svg viewBox="${NOTATION_VIEWBOX}" role="img">
         <g class="staff-lines">${staffLines}</g>
         ${renderTrebleClef()}
         ${signature.svg}

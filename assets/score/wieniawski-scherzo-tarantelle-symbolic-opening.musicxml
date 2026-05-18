@@ -166,6 +166,14 @@
         <duration>2</duration>
         <type>eighth</type>
       </note>
+      <note>
+        <pitch>
+          <step>A</step>
+          <octave>4</octave>
+        </pitch>
+        <duration>2</duration>
+        <type>eighth</type>
+      </note>
     </measure>
   </part>
 </score-partwise>

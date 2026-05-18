@@ -1215,7 +1215,7 @@ class DailyRecordTests(unittest.TestCase):
 
         self.assertEqual(target["scoreNoteCropStatus"], "actual_source_phrase_review_pending")
         self.assertEqual(audit["sourcePdfLocalReadyCount"], 1)
-        self.assertEqual(audit["symbolicScoreNoteCount"], 16)
+        self.assertEqual(audit["symbolicScoreNoteCount"], 17)
         self.assertEqual(audit["symbolicScoreSourceSnippetCount"], 3)
         self.assertGreaterEqual(audit["scoreMapCandidateGlyphCount"], 1)
         self.assertGreaterEqual(audit["scoreMapCandidateStaffCount"], 1)
