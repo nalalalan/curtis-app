@@ -4125,6 +4125,94 @@ def rejected_staff4_expansion_cases() -> list[dict[str, Any]]:
     return cases
 
 
+def source_crop_reverification_targets(limit: int = 3) -> list[dict[str, Any]]:
+    manifest = load_long_phrase_truth()
+    sources = manifest.get("sources") if isinstance(manifest.get("sources"), list) else []
+    source_by_id = {
+        str(source.get("id") or ""): source
+        for source in sources
+        if isinstance(source, dict) and str(source.get("id") or "")
+    }
+    rejected = manifest.get("rejectedRegressionPhrases") if isinstance(manifest.get("rejectedRegressionPhrases"), list) else []
+    targets: list[dict[str, Any]] = []
+    for item in rejected:
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("rejectionKind") or "") != "visible_score_transcription_mismatch":
+            continue
+        source = source_by_id.get(str(item.get("sourceId") or "")) or {}
+        target_midi = int_sequence(item.get("expectedSourceMidiSequence")) or int_sequence(source.get("midiSequence"))
+        detected_midi = int_sequence(item.get("midiSequence")) or target_midi
+        score_sequence = item.get("acceptedScoreSpellingSequence") or item.get("expectedSourceSequence") or source.get("sequence") or []
+        detected_sequence = item.get("sequence") if isinstance(item.get("sequence"), list) else []
+        note_windows = item.get("noteWindows") if isinstance(item.get("noteWindows"), list) else []
+        if not target_midi or not detected_midi or not note_windows:
+            continue
+        review_notes: list[dict[str, Any]] = []
+        for index, window in enumerate(note_windows):
+            if not isinstance(window, dict):
+                continue
+            midi = detected_midi[index] if index < len(detected_midi) else None
+            review_notes.append(
+                {
+                    "note": str(
+                        (detected_sequence[index] if index < len(detected_sequence) else "")
+                        or window.get("note")
+                        or ""
+                    ),
+                    "midi": midi,
+                    "startSeconds": window.get("startSeconds"),
+                    "endSeconds": window.get("endSeconds"),
+                    "audioAgreement": False,
+                    "agreementSourceCount": 0,
+                    "agreementSources": [],
+                    "detectorSource": "visible_mismatch_reverification_queue",
+                }
+            )
+        if not review_notes:
+            continue
+        local_start = review_notes[0].get("startSeconds")
+        local_end = review_notes[-1].get("endSeconds") or review_notes[-1].get("startSeconds")
+        score_label = " ".join(str(note) for note in score_sequence if str(note or "").strip())
+        detected_label = " ".join(str(note) for note in detected_sequence if str(note or "").strip())
+        targets.append(
+            {
+                "status": "queued_source_crop_reverification",
+                "reviewKind": "staff4_visible_score_transcription_mismatch",
+                "rejectedRegressionId": str(item.get("id") or ""),
+                "sourceId": str(item.get("sourceId") or ""),
+                "practiceDay": str(item.get("practiceDay") or ""),
+                "pieceTitle": str(source.get("pieceTitle") or "Wieniawski Scherzo-Tarantelle, Op. 16"),
+                "sampleId": str(item.get("sampleId") or ""),
+                "sourceWindow": str(item.get("sourceWindow") or ""),
+                "targetReferenceStart": int(item.get("targetReferenceStart") or source.get("referenceStart") or 0),
+                "targetReferenceEnd": int(item.get("targetReferenceEnd") or source.get("referenceEnd") or 0),
+                "targetSequence": score_label,
+                "targetMidiSequence": target_midi,
+                "bestAudioSequence": detected_label,
+                "bestAudioMidiSequence": detected_midi,
+                "detectedSequence": detected_label,
+                "detectedMidiSequence": detected_midi,
+                "sourceImageUrl": str(item.get("scoreImageUrl") or source.get("sourceCropImageUrl") or ""),
+                "sourceCropReady": False,
+                "sourceCropRejected": True,
+                "truthEvidenceAccepted": False,
+                "audioLocalStartSeconds": local_start,
+                "audioLocalEndSeconds": local_end,
+                "bestAudioNotes": review_notes,
+                "acceptanceRule": (
+                    "Restore this Staff 4 lane only after the visible source crop, boxed noteheads, "
+                    "rendered transcription, and paired audio all agree."
+                ),
+                "limit": str(
+                    item.get("basis")
+                    or "Visible score and transcription were rejected; this range is queued only for source-crop reverification."
+                ),
+            }
+        )
+    return targets[: max(0, int(limit))]
+
+
 def int_sequence(value: Any) -> list[int]:
     if not isinstance(value, list):
         return []
@@ -4866,6 +4954,16 @@ def build_transcription_completion(
         if isinstance(phrase_expansion.get("currentBest"), dict)
         else {}
     )
+    source_crop_reverification_queue = source_crop_reverification_targets()
+    source_crop_reverification_target = (
+        source_crop_reverification_queue[0] if source_crop_reverification_queue else {}
+    )
+    source_crop_reverification_count = len(source_crop_reverification_queue)
+    source_crop_reverification_status = (
+        str(source_crop_reverification_target.get("status") or "")
+        if source_crop_reverification_target
+        else "empty"
+    )
     staff4_audit_status = str(staff4_audit.get("status") or "")
     staff4_audit_ready = staff4_audit_status not in {"", "not_generated", "blocked_no_staff4_expansion"}
     phrase_expansion_detail = (
@@ -5161,6 +5259,15 @@ def build_transcription_completion(
             ),
         },
         {
+            "label": "Crop review",
+            "value": source_crop_reverification_status.replace("_", " ") if source_crop_reverification_status else "empty",
+            "detail": (
+                str(source_crop_reverification_target.get("targetSequence") or "")
+                if source_crop_reverification_target
+                else "none"
+            ),
+        },
+        {
             "label": "Fast-note trace",
             "value": str(transition_trace_count),
             "detail": "hidden candidates",
@@ -5226,6 +5333,8 @@ def build_transcription_completion(
         done_summary.append("Staff 4 continuity probing now rescans the late-note neighborhood without truth-anchor or guided-note stitching before any longer phrase can enter review.")
     if truth_manifest_live_phrase_count == 0 and staff4_source_rescan_status == "no_staff4_anchor":
         done_summary.append("The May 3 Staff 4 visible score/transcription mismatch is now a rejected regression, so the old accepted Staff 4 lanes are blocked from display.")
+    if source_crop_reverification_count:
+        done_summary.append("Rejected Staff 4 visible mismatches now produce an explicit source-crop reverification queue instead of falling back to a random match.")
     if phrase_expansion_rejected_count:
         done_summary.append(f"{phrase_expansion_rejected_count} Staff 4 audited expansion is now locked as a rejected regression case.")
     if staff4_audit_ready and truth_manifest_live_phrase_count:
@@ -5240,7 +5349,7 @@ def build_transcription_completion(
         "Keep extending the accepted Staff 4 anchor only when each adjacent source note agrees with paired audio.",
         "Lock the eight-note Staff 4 continuation candidate only if the full source crop, local media, transcription, and truth review agree.",
         "Continue using source-audio rescan and continuation search to find real adjacent Staff 4 audio runs without accepting wrong-window matches.",
-        "Reverify the May 3 Staff 4 visible source crop before using that lane as an accepted long-phrase anchor again.",
+        "Reverify the queued May 3 Staff 4 source crop before using that lane as an accepted long-phrase anchor again.",
         "Align accepted phrases to score locations or score-free repeated exercise patterns.",
         "Generate heat maps and Curtis-level observations only from accepted evidence.",
     ]
@@ -5426,7 +5535,15 @@ def build_transcription_completion(
                     f"{phrase_expansion_audio_run_count} audio-note runs."
                 )
     elif truth_manifest_live_phrase_count == 0 and staff4_source_rescan_status == "no_staff4_anchor":
-        next_action = "Reverify one May 3 source-score crop against the transcription and paired audio, then allow phrase matching to restart from that accepted anchor."
+        if source_crop_reverification_target:
+            next_action = (
+                "Reverify the queued May 3 source-score crop "
+                f"{source_crop_reverification_target.get('targetSequence') or 'score'} against "
+                f"{source_crop_reverification_target.get('bestAudioSequence') or 'audio'} and the paired clip, "
+                "then allow phrase matching to restart from that accepted anchor."
+            )
+        else:
+            next_action = "Reverify one May 3 source-score crop against the transcription and paired audio, then allow phrase matching to restart from that accepted anchor."
     elif not measure_match_count:
         next_action = (
             "Convert one local source-score measure into verified symbolic notes, then run the existing phrase matcher over hidden detected series."
@@ -5496,6 +5613,10 @@ def build_transcription_completion(
         "staff4PhraseAudit": staff4_audit,
         "staff4PhraseAuditStatus": staff4_audit_status,
         "staff4PhraseAuditPacketId": staff4_audit.get("packetId") or "",
+        "sourceCropReverificationQueueCount": source_crop_reverification_count,
+        "sourceCropReverificationStatus": source_crop_reverification_status,
+        "sourceCropReverificationTarget": source_crop_reverification_target,
+        "sourceCropReverificationQueue": source_crop_reverification_queue,
         "sourceVerificationTargetCount": source_target_count,
         "sourceVerificationTargets": source_targets,
         "sourceVerificationTargetTop": source_target_top,

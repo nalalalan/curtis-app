@@ -564,6 +564,56 @@ def attach_staff4_full_phrase_decision(packet: dict[str, Any]) -> dict[str, Any]
     return packet
 
 
+def attach_staff4_source_crop_reverification_decision(packet: dict[str, Any]) -> dict[str, Any]:
+    target_midis = int_list(packet.get("targetMidiSequence"))
+    audio_midis = int_list(packet.get("bestAudioMidiSequence"))
+    decision = {
+        "status": "pending_source_crop_reverification",
+        "outcome": "source_crop_reverification_required",
+        "truthDecision": "pending_review",
+        "accepted": False,
+        "rejected": False,
+        "canExtendStaff4Lane": False,
+        "targetMidiSequence": target_midis,
+        "audioMidiSequence": audio_midis,
+        "targetSequence": packet.get("targetSequence") or "",
+        "bestAudioSequence": packet.get("bestAudioSequence") or "",
+        "sourceCropRejected": True,
+        "goldReviewRequired": True,
+        "limit": "Visible source crop, boxed noteheads, rendered transcription, and paired audio must agree before Staff 4 can become accepted evidence again.",
+    }
+    packet["decision"] = decision
+    packet["truthDecision"] = "pending_review"
+    packet["canExtendStaff4Lane"] = False
+    packet["sourceCropReverification"] = {
+        "status": "pending_review",
+        "targetSequence": packet.get("targetSequence") or "",
+        "bestAudioSequence": packet.get("bestAudioSequence") or "",
+        "targetMidiSequence": target_midis,
+        "audioMidiSequence": audio_midis,
+        "scoreImageUrl": (
+            packet.get("score", {}).get("sourceImageUrl")
+            if isinstance(packet.get("score"), dict)
+            else ""
+        ),
+        "acceptanceRule": decision["limit"],
+    }
+    packet["goldReviewCandidate"] = {
+        "status": "queued",
+        "packetId": packet.get("packetId") or "",
+        "kind": "staff4_source_crop_reverification",
+        "targetSequence": packet.get("targetSequence") or "",
+        "bestAudioSequence": packet.get("bestAudioSequence") or "",
+        "targetMidiSequence": target_midis,
+        "audioMidiSequence": audio_midis,
+        "clip": packet.get("clip") if isinstance(packet.get("clip"), dict) else {},
+        "reason": decision["outcome"],
+    }
+    if str(packet.get("status") or "") in {"generated", "needs_manual_audio_review", "detectors_disagree_with_stored_run", "detector_split_review_required"}:
+        packet["status"] = "queued_source_crop_reverification"
+    return packet
+
+
 def compact_note_event(note: dict[str, Any], index: int) -> dict[str, Any]:
     start = number_or_none(note.get("startSeconds")) or 0.0
     end = number_or_none(note.get("endSeconds")) or start
@@ -597,13 +647,83 @@ def current_staff4_expansion(completion: dict[str, Any]) -> dict[str, Any]:
     return current
 
 
+def source_crop_reverification_current(completion: dict[str, Any]) -> dict[str, Any]:
+    target = (
+        completion.get("sourceCropReverificationTarget")
+        if isinstance(completion.get("sourceCropReverificationTarget"), dict)
+        else {}
+    )
+    if not target:
+        return {}
+    target_midis = int_list(target.get("targetMidiSequence"))
+    detected_midis = int_list(target.get("bestAudioMidiSequence") or target.get("detectedMidiSequence"))
+    if not target_midis or not detected_midis:
+        return {}
+    detected_notes = sequence_notes(target.get("bestAudioSequence") or target.get("detectedSequence"))
+    raw_windows = target.get("bestAudioNotes") if isinstance(target.get("bestAudioNotes"), list) else []
+    best_notes: list[dict[str, Any]] = []
+    for index, window in enumerate(raw_windows):
+        if not isinstance(window, dict):
+            continue
+        midi = detected_midis[index] if index < len(detected_midis) else int_or_none(window.get("midi"))
+        note = (
+            detected_notes[index]
+            if index < len(detected_notes)
+            else str(window.get("note") or note_label_for_midi(midi))
+        )
+        best_notes.append(
+            {
+                "note": note,
+                "midi": midi,
+                "startSeconds": window.get("startSeconds"),
+                "endSeconds": window.get("endSeconds"),
+                "confidence": window.get("confidence"),
+                "audioAgreement": False,
+                "agreementSourceCount": 0,
+                "agreementSources": [],
+                "detectorSource": str(window.get("detectorSource") or "visible_mismatch_reverification_queue"),
+            }
+        )
+    return {
+        "status": "queued_source_crop_reverification",
+        "sourceCropReverification": True,
+        "auditFocus": "staff4_source_crop_reverification",
+        "practiceDay": target.get("practiceDay") or "",
+        "pieceTitle": target.get("pieceTitle") or "",
+        "targetReferenceStart": target.get("targetReferenceStart"),
+        "targetReferenceEnd": target.get("targetReferenceEnd"),
+        "targetSequence": sequence_label(target.get("targetSequence")),
+        "targetMidiSequence": target_midis,
+        "bestAudioSequence": sequence_label(target.get("bestAudioSequence") or target.get("detectedSequence")),
+        "bestAudioMidiSequence": detected_midis,
+        "sampleId": target.get("sampleId") or "",
+        "sourceWindow": target.get("sourceWindow") or "",
+        "audioRunSource": "visible_mismatch_reverification_queue",
+        "audioLocalStartSeconds": target.get("audioLocalStartSeconds"),
+        "audioLocalEndSeconds": target.get("audioLocalEndSeconds"),
+        "sourceImageUrl": target.get("sourceImageUrl") or "",
+        "sourceCropReady": False,
+        "sourceCropRejected": True,
+        "truthEvidenceAccepted": False,
+        "bestAudioNotes": best_notes,
+        "rejectedRegressionId": target.get("rejectedRegressionId") or "",
+        "acceptanceRule": target.get("acceptanceRule") or "",
+        "limit": target.get("limit") or "Visible source crop must be reverified before Staff 4 can be accepted.",
+    }
+
+
+def is_source_crop_reverification_current(current: dict[str, Any]) -> bool:
+    return bool(current.get("sourceCropReverification")) or str(current.get("auditFocus") or "") == "staff4_source_crop_reverification"
+
+
 def packet_id_for_current(current: dict[str, Any], failure: dict[str, Any] | None = None) -> str:
     focus = failure if isinstance(failure, dict) and failure else current
     sample_id = str(current.get("sampleId") or focus.get("sampleId") or "sample")
+    prefix = "staff4-source-crop-review" if is_source_crop_reverification_current(current) else "staff4"
     return safe_slug(
         "-".join(
             [
-                "staff4",
+                prefix,
                 str(current.get("practiceDay") or "day"),
                 sample_id,
                 str(focus.get("targetReferenceStart") or current.get("targetReferenceStart") or "start"),
@@ -1270,6 +1390,10 @@ def ensure_staff4_phrase_audit_packet(
     force: bool = False,
 ) -> dict[str, Any]:
     current = current_staff4_expansion(completion)
+    source_crop_reverification = False
+    if not current:
+        current = source_crop_reverification_current(completion)
+        source_crop_reverification = bool(current)
     if not current:
         harness = completion.get("phraseExpansionHarness") if isinstance(completion.get("phraseExpansionHarness"), dict) else {}
         extent_exhausted = str(harness.get("status") or "") == "source_extent_exhausted"
@@ -1288,7 +1412,7 @@ def ensure_staff4_phrase_audit_packet(
         state["staff4PhraseAuditLatest"] = packet
         return packet
 
-    first_failure = staff4_audit_failure_for_completion(completion, current)
+    first_failure = {} if source_crop_reverification else staff4_audit_failure_for_completion(completion, current)
     packet_id = packet_id_for_current(current, first_failure)
     existing_path = packet_json_path(packet_id)
     if existing_path.exists() and not force:
@@ -1359,7 +1483,13 @@ def ensure_staff4_phrase_audit_packet(
         "sourceTitle": sample.get("title") or current.get("sourceTitle") or first_failure.get("sourceTitle") or "",
         "sourceUrl": sample.get("url") or "",
         "status": "generated",
-        "auditFocus": "staff4_first_failed_adjacent_note" if first_failure else "staff4_full_exact_phrase",
+        "auditFocus": (
+            "staff4_source_crop_reverification"
+            if source_crop_reverification
+            else "staff4_first_failed_adjacent_note"
+            if first_failure
+            else "staff4_full_exact_phrase"
+        ),
         "truthDecision": "not_accepted",
         "gate": current.get("status") or "",
         "limit": current.get("limit") or "",
@@ -1392,6 +1522,7 @@ def ensure_staff4_phrase_audit_packet(
         "score": {
             "sourceImageUrl": current.get("sourceImageUrl") or "",
             "sourceCropReady": bool(current.get("sourceCropReady")),
+            "sourceCropRejected": bool(current.get("sourceCropRejected")),
             "truthEvidenceAccepted": bool(current.get("truthEvidenceAccepted")),
         },
         "storedAudioNotes": compact_notes,
@@ -1404,7 +1535,9 @@ def ensure_staff4_phrase_audit_packet(
     if not source_path:
         packet["status"] = "blocked_media_missing"
         packet["limit"] = "The current Staff 4 sample is not present in runtime media storage, so audio/video artifacts cannot be generated."
-        if first_failure:
+        if source_crop_reverification:
+            attach_staff4_source_crop_reverification_decision(packet)
+        elif first_failure:
             attach_staff4_audit_decision(packet, {}, first_failure)
         else:
             attach_staff4_full_phrase_decision(packet)
@@ -1423,7 +1556,9 @@ def ensure_staff4_phrase_audit_packet(
     if not audio_ok:
         packet["status"] = "blocked_audio_extract_failed"
         packet["limit"] = f"Audit audio extraction failed: {audio_output[-180:]}"
-        if first_failure:
+        if source_crop_reverification:
+            attach_staff4_source_crop_reverification_decision(packet)
+        elif first_failure:
             attach_staff4_audit_decision(packet, {}, first_failure)
         else:
             attach_staff4_full_phrase_decision(packet)
@@ -1446,11 +1581,16 @@ def ensure_staff4_phrase_audit_packet(
     packet["artifacts"]["pitchTraceSvgUrl"] = artifact_url(packet_id, pitch_name)
     if write_spectrogram_svg(spectrogram_path, audio_path):
         packet["artifacts"]["spectrogramSvgUrl"] = artifact_url(packet_id, spectrogram_name)
-    if first_failure:
+    if source_crop_reverification:
+        attach_staff4_source_crop_reverification_decision(packet)
+    elif first_failure:
         attach_staff4_audit_decision(packet, analysis, first_failure)
     else:
         attach_staff4_full_phrase_decision(packet)
     packet["nextAction"] = (
+        "Reverify the visible Staff 4 source crop against the transcription and paired audio before reopening this lane."
+        if source_crop_reverification
+        else
         "Lock this Staff 4 failure as rejected; do not extend the lane from this window."
         if packet.get("decision", {}).get("rejected")
         else "Do not extend the Staff 4 lane until this packet is accepted from exact audio and source-score evidence."
@@ -1474,6 +1614,8 @@ def latest_staff4_phrase_audit_packet(state: dict[str, Any]) -> dict[str, Any]:
 def latest_staff4_phrase_audit_packet_for_completion(state: dict[str, Any], completion: dict[str, Any]) -> dict[str, Any]:
     current = current_staff4_expansion(completion)
     if not current:
+        current = source_crop_reverification_current(completion)
+    if not current:
         return latest_staff4_phrase_audit_packet(state)
     current_packet_id = packet_id_for_current(current, staff4_audit_failure_for_completion(completion, current))
     packet = state.get("staff4PhraseAuditLatest") if isinstance(state.get("staff4PhraseAuditLatest"), dict) else {}
@@ -1494,5 +1636,9 @@ def latest_staff4_phrase_audit_packet_for_completion(state: dict[str, Any], comp
         "packetId": "",
         "currentPacketId": current_packet_id,
         "stalePacketId": str(packet.get("packetId") or "") if packet else "",
-        "limit": "Run the Staff 4 phrase audit packet generator for the current adjacent phrase window.",
+        "limit": (
+            "Run the Staff 4 source-crop reverification packet before restoring any accepted Staff 4 anchor."
+            if is_source_crop_reverification_current(current)
+            else "Run the Staff 4 phrase audit packet generator for the current adjacent phrase window."
+        ),
     }

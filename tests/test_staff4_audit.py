@@ -207,6 +207,40 @@ def first_failure_completion_state(failure=None):
     }
 
 
+def source_crop_reverification_completion_state():
+    return {
+        "phraseExpansionHarness": {},
+        "sourceCropReverificationTarget": {
+            "status": "queued_source_crop_reverification",
+            "practiceDay": "2026-05-03",
+            "pieceTitle": "Wieniawski Scherzo-Tarantelle, Op. 16",
+            "sampleId": "Njh8_zq9_DM-8835",
+            "sourceWindow": "*8835-8925",
+            "targetReferenceStart": 9,
+            "targetReferenceEnd": 14,
+            "targetSequence": "Eb5 Eb5 C5 Eb5 Eb5",
+            "targetMidiSequence": [75, 75, 72, 75, 75],
+            "bestAudioSequence": "D#5 D#5 C5 D#5 D#5",
+            "bestAudioMidiSequence": [75, 75, 72, 75, 75],
+            "sourceImageUrl": "/assets/score/staff4-visible-mismatch.png",
+            "sourceCropReady": False,
+            "sourceCropRejected": True,
+            "truthEvidenceAccepted": False,
+            "audioLocalStartSeconds": 20.225,
+            "audioLocalEndSeconds": 22.535,
+            "bestAudioNotes": [
+                {"note": "D#5", "midi": 75, "startSeconds": 20.225, "endSeconds": 20.422},
+                {"note": "D#5", "midi": 75, "startSeconds": 20.550, "endSeconds": 20.689},
+                {"note": "C5", "midi": 72, "startSeconds": 20.817, "endSeconds": 20.898},
+                {"note": "D#5", "midi": 75, "startSeconds": 21.629, "endSeconds": 21.792},
+                {"note": "D#5", "midi": 75, "startSeconds": 22.361, "endSeconds": 22.535},
+            ],
+            "rejectedRegressionId": "rejected-user-flagged-staff4-visible-score-transcription-mismatch",
+            "acceptanceRule": "Visible source crop must be reverified.",
+        },
+    }
+
+
 class Staff4AuditTests(unittest.TestCase):
     def test_failed_note_pitch_diagnostic_rejects_observed_dominant_audio(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -547,6 +581,49 @@ class Staff4AuditTests(unittest.TestCase):
 
         self.assertEqual(packet["status"], "blocked_no_staff4_expansion")
         self.assertEqual(latest_staff4_phrase_audit_packet(state)["status"], "blocked_no_staff4_expansion")
+
+    def test_source_crop_reverification_target_generates_pending_packet(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            state = {
+                "mediaSamples": [
+                    {
+                        "id": "Njh8_zq9_DM-8835",
+                        "path": str(Path(temp_dir) / "curtis-missing-staff4-review-media.mp4"),
+                    }
+                ]
+            }
+            with patch("backend.app.staff4_audit.AUDIT_DIR", Path(temp_dir) / "staff4-audit"):
+                packet = ensure_staff4_phrase_audit_packet(state, source_crop_reverification_completion_state(), force=True)
+
+        self.assertEqual(packet["status"], "blocked_media_missing")
+        self.assertEqual(packet["auditFocus"], "staff4_source_crop_reverification")
+        self.assertEqual(packet["packetId"], "staff4-source-crop-review-2026-05-03-Njh8_zq9_DM-8835-9-14")
+        self.assertEqual(packet["targetSequence"], "Eb5 Eb5 C5 Eb5 Eb5")
+        self.assertEqual(packet["bestAudioSequence"], "D#5 D#5 C5 D#5 D#5")
+        self.assertEqual(packet["truthDecision"], "pending_review")
+        self.assertFalse(packet["canExtendStaff4Lane"])
+        self.assertTrue(packet["score"]["sourceCropRejected"])
+        self.assertFalse(packet["score"]["sourceCropReady"])
+        self.assertEqual(packet["decision"]["status"], "pending_source_crop_reverification")
+        self.assertEqual(packet["goldReviewCandidate"]["kind"], "staff4_source_crop_reverification")
+        self.assertEqual(packet["clip"]["noteLocalStartSeconds"], 20.225)
+        self.assertEqual(packet["clip"]["noteLocalEndSeconds"], 22.535)
+
+    def test_latest_completion_packet_targets_source_crop_reverification_queue(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            state = {}
+            with patch("backend.app.staff4_audit.AUDIT_DIR", Path(temp_dir) / "staff4-audit"):
+                packet = latest_staff4_phrase_audit_packet_for_completion(
+                    state,
+                    source_crop_reverification_completion_state(),
+                )
+
+        self.assertEqual(packet["status"], "not_generated")
+        self.assertEqual(
+            packet["currentPacketId"],
+            "staff4-source-crop-review-2026-05-03-Njh8_zq9_DM-8835-9-14",
+        )
+        self.assertIn("source-crop reverification", packet["limit"])
 
     def test_source_extent_exhausted_reports_musicxml_next_step(self):
         state = {}

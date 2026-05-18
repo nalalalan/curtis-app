@@ -360,7 +360,10 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertEqual(mining["searchedWindowCount"], 0)
         self.assertEqual(mining.get("nearestWindow") or {}, {})
         self.assertEqual(completion["staff4AdjacentMiningStatus"], "no_staff4_anchor")
-        self.assertIn("Reverify one May 3 source-score crop", completion["nextAction"])
+        self.assertIn("Reverify the queued May 3 source-score crop", completion["nextAction"])
+        self.assertEqual(completion["sourceCropReverificationStatus"], "queued_source_crop_reverification")
+        self.assertEqual(completion["sourceCropReverificationTarget"]["targetSequence"], "Eb5 Eb5 C5 Eb5 Eb5")
+        self.assertEqual(completion["sourceCropReverificationTarget"]["bestAudioSequence"], "D#5 D#5 C5 D#5 D#5")
 
     def test_staff4_rejected_anchor_blocks_raw_detected_series_promotion(self):
         daily_records = {
@@ -504,7 +507,7 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertEqual(mining["exactCandidateCount"], 0)
         self.assertEqual(mining["bestCandidate"], {})
         self.assertEqual(completion["staff4AdjacentMiningStatus"], "no_staff4_anchor")
-        self.assertIn("Reverify one May 3 source-score crop", completion["nextAction"])
+        self.assertIn("Reverify the queued May 3 source-score crop", completion["nextAction"])
 
     def test_staff4_exact_midi_search_rejects_stitched_discontinuous_phrase(self):
         runs = [
@@ -852,7 +855,7 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertEqual(completion["phraseExpansionHarness"]["currentBest"], {})
         self.assertEqual(completion["staff4AdjacentMiningStatus"], "no_staff4_anchor")
         self.assertEqual(completion["staff4AdjacentMining"]["bestCandidate"], {})
-        self.assertIn("Reverify one May 3 source-score crop", completion["nextAction"])
+        self.assertIn("Reverify the queued May 3 source-score crop", completion["nextAction"])
 
     def test_staff4_source_audio_rescan_guided_anchor_reproduces_when_broad_pass_misses(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1877,7 +1880,7 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertEqual(completion["staff4AdjacentMining"]["anchorCount"], 0)
         self.assertEqual(completion["staff4AdjacentMiningStatus"], "no_staff4_anchor")
         self.assertEqual(completion["staff4AdjacentMining"]["exactCandidateCount"], 0)
-        self.assertIn("Reverify one May 3 source-score crop", completion["nextAction"])
+        self.assertIn("Reverify the queued May 3 source-score crop", completion["nextAction"])
 
     def test_local_source_score_pdf_advances_score_truth_without_accepting_phrase(self):
         completion = build_transcription_completion(

@@ -3208,8 +3208,15 @@ function renderStaff4Audit(audit) {
   const packetUrl = assetUrl(artifacts.packetJsonUrl || "");
   const decision = audit.decision && typeof audit.decision === "object" ? audit.decision : {};
   const decisionLabel = String(decision.outcome || decision.status || status).replace(/_/g, " ");
-  const score = decision.expectedNote || audit.expectedFailedScoreNote || audit.expectedNextScoreNote || "score";
-  const audio = decision.observedNote || audit.observedFailureAudioNote || audit.observedNextAudioNote || "unverified";
+  const scoreBlock = audit.score && typeof audit.score === "object" ? audit.score : {};
+  const isCropReview = audit.auditFocus === "staff4_source_crop_reverification";
+  const score = isCropReview
+    ? audit.targetSequence || decision.targetSequence || "score crop"
+    : decision.expectedNote || audit.expectedFailedScoreNote || audit.expectedNextScoreNote || "score";
+  const audio = isCropReview
+    ? audit.bestAudioSequence || decision.bestAudioSequence || "audio"
+    : decision.observedNote || audit.observedFailureAudioNote || audit.observedNextAudioNote || "unverified";
+  const sourceCrop = isCropReview ? assetUrl(scoreBlock.sourceImageUrl || "") : "";
   return `
     <section class="staff4-audit-card" aria-label="Staff 4 audit packet">
       <div class="staff4-audit-head">
@@ -3228,6 +3235,7 @@ function renderStaff4Audit(audit) {
             <audio controls preload="metadata" src="${escapeHtml(audioUrl)}"></audio>
           </div>
         ` : ""}
+        ${sourceCrop ? `<img class="staff4-audit-plot" src="${escapeHtml(sourceCrop)}" alt="Source crop under review">` : ""}
         ${pitchTrace ? `<img class="staff4-audit-plot" src="${escapeHtml(pitchTrace)}" alt="Staff 4 pitch trace">` : ""}
         ${spectrogram ? `<img class="staff4-audit-plot" src="${escapeHtml(spectrogram)}" alt="Staff 4 spectrogram">` : ""}
       </div>
@@ -3310,6 +3318,7 @@ function renderTranscriptionCompletion() {
     ["Rescan", completion.staff4SourceAudioRescanStatus ? String(completion.staff4SourceAudioRescanStatus).replace(/_/g, " ") : "pending"],
     ["Mining", completion.staff4AdjacentMiningStatus ? String(completion.staff4AdjacentMiningStatus).replace(/_/g, " ") : "pending"],
     ["Staff 4 audit", completion.staff4PhraseAuditStatus ? String(completion.staff4PhraseAuditStatus).replace(/_/g, " ") : "not generated"],
+    ["Crop review", completion.sourceCropReverificationStatus ? String(completion.sourceCropReverificationStatus).replace(/_/g, " ") : "empty"],
   ];
   elements.transcriptionCompletion.innerHTML = `
     <div class="roadmap-score">
