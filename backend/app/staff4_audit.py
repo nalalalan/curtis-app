@@ -12,7 +12,9 @@ from .state import utc_now
 
 
 AUDIT_DIR = RUNTIME_DIR / "staff4-audit"
+OWNER_MEDIA_DIR = RUNTIME_DIR / "owner-media"
 STAFF4_AUDIT_VERSION = "staff4_phrase_audit_v3"
+OWNER_MEDIA_SUFFIXES = (".webm", ".mp4", ".mov", ".m4a", ".mp3", ".wav")
 
 
 def safe_slug(value: Any, fallback: str = "packet") -> str:
@@ -31,6 +33,45 @@ def packet_artifact_path(packet_id: str, filename: str) -> Path:
 
 def packet_json_path(packet_id: str) -> Path:
     return packet_artifact_path(packet_id, "packet.json")
+
+
+def safe_media_sample_id(value: Any) -> str:
+    raw = str(value or "").strip()
+    return re.sub(r"[^A-Za-z0-9_.-]+", "-", raw).strip("-")
+
+
+def owner_media_path_for_sample_id(sample_id: str) -> Path | None:
+    safe_id = safe_media_sample_id(sample_id)
+    if not safe_id:
+        return None
+    candidates: list[Path] = []
+    for suffix in OWNER_MEDIA_SUFFIXES:
+        candidates.append(OWNER_MEDIA_DIR / f"{safe_id}-browser{suffix}")
+        candidates.append(OWNER_MEDIA_DIR / f"{safe_id}{suffix}")
+    try:
+        owner_dir = OWNER_MEDIA_DIR.resolve()
+    except OSError:
+        return None
+    for candidate in candidates:
+        try:
+            path = candidate.resolve(strict=True)
+        except OSError:
+            continue
+        if path.is_file() and (path == owner_dir or owner_dir in path.parents):
+            return path
+    return None
+
+
+def owner_media_sample_for_id(sample_id: str) -> dict[str, Any]:
+    path = owner_media_path_for_sample_id(sample_id)
+    if not path:
+        return {}
+    return {
+        "id": str(sample_id or "").strip(),
+        "path": str(path),
+        "status": "media_sample_ready",
+        "source": "owner_media_fallback",
+    }
 
 
 def number_or_none(value: Any) -> float | None:
@@ -510,12 +551,13 @@ def current_staff4_expansion(completion: dict[str, Any]) -> dict[str, Any]:
 
 def packet_id_for_current(current: dict[str, Any], failure: dict[str, Any] | None = None) -> str:
     focus = failure if isinstance(failure, dict) and failure else current
+    sample_id = str(current.get("sampleId") or focus.get("sampleId") or "sample")
     return safe_slug(
         "-".join(
             [
                 "staff4",
                 str(current.get("practiceDay") or "day"),
-                str(current.get("sampleId") or "sample"),
+                sample_id,
                 str(focus.get("targetReferenceStart") or current.get("targetReferenceStart") or "start"),
                 str(focus.get("targetReferenceEnd") or current.get("targetReferenceEnd") or "end"),
             ]
@@ -525,16 +567,17 @@ def packet_id_for_current(current: dict[str, Any], failure: dict[str, Any] | Non
 
 def media_sample_for_id(state: dict[str, Any], sample_id: str) -> dict[str, Any]:
     samples = state.get("mediaSamples") if isinstance(state.get("mediaSamples"), list) else []
+    target = str(sample_id or "").strip()
     for sample in samples:
-        if isinstance(sample, dict) and str(sample.get("id") or "") == str(sample_id or ""):
+        if isinstance(sample, dict) and str(sample.get("id") or "").strip() == target:
             return sample
-    return {}
+    return owner_media_sample_for_id(target)
 
 
 def source_media_path(sample: dict[str, Any]) -> Path | None:
     raw = str(sample.get("path") or "").strip()
     if not raw:
-        return None
+        return owner_media_path_for_sample_id(str(sample.get("id") or ""))
     try:
         path = Path(raw).resolve(strict=True)
     except OSError:
@@ -1036,7 +1079,7 @@ def ensure_staff4_phrase_audit_packet(
         except (OSError, json.JSONDecodeError):
             pass
 
-    sample_id = str(current.get("sampleId") or "").strip()
+    sample_id = str(current.get("sampleId") or first_failure.get("sampleId") or "").strip()
     sample = media_sample_for_id(state, sample_id)
     source_path = source_media_path(sample)
     target_midis = (
@@ -1087,11 +1130,11 @@ def ensure_staff4_phrase_audit_packet(
         "version": STAFF4_AUDIT_VERSION,
         "packetId": packet_id,
         "createdAt": utc_now(),
-        "practiceDay": current.get("practiceDay") or "",
-        "pieceTitle": current.get("pieceTitle") or "",
+        "practiceDay": current.get("practiceDay") or first_failure.get("practiceDay") or "",
+        "pieceTitle": current.get("pieceTitle") or first_failure.get("pieceTitle") or "",
         "sampleId": sample_id,
-        "sourceWindow": current.get("sourceWindow") or "",
-        "sourceTitle": sample.get("title") or current.get("sourceTitle") or "",
+        "sourceWindow": current.get("sourceWindow") or first_failure.get("sourceWindow") or sample.get("window") or "",
+        "sourceTitle": sample.get("title") or current.get("sourceTitle") or first_failure.get("sourceTitle") or "",
         "sourceUrl": sample.get("url") or "",
         "status": "generated",
         "auditFocus": "staff4_first_failed_adjacent_note" if first_failure else "staff4_full_exact_phrase",

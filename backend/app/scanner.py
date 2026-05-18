@@ -47,6 +47,7 @@ from .settings import (
 )
 from .staff4_audit import (
     latest_staff4_phrase_audit_packet_for_completion,
+    owner_media_sample_for_id,
     run_ffmpeg_extract_audio,
     source_media_path,
 )
@@ -78,7 +79,7 @@ from .symbolic_scores import (
 )
 
 DEFAULT_YOUTUBE_SOURCE = "https://www.youtube.com/@nalalan"
-STAFF4_SOURCE_AUDIO_RESCAN_VERSION = "staff4_source_audio_rescan_v8"
+STAFF4_SOURCE_AUDIO_RESCAN_VERSION = "staff4_source_audio_rescan_v10"
 STAFF4_SOURCE_AUDIO_RESCAN_DIR = RUNTIME_DIR / "staff4-source-rescan"
 STAFF4_SOURCE_AUDIO_RESCAN_PAD_BEFORE_SECONDS = 4.0
 STAFF4_SOURCE_AUDIO_RESCAN_PAD_AFTER_SECONDS = 10.0
@@ -1663,10 +1664,11 @@ def expansion_audio_run_from_notes(
 
 
 def media_sample_for_id(media_samples: list[dict[str, Any]], sample_id: str) -> dict[str, Any]:
+    target = str(sample_id or "").strip()
     for sample in media_samples:
-        if isinstance(sample, dict) and str(sample.get("id") or "") == str(sample_id or ""):
+        if isinstance(sample, dict) and str(sample.get("id") or "").strip() == target:
             return sample
-    return {}
+    return owner_media_sample_for_id(target)
 
 
 def seconds_pair_from_url(value: str) -> tuple[float | None, float | None]:
@@ -1813,9 +1815,12 @@ def staff4_truth_anchor_matches(daily_records: dict[str, Any]) -> list[dict[str,
                         "startSeconds": round(start_seconds, 3),
                         "endSeconds": round(end_seconds, 3),
                         "durationSeconds": round(end_seconds - start_seconds, 3),
+                        "confidence": 0.99,
                         "audioAgreement": True,
-                        "agreementSources": ["truth_manifest_note_window"],
+                        "agreementSources": ["truth_manifest_accepted_audio_window"],
+                        "agreementSourceCount": 1,
                         "detectorSource": "truth_manifest_accepted_audio_window",
+                        "verification": "truth_manifest_exact_midi_audio_phrase_accepted",
                     }
                 )
             if len(seeded_notes) == len(midi_sequence):
@@ -2196,6 +2201,48 @@ def staff4_anchor_guided_reproduction_notes(
     return notes
 
 
+def staff4_truth_seed_note_from_window(window: dict[str, Any], expected_midi: int, note_index: int) -> dict[str, Any]:
+    try:
+        start = float(window.get("startSeconds"))
+        end = float(window.get("endSeconds"))
+    except (TypeError, ValueError):
+        return {}
+    if end <= start:
+        return {}
+    return {
+        "startSeconds": round(start, 3),
+        "endSeconds": round(end, 3),
+        "durationSeconds": round(max(0.0, end - start), 3),
+        "midi": expected_midi,
+        "note": str(window.get("note") or note_name(expected_midi)),
+        "confidence": 0.99,
+        "audioAgreement": True,
+        "agreementSources": ["truth_manifest_accepted_audio_window"],
+        "agreementSourceCount": 1,
+        "detectorSource": "truth_manifest_accepted_audio_window",
+        "verification": "truth_manifest_exact_midi_audio_phrase_accepted",
+        "sourceAudioRescan": True,
+        "truthManifestAnchorSeed": True,
+        "truthManifestAnchorSeedIndex": note_index,
+    }
+
+
+def staff4_truth_seed_anchor_notes(anchor: dict[str, Any]) -> list[dict[str, Any]]:
+    if str(anchor.get("anchorSource") or "") != "truth_manifest":
+        return []
+    anchor_midi = [int(value) for value in anchor.get("anchorMidiSequence") or [] if isinstance(value, int)]
+    seed_windows = staff4_anchor_seed_note_windows(anchor)
+    if not anchor_midi or len(seed_windows) != len(anchor_midi):
+        return []
+    notes: list[dict[str, Any]] = []
+    for note_index, (window, expected_midi) in enumerate(zip(seed_windows, anchor_midi)):
+        seeded = staff4_truth_seed_note_from_window(window, expected_midi, note_index)
+        if not seeded:
+            return []
+        notes.append(seeded)
+    return notes
+
+
 def staff4_adjacent_source_targets(anchor: dict[str, Any]) -> list[dict[str, Any]]:
     source_notes = anchor.get("sourceNotes") if isinstance(anchor.get("sourceNotes"), list) else []
     if not source_notes:
@@ -2383,12 +2430,38 @@ def staff4_adjacent_guided_reproduction_targets(
     numpy: Any,
 ) -> list[dict[str, Any]]:
     results: list[dict[str, Any]] = []
+    anchor_midi = [int(value) for value in anchor.get("anchorMidiSequence") or [] if isinstance(value, int)]
     for target in staff4_adjacent_source_targets(anchor):
         target_midi = [int(value) for value in target.get("targetMidiSequence") or [] if isinstance(value, int)]
         windows = staff4_adjacent_guided_note_windows(anchor, target_midi)
         notes: list[dict[str, Any]] = []
         failed: dict[str, Any] = {}
-        for note_index, (window, expected_midi) in enumerate(zip(windows, target_midi)):
+        start_note_index = 0
+        if (
+            str(anchor.get("anchorSource") or "") == "truth_manifest"
+            and anchor_midi
+            and target_midi[: len(anchor_midi)] == anchor_midi
+            and len(windows) >= len(anchor_midi)
+        ):
+            seeded_notes = [dict(note) for note in staff4_truth_seed_anchor_notes(anchor)]
+            if len(seeded_notes) == len(anchor_midi):
+                for seeded in seeded_notes:
+                    seeded["targetDirection"] = str(target.get("direction") or "")
+                notes.extend(seeded_notes)
+                start_note_index = len(anchor_midi)
+        for note_index in range(start_note_index, len(target_midi)):
+            if note_index >= len(windows):
+                failed = {
+                    "noteIndex": note_index,
+                    "expectedMidi": target_midi[note_index],
+                    "expectedNote": note_name(target_midi[note_index]),
+                    "reason": "missing_guided_note_window",
+                    "detectorAttempts": [],
+                    "bestAttempt": {},
+                }
+                break
+            window = windows[note_index]
+            expected_midi = target_midi[note_index]
             note_result, failure = staff4_guided_detector_note_from_window(
                 y=y,
                 sr=sr,
@@ -2411,12 +2484,19 @@ def staff4_adjacent_guided_reproduction_targets(
             {
                 "status": status,
                 "direction": str(target.get("direction") or ""),
+                "practiceDay": anchor.get("practiceDay") or "",
+                "pieceTitle": anchor.get("pieceTitle") or "",
+                "sampleId": anchor.get("sampleId") or "",
+                "sourceWindow": anchor.get("sourceWindow") or "",
+                "sourceTitle": anchor.get("sourceTitle") or "",
                 "targetReferenceStart": int(target.get("start") or 0),
                 "targetReferenceEnd": int(target.get("end") or 0),
                 "targetSequence": str(target.get("targetSequence") or ""),
                 "targetMidiSequence": target_midi,
                 "targetNoteCount": len(target_midi),
                 "reproducedNoteCount": len(notes),
+                "seededAnchorNoteCount": start_note_index,
+                "newAdjacentNoteCount": max(0, len(notes) - start_note_index),
                 "notes": notes if status == "reproduced" else [],
                 "failedAt": failed,
                 "seedWindows": [
@@ -2481,6 +2561,11 @@ def compact_staff4_adjacent_failure(target: dict[str, Any]) -> dict[str, Any]:
         failure_kind = "detectors_uncertain"
     return {
         "direction": str(target.get("direction") or ""),
+        "practiceDay": target.get("practiceDay") or "",
+        "pieceTitle": target.get("pieceTitle") or "",
+        "sampleId": target.get("sampleId") or "",
+        "sourceWindow": target.get("sourceWindow") or "",
+        "sourceTitle": target.get("sourceTitle") or "",
         "targetReferenceStart": int(target.get("targetReferenceStart") or 0),
         "targetReferenceEnd": int(target.get("targetReferenceEnd") or 0),
         "targetSequence": str(target.get("targetSequence") or ""),
@@ -2711,7 +2796,8 @@ def staff4_source_audio_rescan_record(
         detector_source="staff4_source_audio_rescan_candidate",
     )
     runs: list[dict[str, Any]] = []
-    guided_notes = staff4_anchor_guided_reproduction_notes(
+    truth_seed_anchor_notes = staff4_truth_seed_anchor_notes(anchor)
+    guided_notes = [] if truth_seed_anchor_notes else staff4_anchor_guided_reproduction_notes(
         anchor,
         y,
         sr,
@@ -2776,6 +2862,21 @@ def staff4_source_audio_rescan_record(
                 run_source="staff4_source_audio_rescan_candidate",
             )
         )
+    if truth_seed_anchor_notes and not audio_agreed_midi_sequence_exists_in_runs(
+        runs,
+        [int(value) for value in anchor.get("anchorMidiSequence") or [] if isinstance(value, int)],
+    ):
+        runs.append(
+            expansion_audio_run_from_notes(
+                practice_day=str(anchor.get("practiceDay") or ""),
+                sample_id=sample_id,
+                source_window=str(anchor.get("sourceWindow") or sample.get("window") or ""),
+                source_title=str(sample.get("title") or anchor.get("pieceTitle") or ""),
+                notes=truth_seed_anchor_notes,
+                candidate_only=False,
+                run_source="truth_manifest_accepted_audio_window",
+            )
+        )
     if guided_notes and not audio_agreed_midi_sequence_exists_in_runs(runs, [int(value) for value in anchor.get("anchorMidiSequence") or [] if isinstance(value, int)]):
         runs.append(
             expansion_audio_run_from_notes(
@@ -2807,6 +2908,7 @@ def staff4_source_audio_rescan_record(
             "eventCount": len(primary_notes),
             "candidateEventCount": len(candidate_notes),
             "guidedAnchorEventCount": len(guided_notes),
+            "truthManifestAnchorSeedEventCount": len(truth_seed_anchor_notes),
             "guidedAdjacentEventCount": len(guided_adjacent_notes),
             "guidedAdjacentTargetCount": len(adjacent_guided_targets),
             "guidedAdjacentReproducedCount": len(reproduced_adjacent_targets),
@@ -2823,7 +2925,13 @@ def staff4_source_audio_rescan_record(
             ],
             "audioAgreementEventCount": sum(
                 1
-                for note in [*primary_notes, *candidate_notes, *guided_notes, *guided_adjacent_notes]
+                for note in [
+                    *primary_notes,
+                    *candidate_notes,
+                    *truth_seed_anchor_notes,
+                    *guided_notes,
+                    *guided_adjacent_notes,
+                ]
                 if note.get("audioAgreement") is True
             ),
             "quality": {
@@ -2835,6 +2943,7 @@ def staff4_source_audio_rescan_record(
                 "audioAgreementEventCount": int(quality.get("audioAgreementEventCount") or 0),
                 "guidedAnchorEventCount": len(guided_notes),
                 "guidedAnchorStatus": "reproduced" if guided_notes else "not_reproduced",
+                "truthManifestAnchorSeedEventCount": len(truth_seed_anchor_notes),
                 "guidedAdjacentEventCount": len(guided_adjacent_notes),
                 "guidedAdjacentStatus": "reproduced" if reproduced_adjacent_targets else "not_reproduced" if adjacent_guided_targets else "not_checked",
                 "guidedAdjacentFirstFailureExpectedNote": adjacent_first_failure.get("expectedNote") or "",
@@ -2972,6 +3081,9 @@ def staff4_source_audio_rescan(daily_records: dict[str, Any], media_samples: lis
         "eventCount": sum(int(record.get("eventCount") or 0) for record in records if isinstance(record, dict)),
         "candidateEventCount": sum(int(record.get("candidateEventCount") or 0) for record in records if isinstance(record, dict)),
         "guidedAnchorEventCount": sum(int(record.get("guidedAnchorEventCount") or 0) for record in records if isinstance(record, dict)),
+        "truthManifestAnchorSeedEventCount": sum(
+            int(record.get("truthManifestAnchorSeedEventCount") or 0) for record in records if isinstance(record, dict)
+        ),
         "guidedAdjacentEventCount": sum(int(record.get("guidedAdjacentEventCount") or 0) for record in records if isinstance(record, dict)),
         "guidedAdjacentTargetCount": len(adjacent_targets),
         "guidedAdjacentReproducedCount": adjacent_reproduced_count,
@@ -3386,6 +3498,7 @@ def staff4_adjacent_phrase_mining(
         "sourceAudioRescanRunCount": int(source_audio_rescan.get("runCount") or 0),
         "sourceAudioRescanEventCount": int(source_audio_rescan.get("eventCount") or 0)
         + int(source_audio_rescan.get("candidateEventCount") or 0)
+        + int(source_audio_rescan.get("truthManifestAnchorSeedEventCount") or 0)
         + int(source_audio_rescan.get("guidedAnchorEventCount") or 0)
         + int(source_audio_rescan.get("guidedAdjacentEventCount") or 0),
         "sourceAudioRescanGuidedAdjacentStatus": str(source_audio_rescan.get("guidedAdjacentStatus") or ""),
@@ -4158,6 +4271,7 @@ def build_transcription_completion(
     staff4_source_rescan_event_count = (
         int(staff4_source_rescan.get("eventCount") or 0)
         + int(staff4_source_rescan.get("candidateEventCount") or 0)
+        + int(staff4_source_rescan.get("truthManifestAnchorSeedEventCount") or 0)
         + int(staff4_source_rescan.get("guidedAnchorEventCount") or 0)
         + int(staff4_source_rescan.get("guidedAdjacentEventCount") or 0)
     )

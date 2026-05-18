@@ -10,7 +10,9 @@ from backend.app.staff4_audit import (
     ensure_staff4_phrase_audit_packet,
     latest_staff4_phrase_audit_packet,
     latest_staff4_phrase_audit_packet_for_completion,
+    media_sample_for_id,
     packet_id_for_current,
+    source_media_path,
 )
 
 
@@ -188,6 +190,72 @@ def first_failure_completion_state(failure=None):
 
 
 class Staff4AuditTests(unittest.TestCase):
+    def test_owner_media_sample_fallback_resolves_existing_browser_export(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            owner_dir = Path(temp_dir) / "owner-media"
+            owner_dir.mkdir()
+            sample_path = owner_dir / "Njh8_zq9_DM-8835-browser.webm"
+            sample_path.write_bytes(b"owner-media")
+            state = {"mediaSamples": []}
+            with patch("backend.app.staff4_audit.OWNER_MEDIA_DIR", owner_dir):
+                sample = media_sample_for_id(state, "Njh8_zq9_DM-8835")
+                resolved = source_media_path(sample)
+
+        self.assertEqual(sample["id"], "Njh8_zq9_DM-8835")
+        self.assertEqual(sample["source"], "owner_media_fallback")
+        self.assertEqual(resolved, sample_path.resolve())
+
+    def test_audit_packet_uses_failure_sample_when_current_source_only_target_has_none(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            owner_dir = Path(temp_dir) / "owner-media"
+            owner_dir.mkdir()
+            sample_path = owner_dir / "Njh8_zq9_DM-8835-browser.webm"
+            sample_path.write_bytes(b"owner-media")
+            completion = first_failure_completion_state(
+                staff4_first_failure(
+                    targetReferenceEnd=17,
+                    targetSequence="Eb5 Eb5 C5 Eb5 Eb5 Eb5 C5 A4",
+                    targetMidiSequence=[75, 75, 72, 75, 75, 75, 72, 69],
+                    targetNoteCount=8,
+                    reproducedNoteCount=7,
+                    failedNoteIndex=7,
+                    expectedMidi=69,
+                    expectedNote="A4",
+                    failureKind="wrong_midi_detected",
+                    sampleId="Njh8_zq9_DM-8835",
+                    sourceWindow="*8835-8925",
+                    bestAttemptStartSeconds=23.514,
+                    bestAttemptEndSeconds=23.677,
+                    bestAttemptObservedMidi=[74, 74, 74],
+                    bestAttemptObservedNotes=["D5", "D5", "D5"],
+                    bestAttemptObservedConsensusMidi=74,
+                    bestAttemptObservedConsensusNote="D5",
+                )
+            )
+            completion["phraseExpansionHarness"]["currentBest"]["sampleId"] = ""
+            state = {"mediaSamples": []}
+            with patch("backend.app.staff4_audit.AUDIT_DIR", Path(temp_dir) / "staff4-audit"), patch(
+                "backend.app.staff4_audit.OWNER_MEDIA_DIR", owner_dir
+            ), patch(
+                "backend.app.staff4_audit.run_ffmpeg_extract_audio", return_value=(True, "")
+            ), patch("backend.app.staff4_audit.run_ffmpeg_extract_video", return_value=(True, "")), patch(
+                "backend.app.staff4_audit.analyze_audio_clip",
+                return_value={"status": "blocked_audio_mismatch_confirmed"},
+            ), patch(
+                "backend.app.staff4_audit.write_pitch_trace_svg"
+            ), patch(
+                "backend.app.staff4_audit.write_spectrogram_svg", return_value=True
+            ):
+                packet = ensure_staff4_phrase_audit_packet(state, completion, force=True)
+
+        self.assertEqual(packet["sampleId"], "Njh8_zq9_DM-8835")
+        self.assertEqual(packet["sourceWindow"], "*8835-8925")
+        self.assertEqual(packet["clip"]["mediaUrl"], "/api/curtis/media/sample/Njh8_zq9_DM-8835")
+        self.assertEqual(packet["expectedFailedScoreNote"], "A4")
+        self.assertEqual(packet["observedFailureAudioNote"], "D5")
+        self.assertEqual(packet["status"], "blocked_audio_mismatch_confirmed")
+        self.assertEqual(packet["decision"]["status"], "rejected_mismatch")
+
     def test_missing_runtime_media_still_generates_blocked_packet(self):
         state = {
             "mediaSamples": [

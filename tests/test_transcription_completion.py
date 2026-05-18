@@ -10,6 +10,7 @@ from backend.app.scanner import (
     build_transcription_completion,
     build_truth_workbench,
     audio_window_search_for_exact_midi,
+    media_sample_for_id,
     reference_phrase_candidate_count,
     reference_phrase_candidate_top,
     source_verification_target_count,
@@ -312,30 +313,33 @@ class TranscriptionCompletionTests(unittest.TestCase):
             ],
         }
 
-        completion = build_transcription_completion(
-            {"scoreReferenceTargetCount": 1},
-            daily_records,
-            {"entries": [{"title": "Wieniawski Scherzo-Tarantelle, Op. 16"}]},
-            {
-                "ledgerVideoCount": 1,
-                "uploadedVideoSeconds": 120,
-                "uploadedVideoLabel": "2m",
-                "checkedVideoSeconds": 120,
-                "checkedVideoLabel": "2m",
-                "activePracticeLabel": "2m",
-                "estimatedTotalPracticeLabel": "2m",
-                "activePracticeScan": {
-                    "activeIntervalCount": 1,
-                    "sampleResultCount": 1,
-                    "activeViolinSampleCount": 1,
-                    "checkedNoViolinSampleCount": 0,
-                    "pendingWindowCount": 0,
+        with tempfile.TemporaryDirectory() as temp_dir, patch(
+            "backend.app.staff4_audit.OWNER_MEDIA_DIR", Path(temp_dir) / "owner-media"
+        ):
+            completion = build_transcription_completion(
+                {"scoreReferenceTargetCount": 1},
+                daily_records,
+                {"entries": [{"title": "Wieniawski Scherzo-Tarantelle, Op. 16"}]},
+                {
+                    "ledgerVideoCount": 1,
+                    "uploadedVideoSeconds": 120,
+                    "uploadedVideoLabel": "2m",
+                    "checkedVideoSeconds": 120,
+                    "checkedVideoLabel": "2m",
+                    "activePracticeLabel": "2m",
+                    "estimatedTotalPracticeLabel": "2m",
+                    "activePracticeScan": {
+                        "activeIntervalCount": 1,
+                        "sampleResultCount": 1,
+                        "activeViolinSampleCount": 1,
+                        "checkedNoViolinSampleCount": 0,
+                        "pendingWindowCount": 0,
+                    },
                 },
-            },
-            {"benchmarkCount": 1, "wrongScoreNoteRegressionCount": 1},
-            [{"id": "Njh8_zq9_DM-8835"}],
-            [{"transcriptionId": "t1"}],
-        )
+                {"benchmarkCount": 1, "wrongScoreNoteRegressionCount": 1},
+                [{"id": "Njh8_zq9_DM-8835"}],
+                [{"transcriptionId": "t1"}],
+            )
 
         harness = completion["phraseExpansionHarness"]
         current = harness["currentBest"]
@@ -635,7 +639,10 @@ class TranscriptionCompletionTests(unittest.TestCase):
                 ],
             }
 
-            with patch("backend.app.scanner.run_ffmpeg_extract_audio", side_effect=fake_extract), patch(
+            empty_owner_dir = Path(temp_dir) / "empty-owner-media"
+            with patch("backend.app.staff4_audit.OWNER_MEDIA_DIR", empty_owner_dir), patch(
+                "backend.app.scanner.run_ffmpeg_extract_audio", side_effect=fake_extract
+            ), patch(
                 "backend.app.scanner.transcribe_audio_array",
                 return_value=fake_transcription,
             ):
@@ -1160,6 +1167,213 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertEqual(failure["bestAttemptObservedConsensusNote"], "D5")
         self.assertIn("current_detectors_did_not_reproduce_exact_midi", failure["reason"])
 
+    def test_staff4_truth_manifest_adjacent_probe_keeps_accepted_anchor_fixed(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source_path = Path(temp_dir) / "staff4-source.wav"
+            write_tiny_wav(source_path)
+            calls = {"count": 0}
+
+            def fake_extract(_source, target, _start, _end):
+                write_tiny_wav(target, seconds=17)
+                return True, ""
+
+            def no_a4_detector_votes(_segment, expected_midi, _sr, _librosa, _numpy):
+                calls["count"] += 1
+                self.assertEqual(expected_midi, midi_for_note("A4"))
+                return []
+
+            def score_note(label, midi):
+                item = note("C5")
+                item["note"] = label
+                item["midi"] = midi
+                return item
+
+            source_notes = [score_note("A5", midi_for_note("A5")) for _ in range(9)] + [
+                score_note("Eb5", midi_for_note("D#5")),
+                score_note("Eb5", midi_for_note("D#5")),
+                score_note("C5", midi_for_note("C5")),
+                score_note("Eb5", midi_for_note("D#5")),
+                score_note("Eb5", midi_for_note("D#5")),
+                score_note("Eb5", midi_for_note("D#5")),
+                score_note("C5", midi_for_note("C5")),
+                score_note("A4", midi_for_note("A4")),
+            ]
+            anchor_notes = [
+                note("D#5", 20.225),
+                note("D#5", 20.550),
+                note("C5", 20.817),
+                note("D#5", 21.629),
+                note("D#5", 22.361),
+                note("D#5", 22.829),
+                note("C5", 23.117),
+            ]
+            anchor = {
+                "practiceDay": "2026-05-03",
+                "pieceTitle": "Wieniawski Scherzo-Tarantelle, Op. 16",
+                "anchorSequence": "Eb5 Eb5 C5 Eb5 Eb5 Eb5 C5",
+                "anchorMidiSequence": [75, 75, 72, 75, 75, 75, 72],
+                "sourceNotes": source_notes,
+                "referenceStart": 9,
+                "referenceEnd": 16,
+                "sampleId": "Njh8_zq9_DM-8835",
+                "sourceWindow": "*8835-8925",
+                "anchorLocalStartSeconds": 20.225,
+                "anchorLocalEndSeconds": 23.280,
+                "anchorSource": "truth_manifest",
+                "match": {
+                    "detectedSeries": {
+                        "sampleId": "Njh8_zq9_DM-8835",
+                        "sourceWindow": "*8835-8925",
+                        "notes": anchor_notes,
+                    },
+                    "matchedDetectedNotes": anchor_notes,
+                },
+            }
+
+            with patch("backend.app.scanner.run_ffmpeg_extract_audio", side_effect=fake_extract), patch(
+                "backend.app.scanner.transcribe_audio_array",
+                return_value={"events": [], "scoreMatchCandidateNotes": [], "quality": {}},
+            ), patch("backend.app.scanner.staff4_detector_votes_for_segment", side_effect=no_a4_detector_votes):
+                record = staff4_source_audio_rescan_record(
+                    anchor=anchor,
+                    sample={"id": "Njh8_zq9_DM-8835", "path": str(source_path), "window": "*8835-8925"},
+                    source_path=source_path,
+                    scan_window={
+                        "label": "anchor_core",
+                        "scanLocalStartSeconds": 16.225,
+                        "scanLocalEndSeconds": 32.535,
+                    },
+                )
+
+        target = record["guidedAdjacentTargets"][0]
+        failure = record["guidedAdjacentFirstFailure"]
+        self.assertEqual(record["guidedAdjacentStatus"], "not_reproduced")
+        self.assertEqual(target["seededAnchorNoteCount"], 7)
+        self.assertEqual(target["reproducedNoteCount"], 7)
+        self.assertEqual(target["sampleId"], "Njh8_zq9_DM-8835")
+        self.assertEqual(target["sourceWindow"], "*8835-8925")
+        self.assertEqual(failure["sampleId"], "Njh8_zq9_DM-8835")
+        self.assertEqual(failure["sourceWindow"], "*8835-8925")
+        self.assertEqual(failure["failedNoteIndex"], 7)
+        self.assertEqual(failure["expectedMidi"], midi_for_note("A4"))
+        self.assertEqual(failure["expectedNote"], "A4")
+        self.assertEqual(failure["targetMidiSequence"], [75, 75, 72, 75, 75, 75, 72, 69])
+        self.assertEqual(calls["count"], 9)
+
+    def test_staff4_truth_manifest_adjacent_probe_can_promote_exact_a4_extension(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source_path = Path(temp_dir) / "staff4-source.wav"
+            write_tiny_wav(source_path)
+            calls = {"count": 0}
+
+            def fake_extract(_source, target, _start, _end):
+                write_tiny_wav(target, seconds=17)
+                return True, ""
+
+            def exact_a4_detector_votes(_segment, expected_midi, _sr, _librosa, _numpy):
+                calls["count"] += 1
+                self.assertEqual(expected_midi, midi_for_note("A4"))
+                return [
+                    {
+                        "detector": "pyin",
+                        "midi": expected_midi,
+                        "note": "A4",
+                        "confidence": 0.91,
+                        "exact": True,
+                        "frameCount": 6,
+                    },
+                    {
+                        "detector": "spectral_onset",
+                        "midi": expected_midi,
+                        "note": "A4",
+                        "confidence": 0.88,
+                        "exact": True,
+                        "frameCount": 1,
+                    },
+                ]
+
+            def score_note(label, midi):
+                item = note("C5")
+                item["note"] = label
+                item["midi"] = midi
+                return item
+
+            source_notes = [score_note("A5", midi_for_note("A5")) for _ in range(9)] + [
+                score_note("Eb5", midi_for_note("D#5")),
+                score_note("Eb5", midi_for_note("D#5")),
+                score_note("C5", midi_for_note("C5")),
+                score_note("Eb5", midi_for_note("D#5")),
+                score_note("Eb5", midi_for_note("D#5")),
+                score_note("Eb5", midi_for_note("D#5")),
+                score_note("C5", midi_for_note("C5")),
+                score_note("A4", midi_for_note("A4")),
+            ]
+            anchor_notes = [
+                note("D#5", 20.225),
+                note("D#5", 20.550),
+                note("C5", 20.817),
+                note("D#5", 21.629),
+                note("D#5", 22.361),
+                note("D#5", 22.829),
+                note("C5", 23.117),
+            ]
+            anchor = {
+                "practiceDay": "2026-05-03",
+                "pieceTitle": "Wieniawski Scherzo-Tarantelle, Op. 16",
+                "anchorSequence": "Eb5 Eb5 C5 Eb5 Eb5 Eb5 C5",
+                "anchorMidiSequence": [75, 75, 72, 75, 75, 75, 72],
+                "sourceNotes": source_notes,
+                "referenceStart": 9,
+                "referenceEnd": 16,
+                "sampleId": "Njh8_zq9_DM-8835",
+                "sourceWindow": "*8835-8925",
+                "anchorLocalStartSeconds": 20.225,
+                "anchorLocalEndSeconds": 23.280,
+                "anchorSource": "truth_manifest",
+                "match": {
+                    "detectedSeries": {
+                        "sampleId": "Njh8_zq9_DM-8835",
+                        "sourceWindow": "*8835-8925",
+                        "notes": anchor_notes,
+                    },
+                    "matchedDetectedNotes": anchor_notes,
+                },
+            }
+
+            with patch("backend.app.scanner.run_ffmpeg_extract_audio", side_effect=fake_extract), patch(
+                "backend.app.scanner.transcribe_audio_array",
+                return_value={"events": [], "scoreMatchCandidateNotes": [], "quality": {}},
+            ), patch("backend.app.scanner.staff4_detector_votes_for_segment", side_effect=exact_a4_detector_votes):
+                record = staff4_source_audio_rescan_record(
+                    anchor=anchor,
+                    sample={"id": "Njh8_zq9_DM-8835", "path": str(source_path), "window": "*8835-8925"},
+                    source_path=source_path,
+                    scan_window={
+                        "label": "anchor_core",
+                        "scanLocalStartSeconds": 16.225,
+                        "scanLocalEndSeconds": 32.535,
+                    },
+                )
+
+        guided_runs = [run for run in record["runs"] if run.get("runSource") == "staff4_adjacent_guided_current_detector"]
+        self.assertEqual(record["guidedAdjacentStatus"], "reproduced")
+        self.assertEqual(record["guidedAdjacentReproducedCount"], 1)
+        self.assertEqual(len(guided_runs), 1)
+        self.assertEqual([item["midi"] for item in guided_runs[0]["notes"]], [75, 75, 72, 75, 75, 75, 72, 69])
+        self.assertTrue(all(item["audioAgreement"] for item in guided_runs[0]["notes"]))
+        self.assertEqual(guided_runs[0]["notes"][0]["detectorSource"], "truth_manifest_accepted_audio_window")
+        self.assertEqual(guided_runs[0]["notes"][-1]["detectorSource"], "staff4_adjacent_guided_current_detector")
+        search = audio_window_search_for_exact_midi(
+            record["runs"],
+            [75, 75, 72, 75, 75, 75, 72, 69],
+            practice_day="2026-05-03",
+            anchor_sample_id="Njh8_zq9_DM-8835",
+            anchor_absolute_start=8855.225,
+        )
+        exact_audio = [item for item in search["exactCandidates"] if item["audioAgreed"]]
+        self.assertEqual(exact_audio[0]["audioRunSource"], "staff4_adjacent_guided_current_detector")
+        self.assertEqual(calls["count"], 1)
+
     def test_completion_surfaces_staff4_adjacent_failure_without_losing_detector_detail(self):
         failure = {
             "direction": "right-1",
@@ -1174,7 +1388,7 @@ class TranscriptionCompletionTests(unittest.TestCase):
             "bestAttemptObservedConsensusNote": "D5",
         }
         fake_rescan = {
-            "version": "staff4_source_audio_rescan_v8",
+            "version": "staff4_source_audio_rescan_v10",
             "status": "rescanned",
             "runCount": 1,
             "eventCount": 0,
@@ -1602,6 +1816,19 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertEqual(workbench["sourceTargetQueueCount"], 1)
         self.assertEqual(workbench["queuedItems"][0]["sequence"], "D D D# D D A# G")
         self.assertEqual(workbench["acceptedEvidenceReadyCount"], 0)
+
+    def test_media_sample_lookup_can_use_owner_media_file_for_truth_anchor(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            owner_dir = Path(temp_dir) / "owner-media"
+            owner_dir.mkdir()
+            sample_path = owner_dir / "Njh8_zq9_DM-8835-browser.webm"
+            sample_path.write_bytes(b"owner-media")
+            with patch("backend.app.staff4_audit.OWNER_MEDIA_DIR", owner_dir):
+                sample = media_sample_for_id([], "Njh8_zq9_DM-8835")
+
+        self.assertEqual(sample["id"], "Njh8_zq9_DM-8835")
+        self.assertEqual(sample["source"], "owner_media_fallback")
+        self.assertEqual(Path(sample["path"]).name, "Njh8_zq9_DM-8835-browser.webm")
 
     def test_source_verification_targets_require_local_unverified_source_runs(self):
         daily_records = {

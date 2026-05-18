@@ -1985,7 +1985,12 @@ def longest_note_run(values: list[int]) -> int:
 def has_spectral_audio_agreement(note: dict[str, Any]) -> bool:
     sources = note.get("agreementSources") if isinstance(note.get("agreementSources"), list) else []
     detector = str(note.get("detectorSource") or "")
-    return detector.startswith("spectral_onset") or "spectral_onset" in sources
+    return (
+        detector.startswith("spectral_onset")
+        or "spectral_onset" in sources
+        or detector == "truth_manifest_accepted_audio_window"
+        or "truth_manifest_accepted_audio_window" in sources
+    )
 
 
 def note_passes_micro_gate(note: dict[str, Any]) -> bool:
