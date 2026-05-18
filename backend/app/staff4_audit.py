@@ -12,7 +12,7 @@ from .state import utc_now
 
 
 AUDIT_DIR = RUNTIME_DIR / "staff4-audit"
-STAFF4_AUDIT_VERSION = "staff4_phrase_audit_v1"
+STAFF4_AUDIT_VERSION = "staff4_phrase_audit_v2"
 
 
 def safe_slug(value: Any, fallback: str = "packet") -> str:
@@ -94,6 +94,266 @@ def sequence_label(value: Any) -> str:
     return str(value or "").strip()
 
 
+def sequence_notes(value: Any) -> list[str]:
+    return [item for item in sequence_label(value).split() if item]
+
+
+def failure_source_note(failure: dict[str, Any]) -> str:
+    index = int_or_none(failure.get("failedNoteIndex"))
+    notes = sequence_notes(failure.get("targetSequence"))
+    if index is not None and 0 <= index < len(notes):
+        return notes[index]
+    return str(failure.get("expectedSourceNote") or failure.get("expectedNote") or "")
+
+
+def first_failure_from_completion(completion: dict[str, Any]) -> dict[str, Any]:
+    candidates = []
+    for key_path in (
+        ("staff4SourceAudioRescanAdjacentFirstFailure",),
+        ("staff4SourceAudioRescan", "guidedAdjacentFirstFailure"),
+        ("staff4AdjacentMining", "sourceAudioRescanGuidedAdjacentFirstFailure"),
+    ):
+        current: Any = completion
+        for key in key_path:
+            current = current.get(key) if isinstance(current, dict) else None
+        if isinstance(current, dict) and current.get("targetMidiSequence"):
+            candidates.append(current)
+    if not candidates:
+        return {}
+
+    def sort_key(item: dict[str, Any]) -> tuple[int, int, int]:
+        direction = str(item.get("direction") or "")
+        direction_rank = 0 if direction == "right-1" else 1 if direction == "right-2" else 2
+        return (
+            direction_rank,
+            int(item.get("failedNoteIndex") or 999),
+            int(item.get("targetNoteCount") or len(item.get("targetMidiSequence") or []) or 999),
+        )
+
+    failure = dict(sorted(candidates, key=sort_key)[0])
+    failure["expectedSourceNote"] = failure_source_note(failure)
+    return failure
+
+
+def failure_from_current_expansion(current: dict[str, Any]) -> dict[str, Any]:
+    mismatch_index = first_mismatch_index(current)
+    expected_current_midi = int_or_none(current.get("expectedNextScoreMidi"))
+    observed_current_midi = int_or_none(current.get("observedNextAudioMidi"))
+    if mismatch_index < 0 and expected_current_midi is not None and observed_current_midi is not None and expected_current_midi != observed_current_midi:
+        anchor_len = len(sequence_notes(current.get("anchorSequence")))
+        target_len = len(current.get("targetMidiSequence")) if isinstance(current.get("targetMidiSequence"), list) else 0
+        mismatch_index = min(max(0, anchor_len), max(0, target_len - 1))
+    if mismatch_index < 0:
+        return {}
+    target_midis = current.get("targetMidiSequence") if isinstance(current.get("targetMidiSequence"), list) else []
+    best_midis = current.get("bestAudioMidiSequence") if isinstance(current.get("bestAudioMidiSequence"), list) else []
+    expected_midi = expected_current_midi or list_int_at(target_midis, mismatch_index)
+    observed_midi = observed_current_midi or list_int_at(best_midis, mismatch_index)
+    target_notes = sequence_notes(current.get("targetSequence"))
+    expected_note = (
+        target_notes[mismatch_index]
+        if 0 <= mismatch_index < len(target_notes)
+        else note_label_for_midi(expected_midi, prefer_flats=True)
+    )
+    return {
+        "direction": str(current.get("direction") or "current"),
+        "targetReferenceStart": current.get("targetReferenceStart"),
+        "targetReferenceEnd": current.get("targetReferenceEnd"),
+        "targetSequence": sequence_label(current.get("targetSequence")),
+        "targetMidiSequence": target_midis,
+        "targetNoteCount": len(target_midis),
+        "reproducedNoteCount": mismatch_index,
+        "failedNoteIndex": mismatch_index,
+        "expectedMidi": expected_midi,
+        "expectedNote": expected_note,
+        "expectedSourceNote": expected_note,
+        "reason": current.get("status") or "current_expansion_mismatch",
+        "failureKind": "wrong_midi_detected" if observed_midi is not None and observed_midi != expected_midi else "stored_run_unverified",
+        "bestAttemptStartSeconds": (
+            current.get("bestAudioNotes", [{}])[mismatch_index].get("startSeconds")
+            if isinstance(current.get("bestAudioNotes"), list) and 0 <= mismatch_index < len(current.get("bestAudioNotes"))
+            else None
+        ),
+        "bestAttemptEndSeconds": (
+            current.get("bestAudioNotes", [{}])[mismatch_index].get("endSeconds")
+            if isinstance(current.get("bestAudioNotes"), list) and 0 <= mismatch_index < len(current.get("bestAudioNotes"))
+            else None
+        ),
+        "bestAttemptObservedMidi": [observed_midi] if observed_midi is not None else [],
+        "bestAttemptObservedNotes": [note_label_for_midi(observed_midi)] if observed_midi is not None else [],
+        "bestAttemptObservedConsensusMidi": observed_midi or 0,
+        "bestAttemptObservedConsensusNote": note_label_for_midi(observed_midi) if observed_midi is not None else "",
+    }
+
+
+def failure_observed_midi(failure: dict[str, Any]) -> int | None:
+    consensus = int_or_none(failure.get("bestAttemptObservedConsensusMidi"))
+    if consensus:
+        return consensus
+    observed = failure.get("bestAttemptObservedMidi") if isinstance(failure.get("bestAttemptObservedMidi"), list) else []
+    for value in observed:
+        midi = int_or_none(value)
+        if midi is not None:
+            return midi
+    return None
+
+
+def failure_observed_note(failure: dict[str, Any]) -> str:
+    note = str(failure.get("bestAttemptObservedConsensusNote") or "")
+    if note:
+        return note
+    midi = failure_observed_midi(failure)
+    if midi is not None:
+        return note_label_for_midi(midi)
+    observed_notes = (
+        failure.get("bestAttemptObservedNotes")
+        if isinstance(failure.get("bestAttemptObservedNotes"), list)
+        else []
+    )
+    return str(observed_notes[0]) if observed_notes else ""
+
+
+def list_int_at(values: Any, index: int | None) -> int | None:
+    if index is None or not isinstance(values, list) or not (0 <= index < len(values)):
+        return None
+    return int_or_none(values[index])
+
+
+def staff4_audit_decision(packet: dict[str, Any], analysis: dict[str, Any], failure: dict[str, Any]) -> dict[str, Any]:
+    expected_midi = int_or_none(failure.get("expectedMidi")) or int_or_none(packet.get("expectedNextScoreMidi"))
+    expected_note = failure_source_note(failure) or str(packet.get("expectedNextScoreNote") or "")
+    observed_midi = failure_observed_midi(failure)
+    observed_note = failure_observed_note(failure) or str(packet.get("observedNextAudioNote") or "")
+    mismatch = analysis.get("mismatchWindow") if isinstance(analysis.get("mismatchWindow"), dict) else {}
+    detector_votes = mismatch.get("detectorVotes") if isinstance(mismatch.get("detectorVotes"), dict) else {}
+    exact_expected_votes = int(detector_votes.get("expected") or 0)
+    exact_observed_votes = int(detector_votes.get("observed") or 0)
+    failure_kind = str(failure.get("failureKind") or "")
+    reason = str(failure.get("reason") or "")
+    failed_index = int_or_none(failure.get("failedNoteIndex"))
+    stored_expected_midi = list_int_at(packet.get("targetMidiSequence"), failed_index)
+    stored_audio_midi = list_int_at(packet.get("bestAudioMidiSequence"), failed_index)
+    stored_run_exact_at_failure = (
+        expected_midi is not None
+        and stored_expected_midi == expected_midi
+        and stored_audio_midi == expected_midi
+    )
+    outcome = "review_required"
+    status = "queued_gold_review"
+    truth_decision = "pending_review"
+    accepted = False
+    rejected = False
+    can_extend = False
+    regression_case = None
+
+    if expected_midi is not None and observed_midi is not None and observed_midi != expected_midi and (
+        failure_kind == "wrong_midi_detected" or exact_observed_votes >= 2
+    ):
+        outcome = "reject_audio_score_mismatch"
+        status = "rejected_mismatch"
+        truth_decision = "rejected_mismatch"
+        rejected = True
+        regression_case = {
+            "regressionId": safe_slug(
+                f"rejected-staff4-{packet.get('practiceDay')}-{packet.get('sampleId')}-{packet.get('targetReferenceStart')}-{packet.get('targetReferenceEnd')}-{expected_note}-vs-{observed_note}",
+                "rejected-staff4-audio-mismatch",
+            ),
+            "kind": "staff4_first_failure_audio_mismatch",
+            "expectedNote": expected_note,
+            "expectedMidi": expected_midi,
+            "observedNote": observed_note,
+            "observedMidi": observed_midi,
+            "basis": "First-failure audit heard a different MIDI value than the verified Staff 4 source note.",
+        }
+    elif (
+        failure_kind in {"outside_scan", "no_detector_votes"}
+        or reason == "current_detectors_did_not_reproduce_exact_midi"
+    ) and observed_midi is None and exact_expected_votes == 0:
+        outcome = "rescan_window_required"
+        status = "queued_gold_review"
+    elif stored_run_exact_at_failure and exact_expected_votes == 0:
+        outcome = "stored_audio_run_exact_but_current_audit_unverified"
+        status = "queued_gold_review"
+    elif expected_midi is not None and (
+        exact_expected_votes >= 2
+    ):
+        if packet.get("score", {}).get("sourceCropReady") and packet.get("score", {}).get("truthEvidenceAccepted"):
+            outcome = "accept_audio_agreed_source_note"
+            status = "accepted_truth_candidate"
+            truth_decision = "accepted"
+            accepted = True
+            can_extend = True
+        else:
+            outcome = "audio_agreed_but_source_crop_or_truth_lock_missing"
+            status = "pending_source_lock"
+    else:
+        outcome = "manual_review_required"
+        status = "queued_gold_review"
+
+    return {
+        "status": status,
+        "outcome": outcome,
+        "truthDecision": truth_decision,
+        "accepted": accepted,
+        "rejected": rejected,
+        "canExtendStaff4Lane": can_extend,
+        "storedRunExactAtFailure": stored_run_exact_at_failure,
+        "failedNoteIndex": failed_index,
+        "expectedNote": expected_note,
+        "expectedMidi": expected_midi,
+        "observedNote": observed_note,
+        "observedMidi": observed_midi,
+        "failureKind": failure_kind,
+        "reason": reason,
+        "detectorVotes": detector_votes,
+        "regressionCase": regression_case,
+        "goldReviewRequired": status == "queued_gold_review",
+        "limit": (
+            "Accepted extension requires exact audio MIDI plus source crop/truth lock."
+            if status == "pending_source_lock"
+            else "Rejected extension is locked as a regression case."
+            if rejected
+            else "No acceptance or rejection without inspectable audio evidence."
+        ),
+    }
+
+
+def attach_staff4_audit_decision(
+    packet: dict[str, Any],
+    analysis: dict[str, Any],
+    failure: dict[str, Any],
+) -> dict[str, Any]:
+    if not failure:
+        return packet
+    decision = staff4_audit_decision(packet, analysis, failure)
+    packet["decision"] = decision
+    packet["truthDecision"] = decision.get("truthDecision") or "pending_review"
+    packet["canExtendStaff4Lane"] = bool(decision.get("canExtendStaff4Lane"))
+    packet["expectedFailedScoreNote"] = decision.get("expectedNote") or ""
+    packet["expectedFailedScoreMidi"] = decision.get("expectedMidi")
+    packet["observedFailureAudioNote"] = decision.get("observedNote") or ""
+    packet["observedFailureAudioMidi"] = decision.get("observedMidi")
+    if decision.get("regressionCase"):
+        packet["regressionCase"] = decision["regressionCase"]
+    if decision.get("goldReviewRequired"):
+        packet["goldReviewCandidate"] = {
+            "status": "queued",
+            "packetId": packet.get("packetId") or "",
+            "kind": "staff4_first_failure_audio_score_audit",
+            "expectedNote": decision.get("expectedNote") or "",
+            "expectedMidi": decision.get("expectedMidi"),
+            "observedNote": decision.get("observedNote") or "",
+            "observedMidi": decision.get("observedMidi"),
+            "targetSequence": packet.get("targetSequence") or "",
+            "bestAudioSequence": packet.get("bestAudioSequence") or "",
+            "clip": packet.get("clip") if isinstance(packet.get("clip"), dict) else {},
+            "reason": decision.get("outcome") or decision.get("reason") or "",
+        }
+    if str(packet.get("status") or "") in {"generated", "needs_manual_audio_review", "detectors_disagree_with_stored_run", "detector_split_review_required"}:
+        packet["status"] = str(decision.get("status") or packet.get("status") or "queued_gold_review")
+    return packet
+
+
 def compact_note_event(note: dict[str, Any], index: int) -> dict[str, Any]:
     start = number_or_none(note.get("startSeconds")) or 0.0
     end = number_or_none(note.get("endSeconds")) or start
@@ -127,15 +387,16 @@ def current_staff4_expansion(completion: dict[str, Any]) -> dict[str, Any]:
     return current
 
 
-def packet_id_for_current(current: dict[str, Any]) -> str:
+def packet_id_for_current(current: dict[str, Any], failure: dict[str, Any] | None = None) -> str:
+    focus = failure if isinstance(failure, dict) and failure else current
     return safe_slug(
         "-".join(
             [
                 "staff4",
                 str(current.get("practiceDay") or "day"),
                 str(current.get("sampleId") or "sample"),
-                str(current.get("targetReferenceStart") or "start"),
-                str(current.get("targetReferenceEnd") or "end"),
+                str(focus.get("targetReferenceStart") or current.get("targetReferenceStart") or "start"),
+                str(focus.get("targetReferenceEnd") or current.get("targetReferenceEnd") or "end"),
             ]
         )
     )
@@ -277,7 +538,12 @@ def detector_window_median(
     }
 
 
-def analyze_audio_clip(audio_path: Path, current: dict[str, Any], clip_start: float) -> dict[str, Any]:
+def analyze_audio_clip(
+    audio_path: Path,
+    current: dict[str, Any],
+    clip_start: float,
+    audit_failure: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     try:
         import librosa
         import numpy as np
@@ -375,13 +641,32 @@ def analyze_audio_clip(audio_path: Path, current: dict[str, Any], clip_start: fl
     except Exception:
         onset_times = []
 
-    mismatch_index = first_mismatch_index(current)
+    failure = audit_failure if isinstance(audit_failure, dict) else {}
+    mismatch_index = int_or_none(failure.get("failedNoteIndex")) if failure else first_mismatch_index(current)
+    if mismatch_index is None:
+        mismatch_index = -1
     best_notes = current.get("bestAudioNotes") if isinstance(current.get("bestAudioNotes"), list) else []
     mismatch_note = best_notes[mismatch_index] if 0 <= mismatch_index < len(best_notes) and isinstance(best_notes[mismatch_index], dict) else {}
-    mismatch_start = max(0.0, (number_or_none(mismatch_note.get("startSeconds")) or clip_start) - clip_start)
-    mismatch_end = max(mismatch_start, (number_or_none(mismatch_note.get("endSeconds")) or clip_start) - clip_start)
-    expected_midi = int_or_none(current.get("expectedNextScoreMidi"))
-    observed_midi = int_or_none(current.get("observedNextAudioMidi"))
+    failure_start = number_or_none(failure.get("bestAttemptStartSeconds")) if failure else None
+    failure_end = number_or_none(failure.get("bestAttemptEndSeconds")) if failure else None
+    note_start = failure_start if failure_start is not None else number_or_none(mismatch_note.get("startSeconds"))
+    note_end = failure_end if failure_end is not None else number_or_none(mismatch_note.get("endSeconds"))
+    mismatch_start = max(0.0, (note_start or clip_start) - clip_start)
+    mismatch_end = max(mismatch_start, (note_end or note_start or clip_start) - clip_start)
+    if mismatch_end <= mismatch_start:
+        mismatch_end = min(duration, mismatch_start + 0.18)
+    expected_midi = int_or_none(failure.get("expectedMidi")) if failure else None
+    if expected_midi is None:
+        expected_midi = int_or_none(current.get("expectedNextScoreMidi"))
+    observed_midi = failure_observed_midi(failure) if failure else None
+    if observed_midi is None:
+        observed_midi = int_or_none(current.get("observedNextAudioMidi"))
+    expected_note = failure_source_note(failure) if failure else ""
+    if not expected_note:
+        expected_note = note_label_for_midi(expected_midi, prefer_flats=True)
+    observed_note = failure_observed_note(failure) if failure else ""
+    if not observed_note:
+        observed_note = note_label_for_midi(observed_midi)
     detector_windows = {
         "pyin": detector_window_median(pyin_frames, local_start=mismatch_start, local_end=mismatch_end),
         "yin": detector_window_median(yin_frames, local_start=mismatch_start, local_end=mismatch_end),
@@ -416,9 +701,9 @@ def analyze_audio_clip(audio_path: Path, current: dict[str, Any], clip_start: fl
             "clipLocalStartSeconds": round(mismatch_start, 3),
             "clipLocalEndSeconds": round(mismatch_end, 3),
             "expectedMidi": expected_midi,
-            "expectedNote": note_label_for_midi(expected_midi, prefer_flats=True),
+            "expectedNote": expected_note,
             "observedMidi": observed_midi,
-            "observedNote": note_label_for_midi(observed_midi),
+            "observedNote": observed_note,
             "detectorVotes": votes,
             "detectors": detector_windows,
         },
@@ -610,25 +895,38 @@ def ensure_staff4_phrase_audit_packet(
         state["staff4PhraseAuditLatest"] = packet
         return packet
 
-    packet_id = packet_id_for_current(current)
+    first_failure = first_failure_from_completion(completion) or failure_from_current_expansion(current)
+    packet_id = packet_id_for_current(current, first_failure)
     existing_path = packet_json_path(packet_id)
     if existing_path.exists() and not force:
         try:
             packet = json.loads(existing_path.read_text(encoding="utf-8"))
-            state["staff4PhraseAuditLatest"] = packet
-            return packet
+            if packet.get("version") == STAFF4_AUDIT_VERSION:
+                state["staff4PhraseAuditLatest"] = packet
+                return packet
         except (OSError, json.JSONDecodeError):
             pass
 
     sample_id = str(current.get("sampleId") or "").strip()
     sample = media_sample_for_id(state, sample_id)
     source_path = source_media_path(sample)
-    target_midis = current.get("targetMidiSequence") if isinstance(current.get("targetMidiSequence"), list) else []
+    target_midis = (
+        first_failure.get("targetMidiSequence")
+        if isinstance(first_failure.get("targetMidiSequence"), list)
+        else current.get("targetMidiSequence")
+        if isinstance(current.get("targetMidiSequence"), list)
+        else []
+    )
     best_midis = current.get("bestAudioMidiSequence") if isinstance(current.get("bestAudioMidiSequence"), list) else []
     best_notes = current.get("bestAudioNotes") if isinstance(current.get("bestAudioNotes"), list) else []
     compact_notes = [compact_note_event(note, index) for index, note in enumerate(best_notes)]
     local_start = number_or_none(current.get("audioLocalStartSeconds"))
     local_end = number_or_none(current.get("audioLocalEndSeconds"))
+    failure_start = number_or_none(first_failure.get("bestAttemptStartSeconds")) if first_failure else None
+    failure_end = number_or_none(first_failure.get("bestAttemptEndSeconds")) if first_failure else None
+    if failure_start is not None and failure_end is not None and failure_end > failure_start:
+        local_start = failure_start
+        local_end = failure_end
     if local_start is None and compact_notes:
         local_start = number_or_none(compact_notes[0].get("startSeconds"))
     if local_end is None and compact_notes:
@@ -650,6 +948,11 @@ def ensure_staff4_phrase_audit_packet(
     video_path = packet_artifact_path(packet_id, video_name)
     pitch_path = packet_artifact_path(packet_id, pitch_name)
     spectrogram_path = packet_artifact_path(packet_id, spectrogram_name)
+    target_sequence = sequence_label(first_failure.get("targetSequence") or current.get("targetSequence"))
+    expected_failed_note = failure_source_note(first_failure) if first_failure else str(current.get("expectedNextScoreNote") or "")
+    expected_failed_midi = int_or_none(first_failure.get("expectedMidi")) if first_failure else int_or_none(current.get("expectedNextScoreMidi"))
+    observed_failure_note = failure_observed_note(first_failure) if first_failure else str(current.get("observedNextAudioNote") or "")
+    observed_failure_midi = failure_observed_midi(first_failure) if first_failure else int_or_none(current.get("observedNextAudioMidi"))
 
     packet: dict[str, Any] = {
         "version": STAFF4_AUDIT_VERSION,
@@ -662,19 +965,25 @@ def ensure_staff4_phrase_audit_packet(
         "sourceTitle": sample.get("title") or current.get("sourceTitle") or "",
         "sourceUrl": sample.get("url") or "",
         "status": "generated",
+        "auditFocus": "staff4_first_failed_adjacent_note" if first_failure else "staff4_current_expansion",
         "truthDecision": "not_accepted",
         "gate": current.get("status") or "",
         "limit": current.get("limit") or "",
-        "targetReferenceStart": current.get("targetReferenceStart"),
-        "targetReferenceEnd": current.get("targetReferenceEnd"),
-        "targetSequence": sequence_label(current.get("targetSequence")),
+        "targetReferenceStart": first_failure.get("targetReferenceStart") or current.get("targetReferenceStart"),
+        "targetReferenceEnd": first_failure.get("targetReferenceEnd") or current.get("targetReferenceEnd"),
+        "targetSequence": target_sequence,
         "bestAudioSequence": sequence_label(current.get("bestAudioSequence")),
         "targetMidiSequence": target_midis,
         "bestAudioMidiSequence": best_midis,
-        "expectedNextScoreNote": current.get("expectedNextScoreNote") or "",
-        "expectedNextScoreMidi": current.get("expectedNextScoreMidi"),
-        "observedNextAudioNote": current.get("observedNextAudioNote") or "",
-        "observedNextAudioMidi": current.get("observedNextAudioMidi"),
+        "expectedNextScoreNote": expected_failed_note,
+        "expectedNextScoreMidi": expected_failed_midi,
+        "observedNextAudioNote": observed_failure_note,
+        "observedNextAudioMidi": observed_failure_midi,
+        "expectedFailedScoreNote": expected_failed_note,
+        "expectedFailedScoreMidi": expected_failed_midi,
+        "observedFailureAudioNote": observed_failure_note,
+        "observedFailureAudioMidi": observed_failure_midi,
+        "firstFailure": first_failure,
         "audioRunSource": current.get("audioRunSource") or "",
         "clip": {
             "startSeconds": current.get("audioAbsoluteStartSeconds"),
@@ -701,6 +1010,7 @@ def ensure_staff4_phrase_audit_packet(
     if not source_path:
         packet["status"] = "blocked_media_missing"
         packet["limit"] = "The current Staff 4 sample is not present in runtime media storage, so audio/video artifacts cannot be generated."
+        attach_staff4_audit_decision(packet, {}, first_failure)
         existing_path.write_text(json.dumps(packet, indent=2, sort_keys=True), encoding="utf-8")
         state["staff4PhraseAuditLatest"] = packet
         return packet
@@ -716,11 +1026,12 @@ def ensure_staff4_phrase_audit_packet(
     if not audio_ok:
         packet["status"] = "blocked_audio_extract_failed"
         packet["limit"] = f"Audit audio extraction failed: {audio_output[-180:]}"
+        attach_staff4_audit_decision(packet, {}, first_failure)
         existing_path.write_text(json.dumps(packet, indent=2, sort_keys=True), encoding="utf-8")
         state["staff4PhraseAuditLatest"] = packet
         return packet
 
-    analysis = analyze_audio_clip(audio_path, current, clip_start)
+    analysis = analyze_audio_clip(audio_path, current, clip_start, first_failure)
     packet["audioAnalysis"] = analysis
     if analysis.get("status") in {
         "blocked_audio_mismatch_confirmed",
@@ -733,10 +1044,11 @@ def ensure_staff4_phrase_audit_packet(
     packet["artifacts"]["pitchTraceSvgUrl"] = artifact_url(packet_id, pitch_name)
     if write_spectrogram_svg(spectrogram_path, audio_path):
         packet["artifacts"]["spectrogramSvgUrl"] = artifact_url(packet_id, spectrogram_name)
+    attach_staff4_audit_decision(packet, analysis, first_failure)
     packet["nextAction"] = (
-        "Store this Staff 4 right-2 expansion as rejected and move outward only if a later audit finds Eb5 at the sixth note."
-        if packet["status"] == "blocked_audio_mismatch_confirmed"
-        else "Review this packet before accepting, rejecting, or re-running the Staff 4 expansion."
+        "Lock this Staff 4 failure as rejected; do not extend the lane from this window."
+        if packet.get("decision", {}).get("rejected")
+        else "Do not extend the Staff 4 lane until this packet is accepted from exact audio and source-score evidence."
     )
     existing_path.write_text(json.dumps(packet, indent=2, sort_keys=True), encoding="utf-8")
     state["staff4PhraseAuditLatest"] = packet
@@ -758,7 +1070,7 @@ def latest_staff4_phrase_audit_packet_for_completion(state: dict[str, Any], comp
     current = current_staff4_expansion(completion)
     if not current:
         return latest_staff4_phrase_audit_packet(state)
-    current_packet_id = packet_id_for_current(current)
+    current_packet_id = packet_id_for_current(current, first_failure_from_completion(completion))
     packet = state.get("staff4PhraseAuditLatest") if isinstance(state.get("staff4PhraseAuditLatest"), dict) else {}
     if packet and str(packet.get("packetId") or "") == current_packet_id:
         return packet

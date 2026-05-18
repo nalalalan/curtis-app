@@ -2373,10 +2373,21 @@ def compact_staff4_adjacent_failure(target: dict[str, Any]) -> dict[str, Any]:
     failed = target.get("failedAt") if isinstance(target.get("failedAt"), dict) else {}
     if not failed:
         return {}
+    target_notes = [note for note in str(target.get("targetSequence") or "").split() if note]
+    failed_note_index = int(failed.get("noteIndex") or 0)
     best_attempt = failed.get("bestAttempt") if isinstance(failed.get("bestAttempt"), dict) else {}
     detector_attempts = failed.get("detectorAttempts") if isinstance(failed.get("detectorAttempts"), list) else []
     best_votes = best_attempt.get("detectorVotes") if isinstance(best_attempt.get("detectorVotes"), list) else []
     expected_midi = int(failed.get("expectedMidi") or 0)
+    expected_detector_note = str(failed.get("expectedNote") or note_name(expected_midi))
+    expected_source_note = (
+        target_notes[failed_note_index]
+        if 0 <= failed_note_index < len(target_notes)
+        else expected_detector_note
+    )
+    if "#" in expected_source_note:
+        flat_names = ("C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B")
+        expected_source_note = f"{flat_names[expected_midi % 12]}{(expected_midi // 12) - 1}"
     observed_midi_values = [
         int(vote.get("midi"))
         for vote in best_votes
@@ -2415,9 +2426,11 @@ def compact_staff4_adjacent_failure(target: dict[str, Any]) -> dict[str, Any]:
         ],
         "targetNoteCount": int(target.get("targetNoteCount") or 0),
         "reproducedNoteCount": int(target.get("reproducedNoteCount") or 0),
-        "failedNoteIndex": int(failed.get("noteIndex") or 0),
+        "failedNoteIndex": failed_note_index,
         "expectedMidi": expected_midi,
-        "expectedNote": str(failed.get("expectedNote") or ""),
+        "expectedNote": expected_source_note,
+        "expectedSourceNote": expected_source_note,
+        "expectedDetectorNote": expected_detector_note,
         "reason": str(failed.get("reason") or ""),
         "failureKind": failure_kind,
         "attemptCount": len(detector_attempts),

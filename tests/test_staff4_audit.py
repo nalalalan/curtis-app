@@ -61,11 +61,93 @@ def current_best_right1():
     return value
 
 
+def current_best_right1_exact():
+    value = current_best_right1()
+    value.update(
+        {
+            "status": "blocked_source_crop_required",
+            "bestAudioSequence": "D#5 D#5 C5 D#5 D#5 D#5",
+            "bestAudioMidiSequence": [75, 75, 72, 75, 75, 75],
+            "expectedNextScoreNote": "",
+            "expectedNextScoreMidi": None,
+            "observedNextAudioNote": "",
+            "observedNextAudioMidi": None,
+            "limit": "Exact audio MIDI exists, but the source crop has not been verified.",
+            "bestAudioNotes": [
+                {"note": "D#5", "midi": 75, "startSeconds": 0.50, "endSeconds": 0.62, "audioAgreement": True},
+                {"note": "D#5", "midi": 75, "startSeconds": 0.62, "endSeconds": 0.74, "audioAgreement": True},
+                {"note": "C5", "midi": 72, "startSeconds": 0.74, "endSeconds": 0.86, "audioAgreement": True},
+                {"note": "D#5", "midi": 75, "startSeconds": 0.86, "endSeconds": 0.98, "audioAgreement": True},
+                {"note": "D#5", "midi": 75, "startSeconds": 0.98, "endSeconds": 1.10, "audioAgreement": True},
+                {"note": "D#5", "midi": 75, "startSeconds": 1.10, "endSeconds": 1.22, "audioAgreement": True},
+            ],
+        }
+    )
+    return value
+
+
+def staff4_first_failure(**overrides):
+    failure = {
+        "direction": "right-1",
+        "targetReferenceStart": 9,
+        "targetReferenceEnd": 15,
+        "targetSequence": "Eb5 Eb5 C5 Eb5 Eb5 Eb5",
+        "targetMidiSequence": [75, 75, 72, 75, 75, 75],
+        "targetNoteCount": 6,
+        "reproducedNoteCount": 0,
+        "failedNoteIndex": 0,
+        "expectedMidi": 75,
+        "expectedNote": "D#5",
+        "reason": "current_detectors_did_not_reproduce_exact_midi",
+        "failureKind": "outside_scan",
+        "attemptCount": 1,
+        "bestAttemptStartSeconds": 0.50,
+        "bestAttemptEndSeconds": 0.62,
+        "bestAttemptObservedMidi": [],
+        "bestAttemptObservedNotes": [],
+        "bestAttemptObservedConsensusMidi": 0,
+        "bestAttemptObservedConsensusNote": "",
+        "bestAttemptDetectorVotes": [],
+    }
+    failure.update(overrides)
+    return failure
+
+
 def completion_state():
     return {
         "phraseExpansionHarness": {
             "currentBest": current_best(),
         }
+    }
+
+
+def completion_state_without_stored_audio_run():
+    current = dict(current_best())
+    current.update(
+        {
+            "bestAudioSequence": "",
+            "bestAudioMidiSequence": [],
+            "bestAudioNotes": [],
+            "bestExactCount": 0,
+            "bestPrefixCount": 0,
+            "anchorSequence": "Eb5 Eb5 C5 Eb5 Eb5",
+            "audioLocalStartSeconds": None,
+            "audioLocalEndSeconds": None,
+        }
+    )
+    return {
+        "phraseExpansionHarness": {
+            "currentBest": current,
+        }
+    }
+
+
+def first_failure_completion_state(failure=None):
+    return {
+        "phraseExpansionHarness": {
+            "currentBest": current_best_right1_exact(),
+        },
+        "staff4SourceAudioRescanAdjacentFirstFailure": failure or staff4_first_failure(),
     }
 
 
@@ -83,14 +165,87 @@ class Staff4AuditTests(unittest.TestCase):
         packet = ensure_staff4_phrase_audit_packet(state, completion_state(), force=True)
 
         self.assertEqual(packet["status"], "blocked_media_missing")
-        self.assertEqual(packet["truthDecision"], "not_accepted")
+        self.assertEqual(packet["truthDecision"], "rejected_mismatch")
         self.assertEqual(packet["expectedNextScoreNote"], "Eb5")
         self.assertEqual(packet["observedNextAudioNote"], "D5")
-        self.assertEqual(packet["clip"]["localStartSeconds"], 0.15)
-        self.assertEqual(packet["clip"]["noteLocalStartSeconds"], 0.5)
+        self.assertEqual(packet["decision"]["status"], "rejected_mismatch")
+        self.assertFalse(packet["canExtendStaff4Lane"])
+        self.assertEqual(packet["clip"]["localStartSeconds"], 0.75)
+        self.assertEqual(packet["clip"]["noteLocalStartSeconds"], 1.1)
         self.assertEqual(packet["storedAudioNotes"][5]["note"], "D5")
         self.assertIn("packet.json", packet["artifacts"]["packetJsonUrl"])
         self.assertEqual(latest_staff4_phrase_audit_packet(state)["packetId"], packet["packetId"])
+
+    def test_current_mismatch_without_stored_audio_run_still_gets_decision(self):
+        state = {
+            "mediaSamples": [
+                {
+                    "id": "sample-staff4",
+                    "path": str(Path(tempfile.gettempdir()) / "curtis-missing-staff4-media.mp4"),
+                }
+            ]
+        }
+
+        packet = ensure_staff4_phrase_audit_packet(state, completion_state_without_stored_audio_run(), force=True)
+
+        self.assertEqual(packet["status"], "blocked_media_missing")
+        self.assertEqual(packet["auditFocus"], "staff4_first_failed_adjacent_note")
+        self.assertEqual(packet["expectedFailedScoreNote"], "Eb5")
+        self.assertEqual(packet["observedFailureAudioNote"], "D5")
+        self.assertEqual(packet["decision"]["failedNoteIndex"], 5)
+        self.assertEqual(packet["decision"]["status"], "rejected_mismatch")
+        self.assertEqual(packet["truthDecision"], "rejected_mismatch")
+        self.assertFalse(packet["canExtendStaff4Lane"])
+
+    def test_first_failure_packet_uses_source_spelling_and_blocks_extension(self):
+        state = {
+            "mediaSamples": [
+                {
+                    "id": "sample-staff4",
+                    "path": str(Path(tempfile.gettempdir()) / "curtis-missing-staff4-media.mp4"),
+                }
+            ]
+        }
+
+        packet = ensure_staff4_phrase_audit_packet(state, first_failure_completion_state(), force=True)
+
+        self.assertEqual(packet["status"], "blocked_media_missing")
+        self.assertEqual(packet["auditFocus"], "staff4_first_failed_adjacent_note")
+        self.assertEqual(packet["expectedFailedScoreNote"], "Eb5")
+        self.assertEqual(packet["expectedFailedScoreMidi"], 75)
+        self.assertEqual(packet["decision"]["expectedNote"], "Eb5")
+        self.assertEqual(packet["decision"]["outcome"], "rescan_window_required")
+        self.assertEqual(packet["truthDecision"], "pending_review")
+        self.assertFalse(packet["canExtendStaff4Lane"])
+        self.assertEqual(packet["goldReviewCandidate"]["expectedNote"], "Eb5")
+
+    def test_first_failure_wrong_midi_locks_rejected_regression_case(self):
+        failure = staff4_first_failure(
+            failedNoteIndex=5,
+            failureKind="wrong_midi_detected",
+            bestAttemptObservedMidi=[74, 74],
+            bestAttemptObservedNotes=["D5", "D5"],
+            bestAttemptObservedConsensusMidi=74,
+            bestAttemptObservedConsensusNote="D5",
+        )
+        state = {
+            "mediaSamples": [
+                {
+                    "id": "sample-staff4",
+                    "path": str(Path(tempfile.gettempdir()) / "curtis-missing-staff4-media.mp4"),
+                }
+            ]
+        }
+
+        packet = ensure_staff4_phrase_audit_packet(state, first_failure_completion_state(failure), force=True)
+
+        self.assertEqual(packet["decision"]["status"], "rejected_mismatch")
+        self.assertEqual(packet["truthDecision"], "rejected_mismatch")
+        self.assertEqual(packet["decision"]["expectedNote"], "Eb5")
+        self.assertEqual(packet["decision"]["observedNote"], "D5")
+        self.assertFalse(packet["canExtendStaff4Lane"])
+        self.assertIn("regressionCase", packet)
+        self.assertIn("Eb5-vs-D5", packet["regressionCase"]["regressionId"])
 
     def test_no_current_expansion_is_not_generated(self):
         state = {}

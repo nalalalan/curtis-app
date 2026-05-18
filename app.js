@@ -3058,12 +3058,14 @@ function renderStaff4Audit(audit) {
   const pitchTrace = assetUrl(artifacts.pitchTraceSvgUrl || "");
   const spectrogram = assetUrl(artifacts.spectrogramSvgUrl || "");
   const packetUrl = assetUrl(artifacts.packetJsonUrl || "");
-  const score = audit.expectedNextScoreNote || "score";
-  const audio = audit.observedNextAudioNote || "audio";
+  const decision = audit.decision && typeof audit.decision === "object" ? audit.decision : {};
+  const decisionLabel = String(decision.outcome || decision.status || status).replace(/_/g, " ");
+  const score = decision.expectedNote || audit.expectedFailedScoreNote || audit.expectedNextScoreNote || "score";
+  const audio = decision.observedNote || audit.observedFailureAudioNote || audit.observedNextAudioNote || "unverified";
   return `
     <section class="staff4-audit-card" aria-label="Staff 4 audit packet">
       <div class="staff4-audit-head">
-        <strong>${escapeHtml(status)}</strong>
+        <strong>${escapeHtml(decisionLabel)}</strong>
         <span>${escapeHtml(score)} / ${escapeHtml(audio)}</span>
         ${packetUrl ? `<a href="${escapeHtml(packetUrl)}" target="_blank" rel="noreferrer">JSON</a>` : ""}
       </div>

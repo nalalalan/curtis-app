@@ -1144,7 +1144,9 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertEqual(failure["direction"], "right-1")
         self.assertEqual(failure["failedNoteIndex"], 5)
         self.assertEqual(failure["expectedMidi"], 75)
-        self.assertEqual(failure["expectedNote"], "D#5")
+        self.assertEqual(failure["expectedNote"], "Eb5")
+        self.assertEqual(failure["expectedSourceNote"], "Eb5")
+        self.assertEqual(failure["expectedDetectorNote"], "D#5")
         self.assertEqual(failure["targetMidiSequence"], [75, 75, 72, 75, 75, 75])
         self.assertEqual(failure["attemptCount"], 9)
         self.assertEqual(failure["bestAttemptExactSourceCount"], 0)
@@ -1156,11 +1158,11 @@ class TranscriptionCompletionTests(unittest.TestCase):
     def test_completion_surfaces_staff4_adjacent_failure_without_losing_detector_detail(self):
         failure = {
             "direction": "right-1",
-            "targetSequence": "D#5 D#5 C5 D#5 D#5 D#5",
+            "targetSequence": "Eb5 Eb5 C5 Eb5 Eb5 Eb5",
             "targetMidiSequence": [75, 75, 72, 75, 75, 75],
             "failedNoteIndex": 5,
             "expectedMidi": 75,
-            "expectedNote": "D#5",
+            "expectedNote": "Eb5",
             "failureKind": "wrong_midi_detected",
             "bestAttemptOffsetSeconds": -0.06,
             "bestAttemptObservedConsensusMidi": 74,
@@ -1237,10 +1239,10 @@ class TranscriptionCompletionTests(unittest.TestCase):
             )
 
         surfaced = completion["staff4SourceAudioRescanAdjacentFirstFailure"]
-        self.assertEqual(surfaced["expectedNote"], "D#5")
+        self.assertEqual(surfaced["expectedNote"], "Eb5")
         self.assertEqual(surfaced["bestAttemptObservedConsensusNote"], "D5")
         self.assertEqual(completion["staff4AdjacentMining"]["sourceAudioRescanGuidedAdjacentFirstFailure"], failure)
-        self.assertIn("D#5", completion["nextAction"])
+        self.assertIn("Eb5", completion["nextAction"])
         self.assertIn("D5", completion["nextAction"])
 
     def test_staff4_truth_manifest_anchor_persists_without_visible_match_group(self):
