@@ -44,6 +44,13 @@ def test_notation_renderer_draws_exact_accidentals():
           ], {keySignature:{}, maxNotes:4})`,
           context
         );
+        assert(noKey.includes('class="notation-sheet notation-engraved'), "browser notation must use the engraved notation wrapper");
+        assert(noKey.includes('data-abc='), "browser notation must carry ABC source for the real engraver");
+        assert(noKey.includes('M:none'), "ABC snippets must not invent a visible time signature when rhythm is not accepted");
+        assert(noKey.includes('K:C clef=treble'), "ABC source must force treble clef");
+        assert(noKey.includes('^A ^d'), "ABC source must preserve sharp pitches instead of dropping accidentals");
+        assert(noKey.includes('_B _e'), "ABC source must preserve flat pitches instead of dropping accidentals");
+        assert(noKey.includes('notation-svg-fallback'), "manual SVG must remain only as a no-JavaScript fallback");
         assert((noKey.match(/accidental-glyph accidental-sharp/g) || []).length === 2, "A# and D# need visible sharp glyphs");
         assert((noKey.match(/accidental-glyph accidental-flat/g) || []).length === 2, "Bb and Eb need visible flat glyphs");
         assert((noKey.match(/&#xE262;/g) || []).length === 2, "sharps must use the Bravura/SMuFL sharp glyph");
@@ -67,12 +74,27 @@ def test_notation_renderer_draws_exact_accidentals():
           ], {keySignature:{accidentalType:'flat',accidentals:['Bb','Eb'],label:'G minor / 2 flats'}, maxNotes:2})`,
           context
         );
+        assert(flatKey.includes('K:Bb clef=treble'), "ABC source must carry the flat-key treble signature");
+        assert(flatKey.includes('B e'), "key-signature-covered flats should use the key signature, not duplicate local flats");
+        assert(!flatKey.includes('_B'), "Bb covered by the key signature must not render as a separate local flat in ABC");
+        assert(!flatKey.includes('_e'), "Eb covered by the key signature must not render as a separate local flat in ABC");
         assert((flatKey.match(/key-signature-mark accidental-glyph accidental-flat/g) || []).length === 2, "Bb/Eb key signature needs two flat glyphs");
         assert(flatKey.includes('class="key-signature-mark accidental-glyph accidental-flat" x="63.0" y="50.0"'), "key-signature Bb flat must sit on B, not A");
         assert(flatKey.includes('class="key-signature-mark accidental-glyph accidental-flat" x="79.0" y="35.0"'), "key-signature Eb flat must sit on E, not D");
         assert(!flatKey.includes('note-accidental'), "key-signature-covered Bb/Eb notes must not draw duplicate local accidentals");
         assert(flatKey.includes('aria-label="Bb4 / detected A#4"'), "A# must respell as Bb in a flat key");
         assert(flatKey.includes('aria-label="Eb6 / detected D#6"'), "D# must respell as Eb in a flat key");
+
+        const naturalInFlatKey = vm.runInContext(
+          `renderNotationSheet([
+            {kind:'note',note:'B4'},
+            {kind:'note',note:'E5'}
+          ], {keySignature:{accidentalType:'flat',accidentals:['Bb','Eb'],label:'G minor / 2 flats'}, maxNotes:2})`,
+          context
+        );
+        assert(naturalInFlatKey.includes('=B =e'), "natural B/E in a flat key must carry natural signs in ABC");
+        assert((naturalInFlatKey.match(/accidental-glyph accidental-natural/g) || []).length === 2, "manual fallback must draw natural signs when a flat-key note is naturalized");
+        assert((naturalInFlatKey.match(/&#xE261;/g) || []).length === 2, "naturals must use the Bravura/SMuFL natural glyph");
         """
     )
     completed = subprocess.run(["node", "-e", script], cwd=".", text=True, capture_output=True)
@@ -82,6 +104,10 @@ def test_notation_renderer_draws_exact_accidentals():
 def test_notation_styles_use_local_music_font_and_professional_glyph_sizes():
     css = Path("styles.css").read_text(encoding="utf-8")
     assert 'url("/assets/fonts/Bravura.woff2") format("woff2")' in css
+    assert ".notation-abc-target" in css
+    assert ".notation-sheet.notation-abc-ready .notation-svg-fallback" in css
+    assert ".notation-svg-fallback svg" in css
+    assert ".notation-sheet svg" not in css
     assert ".notation-sheet .treble-clef" in css
     assert "font-size: 68px;" in css
     assert ".notation-sheet .accidental-flat" in css
@@ -97,3 +123,15 @@ def test_local_music_font_serves_as_font_file():
 
     response = asyncio.run(static_assets("fonts/Bravura.woff2"))
     assert response.media_type == "font/woff2"
+
+
+def test_engraving_runtime_is_vendored_and_loaded_before_app_code():
+    vendor = Path("assets/vendor/abcjs-basic-min.js")
+    license_file = Path("assets/vendor/abcjs-basic-min.js.LICENSE")
+    index = Path("index.html").read_text(encoding="utf-8")
+
+    assert vendor.is_file(), "ABC engraver must be vendored locally for stable notation rendering"
+    assert license_file.is_file(), "vendored ABC engraver license must ship with the asset"
+    assert "MIT" in license_file.read_text(encoding="utf-8")
+    assert "/assets/vendor/abcjs-basic-min.js" in index
+    assert index.index("/assets/vendor/abcjs-basic-min.js") < index.index("/app.js"), "ABC engraver must load before app.js hydrates notation"

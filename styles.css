@@ -1883,7 +1883,7 @@ h2 {
   overflow: hidden;
 }
 
-.score-anchor-panel .notation-sheet svg {
+.score-anchor-panel .notation-svg-fallback svg {
   min-width: 0;
   min-height: 96px;
 }
@@ -2002,7 +2002,7 @@ h2 {
   white-space: nowrap;
 }
 
-.matched-notation-panel .notation-sheet svg {
+.matched-notation-panel .notation-svg-fallback svg {
   min-width: 0;
   height: 90px;
 }
@@ -2357,18 +2357,43 @@ h2 {
   background: rgba(255, 252, 246, .9);
 }
 
-.notation-sheet svg {
+.notation-svg-fallback svg {
   display: block;
   width: 100%;
   min-width: 720px;
   height: 128px;
 }
 
-.notation-sheet text {
+.notation-svg-fallback text {
   fill: var(--muted);
   font-family: Georgia, "Times New Roman", serif;
   font-size: 19px;
   font-weight: 700;
+}
+
+.notation-abc-target {
+  min-width: 680px;
+  padding: 9px 10px 6px;
+}
+
+.notation-abc-target svg {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  height: auto;
+  overflow: visible;
+}
+
+.notation-sheet:not(.notation-abc-ready) .notation-abc-target {
+  display: none;
+}
+
+.notation-sheet.notation-abc-ready .notation-svg-fallback {
+  display: none;
+}
+
+.notation-sheet.notation-abc-ready {
+  background: #fff;
 }
 
 .notation-sheet .treble-clef {
@@ -2808,7 +2833,7 @@ h2 {
   overflow-wrap: anywhere;
 }
 
-.clip-evidence-pair .notation-sheet svg {
+.clip-evidence-pair .notation-svg-fallback svg {
   height: 70px;
 }
 
@@ -3018,7 +3043,7 @@ h2 {
   line-height: 1.25;
 }
 
-.evidence-row .notation-sheet svg {
+.evidence-row .notation-svg-fallback svg {
   height: 78px;
 }
 
@@ -3897,7 +3922,7 @@ h2 {
     text-overflow: ellipsis;
   }
 
-  .matched-notation-panel .notation-sheet svg {
+  .matched-notation-panel .notation-svg-fallback svg {
     min-width: 200px;
     height: 118px;
   }
@@ -4284,7 +4309,7 @@ h2 {
   height: 28px;
 }
 
-.matched-notation-panel .notation-sheet svg {
+.matched-notation-panel .notation-svg-fallback svg {
   height: 118px;
 }
 
@@ -4294,7 +4319,11 @@ h2 {
   background: #fff;
 }
 
-.notation-sheet svg {
+.notation-svg-fallback svg {
+  min-width: 0;
+}
+
+.notation-sheet.notation-abc-ready .notation-abc-target {
   min-width: 0;
 }
 
@@ -4681,7 +4710,7 @@ h2 {
   gap: 5px;
 }
 
-.gold-review-notation .notation-sheet svg {
+.gold-review-notation .notation-svg-fallback svg {
   height: 92px;
 }
 

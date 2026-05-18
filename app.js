@@ -1404,6 +1404,9 @@ const NOTATION_KEY_SIGNATURE_STEP_X = 16;
 const NOTATION_KEY_SIGNATURE_WIDTH_PAD = 18;
 const SHARP_TO_FLAT_NOTE = { "C#": "Db", "D#": "Eb", "F#": "Gb", "G#": "Ab", "A#": "Bb" };
 const FLAT_TO_SHARP_NOTE = { Db: "C#", Eb: "D#", Gb: "F#", Ab: "G#", Bb: "A#" };
+const ABC_FLAT_KEYS = ["C", "F", "Bb", "Eb", "Ab", "Db", "Gb", "Cb"];
+const ABC_SHARP_KEYS = ["C", "G", "D", "A", "E", "B", "F#", "C#"];
+let notationSheetIdCounter = 0;
 
 function normalizeAccidentalToken(value) {
   const clean = String(value || "")
@@ -1454,25 +1457,154 @@ function notationDisplayNote(note, signature) {
 
 function keySignatureCoversNote(spelledNote, signature) {
   const parsed = parseExactNote(spelledNote);
-  if (!parsed || !parsed.accidental) return true;
-  return normalizedAccidentalNames(signature).has(parsed.pitch);
+  if (!parsed) return true;
+  const keyAlteration = keySignatureAlterationForLetter(parsed.letter, signature);
+  if (!parsed.accidental) return !keyAlteration;
+  return parsed.accidental === keyAlteration;
+}
+
+function keySignatureAlterationForLetter(letter, signature) {
+  const cleanLetter = String(letter || "").toUpperCase();
+  for (const accidental of normalizedAccidentalNames(signature)) {
+    if (accidental.charAt(0).toUpperCase() === cleanLetter) {
+      return accidental.includes("b") ? "b" : accidental.includes("#") ? "#" : "";
+    }
+  }
+  return "";
 }
 
 function renderAccidentalGlyph(type, x, y, className) {
-  const safeType = type === "flat" ? "flat" : "sharp";
+  const safeType = type === "flat" ? "flat" : type === "natural" ? "natural" : "sharp";
+  const glyph = safeType === "flat" ? "&#xE260;" : safeType === "natural" ? "&#xE261;" : "&#xE262;";
   return `
-    <text class="${className} accidental-glyph accidental-${safeType}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" aria-label="${safeType}">${safeType === "flat" ? "&#xE260;" : "&#xE262;"}</text>
+    <text class="${className} accidental-glyph accidental-${safeType}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" aria-label="${safeType}">${glyph}</text>
   `;
 }
 
 function renderNoteAccidental(spelledNote, signature, x, y) {
   const parsed = parseExactNote(spelledNote);
-  if (!parsed || !parsed.accidental || keySignatureCoversNote(spelledNote, signature)) return "";
-  const type = parsed.accidental === "b" ? "flat" : "sharp";
+  if (!parsed || keySignatureCoversNote(spelledNote, signature)) return "";
+  const type = parsed.accidental === "b" ? "flat" : parsed.accidental === "#" ? "sharp" : "natural";
   const rawY = y + (NOTATION_NOTE_ACCIDENTAL_Y_OFFSET[type] || 0);
   const safeY = Math.max(NOTATION_ACCIDENTAL_SAFE_TOP_Y, Math.min(NOTATION_ACCIDENTAL_SAFE_BOTTOM_Y, rawY));
   const accidentalX = x - NOTATION_NOTE_ACCIDENTAL_X_OFFSET;
   return renderAccidentalGlyph(type, accidentalX, safeY, "note-accidental");
+}
+
+function abcKeyNameForSignature(signature) {
+  const normalized = normalizedKeySignature(signature || {});
+  const count = Math.max(0, Math.min(7, normalized.accidentals.length));
+  if (normalized.accidentalType === "flat") return ABC_FLAT_KEYS[count] || "C";
+  if (normalized.accidentalType === "sharp") return ABC_SHARP_KEYS[count] || "C";
+  return "C";
+}
+
+function abcDurationToken(kind) {
+  switch (notationDurationClass(kind)) {
+    case "whole":
+      return "4";
+    case "half":
+      return "2";
+    case "eighth":
+      return "/2";
+    case "sixteenth":
+      return "/4";
+    default:
+      return "";
+  }
+}
+
+function abcPitchToken(noteName, signature) {
+  const parsed = parseExactNote(noteName);
+  if (!parsed) return "z";
+  const octave = Number(parsed.octave);
+  const keyAlteration = keySignatureAlterationForLetter(parsed.letter, signature);
+  let accidental = "";
+  if (parsed.accidental === "b" && keyAlteration !== "b") accidental = "_";
+  if (parsed.accidental === "#" && keyAlteration !== "#") accidental = "^";
+  if (!parsed.accidental && keyAlteration) accidental = "=";
+  let letter = parsed.letter;
+  let octaveMark = "";
+  if (octave < 4) {
+    octaveMark = ",".repeat(4 - octave);
+  } else if (octave >= 5) {
+    letter = letter.toLowerCase();
+    octaveMark = "'".repeat(Math.max(0, octave - 5));
+  }
+  return `${accidental}${letter}${octaveMark}`;
+}
+
+function notationAbcForEvents(events, signature) {
+  const normalized = normalizedKeySignature(signature || {});
+  const notes = Array.isArray(events) ? events : [];
+  const body = notes.map((event, index) => {
+    const token = event.kind === "rest"
+      ? `z${abcDurationToken(event.durationKind)}`
+      : `${abcPitchToken(notationDisplayNote(event.note, normalized), normalized)}${abcDurationToken(event.durationKind)}`;
+    return `${token}${(index + 1) % 4 === 0 ? " |" : ""}`;
+  }).join(" ").trim();
+  return [
+    "X:1",
+    "M:none",
+    "L:1/4",
+    `K:${abcKeyNameForSignature(normalized)} clef=treble`,
+    body || "z4 |",
+  ].join("\n");
+}
+
+function hydrateNotationSheet(sheet) {
+  if (!sheet || sheet.dataset.abcRendered === "true" || typeof ABCJS === "undefined") return;
+  const target = sheet.querySelector(".notation-abc-target");
+  const abc = sheet.dataset.abc || "";
+  if (!target || !abc) return;
+  try {
+    target.innerHTML = "";
+    ABCJS.renderAbc(target, abc, {
+      add_classes: true,
+      paddingbottom: 0,
+      paddingleft: 0,
+      paddingright: 8,
+      paddingtop: 0,
+      responsive: "resize",
+      scale: 0.82,
+      staffwidth: 650,
+    });
+    sheet.dataset.abcRendered = "true";
+    sheet.classList.add("notation-abc-ready");
+  } catch (error) {
+    sheet.dataset.abcRendered = "failed";
+  }
+}
+
+function hydrateNotationSheets(root = document) {
+  if (typeof document === "undefined" || typeof ABCJS === "undefined") return;
+  (root.querySelectorAll ? root : document).querySelectorAll(".notation-sheet[data-abc]").forEach(hydrateNotationSheet);
+}
+
+function queueNotationHydration(id) {
+  if (typeof window === "undefined" || typeof document === "undefined") return;
+  const run = () => hydrateNotationSheet(document.getElementById(id));
+  if (typeof window.requestAnimationFrame === "function") {
+    window.requestAnimationFrame(run);
+  } else {
+    setTimeout(run, 0);
+  }
+}
+
+if (typeof window !== "undefined" && typeof window.addEventListener === "function" && typeof document !== "undefined") {
+  window.addEventListener("load", () => {
+    hydrateNotationSheets(document);
+    if (typeof MutationObserver !== "undefined") {
+      const observer = new MutationObserver((mutations) => {
+        for (const mutation of mutations) {
+          mutation.addedNodes.forEach((node) => {
+            if (node?.nodeType === 1) hydrateNotationSheets(node);
+          });
+        }
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+    }
+  });
 }
 
 function naturalNoteStep(note) {
@@ -1660,15 +1792,24 @@ function renderNotationSheet(events, options = {}) {
       <text x="654" y="17" text-anchor="end">${escapeHtml(shortText(repeatLabel, 34))}</text>
     </g>
   ` : "";
+  const sheetId = `notationSheet${++notationSheetIdCounter}`;
+  const abc = notationAbcForEvents(items, normalizedSignature);
+  const abcTarget = `
+    <div class="notation-abc-target" aria-hidden="true"></div>
+  `;
+  queueNotationHydration(sheetId);
   if (!items.length) {
     return `
-      <div class="notation-sheet notation-empty${repeatClass}${draftClass}" aria-label="Sheet-music-style transcription pending">
-        <svg viewBox="${NOTATION_VIEWBOX}" role="img">
-        <g class="staff-lines">${staffLines}</g>
-          ${renderTrebleClef()}
-          ${keySignature.svg}
-          ${repeatMarks}
-        </svg>
+      <div id="${sheetId}" class="notation-sheet notation-empty notation-engraved${repeatClass}${draftClass}" data-abc="${escapeHtml(abc)}" aria-label="Sheet-music-style transcription pending">
+        ${abcTarget}
+        <div class="notation-svg-fallback">
+          <svg viewBox="${NOTATION_VIEWBOX}" role="img">
+          <g class="staff-lines">${staffLines}</g>
+            ${renderTrebleClef()}
+            ${keySignature.svg}
+            ${repeatMarks}
+          </svg>
+        </div>
         <span>Notation pending.</span>
         ${captionTitle ? `
           <div class="notation-repeat-caption">
@@ -1713,14 +1854,17 @@ function renderNotationSheet(events, options = {}) {
     `;
   }).join("");
   return `
-    <div class="notation-sheet${repeatClass}${draftClass}" aria-label="Sheet-music-style machine transcription">
-      <svg viewBox="${NOTATION_VIEWBOX}" role="img">
-        <g class="staff-lines">${staffLines}</g>
-        ${renderTrebleClef()}
-        ${keySignature.svg}
-        ${repeatMarks}
-        ${marks}
-      </svg>
+    <div id="${sheetId}" class="notation-sheet notation-engraved${repeatClass}${draftClass}" data-abc="${escapeHtml(abc)}" aria-label="Sheet-music-style machine transcription">
+      ${abcTarget}
+      <div class="notation-svg-fallback">
+        <svg viewBox="${NOTATION_VIEWBOX}" role="img">
+          <g class="staff-lines">${staffLines}</g>
+          ${renderTrebleClef()}
+          ${keySignature.svg}
+          ${repeatMarks}
+          ${marks}
+        </svg>
+      </div>
       ${captionTitle ? `
         <div class="notation-repeat-caption">
           <b>${escapeHtml(shortText(captionTitle, 72))}</b>
