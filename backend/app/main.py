@@ -46,10 +46,9 @@ from .score_assets import ensure_score_page
 from .settings import MEDIA_DIR, ROOT_DIR, RUNTIME_DIR, SCAN_INTERVAL_SECONDS, SERVICE_NAME, allowed_origins, token_matches
 from .state import load_state, save_state
 from .staff4_audit import (
-    AUDIT_DIR,
     ensure_staff4_phrase_audit_packet,
     latest_staff4_phrase_audit_packet,
-    packet_artifact_path,
+    resolve_packet_artifact_path,
 )
 from .transcription import transcribe_media_samples
 
@@ -835,14 +834,8 @@ async def staff4_audit_run(force: bool = True) -> dict[str, Any]:
 
 @app.get("/api/curtis/staff4-audit/artifacts/{packet_id}/{filename}")
 async def staff4_audit_artifact(packet_id: str, filename: str) -> FileResponse:
-    try:
-        target = packet_artifact_path(packet_id, filename).resolve(strict=True)
-        audit_root = AUDIT_DIR.resolve()
-    except OSError as exc:
-        raise HTTPException(status_code=404, detail="audit artifact not found") from exc
-    if target != audit_root and audit_root not in target.parents:
-        raise HTTPException(status_code=404, detail="audit artifact not found")
-    if not target.is_file():
+    target = resolve_packet_artifact_path(packet_id, filename)
+    if not target:
         raise HTTPException(status_code=404, detail="audit artifact not found")
     return FileResponse(target, media_type=sample_media_type(target))
 

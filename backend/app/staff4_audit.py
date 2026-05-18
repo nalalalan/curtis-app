@@ -8,11 +8,12 @@ from typing import Any
 
 from .analyzer import run_process
 from .long_phrase_truth import note_window_continuity
-from .settings import RUNTIME_DIR
+from .settings import ROOT_DIR, RUNTIME_DIR
 from .state import utc_now
 
 
 AUDIT_DIR = RUNTIME_DIR / "staff4-audit"
+PACKAGED_AUDIT_DIR = ROOT_DIR / "assets" / "staff4-audit"
 OWNER_MEDIA_DIR = RUNTIME_DIR / "owner-media"
 STAFF4_AUDIT_VERSION = "staff4_phrase_audit_v3"
 OWNER_MEDIA_SUFFIXES = (".webm", ".mp4", ".mov", ".m4a", ".mp3", ".wav")
@@ -32,8 +33,65 @@ def packet_artifact_path(packet_id: str, filename: str) -> Path:
     return AUDIT_DIR / safe_slug(packet_id) / safe_slug(filename)
 
 
+def packaged_packet_artifact_path(packet_id: str, filename: str) -> Path:
+    return PACKAGED_AUDIT_DIR / safe_slug(packet_id) / safe_slug(filename)
+
+
 def packet_json_path(packet_id: str) -> Path:
     return packet_artifact_path(packet_id, "packet.json")
+
+
+def packaged_packet_json_path(packet_id: str) -> Path:
+    return packaged_packet_artifact_path(packet_id, "packet.json")
+
+
+def resolve_packet_artifact_path(packet_id: str, filename: str) -> Path | None:
+    for root in (AUDIT_DIR, PACKAGED_AUDIT_DIR):
+        try:
+            target = (root / safe_slug(packet_id) / safe_slug(filename)).resolve(strict=True)
+            safe_root = root.resolve()
+        except OSError:
+            continue
+        if target.is_file() and safe_root in target.parents:
+            return target
+    return None
+
+
+def load_packaged_audit_packet(packet_id: str) -> dict[str, Any]:
+    path = packaged_packet_json_path(packet_id)
+    try:
+        packet = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(packet, dict):
+        return {}
+    if packet.get("version") != STAFF4_AUDIT_VERSION:
+        return {}
+    if str(packet.get("packetId") or "") != safe_slug(packet_id):
+        return {}
+    return packet
+
+
+def packaged_artifacts_ready(packet_id: str) -> bool:
+    return bool(
+        resolve_packet_artifact_path(packet_id, "packet.json")
+        and resolve_packet_artifact_path(packet_id, "staff4-audit.wav")
+        and resolve_packet_artifact_path(packet_id, "staff4-audit.mp4")
+    )
+
+
+def with_packaged_audit_fallback(packet: dict[str, Any]) -> dict[str, Any]:
+    packet_id = str(packet.get("packetId") or "").strip()
+    if not packet_id or not packaged_artifacts_ready(packet_id):
+        return packet
+    packaged = load_packaged_audit_packet(packet_id)
+    if not packaged:
+        return packet
+    if str(packet.get("auditFocus") or packaged.get("auditFocus") or "") != str(packaged.get("auditFocus") or ""):
+        return packet
+    merged = dict(packaged)
+    merged["packagedArtifactFallback"] = True
+    return merged
 
 
 def safe_media_sample_id(value: Any) -> str:
@@ -1419,6 +1477,7 @@ def ensure_staff4_phrase_audit_packet(
         try:
             packet = json.loads(existing_path.read_text(encoding="utf-8"))
             if packet.get("version") == STAFF4_AUDIT_VERSION:
+                packet = with_packaged_audit_fallback(packet)
                 state["staff4PhraseAuditLatest"] = packet
                 return packet
         except (OSError, json.JSONDecodeError):
@@ -1541,6 +1600,7 @@ def ensure_staff4_phrase_audit_packet(
             attach_staff4_audit_decision(packet, {}, first_failure)
         else:
             attach_staff4_full_phrase_decision(packet)
+        packet = with_packaged_audit_fallback(packet)
         existing_path.write_text(json.dumps(packet, indent=2, sort_keys=True), encoding="utf-8")
         state["staff4PhraseAuditLatest"] = packet
         return packet
@@ -1562,6 +1622,7 @@ def ensure_staff4_phrase_audit_packet(
             attach_staff4_audit_decision(packet, {}, first_failure)
         else:
             attach_staff4_full_phrase_decision(packet)
+        packet = with_packaged_audit_fallback(packet)
         existing_path.write_text(json.dumps(packet, indent=2, sort_keys=True), encoding="utf-8")
         state["staff4PhraseAuditLatest"] = packet
         return packet
@@ -1603,7 +1664,7 @@ def ensure_staff4_phrase_audit_packet(
 def latest_staff4_phrase_audit_packet(state: dict[str, Any]) -> dict[str, Any]:
     packet = state.get("staff4PhraseAuditLatest") if isinstance(state.get("staff4PhraseAuditLatest"), dict) else {}
     if packet:
-        return packet
+        return with_packaged_audit_fallback(packet)
     return {
         "version": STAFF4_AUDIT_VERSION,
         "status": "not_generated",
@@ -1620,16 +1681,22 @@ def latest_staff4_phrase_audit_packet_for_completion(state: dict[str, Any], comp
     current_packet_id = packet_id_for_current(current, staff4_audit_failure_for_completion(completion, current))
     packet = state.get("staff4PhraseAuditLatest") if isinstance(state.get("staff4PhraseAuditLatest"), dict) else {}
     if packet and str(packet.get("packetId") or "") == current_packet_id and packet.get("version") == STAFF4_AUDIT_VERSION:
-        return packet
+        return with_packaged_audit_fallback(packet)
     packet_path = packet_json_path(current_packet_id)
     if packet_path.exists():
         try:
             packet = json.loads(packet_path.read_text(encoding="utf-8"))
             if isinstance(packet, dict) and packet.get("version") == STAFF4_AUDIT_VERSION:
+                packet = with_packaged_audit_fallback(packet)
                 state["staff4PhraseAuditLatest"] = packet
                 return packet
         except (OSError, json.JSONDecodeError):
             pass
+    packaged = load_packaged_audit_packet(current_packet_id)
+    if packaged and packaged_artifacts_ready(current_packet_id):
+        packaged = with_packaged_audit_fallback(packaged)
+        state["staff4PhraseAuditLatest"] = packaged
+        return packaged
     return {
         "version": STAFF4_AUDIT_VERSION,
         "status": "not_generated",

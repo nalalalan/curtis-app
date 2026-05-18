@@ -1,0 +1,4789 @@
+{
+  "artifacts": {
+    "audioClipUrl": "/api/curtis/staff4-audit/artifacts/staff4-source-crop-review-2026-05-03-Njh8_zq9_DM-8835-9-14/staff4-audit.wav",
+    "packetJsonUrl": "/api/curtis/staff4-audit/artifacts/staff4-source-crop-review-2026-05-03-Njh8_zq9_DM-8835-9-14/packet.json",
+    "pitchTraceSvgUrl": "/api/curtis/staff4-audit/artifacts/staff4-source-crop-review-2026-05-03-Njh8_zq9_DM-8835-9-14/pitch-trace.svg",
+    "spectrogramSvgUrl": "/api/curtis/staff4-audit/artifacts/staff4-source-crop-review-2026-05-03-Njh8_zq9_DM-8835-9-14/spectrogram.svg",
+    "videoClipUrl": "/api/curtis/staff4-audit/artifacts/staff4-source-crop-review-2026-05-03-Njh8_zq9_DM-8835-9-14/staff4-audit.mp4"
+  },
+  "audioAnalysis": {
+    "detectors": {
+      "pyin": {
+        "frameCount": 503,
+        "sequence": [
+          {
+            "endSeconds": 0.046,
+            "midi": 74,
+            "note": "D5",
+            "startSeconds": 0.0
+          },
+          {
+            "endSeconds": 0.192,
+            "midi": 69,
+            "note": "A4",
+            "startSeconds": 0.128
+          },
+          {
+            "endSeconds": 0.197,
+            "midi": 68,
+            "note": "G#4",
+            "startSeconds": 0.197
+          },
+          {
+            "endSeconds": 0.511,
+            "midi": 75,
+            "note": "D#5",
+            "startSeconds": 0.319
+          },
+          {
+            "endSeconds": 0.691,
+            "midi": 74,
+            "note": "D5",
+            "startSeconds": 0.517
+          },
+          {
+            "endSeconds": 0.813,
+            "midi": 75,
+            "note": "D#5",
+            "startSeconds": 0.697
+          },
+          {
+            "endSeconds": 0.871,
+            "midi": 74,
+            "note": "D5",
+            "startSeconds": 0.819
+          },
+          {
+            "endSeconds": 0.894,
+            "midi": 73,
+            "note": "C#5",
+            "startSeconds": 0.877
+          },
+          {
+            "endSeconds": 1.057,
+            "midi": 72,
+            "note": "C5",
+            "startSeconds": 0.9
+          },
+          {
+            "endSeconds": 1.103,
+            "midi": 73,
+            "note": "C#5",
+            "startSeconds": 1.062
+          },
+          {
+            "endSeconds": 1.271,
+            "midi": 74,
+            "note": "D5",
+            "startSeconds": 1.109
+          },
+          {
+            "endSeconds": 1.469,
+            "midi": 75,
+            "note": "D#5",
+            "startSeconds": 1.277
+          },
+          {
+            "endSeconds": 1.753,
+            "midi": 74,
+            "note": "D5",
+            "startSeconds": 1.474
+          },
+          {
+            "endSeconds": 1.95,
+            "midi": 75,
+            "note": "D#5",
+            "startSeconds": 1.759
+          },
+          {
+            "endSeconds": 2.101,
+            "midi": 74,
+            "note": "D5",
+            "startSeconds": 1.956
+          },
+          {
+            "endSeconds": 2.113,
+            "midi": 73,
+            "note": "C#5",
+            "startSeconds": 2.107
+          }
+        ]
+      },
+      "spectralPeak": {
+        "frameCount": 536,
+        "sequence": [
+          {
+            "endSeconds": 0.099,
+            "midi": 74,
+            "note": "D5",
+            "startSeconds": 0.0
+          },
+          {
+            "endSeconds": 0.238,
+            "midi": 68,
+            "note": "G#4",
+            "startSeconds": 0.104
+          },
+          {
+            "endSeconds": 0.244,
+            "midi": 74,
+            "note": "D5",
+            "startSeconds": 0.244
+          },
+          {
+            "endSeconds": 0.25,
+            "midi": 68,
+            "note": "G#4",
+            "startSeconds": 0.25
+          },
+          {
+            "endSeconds": 0.267,
+            "midi": 74,
+            "note": "D5",
+            "startSeconds": 0.255
+          },
+          {
+            "endSeconds": 0.273,
+            "midi": 68,
+            "note": "G#4",
+            "startSeconds": 0.273
+          },
+          {
+            "endSeconds": 0.534,
+            "midi": 75,
+            "note": "D#5",
+            "startSeconds": 0.279
+          },
+          {
+            "endSeconds": 0.61,
+            "midi": 86,
+            "note": "D6",
+            "startSeconds": 0.54
+          },
+          {
+            "endSeconds": 0.673,
+            "midi": 74,
+            "note": "D5",
+            "startSeconds": 0.615
+          },
+          {
+            "endSeconds": 0.737,
+            "midi": 75,
+            "note": "D#5",
+            "startSeconds": 0.679
+          },
+          {
+            "endSeconds": 0.743,
+            "midi": 74,
+            "note": "D5",
+            "startSeconds": 0.743
+          },
+          {
+            "endSeconds": 0.877,
+            "midi": 75,
+            "note": "D#5",
+            "startSeconds": 0.749
+          },
+          {
+            "endSeconds": 0.888,
+            "midi": 71,
+            "note": "B4",
+            "startSeconds": 0.882
+          },
+          {
+            "endSeconds": 1.155,
+            "midi": 72,
+            "note": "C5",
+            "startSeconds": 0.894
+          },
+          {
+            "endSeconds": 1.178,
+            "midi": 86,
+            "note": "D6",
+            "startSeconds": 1.161
+          },
+          {
+            "endSeconds": 1.248,
+            "midi": 93,
+            "note": "A6",
+            "startSeconds": 1.184
+          }
+        ]
+      },
+      "yin": {
+        "frameCount": 536,
+        "sequence": [
+          {
+            "endSeconds": 0.046,
+            "midi": 74,
+            "note": "D5",
+            "startSeconds": 0.0
+          },
+          {
+            "endSeconds": 0.116,
+            "midi": 55,
+            "note": "G3",
+            "startSeconds": 0.052
+          },
+          {
+            "endSeconds": 0.122,
+            "midi": 56,
+            "note": "G#3",
+            "startSeconds": 0.122
+          },
+          {
+            "endSeconds": 0.197,
+            "midi": 69,
+            "note": "A4",
+            "startSeconds": 0.128
+          },
+          {
+            "endSeconds": 0.255,
+            "midi": 55,
+            "note": "G3",
+            "startSeconds": 0.203
+          },
+          {
+            "endSeconds": 0.313,
+            "midi": 56,
+            "note": "G#3",
+            "startSeconds": 0.261
+          },
+          {
+            "endSeconds": 0.511,
+            "midi": 75,
+            "note": "D#5",
+            "startSeconds": 0.319
+          },
+          {
+            "endSeconds": 0.685,
+            "midi": 74,
+            "note": "D5",
+            "startSeconds": 0.517
+          },
+          {
+            "endSeconds": 0.819,
+            "midi": 75,
+            "note": "D#5",
+            "startSeconds": 0.691
+          },
+          {
+            "endSeconds": 0.871,
+            "midi": 74,
+            "note": "D5",
+            "startSeconds": 0.824
+          },
+          {
+            "endSeconds": 0.9,
+            "midi": 73,
+            "note": "C#5",
+            "startSeconds": 0.877
+          },
+          {
+            "endSeconds": 1.051,
+            "midi": 72,
+            "note": "C5",
+            "startSeconds": 0.906
+          },
+          {
+            "endSeconds": 1.103,
+            "midi": 73,
+            "note": "C#5",
+            "startSeconds": 1.057
+          },
+          {
+            "endSeconds": 1.265,
+            "midi": 74,
+            "note": "D5",
+            "startSeconds": 1.109
+          },
+          {
+            "endSeconds": 1.474,
+            "midi": 75,
+            "note": "D#5",
+            "startSeconds": 1.271
+          },
+          {
+            "endSeconds": 1.747,
+            "midi": 74,
+            "note": "D5",
+            "startSeconds": 1.48
+          }
+        ]
+      }
+    },
+    "durationSeconds": 3.11,
+    "frames": {
+      "pyin": [
+        {
+          "midi": 74.2,
+          "note": "D5",
+          "probability": 0.01,
+          "timeSeconds": 0.0
+        },
+        {
+          "midi": 74.3,
+          "note": "D5",
+          "probability": 0.01,
+          "timeSeconds": 0.012
+        },
+        {
+          "midi": 74.4,
+          "note": "D5",
+          "probability": 0.01,
+          "timeSeconds": 0.023
+        },
+        {
+          "midi": 74.5,
+          "note": "D5",
+          "probability": 0.01,
+          "timeSeconds": 0.035
+        },
+        {
+          "midi": 74.5,
+          "note": "D5",
+          "probability": 0.01,
+          "timeSeconds": 0.046
+        },
+        {
+          "midi": 69.1,
+          "note": "A4",
+          "probability": 0.01,
+          "timeSeconds": 0.134
+        },
+        {
+          "midi": 69.1,
+          "note": "A4",
+          "probability": 0.01,
+          "timeSeconds": 0.145
+        },
+        {
+          "midi": 68.8,
+          "note": "A4",
+          "probability": 0.01,
+          "timeSeconds": 0.157
+        },
+        {
+          "midi": 68.7,
+          "note": "A4",
+          "probability": 0.01,
+          "timeSeconds": 0.168
+        },
+        {
+          "midi": 68.7,
+          "note": "A4",
+          "probability": 0.01,
+          "timeSeconds": 0.18
+        },
+        {
+          "midi": 68.6,
+          "note": "A4",
+          "probability": 0.01,
+          "timeSeconds": 0.192
+        },
+        {
+          "midi": 75.2,
+          "note": "D#5",
+          "probability": 0.014,
+          "timeSeconds": 0.319
+        },
+        {
+          "midi": 75.2,
+          "note": "D#5",
+          "probability": 0.177,
+          "timeSeconds": 0.331
+        },
+        {
+          "midi": 75.2,
+          "note": "D#5",
+          "probability": 0.426,
+          "timeSeconds": 0.342
+        },
+        {
+          "midi": 75.3,
+          "note": "D#5",
+          "probability": 0.686,
+          "timeSeconds": 0.354
+        },
+        {
+          "midi": 75.2,
+          "note": "D#5",
+          "probability": 0.827,
+          "timeSeconds": 0.366
+        },
+        {
+          "midi": 75.2,
+          "note": "D#5",
+          "probability": 0.891,
+          "timeSeconds": 0.377
+        },
+        {
+          "midi": 75.2,
+          "note": "D#5",
+          "probability": 0.946,
+          "timeSeconds": 0.389
+        },
+        {
+          "midi": 75.2,
+          "note": "D#5",
+          "probability": 0.985,
+          "timeSeconds": 0.401
+        },
+        {
+          "midi": 75.2,
+          "note": "D#5",
+          "probability": 1.0,
+          "timeSeconds": 0.412
+        },
+        {
+          "midi": 75.2,
+          "note": "D#5",
+          "probability": 1.0,
+          "timeSeconds": 0.424
+        },
+        {
+          "midi": 75.2,
+          "note": "D#5",
+          "probability": 1.0,
+          "timeSeconds": 0.435
+        },
+        {
+          "midi": 75.2,
+          "note": "D#5",
+          "probability": 1.0,
+          "timeSeconds": 0.447
+        },
+        {
+          "midi": 75.2,
+          "note": "D#5",
+          "probability": 1.0,
+          "timeSeconds": 0.459
+        },
+        {
+          "midi": 75.2,
+          "note": "D#5",
+          "probability": 1.0,
+          "timeSeconds": 0.47
+        },
+        {
+          "midi": 75.1,
+          "note": "D#5",
+          "probability": 0.985,
+          "timeSeconds": 0.482
+        },
+        {
+          "midi": 75.1,
+          "note": "D#5",
+          "probability": 0.891,
+          "timeSeconds": 0.493
+        },
+        {
+          "midi": 74.9,
+          "note": "D#5",
+          "probability": 0.616,
+          "timeSeconds": 0.505
+        },
+        {
+          "midi": 74.5,
+          "note": "D5",
+          "probability": 0.28,
+          "timeSeconds": 0.517
+        },
+        {
+          "midi": 74.3,
+          "note": "D5",
+          "probability": 0.28,
+          "timeSeconds": 0.528
+        },
+        {
+          "midi": 74.2,
+          "note": "D5",
+          "probability": 0.323,
+          "timeSeconds": 0.54
+        },
+        {
+          "midi": 74.2,
+          "note": "D5",
+          "probability": 0.426,
+          "timeSeconds": 0.551
+        },
+        {
+          "midi": 74.1,
+          "note": "D5",
+          "probability": 0.485,
+          "timeSeconds": 0.563
+        },
+        {
+          "midi": 74.1,
+          "note": "D5",
+          "probability": 0.549,
+          "timeSeconds": 0.575
+        },
+        {
+          "midi": 74.1,
+          "note": "D5",
+          "probability": 0.616,
+          "timeSeconds": 0.586
+        },
+        {
+          "midi": 74.1,
+          "note": "D5",
+          "probability": 0.686,
+          "timeSeconds": 0.598
+        },
+        {
+          "midi": 74.1,
+          "note": "D5",
+          "probability": 0.827,
+          "timeSeconds": 0.61
+        },
+        {
+          "midi": 74.2,
+          "note": "D5",
+          "probability": 0.827,
+          "timeSeconds": 0.621
+        },
+        {
+          "midi": 74.2,
+          "note": "D5",
+          "probability": 0.757,
+          "timeSeconds": 0.633
+        },
+        {
+          "midi": 74.2,
+          "note": "D5",
+          "probability": 0.827,
+          "timeSeconds": 0.644
+        },
+        {
+          "midi": 74.3,
+          "note": "D5",
+          "probability": 0.757,
+          "timeSeconds": 0.656
+        },
+        {
+          "midi": 74.4,
+          "note": "D5",
+          "probability": 0.686,
+          "timeSeconds": 0.668
+        },
+        {
+          "midi": 74.5,
+          "note": "D5",
+          "probability": 0.827,
+          "timeSeconds": 0.679
+        },
+        {
+          "midi": 74.5,
+          "note": "D5",
+          "probability": 0.891,
+          "timeSeconds": 0.691
+        },
+        {
+          "midi": 74.6,
+          "note": "D#5",
+          "probability": 0.891,
+          "timeSeconds": 0.702
+        },
+        {
+          "midi": 74.7,
+          "note": "D#5",
+          "probability": 0.891,
+          "timeSeconds": 0.714
+        },
+        {
+          "midi": 74.8,
+          "note": "D#5",
+          "probability": 0.827,
+          "timeSeconds": 0.726
+        },
+        {
+          "midi": 74.8,
+          "note": "D#5",
+          "probability": 0.757,
+          "timeSeconds": 0.737
+        },
+        {
+          "midi": 74.9,
+          "note": "D#5",
+          "probability": 0.827,
+          "timeSeconds": 0.749
+        },
+        {
+          "midi": 74.8,
+          "note": "D#5",
+          "probability": 0.891,
+          "timeSeconds": 0.76
+        },
+        {
+          "midi": 74.7,
+          "note": "D#5",
+          "probability": 0.891,
+          "timeSeconds": 0.772
+        },
+        {
+          "midi": 74.7,
+          "note": "D#5",
+          "probability": 0.891,
+          "timeSeconds": 0.784
+        },
+        {
+          "midi": 74.6,
+          "note": "D#5",
+          "probability": 0.827,
+          "timeSeconds": 0.795
+        },
+        {
+          "midi": 74.6,
+          "note": "D#5",
+          "probability": 0.827,
+          "timeSeconds": 0.807
+        },
+        {
+          "midi": 74.5,
+          "note": "D5",
+          "probability": 0.827,
+          "timeSeconds": 0.819
+        },
+        {
+          "midi": 74.4,
+          "note": "D5",
+          "probability": 0.757,
+          "timeSeconds": 0.83
+        },
+        {
+          "midi": 74.3,
+          "note": "D5",
+          "probability": 0.757,
+          "timeSeconds": 0.842
+        },
+        {
+          "midi": 74.1,
+          "note": "D5",
+          "probability": 0.323,
+          "timeSeconds": 0.853
+        },
+        {
+          "midi": 73.7,
+          "note": "D5",
+          "probability": 0.128,
+          "timeSeconds": 0.865
+        },
+        {
+          "midi": 73.3,
+          "note": "C#5",
+          "probability": 0.177,
+          "timeSeconds": 0.877
+        },
+        {
+          "midi": 72.8,
+          "note": "C#5",
+          "probability": 0.241,
+          "timeSeconds": 0.888
+        },
+        {
+          "midi": 72.5,
+          "note": "C5",
+          "probability": 0.426,
+          "timeSeconds": 0.9
+        },
+        {
+          "midi": 72.3,
+          "note": "C5",
+          "probability": 0.686,
+          "timeSeconds": 0.911
+        },
+        {
+          "midi": 72.2,
+          "note": "C5",
+          "probability": 0.757,
+          "timeSeconds": 0.923
+        },
+        {
+          "midi": 72.2,
+          "note": "C5",
+          "probability": 0.891,
+          "timeSeconds": 0.935
+        },
+        {
+          "midi": 72.2,
+          "note": "C5",
+          "probability": 0.891,
+          "timeSeconds": 0.946
+        },
+        {
+          "midi": 72.2,
+          "note": "C5",
+          "probability": 0.891,
+          "timeSeconds": 0.958
+        },
+        {
+          "midi": 72.3,
+          "note": "C5",
+          "probability": 0.946,
+          "timeSeconds": 0.969
+        },
+        {
+          "midi": 72.2,
+          "note": "C5",
+          "probability": 0.985,
+          "timeSeconds": 0.981
+        },
+        {
+          "midi": 72.3,
+          "note": "C5",
+          "probability": 0.985,
+          "timeSeconds": 0.993
+        },
+        {
+          "midi": 72.3,
+          "note": "C5",
+          "probability": 0.985,
+          "timeSeconds": 1.004
+        },
+        {
+          "midi": 72.3,
+          "note": "C5",
+          "probability": 0.946,
+          "timeSeconds": 1.016
+        },
+        {
+          "midi": 72.3,
+          "note": "C5",
+          "probability": 0.946,
+          "timeSeconds": 1.027
+        },
+        {
+          "midi": 72.4,
+          "note": "C5",
+          "probability": 0.891,
+          "timeSeconds": 1.039
+        },
+        {
+          "midi": 72.4,
+          "note": "C5",
+          "probability": 0.757,
+          "timeSeconds": 1.051
+        },
+        {
+          "midi": 72.6,
+          "note": "C#5",
+          "probability": 0.485,
+          "timeSeconds": 1.062
+        },
+        {
+          "midi": 72.8,
+          "note": "C#5",
+          "probability": 0.372,
+          "timeSeconds": 1.074
+        },
+        {
+          "midi": 73.0,
+          "note": "C#5",
+          "probability": 0.372,
+          "timeSeconds": 1.086
+        },
+        {
+          "midi": 73.2,
+          "note": "C#5",
+          "probability": 0.372,
+          "timeSeconds": 1.097
+        },
+        {
+          "midi": 73.6,
+          "note": "D5",
+          "probability": 0.241,
+          "timeSeconds": 1.109
+        },
+        {
+          "midi": 73.8,
+          "note": "D5",
+          "probability": 0.28,
+          "timeSeconds": 1.12
+        },
+        {
+          "midi": 73.9,
+          "note": "D5",
+          "probability": 0.323,
+          "timeSeconds": 1.132
+        },
+        {
+          "midi": 74.0,
+          "note": "D5",
+          "probability": 0.372,
+          "timeSeconds": 1.144
+        },
+        {
+          "midi": 74.0,
+          "note": "D5",
+          "probability": 0.426,
+          "timeSeconds": 1.155
+        },
+        {
+          "midi": 74.0,
+          "note": "D5",
+          "probability": 0.549,
+          "timeSeconds": 1.167
+        },
+        {
+          "midi": 74.0,
+          "note": "D5",
+          "probability": 0.616,
+          "timeSeconds": 1.178
+        },
+        {
+          "midi": 74.0,
+          "note": "D5",
+          "probability": 0.686,
+          "timeSeconds": 1.19
+        },
+        {
+          "midi": 74.1,
+          "note": "D5",
+          "probability": 0.757,
+          "timeSeconds": 1.202
+        },
+        {
+          "midi": 74.1,
+          "note": "D5",
+          "probability": 0.757,
+          "timeSeconds": 1.213
+        },
+        {
+          "midi": 74.1,
+          "note": "D5",
+          "probability": 0.757,
+          "timeSeconds": 1.225
+        },
+        {
+          "midi": 74.1,
+          "note": "D5",
+          "probability": 0.686,
+          "timeSeconds": 1.236
+        },
+        {
+          "midi": 74.2,
+          "note": "D5",
+          "probability": 0.426,
+          "timeSeconds": 1.248
+        },
+        {
+          "midi": 74.3,
+          "note": "D5",
+          "probability": 0.485,
+          "timeSeconds": 1.26
+        },
+        {
+          "midi": 74.5,
+          "note": "D5",
+          "probability": 0.323,
+          "timeSeconds": 1.271
+        },
+        {
+          "midi": 74.7,
+          "note": "D#5",
+          "probability": 0.686,
+          "timeSeconds": 1.283
+        },
+        {
+          "midi": 74.9,
+          "note": "D#5",
+          "probability": 0.827,
+          "timeSeconds": 1.295
+        },
+        {
+          "midi": 75.0,
+          "note": "D#5",
+          "probability": 0.827,
+          "timeSeconds": 1.306
+        },
+        {
+          "midi": 75.0,
+          "note": "D#5",
+          "probability": 0.946,
+          "timeSeconds": 1.318
+        },
+        {
+          "midi": 75.0,
+          "note": "D#5",
+          "probability": 0.946,
+          "timeSeconds": 1.329
+        },
+        {
+          "midi": 75.1,
+          "note": "D#5",
+          "probability": 0.985,
+          "timeSeconds": 1.341
+        },
+        {
+          "midi": 75.1,
+          "note": "D#5",
+          "probability": 0.985,
+          "timeSeconds": 1.353
+        },
+        {
+          "midi": 75.1,
+          "note": "D#5",
+          "probability": 0.985,
+          "timeSeconds": 1.364
+        },
+        {
+          "midi": 75.1,
+          "note": "D#5",
+          "probability": 0.985,
+          "timeSeconds": 1.376
+        },
+        {
+          "midi": 75.1,
+          "note": "D#5",
+          "probability": 1.0,
+          "timeSeconds": 1.387
+        },
+        {
+          "midi": 75.1,
+          "note": "D#5",
+          "probability": 1.0,
+          "timeSeconds": 1.399
+        },
+        {
+          "midi": 75.1,
+          "note": "D#5",
+          "probability": 1.0,
+          "timeSeconds": 1.411
+        },
+        {
+          "midi": 75.1,
+          "note": "D#5",
+          "probability": 1.0,
+          "timeSeconds": 1.422
+        },
+        {
+          "midi": 75.1,
+          "note": "D#5",
+          "probability": 1.0,
+          "timeSeconds": 1.434
+        },
+        {
+          "midi": 75.0,
+          "note": "D#5",
+          "probability": 0.946,
+          "timeSeconds": 1.445
+        },
+        {
+          "midi": 74.9,
+          "note": "D#5",
+          "probability": 0.891,
+          "timeSeconds": 1.457
+        },
+        {
+          "midi": 74.7,
+          "note": "D#5",
+          "probability": 0.757,
+          "timeSeconds": 1.469
+        },
+        {
+          "midi": 74.4,
+          "note": "D5",
+          "probability": 0.616,
+          "timeSeconds": 1.48
+        },
+        {
+          "midi": 74.2,
+          "note": "D5",
+          "probability": 0.616,
+          "timeSeconds": 1.492
+        },
+        {
+          "midi": 74.1,
+          "note": "D5",
+          "probability": 0.616,
+          "timeSeconds": 1.503
+        },
+        {
+          "midi": 74.0,
+          "note": "D5",
+          "probability": 0.616,
+          "timeSeconds": 1.515
+        },
+        {
+          "midi": 74.0,
+          "note": "D5",
+          "probability": 0.686,
+          "timeSeconds": 1.527
+        },
+        {
+          "midi": 74.0,
+          "note": "D5",
+          "probability": 0.757,
+          "timeSeconds": 1.538
+        },
+        {
+          "midi": 74.0,
+          "note": "D5",
+          "probability": 0.827,
+          "timeSeconds": 1.55
+        },
+        {
+          "midi": 73.9,
+          "note": "D5",
+          "probability": 0.827,
+          "timeSeconds": 1.562
+        },
+        {
+          "midi": 73.9,
+          "note": "D5",
+          "probability": 0.827,
+          "timeSeconds": 1.573
+        },
+        {
+          "midi": 73.9,
+          "note": "D5",
+          "probability": 0.827,
+          "timeSeconds": 1.585
+        },
+        {
+          "midi": 73.9,
+          "note": "D5",
+          "probability": 0.891,
+          "timeSeconds": 1.596
+        },
+        {
+          "midi": 73.9,
+          "note": "D5",
+          "probability": 0.827,
+          "timeSeconds": 1.608
+        },
+        {
+          "midi": 73.9,
+          "note": "D5",
+          "probability": 0.827,
+          "timeSeconds": 1.62
+        },
+        {
+          "midi": 74.0,
+          "note": "D5",
+          "probability": 0.827,
+          "timeSeconds": 1.631
+        },
+        {
+          "midi": 74.0,
+          "note": "D5",
+          "probability": 0.827,
+          "timeSeconds": 1.643
+        },
+        {
+          "midi": 74.0,
+          "note": "D5",
+          "probability": 0.757,
+          "timeSeconds": 1.654
+        },
+        {
+          "midi": 74.0,
+          "note": "D5",
+          "probability": 0.757,
+          "timeSeconds": 1.666
+        },
+        {
+          "midi": 74.0,
+          "note": "D5",
+          "probability": 0.616,
+          "timeSeconds": 1.678
+        },
+        {
+          "midi": 74.1,
+          "note": "D5",
+          "probability": 0.485,
+          "timeSeconds": 1.689
+        },
+        {
+          "midi": 74.1,
+          "note": "D5",
+          "probability": 0.323,
+          "timeSeconds": 1.701
+        },
+        {
+          "midi": 74.2,
+          "note": "D5",
+          "probability": 0.549,
+          "timeSeconds": 1.712
+        },
+        {
+          "midi": 74.3,
+          "note": "D5",
+          "probability": 0.426,
+          "timeSeconds": 1.724
+        },
+        {
+          "midi": 74.4,
+          "note": "D5",
+          "probability": 0.485,
+          "timeSeconds": 1.736
+        },
+        {
+          "midi": 74.5,
+          "note": "D5",
+          "probability": 0.485,
+          "timeSeconds": 1.747
+        },
+        {
+          "midi": 74.6,
+          "note": "D#5",
+          "probability": 0.426,
+          "timeSeconds": 1.759
+        },
+        {
+          "midi": 74.8,
+          "note": "D#5",
+          "probability": 0.372,
+          "timeSeconds": 1.771
+        },
+        {
+          "midi": 75.0,
+          "note": "D#5",
+          "probability": 0.549,
+          "timeSeconds": 1.782
+        },
+        {
+          "midi": 75.0,
+          "note": "D#5",
+          "probability": 0.686,
+          "timeSeconds": 1.794
+        },
+        {
+          "midi": 75.1,
+          "note": "D#5",
+          "probability": 0.827,
+          "timeSeconds": 1.805
+        },
+        {
+          "midi": 75.1,
+          "note": "D#5",
+          "probability": 0.891,
+          "timeSeconds": 1.817
+        },
+        {
+          "midi": 75.1,
+          "note": "D#5",
+          "probability": 0.946,
+          "timeSeconds": 1.829
+        },
+        {
+          "midi": 75.1,
+          "note": "D#5",
+          "probability": 0.985,
+          "timeSeconds": 1.84
+        },
+        {
+          "midi": 75.1,
+          "note": "D#5",
+          "probability": 0.985,
+          "timeSeconds": 1.852
+        },
+        {
+          "midi": 75.1,
+          "note": "D#5",
+          "probability": 0.985,
+          "timeSeconds": 1.863
+        },
+        {
+          "midi": 75.0,
+          "note": "D#5",
+          "probability": 0.985,
+          "timeSeconds": 1.875
+        },
+        {
+          "midi": 75.0,
+          "note": "D#5",
+          "probability": 0.946,
+          "timeSeconds": 1.887
+        },
+        {
+          "midi": 75.0,
+          "note": "D#5",
+          "probability": 0.891,
+          "timeSeconds": 1.898
+        },
+        {
+          "midi": 75.0,
+          "note": "D#5",
+          "probability": 0.827,
+          "timeSeconds": 1.91
+        },
+        {
+          "midi": 74.9,
+          "note": "D#5",
+          "probability": 0.616,
+          "timeSeconds": 1.921
+        },
+        {
+          "midi": 74.8,
+          "note": "D#5",
+          "probability": 0.426,
+          "timeSeconds": 1.933
+        },
+        {
+          "midi": 74.8,
+          "note": "D#5",
+          "probability": 0.15,
+          "timeSeconds": 1.945
+        },
+        {
+          "midi": 74.5,
+          "note": "D5",
+          "probability": 0.109,
+          "timeSeconds": 1.956
+        },
+        {
+          "midi": 74.3,
+          "note": "D5",
+          "probability": 0.15,
+          "timeSeconds": 1.968
+        },
+        {
+          "midi": 74.2,
+          "note": "D5",
+          "probability": 0.241,
+          "timeSeconds": 1.98
+        },
+        {
+          "midi": 74.1,
+          "note": "D5",
+          "probability": 0.28,
+          "timeSeconds": 1.991
+        },
+        {
+          "midi": 74.1,
+          "note": "D5",
+          "probability": 0.323,
+          "timeSeconds": 2.003
+        },
+        {
+          "midi": 74.0,
+          "note": "D5",
+          "probability": 0.485,
+          "timeSeconds": 2.014
+        },
+        {
+          "midi": 74.1,
+          "note": "D5",
+          "probability": 0.616,
+          "timeSeconds": 2.026
+        },
+        {
+          "midi": 74.1,
+          "note": "D5",
+          "probability": 0.686,
+          "timeSeconds": 2.038
+        },
+        {
+          "midi": 74.1,
+          "note": "D5",
+          "probability": 0.757,
+          "timeSeconds": 2.049
+        },
+        {
+          "midi": 74.0,
+          "note": "D5",
+          "probability": 0.485,
+          "timeSeconds": 2.061
+        },
+        {
+          "midi": 74.0,
+          "note": "D5",
+          "probability": 0.372,
+          "timeSeconds": 2.072
+        },
+        {
+          "midi": 74.0,
+          "note": "D5",
+          "probability": 0.241,
+          "timeSeconds": 2.084
+        },
+        {
+          "midi": 73.9,
+          "note": "D5",
+          "probability": 0.048,
+          "timeSeconds": 2.096
+        },
+        {
+          "midi": 73.4,
+          "note": "C#5",
+          "probability": 0.041,
+          "timeSeconds": 2.107
+        },
+        {
+          "midi": 72.4,
+          "note": "C5",
+          "probability": 0.28,
+          "timeSeconds": 2.119
+        },
+        {
+          "midi": 72.2,
+          "note": "C5",
+          "probability": 0.549,
+          "timeSeconds": 2.13
+        },
+        {
+          "midi": 72.2,
+          "note": "C5",
+          "probability": 0.616,
+          "timeSeconds": 2.142
+        },
+        {
+          "midi": 72.2,
+          "note": "C5",
+          "probability": 0.757,
+          "timeSeconds": 2.154
+        },
+        {
+          "midi": 72.2,
+          "note": "C5",
+          "probability": 0.827,
+          "timeSeconds": 2.165
+        },
+        {
+          "midi": 72.2,
+          "note": "C5",
+          "probability": 0.891,
+          "timeSeconds": 2.177
+        },
+        {
+          "midi": 72.2,
+          "note": "C5",
+          "probability": 0.946,
+          "timeSeconds": 2.188
+        },
+        {
+          "midi": 72.2,
+          "note": "C5",
+          "probability": 0.985,
+          "timeSeconds": 2.2
+        },
+        {
+          "midi": 72.2,
+          "note": "C5",
+          "probability": 0.985,
+          "timeSeconds": 2.212
+        },
+        {
+          "midi": 72.2,
+          "note": "C5",
+          "probability": 0.985,
+          "timeSeconds": 2.223
+        },
+        {
+          "midi": 72.2,
+          "note": "C5",
+          "probability": 0.985,
+          "timeSeconds": 2.235
+        },
+        {
+          "midi": 72.2,
+          "note": "C5",
+          "probability": 0.985,
+          "timeSeconds": 2.247
+        },
+        {
+          "midi": 72.2,
+          "note": "C5",
+          "probability": 0.946,
+          "timeSeconds": 2.258
+        },
+        {
+          "midi": 72.3,
+          "note": "C5",
+          "probability": 0.686,
+          "timeSeconds": 2.27
+        },
+        {
+          "midi": 72.6,
+          "note": "C#5",
+          "probability": 0.28,
+          "timeSeconds": 2.281
+        },
+        {
+          "midi": 73.4,
+          "note": "C#5",
+          "probability": 0.128,
+          "timeSeconds": 2.293
+        },
+        {
+          "midi": 73.7,
+          "note": "D5",
+          "probability": 0.207,
+          "timeSeconds": 2.305
+        },
+        {
+          "midi": 73.8,
+          "note": "D5",
+          "probability": 0.323,
+          "timeSeconds": 2.316
+        },
+        {
+          "midi": 73.8,
+          "note": "D5",
+          "probability": 0.485,
+          "timeSeconds": 2.328
+        },
+        {
+          "midi": 73.9,
+          "note": "D5",
+          "probability": 0.616,
+          "timeSeconds": 2.339
+        },
+        {
+          "midi": 73.9,
+          "note": "D5",
+          "probability": 0.686,
+          "timeSeconds": 2.351
+        },
+        {
+          "midi": 73.9,
+          "note": "D5",
+          "probability": 0.616,
+          "timeSeconds": 2.363
+        },
+        {
+          "midi": 73.9,
+          "note": "D5",
+          "probability": 0.485,
+          "timeSeconds": 2.374
+        },
+        {
+          "midi": 73.9,
+          "note": "D5",
+          "probability": 0.323,
+          "timeSeconds": 2.386
+        },
+        {
+          "midi": 73.9,
+          "note": "D5",
+          "probability": 0.241,
+          "timeSeconds": 2.397
+        },
+        {
+          "midi": 74.1,
+          "note": "D5",
+          "probability": 0.041,
+          "timeSeconds": 2.409
+        },
+        {
+          "midi": 74.5,
+          "note": "D5",
+          "probability": 0.048,
+          "timeSeconds": 2.421
+        },
+        {
+          "midi": 74.8,
+          "note": "D#5",
+          "probability": 0.241,
+          "timeSeconds": 2.432
+        },
+        {
+          "midi": 74.9,
+          "note": "D#5",
+          "probability": 0.485,
+          "timeSeconds": 2.444
+        },
+        {
+          "midi": 75.0,
+          "note": "D#5",
+          "probability": 0.686,
+          "timeSeconds": 2.456
+        },
+        {
+          "midi": 75.0,
+          "note": "D#5",
+          "probability": 0.827,
+          "timeSeconds": 2.467
+        },
+        {
+          "midi": 75.0,
+          "note": "D#5",
+          "probability": 0.891,
+          "timeSeconds": 2.479
+        },
+        {
+          "midi": 75.0,
+          "note": "D#5",
+          "probability": 0.946,
+          "timeSeconds": 2.49
+        },
+        {
+          "midi": 75.0,
+          "note": "D#5",
+          "probability": 0.946,
+          "timeSeconds": 2.502
+        },
+        {
+          "midi": 75.0,
+          "note": "D#5",
+          "probability": 0.985,
+          "timeSeconds": 2.514
+        },
+        {
+          "midi": 75.0,
+          "note": "D#5",
+          "probability": 0.985,
+          "timeSeconds": 2.525
+        },
+        {
+          "midi": 75.0,
+          "note": "D#5",
+          "probability": 0.985,
+          "timeSeconds": 2.537
+        },
+        {
+          "midi": 75.0,
+          "note": "D#5",
+          "probability": 1.0,
+          "timeSeconds": 2.548
+        },
+        {
+          "midi": 75.0,
+          "note": "D#5",
+          "probability": 1.0,
+          "timeSeconds": 2.56
+        },
+        {
+          "midi": 75.0,
+          "note": "D#5",
+          "probability": 1.0,
+          "timeSeconds": 2.572
+        },
+        {
+          "midi": 75.0,
+          "note": "D#5",
+          "probability": 1.0,
+          "timeSeconds": 2.583
+        },
+        {
+          "midi": 75.0,
+          "note": "D#5",
+          "probability": 0.985,
+          "timeSeconds": 2.595
+        },
+        {
+          "midi": 74.9,
+          "note": "D#5",
+          "probability": 0.946,
+          "timeSeconds": 2.606
+        },
+        {
+          "midi": 74.9,
+          "note": "D#5",
+          "probability": 0.827,
+          "timeSeconds": 2.618
+        },
+        {
+          "midi": 74.8,
+          "note": "D#5",
+          "probability": 0.616,
+          "timeSeconds": 2.63
+        },
+        {
+          "midi": 74.6,
+          "note": "D#5",
+          "probability": 0.372,
+          "timeSeconds": 2.641
+        },
+        {
+          "midi": 74.3,
+          "note": "D5",
+          "probability": 0.323,
+          "timeSeconds": 2.653
+        },
+        {
+          "midi": 74.1,
+          "note": "D5",
+          "probability": 0.372,
+          "timeSeconds": 2.664
+        },
+        {
+          "midi": 74.0,
+          "note": "D5",
+          "probability": 0.485,
+          "timeSeconds": 2.676
+        },
+        {
+          "midi": 73.9,
+          "note": "D5",
+          "probability": 0.686,
+          "timeSeconds": 2.688
+        },
+        {
+          "midi": 73.9,
+          "note": "D5",
+          "probability": 0.757,
+          "timeSeconds": 2.699
+        },
+        {
+          "midi": 73.9,
+          "note": "D5",
+          "probability": 0.827,
+          "timeSeconds": 2.711
+        },
+        {
+          "midi": 73.8,
+          "note": "D5",
+          "probability": 0.891,
+          "timeSeconds": 2.723
+        },
+        {
+          "midi": 73.8,
+          "note": "D5",
+          "probability": 0.891,
+          "timeSeconds": 2.734
+        },
+        {
+          "midi": 73.8,
+          "note": "D5",
+          "probability": 0.946,
+          "timeSeconds": 2.746
+        },
+        {
+          "midi": 73.8,
+          "note": "D5",
+          "probability": 0.946,
+          "timeSeconds": 2.757
+        },
+        {
+          "midi": 73.8,
+          "note": "D5",
+          "probability": 0.946,
+          "timeSeconds": 2.769
+        },
+        {
+          "midi": 73.8,
+          "note": "D5",
+          "probability": 0.946,
+          "timeSeconds": 2.781
+        },
+        {
+          "midi": 73.9,
+          "note": "D5",
+          "probability": 0.891,
+          "timeSeconds": 2.792
+        },
+        {
+          "midi": 73.9,
+          "note": "D5",
+          "probability": 0.827,
+          "timeSeconds": 2.804
+        },
+        {
+          "midi": 73.9,
+          "note": "D5",
+          "probability": 0.686,
+          "timeSeconds": 2.815
+        },
+        {
+          "midi": 73.9,
+          "note": "D5",
+          "probability": 0.549,
+          "timeSeconds": 2.827
+        },
+        {
+          "midi": 74.0,
+          "note": "D5",
+          "probability": 0.372,
+          "timeSeconds": 2.839
+        },
+        {
+          "midi": 74.2,
+          "note": "D5",
+          "probability": 0.207,
+          "timeSeconds": 2.85
+        },
+        {
+          "midi": 74.4,
+          "note": "D5",
+          "probability": 0.177,
+          "timeSeconds": 2.862
+        },
+        {
+          "midi": 74.6,
+          "note": "D#5",
+          "probability": 0.241,
+          "timeSeconds": 2.873
+        },
+        {
+          "midi": 74.7,
+          "note": "D#5",
+          "probability": 0.426,
+          "timeSeconds": 2.885
+        },
+        {
+          "midi": 74.8,
+          "note": "D#5",
+          "probability": 0.616,
+          "timeSeconds": 2.897
+        },
+        {
+          "midi": 74.8,
+          "note": "D#5",
+          "probability": 0.827,
+          "timeSeconds": 2.908
+        },
+        {
+          "midi": 74.9,
+          "note": "D#5",
+          "probability": 0.827,
+          "timeSeconds": 2.92
+        },
+        {
+          "midi": 74.9,
+          "note": "D#5",
+          "probability": 0.891,
+          "timeSeconds": 2.932
+        },
+        {
+          "midi": 74.9,
+          "note": "D#5",
+          "probability": 0.946,
+          "timeSeconds": 2.943
+        },
+        {
+          "midi": 74.9,
+          "note": "D#5",
+          "probability": 0.946,
+          "timeSeconds": 2.955
+        },
+        {
+          "midi": 74.9,
+          "note": "D#5",
+          "probability": 0.985,
+          "timeSeconds": 2.966
+        },
+        {
+          "midi": 74.9,
+          "note": "D#5",
+          "probability": 0.985,
+          "timeSeconds": 2.978
+        },
+        {
+          "midi": 74.9,
+          "note": "D#5",
+          "probability": 0.985,
+          "timeSeconds": 2.99
+        },
+        {
+          "midi": 74.9,
+          "note": "D#5",
+          "probability": 0.985,
+          "timeSeconds": 3.001
+        },
+        {
+          "midi": 74.8,
+          "note": "D#5",
+          "probability": 0.946,
+          "timeSeconds": 3.013
+        },
+        {
+          "midi": 74.6,
+          "note": "D#5",
+          "probability": 0.757,
+          "timeSeconds": 3.024
+        },
+        {
+          "midi": 74.4,
+          "note": "D5",
+          "probability": 0.616,
+          "timeSeconds": 3.036
+        },
+        {
+          "midi": 74.2,
+          "note": "D5",
+          "probability": 0.549,
+          "timeSeconds": 3.048
+        },
+        {
+          "midi": 74.1,
+          "note": "D5",
+          "probability": 0.616,
+          "timeSeconds": 3.059
+        },
+        {
+          "midi": 74.1,
+          "note": "D5",
+          "probability": 0.616,
+          "timeSeconds": 3.071
+        },
+        {
+          "midi": 74.1,
+          "note": "D5",
+          "probability": 0.686,
+          "timeSeconds": 3.082
+        },
+        {
+          "midi": 74.0,
+          "note": "D5",
+          "probability": 0.686,
+          "timeSeconds": 3.094
+        },
+        {
+          "midi": 74.0,
+          "note": "D5",
+          "probability": 0.686,
+          "timeSeconds": 3.106
+        }
+      ],
+      "spectralPeak": [
+        {
+          "midi": 74.142,
+          "note": "D5",
+          "timeSeconds": 0.0
+        },
+        {
+          "midi": 74.142,
+          "note": "D5",
+          "timeSeconds": 0.012
+        },
+        {
+          "midi": 74.142,
+          "note": "D5",
+          "timeSeconds": 0.023
+        },
+        {
+          "midi": 74.142,
+          "note": "D5",
+          "timeSeconds": 0.035
+        },
+        {
+          "midi": 74.142,
+          "note": "D5",
+          "timeSeconds": 0.046
+        },
+        {
+          "midi": 74.142,
+          "note": "D5",
+          "timeSeconds": 0.058
+        },
+        {
+          "midi": 74.142,
+          "note": "D5",
+          "timeSeconds": 0.07
+        },
+        {
+          "midi": 74.142,
+          "note": "D5",
+          "timeSeconds": 0.081
+        },
+        {
+          "midi": 74.142,
+          "note": "D5",
+          "timeSeconds": 0.093
+        },
+        {
+          "midi": 67.741,
+          "note": "G#4",
+          "timeSeconds": 0.104
+        },
+        {
+          "midi": 67.741,
+          "note": "G#4",
+          "timeSeconds": 0.116
+        },
+        {
+          "midi": 67.741,
+          "note": "G#4",
+          "timeSeconds": 0.128
+        },
+        {
+          "midi": 67.741,
+          "note": "G#4",
+          "timeSeconds": 0.139
+        },
+        {
+          "midi": 68.19,
+          "note": "G#4",
+          "timeSeconds": 0.151
+        },
+        {
+          "midi": 68.19,
+          "note": "G#4",
+          "timeSeconds": 0.163
+        },
+        {
+          "midi": 68.19,
+          "note": "G#4",
+          "timeSeconds": 0.174
+        },
+        {
+          "midi": 67.741,
+          "note": "G#4",
+          "timeSeconds": 0.186
+        },
+        {
+          "midi": 67.741,
+          "note": "G#4",
+          "timeSeconds": 0.197
+        },
+        {
+          "midi": 67.741,
+          "note": "G#4",
+          "timeSeconds": 0.209
+        },
+        {
+          "midi": 67.741,
+          "note": "G#4",
+          "timeSeconds": 0.221
+        },
+        {
+          "midi": 67.741,
+          "note": "G#4",
+          "timeSeconds": 0.232
+        },
+        {
+          "midi": 74.142,
+          "note": "D5",
+          "timeSeconds": 0.244
+        },
+        {
+          "midi": 74.454,
+          "note": "D5",
+          "timeSeconds": 0.255
+        },
+        {
+          "midi": 74.454,
+          "note": "D5",
+          "timeSeconds": 0.267
+        },
+        {
+          "midi": 74.76,
+          "note": "D#5",
+          "timeSeconds": 0.279
+        },
+        {
+          "midi": 74.76,
+          "note": "D#5",
+          "timeSeconds": 0.29
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 0.302
+        },
+        {
+          "midi": 74.76,
+          "note": "D#5",
+          "timeSeconds": 0.313
+        },
+        {
+          "midi": 74.76,
+          "note": "D#5",
+          "timeSeconds": 0.325
+        },
+        {
+          "midi": 75.357,
+          "note": "D#5",
+          "timeSeconds": 0.337
+        },
+        {
+          "midi": 75.357,
+          "note": "D#5",
+          "timeSeconds": 0.348
+        },
+        {
+          "midi": 75.357,
+          "note": "D#5",
+          "timeSeconds": 0.36
+        },
+        {
+          "midi": 75.357,
+          "note": "D#5",
+          "timeSeconds": 0.372
+        },
+        {
+          "midi": 75.357,
+          "note": "D#5",
+          "timeSeconds": 0.383
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 0.395
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 0.406
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 0.418
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 0.43
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 0.441
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 0.453
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 0.464
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 0.476
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 0.488
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 0.499
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 0.511
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 0.522
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 0.534
+        },
+        {
+          "midi": 85.984,
+          "note": "D6",
+          "timeSeconds": 0.546
+        },
+        {
+          "midi": 86.142,
+          "note": "D6",
+          "timeSeconds": 0.557
+        },
+        {
+          "midi": 86.142,
+          "note": "D6",
+          "timeSeconds": 0.569
+        },
+        {
+          "midi": 86.142,
+          "note": "D6",
+          "timeSeconds": 0.58
+        },
+        {
+          "midi": 86.142,
+          "note": "D6",
+          "timeSeconds": 0.592
+        },
+        {
+          "midi": 86.142,
+          "note": "D6",
+          "timeSeconds": 0.604
+        },
+        {
+          "midi": 74.142,
+          "note": "D5",
+          "timeSeconds": 0.615
+        },
+        {
+          "midi": 74.142,
+          "note": "D5",
+          "timeSeconds": 0.627
+        },
+        {
+          "midi": 74.142,
+          "note": "D5",
+          "timeSeconds": 0.639
+        },
+        {
+          "midi": 74.142,
+          "note": "D5",
+          "timeSeconds": 0.65
+        },
+        {
+          "midi": 74.142,
+          "note": "D5",
+          "timeSeconds": 0.662
+        },
+        {
+          "midi": 74.142,
+          "note": "D5",
+          "timeSeconds": 0.673
+        },
+        {
+          "midi": 74.76,
+          "note": "D#5",
+          "timeSeconds": 0.685
+        },
+        {
+          "midi": 74.76,
+          "note": "D#5",
+          "timeSeconds": 0.697
+        },
+        {
+          "midi": 74.76,
+          "note": "D#5",
+          "timeSeconds": 0.708
+        },
+        {
+          "midi": 74.76,
+          "note": "D#5",
+          "timeSeconds": 0.72
+        },
+        {
+          "midi": 74.76,
+          "note": "D#5",
+          "timeSeconds": 0.731
+        },
+        {
+          "midi": 74.454,
+          "note": "D5",
+          "timeSeconds": 0.743
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 0.755
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 0.766
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 0.778
+        },
+        {
+          "midi": 74.76,
+          "note": "D#5",
+          "timeSeconds": 0.789
+        },
+        {
+          "midi": 74.76,
+          "note": "D#5",
+          "timeSeconds": 0.801
+        },
+        {
+          "midi": 74.76,
+          "note": "D#5",
+          "timeSeconds": 0.813
+        },
+        {
+          "midi": 74.76,
+          "note": "D#5",
+          "timeSeconds": 0.824
+        },
+        {
+          "midi": 74.76,
+          "note": "D#5",
+          "timeSeconds": 0.836
+        },
+        {
+          "midi": 74.76,
+          "note": "D#5",
+          "timeSeconds": 0.848
+        },
+        {
+          "midi": 74.76,
+          "note": "D#5",
+          "timeSeconds": 0.859
+        },
+        {
+          "midi": 74.76,
+          "note": "D#5",
+          "timeSeconds": 0.871
+        },
+        {
+          "midi": 71.421,
+          "note": "B4",
+          "timeSeconds": 0.882
+        },
+        {
+          "midi": 71.785,
+          "note": "C5",
+          "timeSeconds": 0.894
+        },
+        {
+          "midi": 71.785,
+          "note": "C5",
+          "timeSeconds": 0.906
+        },
+        {
+          "midi": 72.142,
+          "note": "C5",
+          "timeSeconds": 0.917
+        },
+        {
+          "midi": 72.142,
+          "note": "C5",
+          "timeSeconds": 0.929
+        },
+        {
+          "midi": 72.142,
+          "note": "C5",
+          "timeSeconds": 0.94
+        },
+        {
+          "midi": 72.142,
+          "note": "C5",
+          "timeSeconds": 0.952
+        },
+        {
+          "midi": 72.142,
+          "note": "C5",
+          "timeSeconds": 0.964
+        },
+        {
+          "midi": 72.142,
+          "note": "C5",
+          "timeSeconds": 0.975
+        },
+        {
+          "midi": 72.142,
+          "note": "C5",
+          "timeSeconds": 0.987
+        },
+        {
+          "midi": 72.142,
+          "note": "C5",
+          "timeSeconds": 0.998
+        },
+        {
+          "midi": 72.142,
+          "note": "C5",
+          "timeSeconds": 1.01
+        },
+        {
+          "midi": 72.142,
+          "note": "C5",
+          "timeSeconds": 1.022
+        },
+        {
+          "midi": 72.142,
+          "note": "C5",
+          "timeSeconds": 1.033
+        },
+        {
+          "midi": 72.142,
+          "note": "C5",
+          "timeSeconds": 1.045
+        },
+        {
+          "midi": 72.492,
+          "note": "C5",
+          "timeSeconds": 1.057
+        },
+        {
+          "midi": 72.492,
+          "note": "C5",
+          "timeSeconds": 1.068
+        },
+        {
+          "midi": 72.492,
+          "note": "C5",
+          "timeSeconds": 1.08
+        },
+        {
+          "midi": 72.492,
+          "note": "C5",
+          "timeSeconds": 1.091
+        },
+        {
+          "midi": 72.492,
+          "note": "C5",
+          "timeSeconds": 1.103
+        },
+        {
+          "midi": 72.142,
+          "note": "C5",
+          "timeSeconds": 1.115
+        },
+        {
+          "midi": 72.492,
+          "note": "C5",
+          "timeSeconds": 1.126
+        },
+        {
+          "midi": 72.492,
+          "note": "C5",
+          "timeSeconds": 1.138
+        },
+        {
+          "midi": 72.142,
+          "note": "C5",
+          "timeSeconds": 1.149
+        },
+        {
+          "midi": 85.984,
+          "note": "D6",
+          "timeSeconds": 1.161
+        },
+        {
+          "midi": 85.984,
+          "note": "D6",
+          "timeSeconds": 1.173
+        },
+        {
+          "midi": 93.056,
+          "note": "A6",
+          "timeSeconds": 1.184
+        },
+        {
+          "midi": 93.056,
+          "note": "A6",
+          "timeSeconds": 1.196
+        },
+        {
+          "midi": 93.056,
+          "note": "A6",
+          "timeSeconds": 1.207
+        },
+        {
+          "midi": 93.056,
+          "note": "A6",
+          "timeSeconds": 1.219
+        },
+        {
+          "midi": 93.056,
+          "note": "A6",
+          "timeSeconds": 1.231
+        },
+        {
+          "midi": 93.056,
+          "note": "A6",
+          "timeSeconds": 1.242
+        },
+        {
+          "midi": 74.142,
+          "note": "D5",
+          "timeSeconds": 1.254
+        },
+        {
+          "midi": 74.142,
+          "note": "D5",
+          "timeSeconds": 1.265
+        },
+        {
+          "midi": 74.142,
+          "note": "D5",
+          "timeSeconds": 1.277
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 1.289
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 1.3
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 1.312
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 1.324
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 1.335
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 1.347
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 1.358
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 1.37
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 1.382
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 1.393
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 1.405
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 1.416
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 1.428
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 1.44
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 1.451
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 1.463
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 1.474
+        },
+        {
+          "midi": 74.142,
+          "note": "D5",
+          "timeSeconds": 1.486
+        },
+        {
+          "midi": 74.142,
+          "note": "D5",
+          "timeSeconds": 1.498
+        },
+        {
+          "midi": 85.984,
+          "note": "D6",
+          "timeSeconds": 1.509
+        },
+        {
+          "midi": 85.984,
+          "note": "D6",
+          "timeSeconds": 1.521
+        },
+        {
+          "midi": 85.984,
+          "note": "D6",
+          "timeSeconds": 1.533
+        },
+        {
+          "midi": 85.984,
+          "note": "D6",
+          "timeSeconds": 1.544
+        },
+        {
+          "midi": 85.984,
+          "note": "D6",
+          "timeSeconds": 1.556
+        },
+        {
+          "midi": 85.984,
+          "note": "D6",
+          "timeSeconds": 1.567
+        },
+        {
+          "midi": 92.95,
+          "note": "A6",
+          "timeSeconds": 1.579
+        },
+        {
+          "midi": 92.95,
+          "note": "A6",
+          "timeSeconds": 1.591
+        },
+        {
+          "midi": 92.95,
+          "note": "A6",
+          "timeSeconds": 1.602
+        },
+        {
+          "midi": 92.95,
+          "note": "A6",
+          "timeSeconds": 1.614
+        },
+        {
+          "midi": 92.95,
+          "note": "A6",
+          "timeSeconds": 1.625
+        },
+        {
+          "midi": 93.056,
+          "note": "A6",
+          "timeSeconds": 1.637
+        },
+        {
+          "midi": 93.056,
+          "note": "A6",
+          "timeSeconds": 1.649
+        },
+        {
+          "midi": 93.056,
+          "note": "A6",
+          "timeSeconds": 1.66
+        },
+        {
+          "midi": 93.056,
+          "note": "A6",
+          "timeSeconds": 1.672
+        },
+        {
+          "midi": 93.056,
+          "note": "A6",
+          "timeSeconds": 1.683
+        },
+        {
+          "midi": 93.056,
+          "note": "A6",
+          "timeSeconds": 1.695
+        },
+        {
+          "midi": 93.056,
+          "note": "A6",
+          "timeSeconds": 1.707
+        },
+        {
+          "midi": 93.056,
+          "note": "A6",
+          "timeSeconds": 1.718
+        },
+        {
+          "midi": 74.142,
+          "note": "D5",
+          "timeSeconds": 1.73
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 1.741
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 1.753
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 1.765
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 1.776
+        },
+        {
+          "midi": 75.357,
+          "note": "D#5",
+          "timeSeconds": 1.788
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 1.8
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 1.811
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 1.823
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 1.834
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 1.846
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 1.858
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 1.869
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 1.881
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 1.892
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 1.904
+        },
+        {
+          "midi": 74.76,
+          "note": "D#5",
+          "timeSeconds": 1.916
+        },
+        {
+          "midi": 74.454,
+          "note": "D5",
+          "timeSeconds": 1.927
+        },
+        {
+          "midi": 74.76,
+          "note": "D#5",
+          "timeSeconds": 1.939
+        },
+        {
+          "midi": 74.76,
+          "note": "D#5",
+          "timeSeconds": 1.95
+        },
+        {
+          "midi": 74.76,
+          "note": "D#5",
+          "timeSeconds": 1.962
+        },
+        {
+          "midi": 74.76,
+          "note": "D#5",
+          "timeSeconds": 1.974
+        },
+        {
+          "midi": 74.76,
+          "note": "D#5",
+          "timeSeconds": 1.985
+        },
+        {
+          "midi": 85.984,
+          "note": "D6",
+          "timeSeconds": 1.997
+        },
+        {
+          "midi": 85.984,
+          "note": "D6",
+          "timeSeconds": 2.009
+        },
+        {
+          "midi": 93.056,
+          "note": "A6",
+          "timeSeconds": 2.02
+        },
+        {
+          "midi": 93.056,
+          "note": "A6",
+          "timeSeconds": 2.032
+        },
+        {
+          "midi": 93.056,
+          "note": "A6",
+          "timeSeconds": 2.043
+        },
+        {
+          "midi": 93.056,
+          "note": "A6",
+          "timeSeconds": 2.055
+        },
+        {
+          "midi": 93.056,
+          "note": "A6",
+          "timeSeconds": 2.067
+        },
+        {
+          "midi": 93.056,
+          "note": "A6",
+          "timeSeconds": 2.078
+        },
+        {
+          "midi": 93.056,
+          "note": "A6",
+          "timeSeconds": 2.09
+        },
+        {
+          "midi": 74.142,
+          "note": "D5",
+          "timeSeconds": 2.101
+        },
+        {
+          "midi": 74.142,
+          "note": "D5",
+          "timeSeconds": 2.113
+        },
+        {
+          "midi": 71.785,
+          "note": "C5",
+          "timeSeconds": 2.125
+        },
+        {
+          "midi": 71.785,
+          "note": "C5",
+          "timeSeconds": 2.136
+        },
+        {
+          "midi": 72.142,
+          "note": "C5",
+          "timeSeconds": 2.148
+        },
+        {
+          "midi": 72.142,
+          "note": "C5",
+          "timeSeconds": 2.159
+        },
+        {
+          "midi": 72.142,
+          "note": "C5",
+          "timeSeconds": 2.171
+        },
+        {
+          "midi": 72.142,
+          "note": "C5",
+          "timeSeconds": 2.183
+        },
+        {
+          "midi": 72.142,
+          "note": "C5",
+          "timeSeconds": 2.194
+        },
+        {
+          "midi": 72.142,
+          "note": "C5",
+          "timeSeconds": 2.206
+        },
+        {
+          "midi": 72.142,
+          "note": "C5",
+          "timeSeconds": 2.218
+        },
+        {
+          "midi": 72.142,
+          "note": "C5",
+          "timeSeconds": 2.229
+        },
+        {
+          "midi": 72.142,
+          "note": "C5",
+          "timeSeconds": 2.241
+        },
+        {
+          "midi": 72.142,
+          "note": "C5",
+          "timeSeconds": 2.252
+        },
+        {
+          "midi": 72.142,
+          "note": "C5",
+          "timeSeconds": 2.264
+        },
+        {
+          "midi": 72.142,
+          "note": "C5",
+          "timeSeconds": 2.276
+        },
+        {
+          "midi": 72.142,
+          "note": "C5",
+          "timeSeconds": 2.287
+        },
+        {
+          "midi": 71.785,
+          "note": "C5",
+          "timeSeconds": 2.299
+        },
+        {
+          "midi": 85.824,
+          "note": "D6",
+          "timeSeconds": 2.31
+        },
+        {
+          "midi": 85.824,
+          "note": "D6",
+          "timeSeconds": 2.322
+        },
+        {
+          "midi": 85.984,
+          "note": "D6",
+          "timeSeconds": 2.334
+        },
+        {
+          "midi": 85.984,
+          "note": "D6",
+          "timeSeconds": 2.345
+        },
+        {
+          "midi": 85.984,
+          "note": "D6",
+          "timeSeconds": 2.357
+        },
+        {
+          "midi": 85.984,
+          "note": "D6",
+          "timeSeconds": 2.368
+        },
+        {
+          "midi": 92.95,
+          "note": "A6",
+          "timeSeconds": 2.38
+        },
+        {
+          "midi": 73.824,
+          "note": "D5",
+          "timeSeconds": 2.392
+        },
+        {
+          "midi": 73.824,
+          "note": "D5",
+          "timeSeconds": 2.403
+        },
+        {
+          "midi": 73.824,
+          "note": "D5",
+          "timeSeconds": 2.415
+        },
+        {
+          "midi": 73.824,
+          "note": "D5",
+          "timeSeconds": 2.426
+        },
+        {
+          "midi": 74.142,
+          "note": "D5",
+          "timeSeconds": 2.438
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 2.45
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 2.461
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 2.473
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 2.485
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 2.496
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 2.508
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 2.519
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 2.531
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 2.543
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 2.554
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 2.566
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 2.577
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 2.589
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 2.601
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 2.612
+        },
+        {
+          "midi": 93.981,
+          "note": "A#6",
+          "timeSeconds": 2.624
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 2.635
+        },
+        {
+          "midi": 75.061,
+          "note": "D#5",
+          "timeSeconds": 2.647
+        },
+        {
+          "midi": 74.76,
+          "note": "D#5",
+          "timeSeconds": 2.659
+        },
+        {
+          "midi": 85.984,
+          "note": "D6",
+          "timeSeconds": 2.67
+        },
+        {
+          "midi": 85.824,
+          "note": "D6",
+          "timeSeconds": 2.682
+        },
+        {
+          "midi": 85.824,
+          "note": "D6",
+          "timeSeconds": 2.694
+        },
+        {
+          "midi": 85.824,
+          "note": "D6",
+          "timeSeconds": 2.705
+        },
+        {
+          "midi": 85.824,
+          "note": "D6",
+          "timeSeconds": 2.717
+        },
+        {
+          "midi": 85.824,
+          "note": "D6",
+          "timeSeconds": 2.728
+        },
+        {
+          "midi": 85.824,
+          "note": "D6",
+          "timeSeconds": 2.74
+        },
+        {
+          "midi": 85.824,
+          "note": "D6",
+          "timeSeconds": 2.752
+        },
+        {
+          "midi": 85.824,
+          "note": "D6",
+          "timeSeconds": 2.763
+        },
+        {
+          "midi": 85.824,
+          "note": "D6",
+          "timeSeconds": 2.775
+        },
+        {
+          "midi": 85.824,
+          "note": "D6",
+          "timeSeconds": 2.786
+        },
+        {
+          "midi": 73.824,
+          "note": "D5",
+          "timeSeconds": 2.798
+        },
+        {
+          "midi": 73.824,
+          "note": "D5",
+          "timeSeconds": 2.81
+        },
+        {
+          "midi": 73.824,
+          "note": "D5",
+          "timeSeconds": 2.821
+        },
+        {
+          "midi": 73.824,
+          "note": "D5",
+          "timeSeconds": 2.833
+        },
+        {
+          "midi": 73.824,
+          "note": "D5",
+          "timeSeconds": 2.844
+        },
+        {
+          "midi": 74.142,
+          "note": "D5",
+          "timeSeconds": 2.856
+        },
+        {
+          "midi": 74.142,
+          "note": "D5",
+          "timeSeconds": 2.868
+        },
+        {
+          "midi": 74.454,
+          "note": "D5",
+          "timeSeconds": 2.879
+        },
+        {
+          "midi": 74.76,
+          "note": "D#5",
+          "timeSeconds": 2.891
+        },
+        {
+          "midi": 74.76,
+          "note": "D#5",
+          "timeSeconds": 2.902
+        },
+        {
+          "midi": 74.76,
+          "note": "D#5",
+          "timeSeconds": 2.914
+        },
+        {
+          "midi": 74.76,
+          "note": "D#5",
+          "timeSeconds": 2.926
+        },
+        {
+          "midi": 74.76,
+          "note": "D#5",
+          "timeSeconds": 2.937
+        },
+        {
+          "midi": 74.76,
+          "note": "D#5",
+          "timeSeconds": 2.949
+        },
+        {
+          "midi": 74.76,
+          "note": "D#5",
+          "timeSeconds": 2.961
+        },
+        {
+          "midi": 74.76,
+          "note": "D#5",
+          "timeSeconds": 2.972
+        },
+        {
+          "midi": 74.76,
+          "note": "D#5",
+          "timeSeconds": 2.984
+        },
+        {
+          "midi": 74.76,
+          "note": "D#5",
+          "timeSeconds": 2.995
+        },
+        {
+          "midi": 74.76,
+          "note": "D#5",
+          "timeSeconds": 3.007
+        },
+        {
+          "midi": 74.76,
+          "note": "D#5",
+          "timeSeconds": 3.019
+        },
+        {
+          "midi": 74.76,
+          "note": "D#5",
+          "timeSeconds": 3.03
+        },
+        {
+          "midi": 74.76,
+          "note": "D#5",
+          "timeSeconds": 3.042
+        },
+        {
+          "midi": 74.76,
+          "note": "D#5",
+          "timeSeconds": 3.053
+        },
+        {
+          "midi": 92.95,
+          "note": "A6",
+          "timeSeconds": 3.065
+        },
+        {
+          "midi": 92.95,
+          "note": "A6",
+          "timeSeconds": 3.077
+        },
+        {
+          "midi": 92.95,
+          "note": "A6",
+          "timeSeconds": 3.088
+        },
+        {
+          "midi": 92.95,
+          "note": "A6",
+          "timeSeconds": 3.1
+        }
+      ],
+      "yin": [
+        {
+          "midi": 74.244,
+          "note": "D5",
+          "timeSeconds": 0.0
+        },
+        {
+          "midi": 74.321,
+          "note": "D5",
+          "timeSeconds": 0.012
+        },
+        {
+          "midi": 74.363,
+          "note": "D5",
+          "timeSeconds": 0.023
+        },
+        {
+          "midi": 74.451,
+          "note": "D5",
+          "timeSeconds": 0.035
+        },
+        {
+          "midi": 74.479,
+          "note": "D5",
+          "timeSeconds": 0.046
+        },
+        {
+          "midi": 54.923,
+          "note": "G3",
+          "timeSeconds": 0.058
+        },
+        {
+          "midi": 54.923,
+          "note": "G3",
+          "timeSeconds": 0.07
+        },
+        {
+          "midi": 54.923,
+          "note": "G3",
+          "timeSeconds": 0.081
+        },
+        {
+          "midi": 54.923,
+          "note": "G3",
+          "timeSeconds": 0.093
+        },
+        {
+          "midi": 55.023,
+          "note": "G3",
+          "timeSeconds": 0.104
+        },
+        {
+          "midi": 55.362,
+          "note": "G3",
+          "timeSeconds": 0.116
+        },
+        {
+          "midi": 69.172,
+          "note": "A4",
+          "timeSeconds": 0.128
+        },
+        {
+          "midi": 69.071,
+          "note": "A4",
+          "timeSeconds": 0.139
+        },
+        {
+          "midi": 69.007,
+          "note": "A4",
+          "timeSeconds": 0.151
+        },
+        {
+          "midi": 68.692,
+          "note": "A4",
+          "timeSeconds": 0.163
+        },
+        {
+          "midi": 68.732,
+          "note": "A4",
+          "timeSeconds": 0.174
+        },
+        {
+          "midi": 68.691,
+          "note": "A4",
+          "timeSeconds": 0.186
+        },
+        {
+          "midi": 68.549,
+          "note": "A4",
+          "timeSeconds": 0.197
+        },
+        {
+          "midi": 55.293,
+          "note": "G3",
+          "timeSeconds": 0.209
+        },
+        {
+          "midi": 55.246,
+          "note": "G3",
+          "timeSeconds": 0.221
+        },
+        {
+          "midi": 55.292,
+          "note": "G3",
+          "timeSeconds": 0.232
+        },
+        {
+          "midi": 55.359,
+          "note": "G3",
+          "timeSeconds": 0.244
+        },
+        {
+          "midi": 55.499,
+          "note": "G3",
+          "timeSeconds": 0.255
+        },
+        {
+          "midi": 55.624,
+          "note": "G#3",
+          "timeSeconds": 0.267
+        },
+        {
+          "midi": 55.742,
+          "note": "G#3",
+          "timeSeconds": 0.279
+        },
+        {
+          "midi": 55.814,
+          "note": "G#3",
+          "timeSeconds": 0.29
+        },
+        {
+          "midi": 55.892,
+          "note": "G#3",
+          "timeSeconds": 0.302
+        },
+        {
+          "midi": 56.08,
+          "note": "G#3",
+          "timeSeconds": 0.313
+        },
+        {
+          "midi": 75.202,
+          "note": "D#5",
+          "timeSeconds": 0.325
+        },
+        {
+          "midi": 75.272,
+          "note": "D#5",
+          "timeSeconds": 0.337
+        },
+        {
+          "midi": 75.248,
+          "note": "D#5",
+          "timeSeconds": 0.348
+        },
+        {
+          "midi": 75.23,
+          "note": "D#5",
+          "timeSeconds": 0.36
+        },
+        {
+          "midi": 75.234,
+          "note": "D#5",
+          "timeSeconds": 0.372
+        },
+        {
+          "midi": 75.216,
+          "note": "D#5",
+          "timeSeconds": 0.383
+        },
+        {
+          "midi": 75.209,
+          "note": "D#5",
+          "timeSeconds": 0.395
+        },
+        {
+          "midi": 75.198,
+          "note": "D#5",
+          "timeSeconds": 0.406
+        },
+        {
+          "midi": 75.19,
+          "note": "D#5",
+          "timeSeconds": 0.418
+        },
+        {
+          "midi": 75.183,
+          "note": "D#5",
+          "timeSeconds": 0.43
+        },
+        {
+          "midi": 75.178,
+          "note": "D#5",
+          "timeSeconds": 0.441
+        },
+        {
+          "midi": 75.173,
+          "note": "D#5",
+          "timeSeconds": 0.453
+        },
+        {
+          "midi": 75.161,
+          "note": "D#5",
+          "timeSeconds": 0.464
+        },
+        {
+          "midi": 75.147,
+          "note": "D#5",
+          "timeSeconds": 0.476
+        },
+        {
+          "midi": 75.096,
+          "note": "D#5",
+          "timeSeconds": 0.488
+        },
+        {
+          "midi": 75.005,
+          "note": "D#5",
+          "timeSeconds": 0.499
+        },
+        {
+          "midi": 74.727,
+          "note": "D#5",
+          "timeSeconds": 0.511
+        },
+        {
+          "midi": 74.365,
+          "note": "D5",
+          "timeSeconds": 0.522
+        },
+        {
+          "midi": 74.227,
+          "note": "D5",
+          "timeSeconds": 0.534
+        },
+        {
+          "midi": 74.182,
+          "note": "D5",
+          "timeSeconds": 0.546
+        },
+        {
+          "midi": 74.155,
+          "note": "D5",
+          "timeSeconds": 0.557
+        },
+        {
+          "midi": 74.143,
+          "note": "D5",
+          "timeSeconds": 0.569
+        },
+        {
+          "midi": 74.141,
+          "note": "D5",
+          "timeSeconds": 0.58
+        },
+        {
+          "midi": 74.135,
+          "note": "D5",
+          "timeSeconds": 0.592
+        },
+        {
+          "midi": 74.14,
+          "note": "D5",
+          "timeSeconds": 0.604
+        },
+        {
+          "midi": 74.149,
+          "note": "D5",
+          "timeSeconds": 0.615
+        },
+        {
+          "midi": 74.177,
+          "note": "D5",
+          "timeSeconds": 0.627
+        },
+        {
+          "midi": 74.22,
+          "note": "D5",
+          "timeSeconds": 0.639
+        },
+        {
+          "midi": 74.271,
+          "note": "D5",
+          "timeSeconds": 0.65
+        },
+        {
+          "midi": 74.347,
+          "note": "D5",
+          "timeSeconds": 0.662
+        },
+        {
+          "midi": 74.428,
+          "note": "D5",
+          "timeSeconds": 0.673
+        },
+        {
+          "midi": 74.497,
+          "note": "D5",
+          "timeSeconds": 0.685
+        },
+        {
+          "midi": 74.585,
+          "note": "D#5",
+          "timeSeconds": 0.697
+        },
+        {
+          "midi": 74.659,
+          "note": "D#5",
+          "timeSeconds": 0.708
+        },
+        {
+          "midi": 74.719,
+          "note": "D#5",
+          "timeSeconds": 0.72
+        },
+        {
+          "midi": 74.801,
+          "note": "D#5",
+          "timeSeconds": 0.731
+        },
+        {
+          "midi": 74.847,
+          "note": "D#5",
+          "timeSeconds": 0.743
+        },
+        {
+          "midi": 74.823,
+          "note": "D#5",
+          "timeSeconds": 0.755
+        },
+        {
+          "midi": 74.734,
+          "note": "D#5",
+          "timeSeconds": 0.766
+        },
+        {
+          "midi": 74.679,
+          "note": "D#5",
+          "timeSeconds": 0.778
+        },
+        {
+          "midi": 74.638,
+          "note": "D#5",
+          "timeSeconds": 0.789
+        },
+        {
+          "midi": 74.601,
+          "note": "D#5",
+          "timeSeconds": 0.801
+        },
+        {
+          "midi": 74.574,
+          "note": "D#5",
+          "timeSeconds": 0.813
+        },
+        {
+          "midi": 74.491,
+          "note": "D5",
+          "timeSeconds": 0.824
+        },
+        {
+          "midi": 74.379,
+          "note": "D5",
+          "timeSeconds": 0.836
+        },
+        {
+          "midi": 74.189,
+          "note": "D5",
+          "timeSeconds": 0.848
+        },
+        {
+          "midi": 73.887,
+          "note": "D5",
+          "timeSeconds": 0.859
+        },
+        {
+          "midi": 73.515,
+          "note": "D5",
+          "timeSeconds": 0.871
+        },
+        {
+          "midi": 73.061,
+          "note": "C#5",
+          "timeSeconds": 0.882
+        },
+        {
+          "midi": 72.663,
+          "note": "C#5",
+          "timeSeconds": 0.894
+        },
+        {
+          "midi": 72.426,
+          "note": "C5",
+          "timeSeconds": 0.906
+        },
+        {
+          "midi": 72.248,
+          "note": "C5",
+          "timeSeconds": 0.917
+        },
+        {
+          "midi": 72.224,
+          "note": "C5",
+          "timeSeconds": 0.929
+        },
+        {
+          "midi": 72.229,
+          "note": "C5",
+          "timeSeconds": 0.94
+        },
+        {
+          "midi": 72.234,
+          "note": "C5",
+          "timeSeconds": 0.952
+        },
+        {
+          "midi": 72.258,
+          "note": "C5",
+          "timeSeconds": 0.964
+        },
+        {
+          "midi": 72.256,
+          "note": "C5",
+          "timeSeconds": 0.975
+        },
+        {
+          "midi": 72.246,
+          "note": "C5",
+          "timeSeconds": 0.987
+        },
+        {
+          "midi": 72.262,
+          "note": "C5",
+          "timeSeconds": 0.998
+        },
+        {
+          "midi": 72.291,
+          "note": "C5",
+          "timeSeconds": 1.01
+        },
+        {
+          "midi": 72.325,
+          "note": "C5",
+          "timeSeconds": 1.022
+        },
+        {
+          "midi": 72.362,
+          "note": "C5",
+          "timeSeconds": 1.033
+        },
+        {
+          "midi": 72.411,
+          "note": "C5",
+          "timeSeconds": 1.045
+        },
+        {
+          "midi": 72.511,
+          "note": "C#5",
+          "timeSeconds": 1.057
+        },
+        {
+          "midi": 72.745,
+          "note": "C#5",
+          "timeSeconds": 1.068
+        },
+        {
+          "midi": 72.895,
+          "note": "C#5",
+          "timeSeconds": 1.08
+        },
+        {
+          "midi": 73.138,
+          "note": "C#5",
+          "timeSeconds": 1.091
+        },
+        {
+          "midi": 73.377,
+          "note": "C#5",
+          "timeSeconds": 1.103
+        },
+        {
+          "midi": 73.74,
+          "note": "D5",
+          "timeSeconds": 1.115
+        },
+        {
+          "midi": 73.875,
+          "note": "D5",
+          "timeSeconds": 1.126
+        },
+        {
+          "midi": 73.968,
+          "note": "D5",
+          "timeSeconds": 1.138
+        },
+        {
+          "midi": 74.018,
+          "note": "D5",
+          "timeSeconds": 1.149
+        },
+        {
+          "midi": 74.034,
+          "note": "D5",
+          "timeSeconds": 1.161
+        },
+        {
+          "midi": 74.041,
+          "note": "D5",
+          "timeSeconds": 1.173
+        },
+        {
+          "midi": 74.046,
+          "note": "D5",
+          "timeSeconds": 1.184
+        },
+        {
+          "midi": 74.054,
+          "note": "D5",
+          "timeSeconds": 1.196
+        },
+        {
+          "midi": 74.058,
+          "note": "D5",
+          "timeSeconds": 1.207
+        },
+        {
+          "midi": 74.062,
+          "note": "D5",
+          "timeSeconds": 1.219
+        },
+        {
+          "midi": 74.081,
+          "note": "D5",
+          "timeSeconds": 1.231
+        },
+        {
+          "midi": 74.109,
+          "note": "D5",
+          "timeSeconds": 1.242
+        },
+        {
+          "midi": 74.217,
+          "note": "D5",
+          "timeSeconds": 1.254
+        },
+        {
+          "midi": 74.387,
+          "note": "D5",
+          "timeSeconds": 1.265
+        },
+        {
+          "midi": 74.642,
+          "note": "D#5",
+          "timeSeconds": 1.277
+        },
+        {
+          "midi": 74.8,
+          "note": "D#5",
+          "timeSeconds": 1.289
+        },
+        {
+          "midi": 74.928,
+          "note": "D#5",
+          "timeSeconds": 1.3
+        },
+        {
+          "midi": 75.0,
+          "note": "D#5",
+          "timeSeconds": 1.312
+        },
+        {
+          "midi": 75.041,
+          "note": "D#5",
+          "timeSeconds": 1.324
+        },
+        {
+          "midi": 75.058,
+          "note": "D#5",
+          "timeSeconds": 1.335
+        },
+        {
+          "midi": 75.078,
+          "note": "D#5",
+          "timeSeconds": 1.347
+        },
+        {
+          "midi": 75.083,
+          "note": "D#5",
+          "timeSeconds": 1.358
+        },
+        {
+          "midi": 75.094,
+          "note": "D#5",
+          "timeSeconds": 1.37
+        },
+        {
+          "midi": 75.103,
+          "note": "D#5",
+          "timeSeconds": 1.382
+        },
+        {
+          "midi": 75.096,
+          "note": "D#5",
+          "timeSeconds": 1.393
+        },
+        {
+          "midi": 75.098,
+          "note": "D#5",
+          "timeSeconds": 1.405
+        },
+        {
+          "midi": 75.091,
+          "note": "D#5",
+          "timeSeconds": 1.416
+        },
+        {
+          "midi": 75.096,
+          "note": "D#5",
+          "timeSeconds": 1.428
+        },
+        {
+          "midi": 75.073,
+          "note": "D#5",
+          "timeSeconds": 1.44
+        },
+        {
+          "midi": 74.996,
+          "note": "D#5",
+          "timeSeconds": 1.451
+        },
+        {
+          "midi": 74.846,
+          "note": "D#5",
+          "timeSeconds": 1.463
+        },
+        {
+          "midi": 74.543,
+          "note": "D#5",
+          "timeSeconds": 1.474
+        },
+        {
+          "midi": 74.275,
+          "note": "D5",
+          "timeSeconds": 1.486
+        },
+        {
+          "midi": 74.138,
+          "note": "D5",
+          "timeSeconds": 1.498
+        },
+        {
+          "midi": 74.067,
+          "note": "D5",
+          "timeSeconds": 1.509
+        },
+        {
+          "midi": 74.032,
+          "note": "D5",
+          "timeSeconds": 1.521
+        },
+        {
+          "midi": 74.005,
+          "note": "D5",
+          "timeSeconds": 1.533
+        },
+        {
+          "midi": 73.964,
+          "note": "D5",
+          "timeSeconds": 1.544
+        },
+        {
+          "midi": 73.94,
+          "note": "D5",
+          "timeSeconds": 1.556
+        },
+        {
+          "midi": 73.928,
+          "note": "D5",
+          "timeSeconds": 1.567
+        },
+        {
+          "midi": 73.919,
+          "note": "D5",
+          "timeSeconds": 1.579
+        },
+        {
+          "midi": 73.925,
+          "note": "D5",
+          "timeSeconds": 1.591
+        },
+        {
+          "midi": 73.934,
+          "note": "D5",
+          "timeSeconds": 1.602
+        },
+        {
+          "midi": 73.945,
+          "note": "D5",
+          "timeSeconds": 1.614
+        },
+        {
+          "midi": 73.954,
+          "note": "D5",
+          "timeSeconds": 1.625
+        },
+        {
+          "midi": 73.972,
+          "note": "D5",
+          "timeSeconds": 1.637
+        },
+        {
+          "midi": 73.99,
+          "note": "D5",
+          "timeSeconds": 1.649
+        },
+        {
+          "midi": 74.008,
+          "note": "D5",
+          "timeSeconds": 1.66
+        },
+        {
+          "midi": 74.03,
+          "note": "D5",
+          "timeSeconds": 1.672
+        },
+        {
+          "midi": 74.055,
+          "note": "D5",
+          "timeSeconds": 1.683
+        },
+        {
+          "midi": 74.082,
+          "note": "D5",
+          "timeSeconds": 1.695
+        },
+        {
+          "midi": 74.155,
+          "note": "D5",
+          "timeSeconds": 1.707
+        },
+        {
+          "midi": 74.252,
+          "note": "D5",
+          "timeSeconds": 1.718
+        },
+        {
+          "midi": 74.339,
+          "note": "D5",
+          "timeSeconds": 1.73
+        },
+        {
+          "midi": 74.415,
+          "note": "D5",
+          "timeSeconds": 1.741
+        },
+        {
+          "midi": 74.515,
+          "note": "D#5",
+          "timeSeconds": 1.753
+        },
+        {
+          "midi": 74.736,
+          "note": "D#5",
+          "timeSeconds": 1.765
+        },
+        {
+          "midi": 74.921,
+          "note": "D#5",
+          "timeSeconds": 1.776
+        },
+        {
+          "midi": 75.002,
+          "note": "D#5",
+          "timeSeconds": 1.788
+        },
+        {
+          "midi": 75.052,
+          "note": "D#5",
+          "timeSeconds": 1.8
+        },
+        {
+          "midi": 75.056,
+          "note": "D#5",
+          "timeSeconds": 1.811
+        },
+        {
+          "midi": 75.064,
+          "note": "D#5",
+          "timeSeconds": 1.823
+        },
+        {
+          "midi": 75.066,
+          "note": "D#5",
+          "timeSeconds": 1.834
+        },
+        {
+          "midi": 75.066,
+          "note": "D#5",
+          "timeSeconds": 1.846
+        },
+        {
+          "midi": 75.053,
+          "note": "D#5",
+          "timeSeconds": 1.858
+        },
+        {
+          "midi": 75.051,
+          "note": "D#5",
+          "timeSeconds": 1.869
+        },
+        {
+          "midi": 75.042,
+          "note": "D#5",
+          "timeSeconds": 1.881
+        },
+        {
+          "midi": 75.024,
+          "note": "D#5",
+          "timeSeconds": 1.892
+        },
+        {
+          "midi": 74.995,
+          "note": "D#5",
+          "timeSeconds": 1.904
+        },
+        {
+          "midi": 74.949,
+          "note": "D#5",
+          "timeSeconds": 1.916
+        },
+        {
+          "midi": 74.884,
+          "note": "D#5",
+          "timeSeconds": 1.927
+        },
+        {
+          "midi": 74.801,
+          "note": "D#5",
+          "timeSeconds": 1.939
+        },
+        {
+          "midi": 74.656,
+          "note": "D#5",
+          "timeSeconds": 1.95
+        },
+        {
+          "midi": 74.415,
+          "note": "D5",
+          "timeSeconds": 1.962
+        },
+        {
+          "midi": 74.271,
+          "note": "D5",
+          "timeSeconds": 1.974
+        },
+        {
+          "midi": 74.143,
+          "note": "D5",
+          "timeSeconds": 1.985
+        },
+        {
+          "midi": 74.085,
+          "note": "D5",
+          "timeSeconds": 1.997
+        },
+        {
+          "midi": 74.052,
+          "note": "D5",
+          "timeSeconds": 2.009
+        },
+        {
+          "midi": 74.05,
+          "note": "D5",
+          "timeSeconds": 2.02
+        },
+        {
+          "midi": 74.05,
+          "note": "D5",
+          "timeSeconds": 2.032
+        },
+        {
+          "midi": 74.049,
+          "note": "D5",
+          "timeSeconds": 2.043
+        },
+        {
+          "midi": 74.051,
+          "note": "D5",
+          "timeSeconds": 2.055
+        },
+        {
+          "midi": 74.048,
+          "note": "D5",
+          "timeSeconds": 2.067
+        },
+        {
+          "midi": 74.04,
+          "note": "D5",
+          "timeSeconds": 2.078
+        },
+        {
+          "midi": 74.014,
+          "note": "D5",
+          "timeSeconds": 2.09
+        },
+        {
+          "midi": 73.753,
+          "note": "D5",
+          "timeSeconds": 2.101
+        },
+        {
+          "midi": 72.729,
+          "note": "C#5",
+          "timeSeconds": 2.113
+        },
+        {
+          "midi": 72.3,
+          "note": "C5",
+          "timeSeconds": 2.125
+        },
+        {
+          "midi": 72.194,
+          "note": "C5",
+          "timeSeconds": 2.136
+        },
+        {
+          "midi": 72.18,
+          "note": "C5",
+          "timeSeconds": 2.148
+        },
+        {
+          "midi": 72.17,
+          "note": "C5",
+          "timeSeconds": 2.159
+        },
+        {
+          "midi": 72.16,
+          "note": "C5",
+          "timeSeconds": 2.171
+        },
+        {
+          "midi": 72.16,
+          "note": "C5",
+          "timeSeconds": 2.183
+        },
+        {
+          "midi": 72.16,
+          "note": "C5",
+          "timeSeconds": 2.194
+        },
+        {
+          "midi": 72.183,
+          "note": "C5",
+          "timeSeconds": 2.206
+        },
+        {
+          "midi": 72.198,
+          "note": "C5",
+          "timeSeconds": 2.218
+        },
+        {
+          "midi": 72.195,
+          "note": "C5",
+          "timeSeconds": 2.229
+        },
+        {
+          "midi": 72.185,
+          "note": "C5",
+          "timeSeconds": 2.241
+        },
+        {
+          "midi": 72.2,
+          "note": "C5",
+          "timeSeconds": 2.252
+        },
+        {
+          "midi": 72.259,
+          "note": "C5",
+          "timeSeconds": 2.264
+        },
+        {
+          "midi": 72.446,
+          "note": "C5",
+          "timeSeconds": 2.276
+        },
+        {
+          "midi": 72.978,
+          "note": "C#5",
+          "timeSeconds": 2.287
+        },
+        {
+          "midi": 73.625,
+          "note": "D5",
+          "timeSeconds": 2.299
+        },
+        {
+          "midi": 73.748,
+          "note": "D5",
+          "timeSeconds": 2.31
+        },
+        {
+          "midi": 73.81,
+          "note": "D5",
+          "timeSeconds": 2.322
+        },
+        {
+          "midi": 73.858,
+          "note": "D5",
+          "timeSeconds": 2.334
+        },
+        {
+          "midi": 73.885,
+          "note": "D5",
+          "timeSeconds": 2.345
+        },
+        {
+          "midi": 73.885,
+          "note": "D5",
+          "timeSeconds": 2.357
+        },
+        {
+          "midi": 73.887,
+          "note": "D5",
+          "timeSeconds": 2.368
+        },
+        {
+          "midi": 73.883,
+          "note": "D5",
+          "timeSeconds": 2.38
+        },
+        {
+          "midi": 73.896,
+          "note": "D5",
+          "timeSeconds": 2.392
+        },
+        {
+          "midi": 73.949,
+          "note": "D5",
+          "timeSeconds": 2.403
+        },
+        {
+          "midi": 74.304,
+          "note": "D5",
+          "timeSeconds": 2.415
+        },
+        {
+          "midi": 74.726,
+          "note": "D#5",
+          "timeSeconds": 2.426
+        },
+        {
+          "midi": 74.916,
+          "note": "D#5",
+          "timeSeconds": 2.438
+        },
+        {
+          "midi": 74.952,
+          "note": "D#5",
+          "timeSeconds": 2.45
+        },
+        {
+          "midi": 74.962,
+          "note": "D#5",
+          "timeSeconds": 2.461
+        },
+        {
+          "midi": 74.963,
+          "note": "D#5",
+          "timeSeconds": 2.473
+        },
+        {
+          "midi": 74.977,
+          "note": "D#5",
+          "timeSeconds": 2.485
+        },
+        {
+          "midi": 74.978,
+          "note": "D#5",
+          "timeSeconds": 2.496
+        },
+        {
+          "midi": 74.981,
+          "note": "D#5",
+          "timeSeconds": 2.508
+        },
+        {
+          "midi": 74.985,
+          "note": "D#5",
+          "timeSeconds": 2.519
+        },
+        {
+          "midi": 74.977,
+          "note": "D#5",
+          "timeSeconds": 2.531
+        },
+        {
+          "midi": 74.978,
+          "note": "D#5",
+          "timeSeconds": 2.543
+        },
+        {
+          "midi": 74.974,
+          "note": "D#5",
+          "timeSeconds": 2.554
+        },
+        {
+          "midi": 74.974,
+          "note": "D#5",
+          "timeSeconds": 2.566
+        },
+        {
+          "midi": 74.971,
+          "note": "D#5",
+          "timeSeconds": 2.577
+        },
+        {
+          "midi": 74.968,
+          "note": "D#5",
+          "timeSeconds": 2.589
+        },
+        {
+          "midi": 74.955,
+          "note": "D#5",
+          "timeSeconds": 2.601
+        },
+        {
+          "midi": 74.933,
+          "note": "D#5",
+          "timeSeconds": 2.612
+        },
+        {
+          "midi": 74.857,
+          "note": "D#5",
+          "timeSeconds": 2.624
+        },
+        {
+          "midi": 74.706,
+          "note": "D#5",
+          "timeSeconds": 2.635
+        },
+        {
+          "midi": 74.393,
+          "note": "D5",
+          "timeSeconds": 2.647
+        },
+        {
+          "midi": 74.148,
+          "note": "D5",
+          "timeSeconds": 2.659
+        },
+        {
+          "midi": 74.025,
+          "note": "D5",
+          "timeSeconds": 2.67
+        },
+        {
+          "midi": 73.968,
+          "note": "D5",
+          "timeSeconds": 2.682
+        },
+        {
+          "midi": 73.916,
+          "note": "D5",
+          "timeSeconds": 2.694
+        },
+        {
+          "midi": 73.879,
+          "note": "D5",
+          "timeSeconds": 2.705
+        },
+        {
+          "midi": 73.848,
+          "note": "D5",
+          "timeSeconds": 2.717
+        },
+        {
+          "midi": 73.833,
+          "note": "D5",
+          "timeSeconds": 2.728
+        },
+        {
+          "midi": 73.827,
+          "note": "D5",
+          "timeSeconds": 2.74
+        },
+        {
+          "midi": 73.826,
+          "note": "D5",
+          "timeSeconds": 2.752
+        },
+        {
+          "midi": 73.834,
+          "note": "D5",
+          "timeSeconds": 2.763
+        },
+        {
+          "midi": 73.844,
+          "note": "D5",
+          "timeSeconds": 2.775
+        },
+        {
+          "midi": 73.849,
+          "note": "D5",
+          "timeSeconds": 2.786
+        },
+        {
+          "midi": 73.858,
+          "note": "D5",
+          "timeSeconds": 2.798
+        },
+        {
+          "midi": 73.865,
+          "note": "D5",
+          "timeSeconds": 2.81
+        },
+        {
+          "midi": 73.887,
+          "note": "D5",
+          "timeSeconds": 2.821
+        },
+        {
+          "midi": 73.958,
+          "note": "D5",
+          "timeSeconds": 2.833
+        },
+        {
+          "midi": 74.086,
+          "note": "D5",
+          "timeSeconds": 2.844
+        },
+        {
+          "midi": 74.302,
+          "note": "D5",
+          "timeSeconds": 2.856
+        },
+        {
+          "midi": 74.542,
+          "note": "D#5",
+          "timeSeconds": 2.868
+        },
+        {
+          "midi": 74.659,
+          "note": "D#5",
+          "timeSeconds": 2.879
+        },
+        {
+          "midi": 74.738,
+          "note": "D#5",
+          "timeSeconds": 2.891
+        },
+        {
+          "midi": 74.791,
+          "note": "D#5",
+          "timeSeconds": 2.902
+        },
+        {
+          "midi": 74.848,
+          "note": "D#5",
+          "timeSeconds": 2.914
+        },
+        {
+          "midi": 74.867,
+          "note": "D#5",
+          "timeSeconds": 2.926
+        },
+        {
+          "midi": 74.876,
+          "note": "D#5",
+          "timeSeconds": 2.937
+        },
+        {
+          "midi": 74.893,
+          "note": "D#5",
+          "timeSeconds": 2.949
+        },
+        {
+          "midi": 74.89,
+          "note": "D#5",
+          "timeSeconds": 2.961
+        },
+        {
+          "midi": 74.888,
+          "note": "D#5",
+          "timeSeconds": 2.972
+        },
+        {
+          "midi": 74.882,
+          "note": "D#5",
+          "timeSeconds": 2.984
+        },
+        {
+          "midi": 74.866,
+          "note": "D#5",
+          "timeSeconds": 2.995
+        },
+        {
+          "midi": 74.821,
+          "note": "D#5",
+          "timeSeconds": 3.007
+        },
+        {
+          "midi": 74.712,
+          "note": "D#5",
+          "timeSeconds": 3.019
+        },
+        {
+          "midi": 74.477,
+          "note": "D5",
+          "timeSeconds": 3.03
+        },
+        {
+          "midi": 74.28,
+          "note": "D5",
+          "timeSeconds": 3.042
+        },
+        {
+          "midi": 74.161,
+          "note": "D5",
+          "timeSeconds": 3.053
+        },
+        {
+          "midi": 74.096,
+          "note": "D5",
+          "timeSeconds": 3.065
+        },
+        {
+          "midi": 74.08,
+          "note": "D5",
+          "timeSeconds": 3.077
+        },
+        {
+          "midi": 74.039,
+          "note": "D5",
+          "timeSeconds": 3.088
+        },
+        {
+          "midi": 73.992,
+          "note": "D5",
+          "timeSeconds": 3.1
+        }
+      ]
+    },
+    "mismatchWindow": {
+      "clipLocalEndSeconds": 0.18,
+      "clipLocalStartSeconds": 0.0,
+      "detectorVotes": {
+        "expected": 0,
+        "missing": 0,
+        "observed": 0,
+        "other": 3
+      },
+      "detectors": {
+        "pyin": {
+          "frameCount": 19,
+          "medianMidi": 69.2,
+          "note": "A4",
+          "roundedMidi": 69
+        },
+        "spectralPeak": {
+          "frameCount": 32,
+          "medianMidi": 74.142,
+          "note": "D5",
+          "roundedMidi": 74
+        },
+        "yin": {
+          "frameCount": 32,
+          "medianMidi": 68.719,
+          "note": "A4",
+          "roundedMidi": 69
+        }
+      },
+      "expectedMidi": null,
+      "expectedNote": "",
+      "index": -1,
+      "observedMidi": null,
+      "observedNote": ""
+    },
+    "onsetTimes": [
+      0.052,
+      0.163,
+      0.284,
+      0.366,
+      0.517,
+      0.551,
+      0.679,
+      0.813,
+      0.917,
+      1.051,
+      1.155,
+      1.277,
+      1.498,
+      1.643,
+      1.747,
+      1.823,
+      1.921,
+      2.119,
+      2.154,
+      2.299,
+      2.432,
+      2.647,
+      2.879,
+      3.059
+    ],
+    "sampleRate": 22050,
+    "status": "needs_manual_audio_review"
+  },
+  "audioRunSource": "visible_mismatch_reverification_queue",
+  "auditFocus": "staff4_source_crop_reverification",
+  "bestAudioMidiSequence": [
+    75,
+    75,
+    72,
+    75,
+    75
+  ],
+  "bestAudioSequence": "D#5 D#5 C5 D#5 D#5",
+  "canExtendStaff4Lane": false,
+  "clip": {
+    "audioUrl": "/api/curtis/staff4-audit/artifacts/staff4-source-crop-review-2026-05-03-Njh8_zq9_DM-8835-9-14/staff4-audit.wav",
+    "endSeconds": null,
+    "localEndSeconds": 22.985,
+    "localStartSeconds": 19.875,
+    "mediaUrl": "/api/curtis/media/sample/Njh8_zq9_DM-8835",
+    "noteLocalEndSeconds": 22.535,
+    "noteLocalStartSeconds": 20.225,
+    "startSeconds": null,
+    "videoUrl": "/api/curtis/staff4-audit/artifacts/staff4-source-crop-review-2026-05-03-Njh8_zq9_DM-8835-9-14/staff4-audit.mp4"
+  },
+  "createdAt": "2026-05-18T22:13:29.663631+00:00",
+  "decision": {
+    "accepted": false,
+    "audioMidiSequence": [
+      75,
+      75,
+      72,
+      75,
+      75
+    ],
+    "bestAudioSequence": "D#5 D#5 C5 D#5 D#5",
+    "canExtendStaff4Lane": false,
+    "goldReviewRequired": true,
+    "limit": "Visible source crop, boxed noteheads, rendered transcription, and paired audio must agree before Staff 4 can become accepted evidence again.",
+    "outcome": "source_crop_reverification_required",
+    "rejected": false,
+    "sourceCropRejected": true,
+    "status": "pending_source_crop_reverification",
+    "targetMidiSequence": [
+      75,
+      75,
+      72,
+      75,
+      75
+    ],
+    "targetSequence": "Eb5 Eb5 C5 Eb5 Eb5",
+    "truthDecision": "pending_review"
+  },
+  "expectedFailedScoreMidi": null,
+  "expectedFailedScoreNote": "",
+  "expectedNextScoreMidi": null,
+  "expectedNextScoreNote": "",
+  "firstFailure": {},
+  "gate": "queued_source_crop_reverification",
+  "goldReviewCandidate": {
+    "audioMidiSequence": [
+      75,
+      75,
+      72,
+      75,
+      75
+    ],
+    "bestAudioSequence": "D#5 D#5 C5 D#5 D#5",
+    "clip": {
+      "audioUrl": "/api/curtis/staff4-audit/artifacts/staff4-source-crop-review-2026-05-03-Njh8_zq9_DM-8835-9-14/staff4-audit.wav",
+      "endSeconds": null,
+      "localEndSeconds": 22.985,
+      "localStartSeconds": 19.875,
+      "mediaUrl": "/api/curtis/media/sample/Njh8_zq9_DM-8835",
+      "noteLocalEndSeconds": 22.535,
+      "noteLocalStartSeconds": 20.225,
+      "startSeconds": null,
+      "videoUrl": "/api/curtis/staff4-audit/artifacts/staff4-source-crop-review-2026-05-03-Njh8_zq9_DM-8835-9-14/staff4-audit.mp4"
+    },
+    "kind": "staff4_source_crop_reverification",
+    "packetId": "staff4-source-crop-review-2026-05-03-Njh8_zq9_DM-8835-9-14",
+    "reason": "source_crop_reverification_required",
+    "status": "queued",
+    "targetMidiSequence": [
+      75,
+      75,
+      72,
+      75,
+      75
+    ],
+    "targetSequence": "Eb5 Eb5 C5 Eb5 Eb5"
+  },
+  "limit": "Alan reviewed the live 2026-05-03 Staff 4 score/transcription/video group and reported that the visible score notes and displayed transcription do not match. The range is blocked even though the symbolic MIDI fixture can still be parsed.",
+  "nextAction": "Reverify the visible Staff 4 source crop against the transcription and paired audio before reopening this lane.",
+  "observedFailureAudioMidi": null,
+  "observedFailureAudioNote": "",
+  "observedNextAudioMidi": null,
+  "observedNextAudioNote": "",
+  "packetId": "staff4-source-crop-review-2026-05-03-Njh8_zq9_DM-8835-9-14",
+  "pieceTitle": "Wieniawski Scherzo-Tarantelle, Op. 16",
+  "practiceDay": "2026-05-03",
+  "sampleId": "Njh8_zq9_DM-8835",
+  "score": {
+    "sourceCropReady": false,
+    "sourceCropRejected": true,
+    "sourceImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-verified.png",
+    "truthEvidenceAccepted": false
+  },
+  "sourceCropReverification": {
+    "acceptanceRule": "Visible source crop, boxed noteheads, rendered transcription, and paired audio must agree before Staff 4 can become accepted evidence again.",
+    "audioMidiSequence": [
+      75,
+      75,
+      72,
+      75,
+      75
+    ],
+    "bestAudioSequence": "D#5 D#5 C5 D#5 D#5",
+    "scoreImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-verified.png",
+    "status": "pending_review",
+    "targetMidiSequence": [
+      75,
+      75,
+      72,
+      75,
+      75
+    ],
+    "targetSequence": "Eb5 Eb5 C5 Eb5 Eb5"
+  },
+  "sourceTitle": "",
+  "sourceUrl": "",
+  "sourceWindow": "*8835-8925",
+  "status": "queued_source_crop_reverification",
+  "storedAudioNotes": [
+    {
+      "agreementSourceCount": 0,
+      "agreementSources": [],
+      "audioAgreement": false,
+      "confidence": 0.0,
+      "detectorSource": "visible_mismatch_reverification_queue",
+      "durationSeconds": 0.197,
+      "endSeconds": 20.422,
+      "index": 0,
+      "midi": 75,
+      "note": "D#5",
+      "startSeconds": 20.225
+    },
+    {
+      "agreementSourceCount": 0,
+      "agreementSources": [],
+      "audioAgreement": false,
+      "confidence": 0.0,
+      "detectorSource": "visible_mismatch_reverification_queue",
+      "durationSeconds": 0.139,
+      "endSeconds": 20.689,
+      "index": 1,
+      "midi": 75,
+      "note": "D#5",
+      "startSeconds": 20.55
+    },
+    {
+      "agreementSourceCount": 0,
+      "agreementSources": [],
+      "audioAgreement": false,
+      "confidence": 0.0,
+      "detectorSource": "visible_mismatch_reverification_queue",
+      "durationSeconds": 0.081,
+      "endSeconds": 20.898,
+      "index": 2,
+      "midi": 72,
+      "note": "C5",
+      "startSeconds": 20.817
+    },
+    {
+      "agreementSourceCount": 0,
+      "agreementSources": [],
+      "audioAgreement": false,
+      "confidence": 0.0,
+      "detectorSource": "visible_mismatch_reverification_queue",
+      "durationSeconds": 0.163,
+      "endSeconds": 21.792,
+      "index": 3,
+      "midi": 75,
+      "note": "D#5",
+      "startSeconds": 21.629
+    },
+    {
+      "agreementSourceCount": 0,
+      "agreementSources": [],
+      "audioAgreement": false,
+      "confidence": 0.0,
+      "detectorSource": "visible_mismatch_reverification_queue",
+      "durationSeconds": 0.174,
+      "endSeconds": 22.535,
+      "index": 4,
+      "midi": 75,
+      "note": "D#5",
+      "startSeconds": 22.361
+    }
+  ],
+  "targetMidiSequence": [
+    75,
+    75,
+    72,
+    75,
+    75
+  ],
+  "targetReferenceEnd": 14,
+  "targetReferenceStart": 9,
+  "targetSequence": "Eb5 Eb5 C5 Eb5 Eb5",
+  "truthDecision": "pending_review",
+  "version": "staff4_phrase_audit_v3"
+}

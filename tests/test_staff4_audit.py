@@ -592,7 +592,10 @@ class Staff4AuditTests(unittest.TestCase):
                     }
                 ]
             }
-            with patch("backend.app.staff4_audit.AUDIT_DIR", Path(temp_dir) / "staff4-audit"):
+            with patch("backend.app.staff4_audit.AUDIT_DIR", Path(temp_dir) / "staff4-audit"), patch(
+                "backend.app.staff4_audit.PACKAGED_AUDIT_DIR",
+                Path(temp_dir) / "packaged-staff4-audit",
+            ):
                 packet = ensure_staff4_phrase_audit_packet(state, source_crop_reverification_completion_state(), force=True)
 
         self.assertEqual(packet["status"], "blocked_media_missing")
@@ -612,7 +615,10 @@ class Staff4AuditTests(unittest.TestCase):
     def test_latest_completion_packet_targets_source_crop_reverification_queue(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             state = {}
-            with patch("backend.app.staff4_audit.AUDIT_DIR", Path(temp_dir) / "staff4-audit"):
+            with patch("backend.app.staff4_audit.AUDIT_DIR", Path(temp_dir) / "staff4-audit"), patch(
+                "backend.app.staff4_audit.PACKAGED_AUDIT_DIR",
+                Path(temp_dir) / "packaged-staff4-audit",
+            ):
                 packet = latest_staff4_phrase_audit_packet_for_completion(
                     state,
                     source_crop_reverification_completion_state(),
@@ -624,6 +630,61 @@ class Staff4AuditTests(unittest.TestCase):
             "staff4-source-crop-review-2026-05-03-Njh8_zq9_DM-8835-9-14",
         )
         self.assertIn("source-crop reverification", packet["limit"])
+
+    def test_source_crop_reverification_uses_packaged_packet_when_live_media_is_missing(self):
+        packet_id = "staff4-source-crop-review-2026-05-03-Njh8_zq9_DM-8835-9-14"
+        with tempfile.TemporaryDirectory() as temp_dir:
+            audit_dir = Path(temp_dir) / "staff4-audit"
+            packaged_dir = Path(temp_dir) / "packaged-staff4-audit"
+            packaged_packet_dir = packaged_dir / packet_id
+            packaged_packet_dir.mkdir(parents=True)
+            (packaged_packet_dir / "staff4-audit.wav").write_bytes(b"RIFF-packaged-audio")
+            (packaged_packet_dir / "staff4-audit.mp4").write_bytes(b"packaged-video")
+            (packaged_packet_dir / "packet.json").write_text(
+                json.dumps(
+                    {
+                        "version": staff4_audit.STAFF4_AUDIT_VERSION,
+                        "packetId": packet_id,
+                        "status": "queued_source_crop_reverification",
+                        "auditFocus": "staff4_source_crop_reverification",
+                        "truthDecision": "pending_review",
+                        "canExtendStaff4Lane": False,
+                        "targetSequence": "Eb5 Eb5 C5 Eb5 Eb5",
+                        "bestAudioSequence": "D#5 D#5 C5 D#5 D#5",
+                        "clip": {
+                            "audioUrl": f"/api/curtis/staff4-audit/artifacts/{packet_id}/staff4-audit.wav",
+                            "videoUrl": f"/api/curtis/staff4-audit/artifacts/{packet_id}/staff4-audit.mp4",
+                        },
+                        "artifacts": {
+                            "packetJsonUrl": f"/api/curtis/staff4-audit/artifacts/{packet_id}/packet.json",
+                            "audioClipUrl": f"/api/curtis/staff4-audit/artifacts/{packet_id}/staff4-audit.wav",
+                            "videoClipUrl": f"/api/curtis/staff4-audit/artifacts/{packet_id}/staff4-audit.mp4",
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            state = {
+                "mediaSamples": [
+                    {
+                        "id": "Njh8_zq9_DM-8835",
+                        "path": str(Path(temp_dir) / "missing-live-media.mp4"),
+                    }
+                ]
+            }
+            with patch("backend.app.staff4_audit.AUDIT_DIR", audit_dir), patch(
+                "backend.app.staff4_audit.PACKAGED_AUDIT_DIR",
+                packaged_dir,
+            ):
+                packet = ensure_staff4_phrase_audit_packet(state, source_crop_reverification_completion_state(), force=True)
+                resolved_audio = staff4_audit.resolve_packet_artifact_path(packet_id, "staff4-audit.wav")
+
+        self.assertEqual(packet["status"], "queued_source_crop_reverification")
+        self.assertEqual(packet["auditFocus"], "staff4_source_crop_reverification")
+        self.assertTrue(packet["packagedArtifactFallback"])
+        self.assertEqual(packet["truthDecision"], "pending_review")
+        self.assertFalse(packet["canExtendStaff4Lane"])
+        self.assertIsNotNone(resolved_audio)
 
     def test_source_extent_exhausted_reports_musicxml_next_step(self):
         state = {}
