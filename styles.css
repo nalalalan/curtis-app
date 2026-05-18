@@ -4609,6 +4609,11 @@ h2 {
   object-fit: contain;
 }
 
+.staff4-audit-review-plot {
+  grid-column: span 2;
+  min-height: 150px;
+}
+
 .gold-review-panel {
   margin-top: 10px;
 }

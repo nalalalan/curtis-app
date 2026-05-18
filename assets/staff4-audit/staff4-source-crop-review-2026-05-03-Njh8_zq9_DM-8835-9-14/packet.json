@@ -4612,9 +4612,12 @@
     "bestAudioSequence": "D#5 D#5 C5 D#5 D#5",
     "canExtendStaff4Lane": false,
     "goldReviewRequired": true,
-    "limit": "Visible source crop, boxed noteheads, rendered transcription, and paired audio must agree before Staff 4 can become accepted evidence again.",
+    "limit": "Visible source crop, boxed noteheads, rendered transcription, and paired audio must agree before Staff 4 can become accepted evidence again. Rejected tight crops stay hidden from accepted match display.",
     "outcome": "source_crop_reverification_required",
     "rejected": false,
+    "sourceCropContextReady": true,
+    "sourceCropContextRequirement": "Use a full-context source-score crop from the local PDF for review; do not show the rejected tight crop as a match.",
+    "sourceCropDisplayAllowed": false,
     "sourceCropRejected": true,
     "status": "pending_source_crop_reverification",
     "targetMidiSequence": [
@@ -4656,6 +4659,8 @@
     "kind": "staff4_source_crop_reverification",
     "packetId": "staff4-source-crop-review-2026-05-03-Njh8_zq9_DM-8835-9-14",
     "reason": "source_crop_reverification_required",
+    "reviewImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-context-review.png",
+    "sourceCropDisplayAllowed": false,
     "status": "queued",
     "targetMidiSequence": [
       75,
@@ -4677,13 +4682,17 @@
   "practiceDay": "2026-05-03",
   "sampleId": "Njh8_zq9_DM-8835",
   "score": {
+    "sourceCropContextReady": true,
+    "sourceCropContextRequirement": "Use a full-context source-score crop from the local PDF for review; do not show the rejected tight crop as a match.",
+    "sourceCropDisplayAllowed": false,
     "sourceCropReady": false,
     "sourceCropRejected": true,
     "sourceImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-verified.png",
+    "sourceReviewImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-context-review.png",
     "truthEvidenceAccepted": false
   },
   "sourceCropReverification": {
-    "acceptanceRule": "Visible source crop, boxed noteheads, rendered transcription, and paired audio must agree before Staff 4 can become accepted evidence again.",
+    "acceptanceRule": "Visible source crop, boxed noteheads, rendered transcription, and paired audio must agree before Staff 4 can become accepted evidence again. Rejected tight crops stay hidden from accepted match display.",
     "audioMidiSequence": [
       75,
       75,
@@ -4692,7 +4701,10 @@
       75
     ],
     "bestAudioSequence": "D#5 D#5 C5 D#5 D#5",
+    "reviewImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-context-review.png",
     "scoreImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-verified.png",
+    "sourceCropContextReady": true,
+    "sourceCropDisplayAllowed": false,
     "status": "pending_review",
     "targetMidiSequence": [
       75,

@@ -364,6 +364,12 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertEqual(completion["sourceCropReverificationStatus"], "queued_source_crop_reverification")
         self.assertEqual(completion["sourceCropReverificationTarget"]["targetSequence"], "Eb5 Eb5 C5 Eb5 Eb5")
         self.assertEqual(completion["sourceCropReverificationTarget"]["bestAudioSequence"], "D#5 D#5 C5 D#5 D#5")
+        self.assertFalse(completion["sourceCropReverificationTarget"]["sourceCropDisplayAllowed"])
+        self.assertTrue(completion["sourceCropReverificationTarget"]["sourceCropContextReady"])
+        self.assertIn(
+            "context-review.png",
+            completion["sourceCropReverificationTarget"]["sourceReviewImageUrl"],
+        )
 
     def test_staff4_rejected_anchor_blocks_raw_detected_series_promotion(self):
         daily_records = {

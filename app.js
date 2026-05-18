@@ -2060,7 +2060,7 @@ function renderHeatMap(record) {
 
 function recordStatusLabel(record) {
   if (exactScoreMatchGroups(record).length) return "match";
-  if (record?.matchingWorkflow?.status === "score_sequence_matches_ready") return "note match";
+  if (record?.matchingWorkflow?.status === "score_sequence_matches_ready") return "checking";
   if (record?.matchingWorkflow?.status === "reference_sequence_matches_ready") return "matching";
   if (record?.matchingWorkflow?.status === "source_verification_pending") return "checking";
   if (record?.matchingWorkflow?.status === "pitch_anchor_matches_ready") {
@@ -3216,7 +3216,10 @@ function renderStaff4Audit(audit) {
   const audio = isCropReview
     ? audit.bestAudioSequence || decision.bestAudioSequence || "audio"
     : decision.observedNote || audit.observedFailureAudioNote || audit.observedNextAudioNote || "unverified";
-  const sourceCrop = isCropReview ? assetUrl(scoreBlock.sourceImageUrl || "") : "";
+  const rejectedCrop = scoreBlock.sourceCropRejected === true || decision.sourceCropRejected === true;
+  const displayAllowed = scoreBlock.sourceCropDisplayAllowed === true && scoreBlock.sourceCropReady === true && scoreBlock.truthEvidenceAccepted === true;
+  const sourceCrop = isCropReview && !rejectedCrop && displayAllowed ? assetUrl(scoreBlock.sourceImageUrl || "") : "";
+  const reviewCrop = isCropReview && rejectedCrop ? assetUrl(scoreBlock.sourceReviewImageUrl || decision.reviewImageUrl || "") : "";
   return `
     <section class="staff4-audit-card" aria-label="Staff 4 audit packet">
       <div class="staff4-audit-head">
@@ -3235,7 +3238,8 @@ function renderStaff4Audit(audit) {
             <audio controls preload="metadata" src="${escapeHtml(audioUrl)}"></audio>
           </div>
         ` : ""}
-        ${sourceCrop ? `<img class="staff4-audit-plot" src="${escapeHtml(sourceCrop)}" alt="Source crop under review">` : ""}
+        ${sourceCrop ? `<img class="staff4-audit-plot" src="${escapeHtml(sourceCrop)}" alt="Accepted source score crop">` : ""}
+        ${reviewCrop ? `<img class="staff4-audit-plot staff4-audit-review-plot" src="${escapeHtml(reviewCrop)}" alt="Source review context">` : ""}
         ${pitchTrace ? `<img class="staff4-audit-plot" src="${escapeHtml(pitchTrace)}" alt="Staff 4 pitch trace">` : ""}
         ${spectrogram ? `<img class="staff4-audit-plot" src="${escapeHtml(spectrogram)}" alt="Staff 4 spectrogram">` : ""}
       </div>

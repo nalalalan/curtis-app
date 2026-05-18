@@ -27,6 +27,9 @@
       "sequence": ["Eb5", "Eb5", "C5", "Eb5", "Eb5"],
       "midiSequence": [75, 75, 72, 75, 75],
       "sourceCropImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-verified.png",
+      "sourceReviewImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-context-review.png",
+      "sourceCropDisplayAllowed": false,
+      "sourceCropContextReady": true,
       "liveAccepted": false
     },
     {
@@ -226,6 +229,8 @@
       "minimumExactNotes": 5,
       "audioAgreed": false,
       "reviewOutcome": "visible_score_crop_rejected_by_alan_2026_05_18",
+      "sourceReviewImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-context-review.png",
+      "sourceCropDisplayAllowed": false,
       "noteWindows": [
         {"note": "D#5", "startSeconds": 20.225, "endSeconds": 20.422},
         {"note": "D#5", "startSeconds": 20.55, "endSeconds": 20.689},

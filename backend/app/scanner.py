@@ -4175,6 +4175,12 @@ def source_crop_reverification_targets(limit: int = 3) -> list[dict[str, Any]]:
         local_end = review_notes[-1].get("endSeconds") or review_notes[-1].get("startSeconds")
         score_label = " ".join(str(note) for note in score_sequence if str(note or "").strip())
         detected_label = " ".join(str(note) for note in detected_sequence if str(note or "").strip())
+        source_image_url = str(item.get("scoreImageUrl") or source.get("sourceCropImageUrl") or "")
+        source_review_image_url = str(
+            item.get("sourceReviewImageUrl")
+            or source.get("sourceReviewImageUrl")
+            or "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-context-review.png"
+        )
         targets.append(
             {
                 "status": "queued_source_crop_reverification",
@@ -4193,9 +4199,13 @@ def source_crop_reverification_targets(limit: int = 3) -> list[dict[str, Any]]:
                 "bestAudioMidiSequence": detected_midi,
                 "detectedSequence": detected_label,
                 "detectedMidiSequence": detected_midi,
-                "sourceImageUrl": str(item.get("scoreImageUrl") or source.get("sourceCropImageUrl") or ""),
+                "sourceImageUrl": source_image_url,
+                "sourceReviewImageUrl": source_review_image_url,
                 "sourceCropReady": False,
                 "sourceCropRejected": True,
+                "sourceCropDisplayAllowed": False,
+                "sourceCropContextReady": bool(source_review_image_url),
+                "sourceCropContextRequirement": "Use a full-context source-score crop from the local PDF for review; do not show the rejected tight crop as a match.",
                 "truthEvidenceAccepted": False,
                 "audioLocalStartSeconds": local_start,
                 "audioLocalEndSeconds": local_end,

@@ -302,6 +302,9 @@ def wieniawski_reference_target() -> dict[str, Any]:
                     "label": "Staff 4 verified source window Eb-Eb-C-Eb-Eb",
                     "pitchClassSequence": ["D#", "D#", "C", "D#", "D#"],
                     "imageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-verified.png",
+                    "sourceReviewImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-context-review.png",
+                    "sourceCropDisplayAllowed": False,
+                    "sourceCropContextReady": True,
                     "sourcePdfPage": 2,
                     "status": "source_score_exact_midi_sequence_verified",
                     "verification": "verified_from_staff4_review_packet_and_audio_agreed_2026_05_03",
@@ -584,6 +587,7 @@ def wieniawski_reference_target() -> dict[str, Any]:
                     "status": "alan_rejected_visible_score_transcription_mismatch_2026_05_18",
                     "reason": "The live May 3 Staff 4 five-note score/transcription/video group was reviewed in the site and the visible score notes did not match the transcription closely enough to remain accepted evidence.",
                     "blockedImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-verified.png",
+                    "sourceReviewImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-context-review.png",
                 },
                 {
                     "referenceStart": 9,

@@ -223,8 +223,12 @@ def source_crop_reverification_completion_state():
             "bestAudioSequence": "D#5 D#5 C5 D#5 D#5",
             "bestAudioMidiSequence": [75, 75, 72, 75, 75],
             "sourceImageUrl": "/assets/score/staff4-visible-mismatch.png",
+            "sourceReviewImageUrl": "/assets/score/staff4-full-context-review.png",
             "sourceCropReady": False,
             "sourceCropRejected": True,
+            "sourceCropDisplayAllowed": False,
+            "sourceCropContextReady": True,
+            "sourceCropContextRequirement": "Use a full-context source-score crop from the local PDF for review.",
             "truthEvidenceAccepted": False,
             "audioLocalStartSeconds": 20.225,
             "audioLocalEndSeconds": 22.535,
@@ -607,8 +611,14 @@ class Staff4AuditTests(unittest.TestCase):
         self.assertFalse(packet["canExtendStaff4Lane"])
         self.assertTrue(packet["score"]["sourceCropRejected"])
         self.assertFalse(packet["score"]["sourceCropReady"])
+        self.assertFalse(packet["score"]["sourceCropDisplayAllowed"])
+        self.assertTrue(packet["score"]["sourceCropContextReady"])
+        self.assertEqual(packet["score"]["sourceReviewImageUrl"], "/assets/score/staff4-full-context-review.png")
         self.assertEqual(packet["decision"]["status"], "pending_source_crop_reverification")
+        self.assertFalse(packet["decision"]["sourceCropDisplayAllowed"])
+        self.assertTrue(packet["decision"]["sourceCropContextReady"])
         self.assertEqual(packet["goldReviewCandidate"]["kind"], "staff4_source_crop_reverification")
+        self.assertEqual(packet["goldReviewCandidate"]["reviewImageUrl"], "/assets/score/staff4-full-context-review.png")
         self.assertEqual(packet["clip"]["noteLocalStartSeconds"], 20.225)
         self.assertEqual(packet["clip"]["noteLocalEndSeconds"], 22.535)
 

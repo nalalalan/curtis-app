@@ -625,6 +625,8 @@ def attach_staff4_full_phrase_decision(packet: dict[str, Any]) -> dict[str, Any]
 def attach_staff4_source_crop_reverification_decision(packet: dict[str, Any]) -> dict[str, Any]:
     target_midis = int_list(packet.get("targetMidiSequence"))
     audio_midis = int_list(packet.get("bestAudioMidiSequence"))
+    score = packet.get("score") if isinstance(packet.get("score"), dict) else {}
+    source_review_image = str(score.get("sourceReviewImageUrl") or "").strip()
     decision = {
         "status": "pending_source_crop_reverification",
         "outcome": "source_crop_reverification_required",
@@ -637,8 +639,11 @@ def attach_staff4_source_crop_reverification_decision(packet: dict[str, Any]) ->
         "targetSequence": packet.get("targetSequence") or "",
         "bestAudioSequence": packet.get("bestAudioSequence") or "",
         "sourceCropRejected": True,
+        "sourceCropDisplayAllowed": False,
+        "sourceCropContextReady": bool(source_review_image),
+        "sourceCropContextRequirement": str(score.get("sourceCropContextRequirement") or ""),
         "goldReviewRequired": True,
-        "limit": "Visible source crop, boxed noteheads, rendered transcription, and paired audio must agree before Staff 4 can become accepted evidence again.",
+        "limit": "Visible source crop, boxed noteheads, rendered transcription, and paired audio must agree before Staff 4 can become accepted evidence again. Rejected tight crops stay hidden from accepted match display.",
     }
     packet["decision"] = decision
     packet["truthDecision"] = "pending_review"
@@ -654,6 +659,9 @@ def attach_staff4_source_crop_reverification_decision(packet: dict[str, Any]) ->
             if isinstance(packet.get("score"), dict)
             else ""
         ),
+        "reviewImageUrl": source_review_image,
+        "sourceCropDisplayAllowed": False,
+        "sourceCropContextReady": bool(source_review_image),
         "acceptanceRule": decision["limit"],
     }
     packet["goldReviewCandidate"] = {
@@ -664,6 +672,8 @@ def attach_staff4_source_crop_reverification_decision(packet: dict[str, Any]) ->
         "bestAudioSequence": packet.get("bestAudioSequence") or "",
         "targetMidiSequence": target_midis,
         "audioMidiSequence": audio_midis,
+        "reviewImageUrl": source_review_image,
+        "sourceCropDisplayAllowed": False,
         "clip": packet.get("clip") if isinstance(packet.get("clip"), dict) else {},
         "reason": decision["outcome"],
     }
@@ -760,8 +770,12 @@ def source_crop_reverification_current(completion: dict[str, Any]) -> dict[str, 
         "audioLocalStartSeconds": target.get("audioLocalStartSeconds"),
         "audioLocalEndSeconds": target.get("audioLocalEndSeconds"),
         "sourceImageUrl": target.get("sourceImageUrl") or "",
+        "sourceReviewImageUrl": target.get("sourceReviewImageUrl") or "",
         "sourceCropReady": False,
         "sourceCropRejected": True,
+        "sourceCropDisplayAllowed": False,
+        "sourceCropContextReady": bool(target.get("sourceReviewImageUrl")),
+        "sourceCropContextRequirement": target.get("sourceCropContextRequirement") or "",
         "truthEvidenceAccepted": False,
         "bestAudioNotes": best_notes,
         "rejectedRegressionId": target.get("rejectedRegressionId") or "",
@@ -1580,8 +1594,12 @@ def ensure_staff4_phrase_audit_packet(
         },
         "score": {
             "sourceImageUrl": current.get("sourceImageUrl") or "",
+            "sourceReviewImageUrl": current.get("sourceReviewImageUrl") or "",
             "sourceCropReady": bool(current.get("sourceCropReady")),
             "sourceCropRejected": bool(current.get("sourceCropRejected")),
+            "sourceCropDisplayAllowed": bool(current.get("sourceCropDisplayAllowed")),
+            "sourceCropContextReady": bool(current.get("sourceCropContextReady")),
+            "sourceCropContextRequirement": current.get("sourceCropContextRequirement") or "",
             "truthEvidenceAccepted": bool(current.get("truthEvidenceAccepted")),
         },
         "storedAudioNotes": compact_notes,
