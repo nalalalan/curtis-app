@@ -1,6 +1,6 @@
 {
   "schema": "curtis_long_phrase_truth_v1",
-  "updatedAt": "2026-05-17",
+  "updatedAt": "2026-05-18",
   "status": "active",
   "minimumAcceptedEvidenceRule": "A displayed score/transcription/video/audio phrase needs exact MIDI agreement between audio-agreed detected notes and verified MusicXML source notes. Pitch letters, OCR/OMR candidates, and source crops alone are not accepted evidence.",
   "sources": [
@@ -34,13 +34,13 @@
       "pieceTitle": "Wieniawski Scherzo-Tarantelle, Op. 16",
       "target": "wieniawski_reference_target",
       "status": "verified_source_excerpt",
-      "basis": "The current accepted Staff 4 lane extended outward into the two immediate right-adjacent source notes from the same local IMSLP solo-violin page. The first six notes now have accepted source/audio truth; this seven-note lane remains source-verified only until paired audio agrees with the seventh C5.",
+      "basis": "The current accepted Staff 4 lane extended outward into the two immediate right-adjacent source notes from the same local IMSLP solo-violin page. The full seven-note phrase now has accepted source/audio truth after the v3 full-phrase audit proved exact MIDI agreement across the complete local 20.225-23.280 audio window.",
       "referenceStart": 9,
       "referenceEnd": 16,
       "sequence": ["Eb5", "Eb5", "C5", "Eb5", "Eb5", "Eb5", "C5"],
       "midiSequence": [75, 75, 72, 75, 75, 75, 72],
       "sourceCropImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-eb-c-source.png",
-      "liveAccepted": false
+      "liveAccepted": true
     },
     {
       "id": "wieniawski-staff4-eb-eb-c-eb-eb-eb-symbolic-v1",
@@ -94,12 +94,29 @@
     {
       "id": "wieniawski-staff4-source-extension-positive",
       "sourceId": "wieniawski-staff4-eb-eb-c-eb-eb-eb-c-symbolic-v1",
-      "status": "source_only_regression",
-      "basis": "The Staff 4 source lane now contains seven verified source notes. This phrase is discoverable in MusicXML but must not display as accepted live evidence until an audio-agreed detected phrase has the same exact MIDI sequence.",
+      "status": "accepted_truth",
+      "basis": "The Staff 4 source lane now contains seven verified source notes, and the v3 Staff 4 full-phrase audit found the paired May 3 audio run with the identical exact MIDI sequence across local 20.225-23.280.",
+      "practiceDay": "2026-05-03",
+      "sampleId": "Njh8_zq9_DM-8835",
+      "sourceWindow": "*8835-8925",
+      "localStartSeconds": 20.225,
+      "localEndSeconds": 23.28,
       "minimumExactNotes": 7,
-      "sequence": ["Eb5", "Eb5", "C5", "Eb5", "Eb5", "Eb5", "C5"],
+      "sequence": ["D#5", "D#5", "C5", "D#5", "D#5", "D#5", "C5"],
+      "acceptedScoreSpellingSequence": ["Eb5", "Eb5", "C5", "Eb5", "Eb5", "Eb5", "C5"],
       "midiSequence": [75, 75, 72, 75, 75, 75, 72],
-      "liveAccepted": false
+      "noteWindows": [
+        {"note": "D#5", "startSeconds": 20.225, "endSeconds": 20.422},
+        {"note": "D#5", "startSeconds": 20.55, "endSeconds": 20.689},
+        {"note": "C5", "startSeconds": 20.817, "endSeconds": 20.898},
+        {"note": "D#5", "startSeconds": 21.629, "endSeconds": 21.792},
+        {"note": "D#5", "startSeconds": 22.361, "endSeconds": 22.535},
+        {"note": "D#5", "startSeconds": 22.829, "endSeconds": 22.992},
+        {"note": "C5", "startSeconds": 23.117, "endSeconds": 23.28}
+      ],
+      "scoreImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-eb-c-source.png",
+      "auditPacketId": "staff4-2026-05-03-Njh8_zq9_DM-8835-9-16",
+      "liveAccepted": true
     },
     {
       "id": "wieniawski-staff4-live-audio-six-note-exact-midi-positive",
@@ -160,7 +177,7 @@
       "sourceId": "wieniawski-staff4-eb-eb-c-eb-eb-eb-c-symbolic-v1",
       "status": "rejected",
       "rejectionKind": "staff4_expansion_audio_mismatch",
-      "basis": "The Staff 4 audit packet staff4-2026-05-03-Njh8_zq9_DM-8835-9-16 confirmed that the right-2 source expansion expects Eb5 at the sixth note, but the paired May 3 audio run supplies D5. This exact source/audio expansion is a rejected regression and must not be retried as accepted evidence.",
+      "basis": "Earlier Staff 4 adjacent-detector output heard D5 where the source lane required Eb5, producing the stale MIDI sequence 75 75 72 75 75 74 75. That stale source/audio mismatch remains a rejected regression; it is separate from the later v3 full-phrase audit run that proved the exact seven-note MIDI sequence 75 75 72 75 75 75 72.",
       "practiceDay": "2026-05-03",
       "sampleId": "Njh8_zq9_DM-8835",
       "sourceWindow": "*8835-8925",

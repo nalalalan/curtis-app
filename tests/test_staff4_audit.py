@@ -376,6 +376,19 @@ class Staff4AuditTests(unittest.TestCase):
         self.assertEqual(packet["status"], "blocked_no_staff4_expansion")
         self.assertEqual(latest_staff4_phrase_audit_packet(state)["status"], "blocked_no_staff4_expansion")
 
+    def test_source_extent_exhausted_reports_musicxml_next_step(self):
+        state = {}
+
+        packet = ensure_staff4_phrase_audit_packet(
+            state,
+            {"phraseExpansionHarness": {"status": "source_extent_exhausted", "acceptedAnchorNoteCount": 7}},
+            force=True,
+        )
+
+        self.assertEqual(packet["status"], "blocked_source_extent_exhausted")
+        self.assertEqual(packet["acceptedAnchorNoteCount"], 7)
+        self.assertIn("verify more MusicXML/source notes", packet["limit"])
+
     def test_completion_latest_does_not_return_stale_adjacent_window_packet(self):
         old_audit_dir = staff4_audit.AUDIT_DIR
         temp_dir = Path(tempfile.mkdtemp())

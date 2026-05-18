@@ -1007,11 +1007,19 @@ def ensure_staff4_phrase_audit_packet(
 ) -> dict[str, Any]:
     current = current_staff4_expansion(completion)
     if not current:
+        harness = completion.get("phraseExpansionHarness") if isinstance(completion.get("phraseExpansionHarness"), dict) else {}
+        extent_exhausted = str(harness.get("status") or "") == "source_extent_exhausted"
+        accepted_anchor_note_count = int_or_none(harness.get("acceptedAnchorNoteCount")) or 0
         packet = {
             "version": STAFF4_AUDIT_VERSION,
-            "status": "blocked_no_staff4_expansion",
+            "status": "blocked_source_extent_exhausted" if extent_exhausted else "blocked_no_staff4_expansion",
             "createdAt": utc_now(),
-            "limit": "No current Staff 4 phrase expansion target is available.",
+            "acceptedAnchorNoteCount": accepted_anchor_note_count,
+            "limit": (
+                f"The accepted Staff 4 lane reaches the current {accepted_anchor_note_count}-note symbolic source extent; verify more MusicXML/source notes before another audit packet can be generated."
+                if extent_exhausted
+                else "No current Staff 4 phrase expansion target is available."
+            ),
         }
         state["staff4PhraseAuditLatest"] = packet
         return packet

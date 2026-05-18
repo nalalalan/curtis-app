@@ -340,27 +340,24 @@ class TranscriptionCompletionTests(unittest.TestCase):
         harness = completion["phraseExpansionHarness"]
         current = harness["currentBest"]
         self.assertEqual(harness["anchorCount"], 1)
-        self.assertEqual(harness["targetCount"], 1)
+        self.assertEqual(harness["status"], "source_extent_exhausted")
+        self.assertEqual(harness["acceptedAnchorNoteCount"], 7)
+        self.assertEqual(harness["targetCount"], 0)
         self.assertEqual(harness["acceptedExpansionCount"], 0)
-        self.assertGreaterEqual(harness["blockedExpansionCount"], 1)
+        self.assertEqual(harness["blockedExpansionCount"], 0)
         self.assertEqual(harness["rejectedRegressionCount"], 0)
         rejected = [item for item in harness["items"] if item["status"] == "rejected_regression"]
         self.assertEqual(len(rejected), 0)
-        self.assertEqual(current["direction"], "right-1")
-        self.assertEqual(current["status"], "blocked_no_audio_candidate")
-        self.assertEqual(current["targetSequence"], "Eb5 Eb5 C5 Eb5 Eb5 Eb5 C5")
-        self.assertEqual(current["bestPrefixCount"], 0)
-        self.assertEqual(completion["phraseExpansionCurrentStatus"], "blocked_no_audio_candidate")
+        self.assertEqual(current, {})
+        self.assertEqual(completion["phraseExpansionCurrentStatus"], "source_extent_exhausted")
         self.assertEqual(completion["phraseExpansionRejectedRegressionCount"], 0)
         mining = completion["staff4AdjacentMining"]
         self.assertEqual(mining["status"], "not_found")
         self.assertEqual(mining["exactCandidateCount"], 0)
-        self.assertEqual(mining["searchedWindowCount"], 1)
-        self.assertEqual(mining["nearestWindow"]["windowSequence"], "D#5 D#5 C5 D#5 D#5 D5 D#5")
-        self.assertEqual(mining["nearestWindow"]["prefixCount"], 5)
+        self.assertEqual(mining["searchedWindowCount"], 0)
+        self.assertEqual(mining.get("nearestWindow") or {}, {})
         self.assertEqual(completion["staff4AdjacentMiningStatus"], "not_found")
-        self.assertTrue(any(item["label"] == "Expansion gate" and item["value"] == "0/1" for item in completion["implementationCurrent"]))
-        self.assertIn("expansion is blocked at C5", completion["nextAction"])
+        self.assertIn("Extend the verified Staff 4 MusicXML/source map", completion["nextAction"])
 
     def test_staff4_phrase_expansion_searches_raw_detected_series(self):
         daily_records = {
@@ -493,7 +490,7 @@ class TranscriptionCompletionTests(unittest.TestCase):
         harness = completion["phraseExpansionHarness"]
         current = harness["currentBest"]
         self.assertEqual(harness["rawDetectedAudioRunCount"], 1)
-        self.assertEqual(current["status"], "ready_for_truth_review")
+        self.assertEqual(current["status"], "accepted_source_audio_expansion")
         self.assertEqual(current["direction"], "right-2")
         self.assertEqual(current["targetSequence"], "Eb5 Eb5 C5 Eb5 Eb5 Eb5 C5")
         self.assertEqual(current["bestAudioSequence"], "D#5 D#5 C5 D#5 D#5 D#5 C5")
@@ -501,15 +498,15 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertEqual(current["bestPrefixCount"], 7)
         self.assertEqual(current["audioRunSource"], "raw_detected_series")
         self.assertEqual(current["sourceImageUrl"], "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-eb-c-source.png")
-        self.assertEqual(completion["phraseExpansionReadyForReviewCount"], 2)
-        self.assertEqual(completion["phraseExpansionAcceptedCount"], 1)
+        self.assertEqual(completion["phraseExpansionReadyForReviewCount"], 0)
+        self.assertGreaterEqual(completion["phraseExpansionAcceptedCount"], 1)
         mining = completion["staff4AdjacentMining"]
         self.assertEqual(mining["status"], "exact_audio_candidate")
-        self.assertEqual(mining["exactCandidateCount"], 3)
+        self.assertEqual(mining["exactCandidateCount"], 2)
         self.assertEqual(mining["bestCandidate"]["targetDirection"], "right-2")
         self.assertEqual(mining["bestCandidate"]["windowSequence"], "D#5 D#5 C5 D#5 D#5 D#5 C5")
         self.assertEqual(completion["staff4AdjacentMiningStatus"], "exact_audio_candidate")
-        self.assertIn("Audit the next Staff 4 7-note expansion", completion["nextAction"])
+        self.assertIn("Promote the accepted Staff 4 right-2 7-note expansion", completion["nextAction"])
 
     def test_staff4_source_audio_rescan_feeds_exact_midi_search(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -669,7 +666,7 @@ class TranscriptionCompletionTests(unittest.TestCase):
         )
         self.assertEqual(completion["phraseExpansionSourceAudioRescanRunCount"], 5)
         self.assertEqual(completion["phraseExpansionHarness"]["currentBest"]["audioRunSource"], "staff4_source_audio_rescan")
-        self.assertEqual(completion["phraseExpansionHarness"]["currentBest"]["status"], "ready_for_truth_review")
+        self.assertEqual(completion["phraseExpansionHarness"]["currentBest"]["status"], "accepted_source_audio_expansion")
         self.assertEqual(completion["phraseExpansionHarness"]["currentBest"]["direction"], "right-2")
         self.assertEqual(completion["phraseExpansionHarness"]["currentBest"]["targetSequence"], "Eb5 Eb5 C5 Eb5 Eb5 Eb5 C5")
         self.assertEqual(completion["phraseExpansionHarness"]["currentBest"]["sourceImageUrl"], "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-eb-c-source.png")
@@ -1342,12 +1339,12 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertEqual(completion["staff4SourceAudioRescan"]["anchorReproductionStatus"], "reproduced")
         self.assertGreater(completion["staff4SourceAudioRescanEventCount"], 0)
         self.assertGreaterEqual(completion["phraseExpansionHarness"]["anchorCount"], 1)
-        self.assertEqual(completion["phraseExpansionHarness"]["currentBest"]["anchorSource"], "truth_manifest")
-        self.assertEqual(completion["phraseExpansionHarness"]["currentBest"]["audioRunSource"], "staff4_source_audio_rescan")
+        self.assertEqual(completion["phraseExpansionHarness"]["status"], "source_extent_exhausted")
+        self.assertEqual(completion["phraseExpansionHarness"]["acceptedAnchorNoteCount"], 7)
+        self.assertEqual(completion["phraseExpansionHarness"]["currentBest"], {})
         self.assertEqual(completion["staff4AdjacentMining"]["anchorCount"], 1)
-        self.assertEqual(completion["staff4AdjacentMiningStatus"], "exact_audio_candidate")
-        self.assertEqual(completion["staff4AdjacentMining"]["bestCandidate"]["audioRunSource"], "staff4_source_audio_rescan")
-        self.assertEqual(completion["staff4AdjacentMining"]["bestCandidate"]["windowMidiSequence"], [75, 75, 72, 75, 75, 75, 72])
+        self.assertEqual(completion["staff4AdjacentMiningStatus"], "not_found")
+        self.assertEqual(completion["staff4AdjacentMining"]["exactCandidateCount"], 0)
         self.assertNotIn("Convert one local source-score measure", completion["nextAction"])
 
     def test_local_source_score_pdf_advances_score_truth_without_accepting_phrase(self):

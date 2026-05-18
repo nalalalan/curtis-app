@@ -3514,6 +3514,7 @@ def source_phrase_expansion_harness(
     rejected_cases = rejected_staff4_expansion_cases()
     items: list[dict[str, Any]] = []
     anchor_count = 0
+    max_anchor_note_count = 0
     for anchor in staff4_anchor_matches(daily_records):
         practice_day = str(anchor.get("practiceDay") or "")
         target = anchor.get("target") if isinstance(anchor.get("target"), dict) else {}
@@ -3532,6 +3533,7 @@ def source_phrase_expansion_harness(
         if not anchor_midi:
             continue
         anchor_count += 1
+        max_anchor_note_count = max(max_anchor_note_count, len(anchor_midi))
         candidates: list[tuple[str, int, int]] = []
         if reference_end < len(source_notes):
             candidates.append(("right-1", reference_start, reference_end + 1))
@@ -3668,9 +3670,11 @@ def source_phrase_expansion_harness(
         and int(item.get("sourceNoteCount") or 0) > accepted_note_count
     ]
     current = open_extension_items[0] if open_extension_items else items[0] if items else {}
+    source_extent_exhausted = bool(anchor_count and not items)
     return {
-        "status": "accepted" if accepted_count else "ready" if items else "empty",
+        "status": "source_extent_exhausted" if source_extent_exhausted else "accepted" if accepted_count else "ready" if items else "empty",
         "anchorCount": anchor_count,
+        "acceptedAnchorNoteCount": max_anchor_note_count,
         "audioRunCount": len(audio_runs),
         "rawDetectedAudioRunCount": sum(1 for run in audio_runs if run.get("runSource") == "raw_detected_series"),
         "rankedAudioRunCount": sum(1 for run in audio_runs if run.get("runSource") == "ranked_match_group"),
@@ -3683,7 +3687,9 @@ def source_phrase_expansion_harness(
         "currentBest": current,
         "items": items[: max(0, int(limit))],
         "nextAction": (
-            f"Audit the next Staff 4 {current.get('sourceNoteCount')}-note expansion from the accepted lane."
+            f"Extend the verified Staff 4 MusicXML/source map beyond the current {max_anchor_note_count}-note accepted phrase before searching a longer audio phrase."
+            if source_extent_exhausted
+            else f"Audit the next Staff 4 {current.get('sourceNoteCount')}-note expansion from the accepted lane."
             if accepted_count and current in open_extension_items
             else "Promote the accepted expansion into the visible score/audio lane."
             if accepted_count
@@ -4138,6 +4144,7 @@ def build_transcription_completion(
     )
     phrase_expansion = source_phrase_expansion_harness(daily_records, staff4_source_rescan_runs)
     staff4_mining = staff4_adjacent_phrase_mining(daily_records, staff4_source_rescan_runs, staff4_source_rescan)
+    phrase_expansion_status = str(phrase_expansion.get("status") or "")
     phrase_expansion_target_count = int(phrase_expansion.get("targetCount") or 0)
     phrase_expansion_accepted_count = int(phrase_expansion.get("acceptedExpansionCount") or 0)
     phrase_expansion_ready_count = int(phrase_expansion.get("readyForReviewCount") or 0)
@@ -4183,7 +4190,9 @@ def build_transcription_completion(
     staff4_audit_status = str(staff4_audit.get("status") or "")
     staff4_audit_ready = staff4_audit_status not in {"", "not_generated", "blocked_no_staff4_expansion"}
     phrase_expansion_detail = (
-        f"{phrase_expansion_accepted_count} accepted / {phrase_expansion_blocked_count} blocked"
+        "source extent exhausted"
+        if phrase_expansion_status == "source_extent_exhausted"
+        else f"{phrase_expansion_accepted_count} accepted / {phrase_expansion_blocked_count} blocked"
         + (f" / {phrase_expansion_rejected_count} rejected" if phrase_expansion_rejected_count else "")
         if phrase_expansion_target_count
         else "pending anchor"
@@ -4626,6 +4635,10 @@ def build_transcription_completion(
             "Review the ready Staff 4 expansion from the raw detected-series search; exact MIDI and audio agree, "
             "but accepted truth evidence is still required before display."
         )
+    elif phrase_expansion_status == "source_extent_exhausted":
+        next_action = str(phrase_expansion.get("nextAction") or "") or (
+            "Extend the verified Staff 4 MusicXML/source map beyond the accepted phrase before searching a longer audio phrase."
+        )
     elif staff4_mining_status == "exact_audio_candidate":
         candidate = staff4_mining.get("bestCandidate") if isinstance(staff4_mining.get("bestCandidate"), dict) else {}
         next_action = (
@@ -4743,7 +4756,7 @@ def build_transcription_completion(
         "phraseExpansionAudioRunCount": phrase_expansion_audio_run_count,
         "phraseExpansionRawAudioRunCount": phrase_expansion_raw_audio_run_count,
         "phraseExpansionSourceAudioRescanRunCount": phrase_expansion_source_rescan_run_count,
-        "phraseExpansionCurrentStatus": str(phrase_expansion_current.get("status") or ""),
+        "phraseExpansionCurrentStatus": str(phrase_expansion_current.get("status") or phrase_expansion_status or ""),
         "staff4SourceAudioRescan": staff4_source_rescan,
         "staff4SourceAudioRescanStatus": staff4_source_rescan_status,
         "staff4SourceAudioRescanRunCount": staff4_source_rescan_run_count,

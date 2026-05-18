@@ -29,7 +29,7 @@ class LongPhraseTruthTests(unittest.TestCase):
         self.assertEqual(result["positiveSourcePhraseVerifiedCount"], 4)
         self.assertEqual(result["rejectedRegressionPhraseCount"], 4)
         self.assertEqual(result["rejectedRegressionBlockedCount"], 4)
-        self.assertEqual(result["liveAcceptedPhraseCount"], 2)
+        self.assertEqual(result["liveAcceptedPhraseCount"], 3)
         self.assertIn("rejected-staff4-right2-audit-eb-vs-d", result["blockedRegressionIds"])
 
     def test_current_wieniawski_source_map_has_the_reviewed_exact_midi_sequence(self):
@@ -102,6 +102,28 @@ class LongPhraseTruthTests(unittest.TestCase):
         self.assertEqual(gate["referenceEnd"], 15)
         self.assertEqual(gate["bestOverlapExactSequence"], ["Eb5", "Eb5", "C5", "Eb5", "Eb5", "Eb5"])
         self.assertEqual(gate["bestOverlapMidiSequence"], [75, 75, 72, 75, 75, 75])
+
+    def test_gate_accepts_live_staff4_seven_note_full_phrase_by_exact_midi(self):
+        source_notes = symbolic_score_from_target(wieniawski_reference_target())["notes"]
+        detected = [
+            detected_note("D#5", 75, 0.00),
+            detected_note("D#5", 75, 0.12),
+            detected_note("C5", 72, 0.24),
+            detected_note("D#5", 75, 0.36),
+            detected_note("D#5", 75, 0.48),
+            detected_note("D#5", 75, 0.60),
+            detected_note("C5", 72, 0.72),
+        ]
+
+        gate = exact_midi_phrase_gate(detected, source_notes, audio_agreed=True, min_exact_notes=7)
+
+        self.assertTrue(gate["accepted"])
+        self.assertEqual(gate["status"], "source_score_exact_midi_sequence_verified")
+        self.assertEqual(gate["bestOverlap"], 7)
+        self.assertEqual(gate["referenceStart"], 9)
+        self.assertEqual(gate["referenceEnd"], 16)
+        self.assertEqual(gate["bestOverlapExactSequence"], ["Eb5", "Eb5", "C5", "Eb5", "Eb5", "Eb5", "C5"])
+        self.assertEqual(gate["bestOverlapMidiSequence"], [75, 75, 72, 75, 75, 75, 72])
 
     def test_staff4_extension_rejects_current_audio_after_the_accepted_prefix(self):
         source_notes = symbolic_score_from_target(wieniawski_reference_target())["notes"]

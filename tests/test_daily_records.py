@@ -1216,7 +1216,7 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(target["scoreNoteCropStatus"], "actual_source_phrase_review_pending")
         self.assertEqual(audit["sourcePdfLocalReadyCount"], 1)
         self.assertEqual(audit["symbolicScoreNoteCount"], 16)
-        self.assertEqual(audit["symbolicScoreSourceSnippetCount"], 2)
+        self.assertEqual(audit["symbolicScoreSourceSnippetCount"], 3)
         self.assertGreaterEqual(audit["scoreMapCandidateGlyphCount"], 1)
         self.assertGreaterEqual(audit["scoreMapCandidateStaffCount"], 1)
         self.assertGreaterEqual(audit["scoreMapNoteHypothesisCount"], 1)
@@ -1252,13 +1252,14 @@ class DailyRecordTests(unittest.TestCase):
             for item in target["symbolicScore"]["sourceSnippets"]
             if item.get("referenceStart") == 9 and item.get("referenceEnd") == 16
         )
-        self.assertEqual(extension_source["status"], "source_score_extended_window_verified_audio_extension_blocked")
+        self.assertEqual(extension_source["status"], "source_score_exact_midi_sequence_verified")
         self.assertEqual(extension_source["visibleScoreExactNoteSequence"], ["Eb5", "Eb5", "C5", "Eb5", "Eb5", "Eb5", "C5"])
         self.assertTrue(extension_source["visibleScoreExactNoteSequenceVerified"])
         self.assertTrue(extension_source["scoreBoxCenterAgreement"])
-        self.assertFalse(extension_source["truthEvidenceAccepted"])
+        self.assertTrue(extension_source["truthEvidenceAccepted"])
+        self.assertEqual(extension_source["acceptedAudioPhrase"]["midiSequence"], [75, 75, 72, 75, 75, 75, 72])
         self.assertEqual(extension_source["extensionCheck"]["expectedNextScoreNote"], "C5")
-        self.assertEqual(extension_source["extensionCheck"]["observedNextAudioNote"], "")
+        self.assertEqual(extension_source["extensionCheck"]["observedNextAudioNote"], "C5")
         accepted_source = next(
             item
             for item in target["symbolicScore"]["sourceSnippets"]

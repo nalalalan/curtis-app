@@ -216,7 +216,7 @@ class SymbolicScoreTests(unittest.TestCase):
 
         self.assertEqual(audit["status"], "symbolic_score_ready")
         self.assertEqual(audit["symbolicScoreNoteCount"], 16)
-        self.assertEqual(audit["symbolicScoreSourceSnippetCount"], 2)
+        self.assertEqual(audit["symbolicScoreSourceSnippetCount"], 3)
         self.assertEqual(candidate_audit["status"], "score_map_candidates_ready")
         self.assertGreaterEqual(candidate_audit["scoreMapCandidateGlyphCount"], 1)
         self.assertGreaterEqual(candidate_audit["scoreMapCandidateStaffCount"], 1)
@@ -425,9 +425,55 @@ class SymbolicScoreTests(unittest.TestCase):
             if item.get("referenceStart") == 9 and item.get("referenceEnd") == 16
         )
         self.assertEqual(extension["visibleScoreExactNoteSequence"], ["Eb5", "Eb5", "C5", "Eb5", "Eb5", "Eb5", "C5"])
-        self.assertFalse(extension["truthEvidenceAccepted"])
+        self.assertTrue(extension["truthEvidenceAccepted"])
+        self.assertEqual(extension["acceptedAudioPhrase"]["midiSequence"], [75, 75, 72, 75, 75, 75, 72])
         self.assertEqual(extension["extensionCheck"]["expectedNextScoreNote"], "C5")
-        self.assertEqual(extension["extensionCheck"]["observedNextAudioNote"], "")
+        self.assertEqual(extension["extensionCheck"]["observedNextAudioNote"], "C5")
+
+    def test_wieniawski_staff4_full_phrase_accepts_seven_audio_agreed_notes(self):
+        target = wieniawski_reference_target()
+        series = detected_note_series(
+            [
+                {
+                    "transcriptionId": "wieniawski-staff4-right2-live-window",
+                    "sampleId": "Njh8_zq9_DM-8835",
+                    "sourceWindow": "*8835-8925",
+                    "notes": [
+                        note("D#5", 20.225, 20.422),
+                        note("D#5", 20.55, 20.689),
+                        note("C5", 20.817, 20.898),
+                        note("D#5", 21.629, 21.792),
+                        note("D#5", 22.361, 22.535),
+                        note("D#5", 22.829, 22.992),
+                        note("C5", 23.117, 23.28),
+                    ],
+                }
+            ],
+            max_series=None,
+        )
+
+        matches = score_sequence_matches_for_series(
+            series,
+            [{"title": "Wieniawski Scherzo-Tarantelle, Op. 16", "score": target}],
+        )
+
+        self.assertEqual(matches[0]["status"], "symbolic_score_phrase_match")
+        self.assertEqual(matches[0]["matchedNoteRun"], 7)
+        self.assertEqual(matches[0]["referenceStart"], 9)
+        self.assertEqual(matches[0]["referenceEnd"], 16)
+        self.assertTrue(matches[0]["truthEvidenceAccepted"])
+        self.assertEqual(
+            matches[0]["score"]["imageUrl"],
+            "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-eb-c-source.png",
+        )
+        self.assertEqual(
+            [item["note"] for item in matches[0]["scoreMatchedNotes"]],
+            ["Eb5", "Eb5", "C5", "Eb5", "Eb5", "Eb5", "C5"],
+        )
+        self.assertEqual(
+            [item["note"] for item in matches[0]["displayDetectedNotes"]],
+            ["Eb5", "Eb5", "C5", "Eb5", "Eb5", "Eb5", "C5"],
+        )
 
     def test_wieniawski_lower_octave_opening_map_is_rejected(self):
         target = wieniawski_reference_target()
