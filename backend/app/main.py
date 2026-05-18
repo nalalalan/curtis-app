@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import mimetypes
 import os
 import re
 import tempfile
@@ -51,6 +52,9 @@ from .staff4_audit import (
     packet_artifact_path,
 )
 from .transcription import transcribe_media_samples
+
+mimetypes.add_type("font/woff2", ".woff2")
+mimetypes.add_type("font/woff", ".woff")
 
 
 class SourceConfig(BaseModel):
@@ -997,6 +1001,10 @@ async def static_assets(path: str) -> FileResponse:
         raise HTTPException(status_code=404, detail="Asset not found")
     if not target.exists() or not target.is_file():
         raise HTTPException(status_code=404, detail="Asset not found")
+    if target.suffix.lower() == ".woff2":
+        return FileResponse(target, media_type="font/woff2")
+    if target.suffix.lower() == ".woff":
+        return FileResponse(target, media_type="font/woff")
     return FileResponse(target)
 
 

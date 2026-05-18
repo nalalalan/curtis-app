@@ -2376,6 +2376,7 @@ h2 {
   font-family: "CurtisBravura", "Bravura", "Noto Music", "Segoe UI Symbol", "Apple Symbols", Georgia, "Times New Roman", serif;
   font-size: 68px;
   font-weight: 400;
+  font-synthesis: none;
   text-rendering: geometricPrecision;
 }
 
@@ -2384,6 +2385,7 @@ h2 {
   font-family: "CurtisBravura", "Bravura", "Noto Music", "Segoe UI Symbol", "Apple Symbols", Georgia, "Times New Roman", serif;
   font-size: 24px;
   font-weight: 400;
+  font-synthesis: none;
   text-rendering: geometricPrecision;
 }
 
@@ -2392,6 +2394,7 @@ h2 {
   font-family: "CurtisBravura", "Bravura", "Noto Music", "Segoe UI Symbol", "Apple Symbols", Georgia, "Times New Roman", serif;
   font-size: 24px;
   font-weight: 400;
+  font-synthesis: none;
   text-rendering: geometricPrecision;
 }
 
@@ -2403,19 +2406,20 @@ h2 {
 }
 
 .notation-sheet .accidental-flat {
-  font-size: 36px;
+  font-size: 38px;
 }
 
 .notation-sheet .accidental-sharp {
-  font-size: 32px;
+  font-size: 36px;
 }
 
 .notation-sheet .notehead {
   fill: var(--ink);
   stroke: none;
   font-family: "CurtisBravura", "Bravura", "Noto Music", "Segoe UI Symbol", "Apple Symbols", Georgia, "Times New Roman", serif;
-  font-size: 36px;
+  font-size: 38px;
   dominant-baseline: central;
+  font-synthesis: none;
   text-anchor: middle;
   text-rendering: geometricPrecision;
 }
@@ -4297,6 +4301,7 @@ h2 {
 .notation-sheet .treble-clef {
   font-family: "CurtisBravura", "Bravura", "Noto Music", "Segoe UI Symbol", "Apple Symbols", serif;
   font-size: 68px;
+  font-synthesis: none;
   text-rendering: geometricPrecision;
 }
 
@@ -4304,6 +4309,7 @@ h2 {
   font-family: "CurtisBravura", "Bravura", "Noto Music", "Segoe UI Symbol", "Apple Symbols", serif;
   font-size: 24px;
   font-weight: 400;
+  font-synthesis: none;
   text-rendering: geometricPrecision;
 }
 
@@ -4311,6 +4317,7 @@ h2 {
   font-family: "CurtisBravura", "Bravura", "Noto Music", "Segoe UI Symbol", "Apple Symbols", serif;
   font-size: 24px;
   font-weight: 400;
+  font-synthesis: none;
   text-rendering: geometricPrecision;
 }
 
@@ -4322,19 +4329,20 @@ h2 {
 }
 
 .notation-sheet .accidental-flat {
-  font-size: 36px;
+  font-size: 38px;
 }
 
 .notation-sheet .accidental-sharp {
-  font-size: 32px;
+  font-size: 36px;
 }
 
 .notation-sheet .notehead {
   fill: var(--ink);
   stroke: none;
   font-family: "CurtisBravura", "Bravura", "Noto Music", "Segoe UI Symbol", "Apple Symbols", serif;
-  font-size: 36px;
+  font-size: 38px;
   dominant-baseline: central;
+  font-synthesis: none;
   text-anchor: middle;
   text-rendering: geometricPrecision;
 }

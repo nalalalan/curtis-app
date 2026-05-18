@@ -35,12 +35,13 @@ SYMBOLIC_STAFF_LINE_GAP = 12.0
 SYMBOLIC_STAFF_BOTTOM = SYMBOLIC_STAFF_TOP + (SYMBOLIC_STAFF_LINE_GAP * 4)
 SYMBOLIC_G4_Y = SYMBOLIC_STAFF_TOP + (SYMBOLIC_STAFF_LINE_GAP * 3)
 SYMBOLIC_STAFF_STEP_Y = SYMBOLIC_STAFF_LINE_GAP / 2
-SYMBOLIC_LEDGER_HALF_WIDTH = 12.5
+SYMBOLIC_LEDGER_HALF_WIDTH = 12.0
 SYMBOLIC_KEY_SIGNATURE_START_X = 96
 SYMBOLIC_KEY_SIGNATURE_STEP_X = 16
 SYMBOLIC_NOTEHEAD_FONT_SIZE = 40
-SYMBOLIC_ACCIDENTAL_FONT_SIZE = 36
+SYMBOLIC_ACCIDENTAL_FONT_SIZE = 38
 SYMBOLIC_CLEF_FONT_SIZE = 66
+SYMBOLIC_STEM_OFFSET_X = 6.6
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -454,7 +455,7 @@ def render_symbolic_score_svg(
         x = start_x + (index * step_x)
         y = _staff_y(str(note.get("note") or ""))
         stem_up = y >= 64
-        stem_x = x + (7.2 if stem_up else -7.2)
+        stem_x = x + (SYMBOLIC_STEM_OFFSET_X if stem_up else -SYMBOLIC_STEM_OFFSET_X)
         stem_y = max(15, y - 34) if stem_up else min(108, y + 34)
         marks.append(
             "".join(
@@ -472,9 +473,9 @@ def render_symbolic_score_svg(
         "svg{background:#fffdf8;color:#1b2524;font-family:Georgia,'Times New Roman',serif}"
         ".staff line,.ledger{stroke:#1f2928;stroke-width:1.45;stroke-linecap:square}"
         ".note line{fill:#1f2928;stroke:#1f2928;stroke-width:1.8;stroke-linecap:round}"
-        f".clef{{font-family:'CurtisBravura','Bravura','Noto Music','Segoe UI Symbol',serif;font-size:{SYMBOLIC_CLEF_FONT_SIZE}px;fill:#1f2928;text-rendering:geometricPrecision}}"
-        f".key-signature{{font-family:'CurtisBravura','Bravura','Noto Music','Segoe UI Symbol',serif;font-size:{SYMBOLIC_ACCIDENTAL_FONT_SIZE}px;font-weight:400;fill:#1f2928;dominant-baseline:central;text-anchor:middle;text-rendering:geometricPrecision}}"
-        f".notehead{{font-family:'CurtisBravura','Bravura','Noto Music','Segoe UI Symbol',serif;font-size:{SYMBOLIC_NOTEHEAD_FONT_SIZE}px;fill:#1f2928;dominant-baseline:central;text-anchor:middle;text-rendering:geometricPrecision}}"
+        f".clef{{font-family:'CurtisBravura','Bravura','Noto Music','Segoe UI Symbol',serif;font-size:{SYMBOLIC_CLEF_FONT_SIZE}px;fill:#1f2928;font-synthesis:none;text-rendering:geometricPrecision}}"
+        f".key-signature{{font-family:'CurtisBravura','Bravura','Noto Music','Segoe UI Symbol',serif;font-size:{SYMBOLIC_ACCIDENTAL_FONT_SIZE}px;font-weight:400;fill:#1f2928;dominant-baseline:central;text-anchor:middle;font-synthesis:none;text-rendering:geometricPrecision}}"
+        f".notehead{{font-family:'CurtisBravura','Bravura','Noto Music','Segoe UI Symbol',serif;font-size:{SYMBOLIC_NOTEHEAD_FONT_SIZE}px;fill:#1f2928;dominant-baseline:central;text-anchor:middle;font-synthesis:none;text-rendering:geometricPrecision}}"
         ".title{font-size:16px;font-weight:600}.label{font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}"
         "</style>"
     )

@@ -1,3 +1,4 @@
+import asyncio
 import subprocess
 import textwrap
 from pathlib import Path
@@ -56,7 +57,8 @@ def test_notation_renderer_draws_exact_accidentals():
         assert(noKey.includes('font-size: 70px') === false, "notation renderer should not inline clef styling");
         assert(noKey.includes('aria-label="A#4"'), "A# must not render as natural A in aria label");
         assert(noKey.includes('aria-label="D#6"'), "D# must not render as natural D in aria label");
-        assert(noKey.includes('class="note-accidental accidental-glyph accidental-sharp" x="278.7" y="5.0"'), "high D# sharp must stay vertically aligned with the high notehead");
+        assert(noKey.includes('class="note-accidental accidental-glyph accidental-sharp" x="92.0" y="55.0"'), "first-note A# sharp needs professional clearance before the notehead");
+        assert(noKey.includes('class="note-accidental accidental-glyph accidental-sharp" x="282.7" y="5.0"'), "high D# sharp must stay vertically aligned with the high notehead");
 
         const flatKey = vm.runInContext(
           `renderNotationSheet([
@@ -83,7 +85,15 @@ def test_notation_styles_use_local_music_font_and_professional_glyph_sizes():
     assert ".notation-sheet .treble-clef" in css
     assert "font-size: 68px;" in css
     assert ".notation-sheet .accidental-flat" in css
-    assert "font-size: 36px;" in css
+    assert "font-size: 38px;" in css
     assert ".notation-sheet .accidental-sharp" in css
-    assert "font-size: 32px;" in css
+    assert "font-size: 36px;" in css
+    assert "font-synthesis: none;" in css
     assert "text-rendering: geometricPrecision;" in css
+
+
+def test_local_music_font_serves_as_font_file():
+    from backend.app.main import static_assets
+
+    response = asyncio.run(static_assets("fonts/Bravura.woff2"))
+    assert response.media_type == "font/woff2"
