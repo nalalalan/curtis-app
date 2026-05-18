@@ -105,6 +105,8 @@ def test_notation_styles_use_local_music_font_and_professional_glyph_sizes():
     css = Path("styles.css").read_text(encoding="utf-8")
     assert 'url("/assets/fonts/Bravura.woff2") format("woff2")' in css
     assert ".notation-abc-target" in css
+    assert "min-width: 520px;" in css
+    assert "scrollbar-width: thin;" in css
     assert ".notation-sheet.notation-abc-ready .notation-svg-fallback" in css
     assert ".notation-svg-fallback svg" in css
     assert ".notation-sheet svg" not in css

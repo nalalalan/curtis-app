@@ -2347,9 +2347,19 @@ h2 {
   position: relative;
   overflow-x: auto;
   overflow-y: hidden;
+  scrollbar-width: thin;
   border: 1px solid rgba(31, 41, 39, .13);
   border-radius: 7px;
   background: #fffdf8;
+}
+
+.notation-sheet::-webkit-scrollbar {
+  height: 7px;
+}
+
+.notation-sheet::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(31, 41, 39, .32);
 }
 
 .notation-sheet.notation-draft {
@@ -2372,8 +2382,8 @@ h2 {
 }
 
 .notation-abc-target {
-  min-width: 680px;
-  padding: 9px 10px 6px;
+  min-width: 520px;
+  padding: 10px 12px 16px;
 }
 
 .notation-abc-target svg {
@@ -4324,7 +4334,7 @@ h2 {
 }
 
 .notation-sheet.notation-abc-ready .notation-abc-target {
-  min-width: 0;
+  min-width: 520px;
 }
 
 .notation-sheet .treble-clef {

@@ -1566,8 +1566,8 @@ function hydrateNotationSheet(sheet) {
       paddingright: 8,
       paddingtop: 0,
       responsive: "resize",
-      scale: 1,
-      staffwidth: 540,
+      scale: 1.05,
+      staffwidth: 420,
     });
     sheet.dataset.abcRendered = "true";
     sheet.classList.add("notation-abc-ready");
