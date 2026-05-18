@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from .corrections import wieniawski_reference_target
-from .long_phrase_truth import exact_midi_phrase_gate, note_midi_sequence
+from .long_phrase_truth import exact_midi_phrase_gate, note_midi_sequence, note_window_continuity
 from .symbolic_scores import symbolic_score_from_target
 
 
@@ -37,8 +37,19 @@ def truth_phrase_notes(phrase: dict[str, Any]) -> list[dict[str, Any]]:
     notes = phrase.get("notes") if isinstance(phrase.get("notes"), list) else []
     if notes:
         return [note for note in notes if isinstance(note, dict)]
-    exact = phrase.get("sequence") if isinstance(phrase.get("sequence"), list) else []
+    note_windows = phrase.get("noteWindows") if isinstance(phrase.get("noteWindows"), list) else []
     midi = phrase.get("midiSequence") if isinstance(phrase.get("midiSequence"), list) else []
+    if note_windows:
+        out: list[dict[str, Any]] = []
+        for index, window in enumerate(note_windows):
+            if not isinstance(window, dict):
+                continue
+            note = dict(window)
+            if index < len(midi):
+                note["midi"] = midi[index]
+            out.append(note)
+        return out
+    exact = phrase.get("sequence") if isinstance(phrase.get("sequence"), list) else []
     out: list[dict[str, Any]] = []
     for index, value in enumerate(exact):
         note = {"note": str(value)}
@@ -92,15 +103,23 @@ def verify_long_phrase_truth_manifest(path: str | Path | None = None) -> dict[st
             min_exact_notes=int(phrase.get("minimumExactNotes") or 5),
             require_full_query=True,
         )
+        continuity = note_window_continuity(phrase_notes)
+        phrase_verified = bool(gate.get("accepted")) and bool(continuity.get("continuous"))
         positive_results.append(
             {
                 "id": str(phrase.get("id") or ""),
                 "sourceId": source_id,
-                "status": "source_phrase_verified" if gate.get("accepted") else str(gate.get("status") or "source_phrase_rejected"),
+                "status": "source_phrase_verified"
+                if phrase_verified
+                else "source_phrase_discontinuous"
+                if gate.get("accepted") and not continuity.get("continuous")
+                else str(gate.get("status") or "source_phrase_rejected"),
                 "noteCount": len(phrase_notes),
                 "bestOverlap": int(gate.get("bestOverlap") or 0),
                 "midiSequence": gate.get("queryMidiSequence") or [],
                 "liveAccepted": bool(phrase.get("liveAccepted")),
+                "phraseContinuous": bool(continuity.get("continuous")),
+                "maxInterNoteGapSeconds": continuity.get("maxInterNoteGapSeconds"),
             }
         )
 
@@ -118,7 +137,8 @@ def verify_long_phrase_truth_manifest(path: str | Path | None = None) -> dict[st
             min_exact_notes=int(phrase.get("minimumExactNotes") or 5),
             require_full_query=True,
         )
-        blocked = not bool(gate.get("accepted"))
+        continuity = note_window_continuity(phrase_notes)
+        blocked = not bool(gate.get("accepted")) or not bool(continuity.get("continuous"))
         rejected_results.append(
             {
                 "id": str(phrase.get("id") or ""),
@@ -128,6 +148,8 @@ def verify_long_phrase_truth_manifest(path: str | Path | None = None) -> dict[st
                 "bestOverlap": int(gate.get("bestOverlap") or 0),
                 "gateStatus": str(gate.get("status") or ""),
                 "midiSequence": gate.get("queryMidiSequence") or [],
+                "phraseContinuous": bool(continuity.get("continuous")),
+                "maxInterNoteGapSeconds": continuity.get("maxInterNoteGapSeconds"),
             }
         )
 

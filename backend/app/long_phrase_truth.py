@@ -25,6 +25,7 @@ NOTE_CLASS_VALUES = {
 }
 
 PITCH_CLASS_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+DEFAULT_MAX_PHRASE_GAP_SECONDS = 3.0
 
 
 def note_midi_value(note: dict[str, Any] | str) -> int | None:
@@ -71,6 +72,67 @@ def note_midi_sequence(notes: list[dict[str, Any]]) -> list[int]:
 
 def note_pitch_class_sequence(notes: list[dict[str, Any]]) -> list[str]:
     return [midi_pitch_class(value) for value in note_midi_sequence(notes)]
+
+
+def note_window_continuity(
+    notes: list[dict[str, Any]],
+    *,
+    max_gap_seconds: float = DEFAULT_MAX_PHRASE_GAP_SECONDS,
+) -> dict[str, Any]:
+    timed_notes: list[dict[str, float]] = []
+    for note in notes:
+        if not isinstance(note, dict):
+            continue
+        try:
+            start = float(note.get("startSeconds"))
+        except (TypeError, ValueError):
+            continue
+        try:
+            end = float(note.get("endSeconds"))
+        except (TypeError, ValueError):
+            end = start
+        if end < start:
+            end = start
+        timed_notes.append({"start": start, "end": end})
+    timed_notes = sorted(timed_notes, key=lambda item: (item["start"], item["end"]))
+    if len(timed_notes) < 2:
+        return {
+            "continuous": True,
+            "noteCount": len(timed_notes),
+            "maxInterNoteGapSeconds": 0.0,
+            "maxAllowedInterNoteGapSeconds": round(float(max_gap_seconds), 3),
+            "largestGapAfterIndex": -1,
+            "spanSeconds": 0.0,
+            "soundedSeconds": 0.0,
+            "limit": "",
+        }
+
+    max_gap = 0.0
+    largest_gap_after = -1
+    sounded = 0.0
+    for index, note in enumerate(timed_notes):
+        sounded += max(0.0, note["end"] - note["start"])
+        if index == 0:
+            continue
+        previous = timed_notes[index - 1]
+        gap = max(0.0, note["start"] - previous["end"])
+        if gap > max_gap:
+            max_gap = gap
+            largest_gap_after = index - 1
+    span = max(0.0, timed_notes[-1]["end"] - timed_notes[0]["start"])
+    continuous = max_gap <= float(max_gap_seconds)
+    return {
+        "continuous": continuous,
+        "noteCount": len(timed_notes),
+        "maxInterNoteGapSeconds": round(max_gap, 3),
+        "maxAllowedInterNoteGapSeconds": round(float(max_gap_seconds), 3),
+        "largestGapAfterIndex": largest_gap_after,
+        "spanSeconds": round(span, 3),
+        "soundedSeconds": round(sounded, 3),
+        "limit": ""
+        if continuous
+        else f"Exact MIDI is not accepted as one phrase because the largest internal gap is {max_gap:.3f}s.",
+    }
 
 
 def longest_common_contiguous_midi_run(query: list[int], reference: list[int]) -> dict[str, Any]:

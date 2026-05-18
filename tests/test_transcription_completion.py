@@ -352,7 +352,7 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertEqual(harness["rejectedRegressionCount"], 0)
         rejected = [item for item in harness["items"] if item["status"] == "rejected_regression"]
         self.assertEqual(len(rejected), 0)
-        self.assertEqual(current["status"], "blocked_no_audio_candidate")
+        self.assertEqual(current["status"], "blocked_audio_mismatch")
         self.assertEqual(current["direction"], "right-1")
         self.assertEqual(current["targetSequence"], "Eb5 Eb5 C5 Eb5 Eb5 Eb5 C5 A4")
         self.assertEqual(current["targetMidiSequence"], [75, 75, 72, 75, 75, 75, 72, 69])
@@ -361,7 +361,7 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertEqual(current["bestAudioSequence"], "")
         self.assertEqual(current["sourceImageUrl"], "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-eb-c-a-source.png")
         self.assertFalse(current["truthEvidenceAccepted"])
-        self.assertEqual(completion["phraseExpansionCurrentStatus"], "blocked_no_audio_candidate")
+        self.assertEqual(completion["phraseExpansionCurrentStatus"], "blocked_audio_mismatch")
         self.assertEqual(completion["phraseExpansionRejectedRegressionCount"], 0)
         mining = completion["staff4AdjacentMining"]
         self.assertEqual(mining["status"], "not_found")
@@ -520,6 +520,39 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertEqual(mining["bestCandidate"]["windowSequence"], "D#5 D#5 C5 D#5 D#5 D#5 C5 A4")
         self.assertEqual(completion["staff4AdjacentMiningStatus"], "exact_audio_candidate")
         self.assertIn("Audit the next Staff 4 8-note expansion", completion["nextAction"])
+
+    def test_staff4_exact_midi_search_rejects_stitched_discontinuous_phrase(self):
+        runs = [
+            {
+                "practiceDay": "2026-05-03",
+                "sampleId": "Njh8_zq9_DM-8835",
+                "sourceWindow": "*8835-8925",
+                "runSource": "staff4_source_audio_rescan",
+                "notes": [
+                    note("D#5", 20.225),
+                    note("D#5", 20.550),
+                    note("C5", 20.817),
+                    note("D#5", 21.629),
+                    note("D#5", 22.361),
+                    note("D#5", 22.829),
+                    note("C5", 23.117),
+                    note("A4", 32.265),
+                ],
+            }
+        ]
+
+        search = audio_window_search_for_exact_midi(
+            runs,
+            [75, 75, 72, 75, 75, 75, 72, 69],
+            practice_day="2026-05-03",
+            anchor_sample_id="Njh8_zq9_DM-8835",
+            anchor_absolute_start=8855.225,
+        )
+
+        self.assertEqual(search["exactCandidates"][0]["windowSequence"], "D#5 D#5 C5 D#5 D#5 D#5 C5 A4")
+        self.assertTrue(search["exactCandidates"][0]["audioAgreed"])
+        self.assertFalse(search["exactCandidates"][0]["phraseContinuous"])
+        self.assertGreater(search["exactCandidates"][0]["phraseContinuity"]["maxInterNoteGapSeconds"], 8.0)
 
     def test_staff4_source_audio_rescan_feeds_exact_midi_search(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1712,7 +1745,7 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertGreaterEqual(completion["phraseExpansionHarness"]["anchorCount"], 1)
         self.assertEqual(completion["phraseExpansionHarness"]["status"], "ready")
         self.assertEqual(completion["phraseExpansionHarness"]["acceptedAnchorNoteCount"], 7)
-        self.assertEqual(completion["phraseExpansionHarness"]["currentBest"]["status"], "blocked_no_audio_candidate")
+        self.assertEqual(completion["phraseExpansionHarness"]["currentBest"]["status"], "blocked_audio_mismatch")
         self.assertEqual(completion["phraseExpansionHarness"]["currentBest"]["targetSequence"], "Eb5 Eb5 C5 Eb5 Eb5 Eb5 C5 A4")
         self.assertEqual(completion["phraseExpansionHarness"]["currentBest"]["expectedNextScoreNote"], "A4")
         self.assertEqual(completion["staff4AdjacentMining"]["anchorCount"], 1)

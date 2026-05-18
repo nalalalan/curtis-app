@@ -291,7 +291,7 @@ def wieniawski_reference_target() -> dict[str, Any]:
             "partId": "P1",
             "musicXmlPath": "assets/score/wieniawski-scherzo-tarantelle-symbolic-opening.musicxml",
             "candidateMapPath": "assets/score/wieniawski-scherzo-tarantelle-page2-score-map-candidates.json",
-            "source": "Manually verified symbolic excerpts from the local IMSLP solo-violin PDF, page 2. The visible opening phrase begins A5-G5-F5-A5-G5-F5-A5-G#5-F5. The accepted Staff 4 lane has three exact-MIDI source/audio windows from the same local IMSLP staff: Eb5-Eb5-C5-Eb5-Eb5, Eb5-Eb5-C5-Eb5-Eb5-Eb5, and Eb5-Eb5-C5-Eb5-Eb5-Eb5-C5. The source map now extends one more verified source-only note to Eb5-Eb5-C5-Eb5-Eb5-Eb5-C5-A4; this eighth note is not accepted evidence until paired audio agrees. The previous D6-C6-Bb5 source sequence, lower-octave D5-C5-Bb4 map, D-Bb-G-D source sequence, stale Staff 4 D5 mismatch run, and user-rejected Bb-D-C-Bb-D lane remain rejected.",
+            "source": "Manually verified symbolic excerpts from the local IMSLP solo-violin PDF, page 2. The visible opening phrase begins A5-G5-F5-A5-G5-F5-A5-G#5-F5. The accepted Staff 4 lane has three exact-MIDI source/audio windows from the same local IMSLP staff: Eb5-Eb5-C5-Eb5-Eb5, Eb5-Eb5-C5-Eb5-Eb5-Eb5, and Eb5-Eb5-C5-Eb5-Eb5-Eb5-C5. The source map now extends one more verified source-only note to Eb5-Eb5-C5-Eb5-Eb5-Eb5-C5-A4; the v11 audio search finds those MIDI values only by stitching an A4 8.985 seconds after the accepted seven-note phrase, so this eighth note is not accepted evidence. The previous D6-C6-Bb5 source sequence, lower-octave D5-C5-Bb4 map, D-Bb-G-D source sequence, stale Staff 4 D5 mismatch run, stitched A4 continuation, and user-rejected Bb-D-C-Bb-D lane remain rejected.",
             "sourcePdfLocalPath": "assets/score/wieniawski-scherzo-tarantelle-solo-imslp.pdf",
             "candidateMapStatus": "unaccepted_score_glyph_verification_queue",
             "verification": "source_score_note_sequence_verified_before_matching",
@@ -470,8 +470,13 @@ def wieniawski_reference_target() -> dict[str, Any]:
                         "acceptedPrefixMidiSequence": [75, 75, 72, 75, 75, 75, 72],
                         "expectedNextScoreNote": "A4",
                         "expectedNextScoreMidi": 69,
-                        "audioAgreement": False,
-                        "resolution": "source_map_extended_pending_audio_gate"
+                        "observedNextAudioNote": "A4",
+                        "observedNextAudioMidi": 69,
+                        "audioAgreement": True,
+                        "phraseContinuous": False,
+                        "maxInterNoteGapSeconds": 8.985,
+                        "maxAllowedInterNoteGapSeconds": 3.0,
+                        "resolution": "exact_midi_candidate_rejected_discontinuous_phrase"
                     },
                     "sourceCropCoordinates": {
                         "sourceImage": "verification/wieniawski-page2-300.png",

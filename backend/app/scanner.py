@@ -63,7 +63,7 @@ from .daily_records import (
 from .evidence_ledger import build_active_practice_coverage, build_evidence_progress, build_truth_progress
 from .gold_truth import load_long_phrase_truth, verify_long_phrase_truth_manifest
 from .gold_review import build_gold_review_loop
-from .long_phrase_truth import exact_midi_phrase_gate
+from .long_phrase_truth import exact_midi_phrase_gate, note_window_continuity
 from .study_packets import build_practice_study, build_practice_totals
 from .transcription import (
     TRANSCRIPTION_PIPELINE_VERSION,
@@ -3437,6 +3437,7 @@ def best_audio_window_for_source_range(
             )
             candidate_only = bool(run.get("candidateOnly"))
             audio_agreed = notes_have_score_match_audio_agreement(window_notes, candidate_only=candidate_only)
+            continuity = note_window_continuity([note for note in window_notes if isinstance(note, dict)])
             current = {
                 "run": run,
                 "windowStart": start,
@@ -3448,10 +3449,13 @@ def best_audio_window_for_source_range(
                 "prefixCount": prefix_count,
                 "mismatchIndex": mismatch_index,
                 "audioAgreed": audio_agreed,
+                "phraseContinuous": bool(continuity.get("continuous")),
+                "phraseContinuity": continuity,
                 "candidateOnly": candidate_only,
             }
             current_key = (
                 1 if audio_agreed else 0,
+                1 if continuity.get("continuous") else 0,
                 exact_count,
                 prefix_count,
                 1 if run.get("sampleId") else 0,
@@ -3459,6 +3463,7 @@ def best_audio_window_for_source_range(
             )
             best_key = (
                 1 if best.get("audioAgreed") else 0,
+                1 if best.get("phraseContinuous") else 0,
                 int(best.get("exactCount") or 0),
                 int(best.get("prefixCount") or 0),
                 1 if (best.get("run") or {}).get("sampleId") else 0,
@@ -3512,6 +3517,7 @@ def audio_window_search_for_exact_midi(
             )
             candidate_only = bool(run.get("candidateOnly"))
             audio_agreed = notes_have_score_match_audio_agreement(window_notes, candidate_only=candidate_only)
+            continuity = note_window_continuity([note for note in window_notes if isinstance(note, dict)])
             local_start = float(window_notes[0].get("startSeconds") or 0.0) if window_notes else 0.0
             local_end = float(window_notes[-1].get("endSeconds") or local_start) if window_notes else local_start
             absolute_start = source_window_start + local_start
@@ -3540,6 +3546,8 @@ def audio_window_search_for_exact_midi(
                 "prefixCount": prefix_count,
                 "mismatchIndex": mismatch_index,
                 "audioAgreed": audio_agreed,
+                "phraseContinuous": bool(continuity.get("continuous")),
+                "phraseContinuity": continuity,
                 "candidateOnly": candidate_only,
                 "windowNotes": expansion_window_note_summary(window_notes),
             }
@@ -3549,6 +3557,7 @@ def audio_window_search_for_exact_midi(
                 exact_count,
                 prefix_count,
                 1 if audio_agreed else 0,
+                1 if continuity.get("continuous") else 0,
                 1 if item["sameSampleAsAnchor"] else 0,
                 -distance,
             )
@@ -3556,6 +3565,7 @@ def audio_window_search_for_exact_midi(
                 int(nearest.get("exactCount") or 0),
                 int(nearest.get("prefixCount") or 0),
                 1 if nearest.get("audioAgreed") else 0,
+                1 if nearest.get("phraseContinuous") else 0,
                 1 if nearest.get("sameSampleAsAnchor") else 0,
                 -float(nearest.get("neighborDistanceSeconds") or 999999.0),
             )
@@ -3566,6 +3576,7 @@ def audio_window_search_for_exact_midi(
         exact_candidates,
         key=lambda item: (
             1 if item.get("audioAgreed") else 0,
+            1 if item.get("phraseContinuous") else 0,
             1 if item.get("sameSampleAsAnchor") else 0,
             -float(item.get("neighborDistanceSeconds") or 999999.0),
             -float(item.get("absoluteStartSeconds") or 0.0),
@@ -3630,9 +3641,21 @@ def staff4_adjacent_phrase_mining(
             nearest = search["nearestWindow"]
             total_searched += int(search.get("searchedWindowCount") or 0)
             total_exact += len(search["exactCandidates"])
-            status = "exact_audio_candidate" if any(item.get("audioAgreed") for item in search["exactCandidates"]) else "exact_midi_audio_unconfirmed" if search["exactCandidates"] else "not_found"
+            exact_audio_candidates = [item for item in search["exactCandidates"] if item.get("audioAgreed")]
+            exact_continuous_candidates = [
+                item for item in exact_audio_candidates if item.get("phraseContinuous") is not False
+            ]
+            status = (
+                "exact_audio_candidate"
+                if exact_continuous_candidates
+                else "exact_midi_discontinuous"
+                if exact_audio_candidates
+                else "exact_midi_audio_unconfirmed"
+                if search["exactCandidates"]
+                else "not_found"
+            )
             if exact_candidates and (not best_candidate or len(target_midi) > int(best_candidate.get("targetNoteCount") or 0)):
-                candidate = dict(exact_candidates[0])
+                candidate = dict((exact_continuous_candidates or exact_audio_candidates or exact_candidates)[0])
                 candidate["targetDirection"] = direction
                 candidate["targetSequence"] = note_exact_label(source_slice)
                 candidate["targetMidiSequence"] = target_midi
@@ -3668,7 +3691,8 @@ def staff4_adjacent_phrase_mining(
                     "status": status,
                     "searchedWindowCount": int(search.get("searchedWindowCount") or 0),
                     "exactCandidateCount": len(search["exactCandidates"]),
-                    "exactAudioCandidateCount": sum(1 for item in search["exactCandidates"] if item.get("audioAgreed")),
+                    "exactAudioCandidateCount": len(exact_audio_candidates),
+                    "exactContinuousCandidateCount": len(exact_continuous_candidates),
                     "exactCandidates": exact_candidates,
                     "nearestWindow": nearest,
                 }
@@ -3676,7 +3700,9 @@ def staff4_adjacent_phrase_mining(
 
     status = (
         "exact_audio_candidate"
-        if best_candidate and best_candidate.get("audioAgreed")
+        if best_candidate and best_candidate.get("audioAgreed") and best_candidate.get("phraseContinuous") is not False
+        else "exact_midi_discontinuous"
+        if best_candidate and best_candidate.get("audioAgreed") and best_candidate.get("phraseContinuous") is False
         else "exact_midi_audio_unconfirmed"
         if best_candidate
         else "not_found"
@@ -3685,6 +3711,12 @@ def staff4_adjacent_phrase_mining(
     )
     if status == "exact_audio_candidate":
         next_action = "Audit the exact Staff 4 adjacent audio candidate before accepting it into the visible phrase lane."
+    elif status == "exact_midi_discontinuous":
+        continuity = best_candidate.get("phraseContinuity") if isinstance(best_candidate.get("phraseContinuity"), dict) else {}
+        next_action = (
+            "Reject the discontinuous Staff 4 exact-MIDI candidate as a stitched phrase; "
+            f"largest internal gap is {continuity.get('maxInterNoteGapSeconds')}s. Search a continuous audio window for the next source note."
+        )
     elif status == "exact_midi_audio_unconfirmed":
         next_action = "Run second-pass audio agreement on the exact Staff 4 MIDI candidate before review."
     elif anchor_count:
@@ -3750,11 +3782,28 @@ def expansion_status_for_window(
         return "blocked_no_audio_candidate", "No audio-note run currently covers this adjacent source range."
     exact_count = int(best_window.get("exactCount") or 0)
     audio_agreed = bool(best_window.get("audioAgreed"))
+    phrase_continuous = best_window.get("phraseContinuous") is not False
+    continuity = best_window.get("phraseContinuity") if isinstance(best_window.get("phraseContinuity"), dict) else {}
     if exact_count == len(source_midi) and audio_agreed and snippet_ready and truth_ready:
+        if not phrase_continuous:
+            return (
+                "blocked_discontinuous_audio_phrase",
+                str(continuity.get("limit") or "Exact source MIDI was detected, but the note windows are not one continuous phrase."),
+            )
         return "accepted_source_audio_expansion", "Exact source MIDI, paired audio, source crop, and truth gate all pass."
     if exact_count == len(source_midi) and audio_agreed and snippet_ready:
+        if not phrase_continuous:
+            return (
+                "blocked_discontinuous_audio_phrase",
+                str(continuity.get("limit") or "Exact source MIDI was detected, but the note windows are not one continuous phrase."),
+            )
         return "ready_for_truth_review", "Audio and source MIDI agree; the source crop still needs accepted truth evidence before display."
     if exact_count == len(source_midi) and audio_agreed:
+        if not phrase_continuous:
+            return (
+                "blocked_discontinuous_audio_phrase",
+                str(continuity.get("limit") or "Exact source MIDI was detected, but the note windows are not one continuous phrase."),
+            )
         return "blocked_source_crop_required", "Audio and source MIDI agree, but an accepted actual-score crop is still required."
     if not audio_agreed:
         return "blocked_audio_agreement", "Candidate notes do not all pass the paired-audio agreement gate."
@@ -3926,6 +3975,11 @@ def source_phrase_expansion_harness(
                     limit_text = "Source-lane extension is verified, but the stored adjacent audio check disagrees."
             run = best_window.get("run") if isinstance(best_window.get("run"), dict) else {}
             window_notes = best_window.get("windowNotes") if isinstance(best_window.get("windowNotes"), list) else []
+            phrase_continuity = (
+                best_window.get("phraseContinuity")
+                if isinstance(best_window.get("phraseContinuity"), dict)
+                else {}
+            )
             audio_local_start = None
             audio_local_end = None
             if window_notes:
@@ -3956,6 +4010,9 @@ def source_phrase_expansion_harness(
                     "observedNextAudioNote": observed_note,
                     "observedNextAudioMidi": observed_midi,
                     "audioAgreed": bool(best_window.get("audioAgreed")) if best_window else False,
+                    "phraseContinuous": best_window.get("phraseContinuous") is not False if best_window else False,
+                    "phraseContinuity": phrase_continuity,
+                    "maxInterNoteGapSeconds": phrase_continuity.get("maxInterNoteGapSeconds"),
                     "sourceCropReady": exact_source_range_visually_verified(source_snippet),
                     "truthEvidenceAccepted": bool(source_snippet.get("truthEvidenceAccepted")) if source_snippet else False,
                     "sourceImageUrl": str(source_snippet.get("imageUrl") or ""),
@@ -4021,6 +4078,11 @@ def source_phrase_expansion_harness(
         "nextAction": (
             f"Extend the verified Staff 4 MusicXML/source map beyond the current {max_anchor_note_count}-note accepted phrase before searching a longer audio phrase."
             if source_extent_exhausted
+            else (
+                "Search the Staff 4 source audio for a continuous exact-MIDI window; the current exact notes are split by "
+                f"{current.get('maxInterNoteGapSeconds')}s and cannot be accepted as one phrase."
+            )
+            if current.get("status") == "blocked_discontinuous_audio_phrase"
             else f"Audit the next Staff 4 {current.get('sourceNoteCount')}-note expansion from the accepted lane."
             if accepted_count and current in open_extension_items
             else "Promote the accepted expansion into the visible score/audio lane."
@@ -4959,6 +5021,12 @@ def build_transcription_completion(
             f"Audit the next Staff 4 {phrase_expansion_current.get('sourceNoteCount') or ''}-note expansion; "
             "exact MIDI and audio agree, but accepted truth evidence is still required before display."
         )
+    elif phrase_expansion_current and phrase_expansion_current_status == "blocked_discontinuous_audio_phrase":
+        next_action = (
+            "Do not accept the current Staff 4 exact-MIDI run as a phrase; "
+            f"its largest internal note gap is {phrase_expansion_current.get('maxInterNoteGapSeconds')}s. "
+            "Search for a continuous audio window that matches the next source notes."
+        )
     elif phrase_expansion_current and phrase_expansion_current_status == "accepted_source_audio_expansion":
         next_action = (
             f"Promote the accepted Staff 4 {phrase_expansion_current.get('direction') or 'adjacent'} "
@@ -4978,6 +5046,14 @@ def build_transcription_completion(
         next_action = (
             f"Audit the exact Staff 4 {candidate.get('targetDirection') or 'adjacent'} mining candidate "
             f"{candidate.get('targetSequence') or ''} before accepting it."
+        )
+    elif staff4_mining_status == "exact_midi_discontinuous":
+        candidate = staff4_mining.get("bestCandidate") if isinstance(staff4_mining.get("bestCandidate"), dict) else {}
+        continuity = candidate.get("phraseContinuity") if isinstance(candidate.get("phraseContinuity"), dict) else {}
+        next_action = (
+            "Reject the exact Staff 4 MIDI candidate as discontinuous; "
+            f"largest internal gap is {continuity.get('maxInterNoteGapSeconds')}s. "
+            "Rescan for the same source notes inside one continuous audio window."
         )
     elif phrase_expansion_current and phrase_expansion_accepted_count == 0:
         current_direction = str(phrase_expansion_current.get("direction") or "")

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .analyzer import run_process
+from .long_phrase_truth import note_window_continuity
 from .settings import RUNTIME_DIR
 from .state import utc_now
 
@@ -295,11 +296,28 @@ def staff4_current_has_exact_audio_phrase(current: dict[str, Any]) -> bool:
     note_midis = [int_or_none(note.get("midi")) if isinstance(note, dict) else None for note in notes[: len(target_midis)]]
     if note_midis != target_midis:
         return False
-    return all(isinstance(note, dict) and note.get("audioAgreement") is True for note in notes[: len(target_midis)])
+    continuity = note_window_continuity([note for note in notes[: len(target_midis)] if isinstance(note, dict)])
+    return bool(continuity.get("continuous")) and all(
+        isinstance(note, dict) and note.get("audioAgreement") is True for note in notes[: len(target_midis)]
+    )
+
+
+def staff4_current_has_exact_midi_sequence(current: dict[str, Any]) -> bool:
+    target_midis = int_list(current.get("targetMidiSequence"))
+    audio_midis = int_list(current.get("bestAudioMidiSequence"))
+    if len(target_midis) < 5 or target_midis != audio_midis:
+        return False
+    notes = current.get("bestAudioNotes") if isinstance(current.get("bestAudioNotes"), list) else []
+    if len(notes) < len(target_midis):
+        return bool(current.get("audioAgreed"))
+    note_midis = [int_or_none(note.get("midi")) if isinstance(note, dict) else None for note in notes[: len(target_midis)]]
+    return note_midis == target_midis and all(
+        isinstance(note, dict) and note.get("audioAgreement") is True for note in notes[: len(target_midis)]
+    )
 
 
 def staff4_audit_failure_for_completion(completion: dict[str, Any], current: dict[str, Any]) -> dict[str, Any]:
-    if staff4_current_has_exact_audio_phrase(current):
+    if staff4_current_has_exact_audio_phrase(current) or staff4_current_has_exact_midi_sequence(current):
         return {}
     return first_failure_from_completion(completion) or failure_from_current_expansion(current)
 
@@ -317,6 +335,8 @@ def staff4_full_phrase_audit_decision(packet: dict[str, Any]) -> dict[str, Any]:
         and stored_midis == target_midis
         and all(isinstance(note, dict) and note.get("audioAgreement") is True for note in stored_notes[: len(target_midis)])
     )
+    continuity = note_window_continuity([note for note in stored_notes[: len(target_midis)] if isinstance(note, dict)])
+    stored_audio_phrase_ready = stored_audio_ready and bool(continuity.get("continuous"))
     source_crop_ready = bool(packet.get("score", {}).get("sourceCropReady")) if isinstance(packet.get("score"), dict) else False
     truth_ready = bool(packet.get("score", {}).get("truthEvidenceAccepted")) if isinstance(packet.get("score"), dict) else False
     status = "queued_gold_review"
@@ -324,16 +344,19 @@ def staff4_full_phrase_audit_decision(packet: dict[str, Any]) -> dict[str, Any]:
     truth_decision = "pending_review"
     accepted = False
     can_extend = False
-    if stored_audio_ready and source_crop_ready and truth_ready:
+    if stored_audio_ready and not continuity.get("continuous"):
+        status = "blocked_discontinuous_audio_phrase"
+        outcome = "full_phrase_exact_midi_not_temporally_continuous"
+    elif stored_audio_phrase_ready and source_crop_ready and truth_ready:
         status = "accepted_truth_candidate"
         outcome = "accept_full_audio_agreed_source_phrase"
         truth_decision = "accepted"
         accepted = True
         can_extend = True
-    elif stored_audio_ready and source_crop_ready:
+    elif stored_audio_phrase_ready and source_crop_ready:
         status = "pending_source_lock"
         outcome = "full_audio_agreed_source_phrase_pending_truth_lock"
-    elif stored_audio_ready:
+    elif stored_audio_phrase_ready:
         status = "blocked_source_crop_required"
         outcome = "full_audio_agreed_phrase_missing_source_crop"
     elif target_midis and audio_midis:
@@ -346,7 +369,9 @@ def staff4_full_phrase_audit_decision(packet: dict[str, Any]) -> dict[str, Any]:
         "accepted": accepted,
         "rejected": False,
         "canExtendStaff4Lane": can_extend,
-        "fullPhraseExactAudio": stored_audio_ready,
+        "fullPhraseExactAudio": stored_audio_phrase_ready,
+        "fullPhraseExactMidi": stored_audio_ready,
+        "phraseContinuity": continuity,
         "targetNoteCount": len(target_midis),
         "audioNoteCount": len(audio_midis),
         "targetMidiSequence": target_midis,
@@ -357,6 +382,8 @@ def staff4_full_phrase_audit_decision(packet: dict[str, Any]) -> dict[str, Any]:
             if status == "pending_source_lock"
             else "Full phrase accepted from exact audio, source crop, and truth lock."
             if accepted
+            else str(continuity.get("limit") or "Exact MIDI is not one continuous phrase.")
+            if status == "blocked_discontinuous_audio_phrase"
             else "No full-phrase acceptance without exact audio and source evidence."
         ),
     }
@@ -515,6 +542,8 @@ def attach_staff4_full_phrase_decision(packet: dict[str, Any]) -> dict[str, Any]
         "targetMidiSequence": decision.get("targetMidiSequence") or [],
         "audioMidiSequence": decision.get("audioMidiSequence") or [],
         "exactAudio": bool(decision.get("fullPhraseExactAudio")),
+        "exactMidi": bool(decision.get("fullPhraseExactMidi")),
+        "phraseContinuity": decision.get("phraseContinuity") if isinstance(decision.get("phraseContinuity"), dict) else {},
         "sourceCropReady": bool(packet.get("score", {}).get("sourceCropReady")) if isinstance(packet.get("score"), dict) else False,
         "truthEvidenceAccepted": bool(packet.get("score", {}).get("truthEvidenceAccepted")) if isinstance(packet.get("score"), dict) else False,
     }
@@ -1298,7 +1327,8 @@ def ensure_staff4_phrase_audit_packet(
     local_start = max(0.0, local_start or 0.0)
     local_end = max(local_start + 0.25, local_end or (local_start + 2.0))
     clip_start = max(0.0, local_start - 0.35)
-    clip_end = min(local_end + 0.45, clip_start + 8.0)
+    clip_max_seconds = max(8.0, min(24.0, (local_end - local_start) + 1.0))
+    clip_end = min(local_end + 0.45, clip_start + clip_max_seconds)
     if clip_end <= clip_start:
         clip_end = clip_start + 2.0
 

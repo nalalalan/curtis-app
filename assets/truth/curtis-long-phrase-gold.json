@@ -2,7 +2,7 @@
   "schema": "curtis_long_phrase_truth_v1",
   "updatedAt": "2026-05-18",
   "status": "active",
-  "minimumAcceptedEvidenceRule": "A displayed score/transcription/video/audio phrase needs exact MIDI agreement between audio-agreed detected notes and verified MusicXML source notes. Pitch letters, OCR/OMR candidates, and source crops alone are not accepted evidence.",
+  "minimumAcceptedEvidenceRule": "A displayed score/transcription/video/audio phrase needs exact MIDI agreement between a temporally continuous audio-agreed detected note window and verified MusicXML source notes. Pitch letters, OCR/OMR candidates, source crops alone, and stitched notes from separate attempts are not accepted evidence.",
   "sources": [
     {
       "id": "wieniawski-scherzo-tarantelle-opening-symbolic-v7",
@@ -47,7 +47,7 @@
       "pieceTitle": "Wieniawski Scherzo-Tarantelle, Op. 16",
       "target": "wieniawski_reference_target",
       "status": "verified_source_excerpt",
-      "basis": "The current accepted Staff 4 lane extends one additional right-adjacent source note from the same local IMSLP solo-violin page. This is verified source map material only; it is not live accepted until the paired audio reproduces the added A4 under the exact-MIDI gate.",
+      "basis": "The current accepted Staff 4 lane extends one additional right-adjacent source note from the same local IMSLP solo-violin page. This is verified source map material only; it is not live accepted until paired audio reproduces the added A4 as part of one temporally continuous exact-MIDI phrase.",
       "referenceStart": 9,
       "referenceEnd": 17,
       "sequence": ["Eb5", "Eb5", "C5", "Eb5", "Eb5", "Eb5", "C5", "A4"],
@@ -208,6 +208,39 @@
       "observedNextAudioNote": "D5",
       "observedNextAudioMidi": 74,
       "audioAgreed": true
+    },
+    {
+      "id": "rejected-staff4-stitched-a4-continuation",
+      "sourceId": "wieniawski-staff4-eb-eb-c-eb-eb-eb-c-a-symbolic-v1",
+      "status": "rejected",
+      "rejectionKind": "staff4_expansion_discontinuous_phrase",
+      "basis": "The v11 continuation search found the exact eight-note MIDI sequence 75 75 72 75 75 75 72 69, but the first seven notes occupy local 20.225-23.280 and the added A4 is at local 32.265-32.425. The 8.985-second internal gap means this is a stitched sequence across separate playing moments, not one accepted long phrase.",
+      "practiceDay": "2026-05-03",
+      "sampleId": "Njh8_zq9_DM-8835",
+      "sourceWindow": "*8835-8925",
+      "direction": "right-1",
+      "targetReferenceStart": 9,
+      "targetReferenceEnd": 17,
+      "expectedSourceSequence": ["Eb5", "Eb5", "C5", "Eb5", "Eb5", "Eb5", "C5", "A4"],
+      "expectedSourceMidiSequence": [75, 75, 72, 75, 75, 75, 72, 69],
+      "sequence": ["D#5", "D#5", "C5", "D#5", "D#5", "D#5", "C5", "A4"],
+      "acceptedScoreSpellingSequence": ["Eb5", "Eb5", "C5", "Eb5", "Eb5", "Eb5", "C5", "A4"],
+      "midiSequence": [75, 75, 72, 75, 75, 75, 72, 69],
+      "minimumExactNotes": 8,
+      "auditPacketId": "staff4-2026-05-03-Njh8_zq9_DM-8835-9-17",
+      "maxInterNoteGapSeconds": 8.985,
+      "maxAllowedInterNoteGapSeconds": 3.0,
+      "audioAgreed": true,
+      "noteWindows": [
+        {"note": "D#5", "startSeconds": 20.225, "endSeconds": 20.422},
+        {"note": "D#5", "startSeconds": 20.55, "endSeconds": 20.689},
+        {"note": "C5", "startSeconds": 20.817, "endSeconds": 20.898},
+        {"note": "D#5", "startSeconds": 21.629, "endSeconds": 21.792},
+        {"note": "D#5", "startSeconds": 22.361, "endSeconds": 22.535},
+        {"note": "D#5", "startSeconds": 22.829, "endSeconds": 22.992},
+        {"note": "C5", "startSeconds": 23.117, "endSeconds": 23.28},
+        {"note": "A4", "startSeconds": 32.265, "endSeconds": 32.425}
+      ]
     }
   ]
 }

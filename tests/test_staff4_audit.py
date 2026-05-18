@@ -10,6 +10,7 @@ from unittest.mock import patch
 import backend.app.staff4_audit as staff4_audit
 from backend.app.staff4_audit import (
     attach_staff4_audit_decision,
+    attach_staff4_full_phrase_decision,
     ensure_staff4_phrase_audit_packet,
     failed_note_pitch_diagnostic,
     latest_staff4_phrase_audit_packet,
@@ -467,6 +468,37 @@ class Staff4AuditTests(unittest.TestCase):
         self.assertEqual(packet["clip"]["noteLocalStartSeconds"], 20.225)
         self.assertEqual(packet["clip"]["noteLocalEndSeconds"], 23.28)
         self.assertEqual(packet["goldReviewCandidate"]["kind"], "staff4_full_phrase_audio_score_audit")
+
+    def test_full_phrase_decision_blocks_exact_midi_when_note_windows_are_stitched(self):
+        packet = {
+            "targetMidiSequence": [75, 75, 72, 75, 75, 75, 72, 69],
+            "bestAudioMidiSequence": [75, 75, 72, 75, 75, 75, 72, 69],
+            "storedAudioNotes": [
+                {"note": "D#5", "midi": 75, "startSeconds": 20.225, "endSeconds": 20.422, "audioAgreement": True},
+                {"note": "D#5", "midi": 75, "startSeconds": 20.550, "endSeconds": 20.689, "audioAgreement": True},
+                {"note": "C5", "midi": 72, "startSeconds": 20.817, "endSeconds": 20.898, "audioAgreement": True},
+                {"note": "D#5", "midi": 75, "startSeconds": 21.629, "endSeconds": 21.792, "audioAgreement": True},
+                {"note": "D#5", "midi": 75, "startSeconds": 22.361, "endSeconds": 22.535, "audioAgreement": True},
+                {"note": "D#5", "midi": 75, "startSeconds": 22.829, "endSeconds": 22.992, "audioAgreement": True},
+                {"note": "C5", "midi": 72, "startSeconds": 23.117, "endSeconds": 23.280, "audioAgreement": True},
+                {"note": "A4", "midi": 69, "startSeconds": 32.265, "endSeconds": 32.425, "audioAgreement": True},
+            ],
+            "score": {
+                "sourceCropReady": True,
+                "truthEvidenceAccepted": True,
+            },
+            "status": "generated",
+        }
+
+        attach_staff4_full_phrase_decision(packet)
+
+        self.assertEqual(packet["status"], "blocked_discontinuous_audio_phrase")
+        self.assertEqual(packet["decision"]["outcome"], "full_phrase_exact_midi_not_temporally_continuous")
+        self.assertEqual(packet["truthDecision"], "pending_review")
+        self.assertFalse(packet["canExtendStaff4Lane"])
+        self.assertTrue(packet["fullPhraseCheck"]["exactMidi"])
+        self.assertFalse(packet["fullPhraseCheck"]["exactAudio"])
+        self.assertGreater(packet["fullPhraseCheck"]["phraseContinuity"]["maxInterNoteGapSeconds"], 8.0)
 
     def test_first_failure_exact_audio_and_source_truth_accepts_right1_lane(self):
         packet = {

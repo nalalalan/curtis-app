@@ -2,7 +2,7 @@ import unittest
 
 from backend.app.corrections import wieniawski_reference_target
 from backend.app.gold_truth import verify_long_phrase_truth_manifest
-from backend.app.long_phrase_truth import exact_midi_phrase_gate, note_midi_sequence
+from backend.app.long_phrase_truth import exact_midi_phrase_gate, note_midi_sequence, note_window_continuity
 from backend.app.symbolic_scores import symbolic_score_from_target
 
 
@@ -27,14 +27,15 @@ class LongPhraseTruthTests(unittest.TestCase):
         self.assertEqual(result["status"], "verified")
         self.assertEqual(result["sourceVerifiedCount"], 5)
         self.assertEqual(result["positiveSourcePhraseVerifiedCount"], 4)
-        self.assertEqual(result["rejectedRegressionPhraseCount"], 4)
-        self.assertEqual(result["rejectedRegressionBlockedCount"], 4)
+        self.assertEqual(result["rejectedRegressionPhraseCount"], 5)
+        self.assertEqual(result["rejectedRegressionBlockedCount"], 5)
         self.assertEqual(result["liveAcceptedPhraseCount"], 3)
         source_ids = {item["id"] for item in result["sourceResults"]}
         self.assertIn("wieniawski-staff4-eb-eb-c-eb-eb-eb-c-a-symbolic-v1", source_ids)
         accepted_source_ids = {item["sourceId"] for item in result["positiveSourcePhraseResults"] if item["liveAccepted"]}
         self.assertNotIn("wieniawski-staff4-eb-eb-c-eb-eb-eb-c-a-symbolic-v1", accepted_source_ids)
         self.assertIn("rejected-staff4-right2-audit-eb-vs-d", result["blockedRegressionIds"])
+        self.assertIn("rejected-staff4-stitched-a4-continuation", result["blockedRegressionIds"])
 
     def test_current_wieniawski_source_map_has_the_reviewed_exact_midi_sequence(self):
         score = symbolic_score_from_target(wieniawski_reference_target())
@@ -180,6 +181,25 @@ class LongPhraseTruthTests(unittest.TestCase):
         self.assertFalse(gate["accepted"])
         self.assertEqual(gate["status"], "source_audio_agreement_missing")
         self.assertEqual(gate["bestOverlap"], 5)
+
+    def test_note_window_continuity_blocks_stitched_phrase_candidates(self):
+        notes = [
+            detected_note("D#5", 75, 20.225),
+            detected_note("D#5", 75, 20.550),
+            detected_note("C5", 72, 20.817),
+            detected_note("D#5", 75, 21.629),
+            detected_note("D#5", 75, 22.361),
+            detected_note("D#5", 75, 22.829),
+            detected_note("C5", 72, 23.117),
+            detected_note("A4", 69, 32.265),
+        ]
+
+        continuity = note_window_continuity(notes)
+
+        self.assertFalse(continuity["continuous"])
+        self.assertAlmostEqual(continuity["maxInterNoteGapSeconds"], 9.028, places=3)
+        self.assertEqual(continuity["largestGapAfterIndex"], 6)
+        self.assertIn("not accepted as one phrase", continuity["limit"])
 
 
 if __name__ == "__main__":
