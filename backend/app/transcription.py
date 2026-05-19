@@ -15,7 +15,7 @@ from .state import load_state, save_state, utc_now
 
 MAX_TRANSCRIPTION_SECONDS = int(os.getenv("CURTIS_TRANSCRIPTION_MAX_SECONDS", "180"))
 TRANSCRIPTION_SAMPLE_LIMIT = int(os.getenv("CURTIS_TRANSCRIPTION_SAMPLE_LIMIT", "8"))
-TRANSCRIPTION_PIPELINE_VERSION = "violin_audio_matched_fragment_v12"
+TRANSCRIPTION_PIPELINE_VERSION = "violin_audio_matched_fragment_v13"
 MIN_NOTE_SECONDS = float(os.getenv("CURTIS_MIN_NOTE_SECONDS", "0.055"))
 MIN_ONSET_NOTE_SECONDS = float(os.getenv("CURTIS_MIN_ONSET_NOTE_SECONDS", "0.04"))
 MAX_STORED_NOTES = int(os.getenv("CURTIS_MAX_STORED_NOTES", "240"))
@@ -24,6 +24,8 @@ VIOLIN_MIN_MIDI = int(os.getenv("CURTIS_VIOLIN_MIN_MIDI", "55"))
 VIOLIN_MAX_MIDI = int(os.getenv("CURTIS_VIOLIN_MAX_MIDI", "108"))
 MIN_VOICED_PROBABILITY = float(os.getenv("CURTIS_MIN_VOICED_PROBABILITY", "0.50"))
 NOTE_CHANGE_CONFIRM_FRAMES = int(os.getenv("CURTIS_NOTE_CHANGE_CONFIRM_FRAMES", "2"))
+VIBRATO_SEMITONE_RANGE = int(os.getenv("CURTIS_VIBRATO_SEMITONE_RANGE", "1"))
+VIBRATO_CHANGE_CONFIRM_FRAMES = int(os.getenv("CURTIS_VIBRATO_CHANGE_CONFIRM_FRAMES", "4"))
 NOTE_MERGE_GAP_SECONDS = float(os.getenv("CURTIS_NOTE_MERGE_GAP_SECONDS", "0.07"))
 ONSET_EVENT_MULTIPLIER = float(os.getenv("CURTIS_ONSET_EVENT_MULTIPLIER", "1.12"))
 ONSET_MIN_VOICED_FRAMES = int(os.getenv("CURTIS_ONSET_MIN_VOICED_FRAMES", "1"))
@@ -53,6 +55,11 @@ FAST_ONSET_MIN_FRAME_GAP = int(os.getenv("CURTIS_FAST_ONSET_MIN_FRAME_GAP", "2")
 SPECTRAL_OCTAVE_RESCUE_RATIO = float(os.getenv("CURTIS_SPECTRAL_OCTAVE_RESCUE_RATIO", "0.70"))
 SPECTRAL_OCTAVE_RESCUE_MIN_MIDI = int(os.getenv("CURTIS_SPECTRAL_OCTAVE_RESCUE_MIN_MIDI", "81"))
 SPECTRAL_FAST_MIN_EVENTS = int(os.getenv("CURTIS_SPECTRAL_FAST_MIN_EVENTS", "6"))
+SPECTRAL_MICRO_WINDOW_SECONDS = float(os.getenv("CURTIS_SPECTRAL_MICRO_WINDOW_SECONDS", "0.034"))
+SPECTRAL_MICRO_HOP_SECONDS = float(os.getenv("CURTIS_SPECTRAL_MICRO_HOP_SECONDS", "0.016"))
+SPECTRAL_MICRO_MIN_RMS_RATIO = float(os.getenv("CURTIS_SPECTRAL_MICRO_MIN_RMS_RATIO", "0.28"))
+SPECTRAL_MICRO_MIN_MIDI = int(os.getenv("CURTIS_SPECTRAL_MICRO_MIN_MIDI", "81"))
+SPECTRAL_MICRO_MIN_EVENTS = int(os.getenv("CURTIS_SPECTRAL_MICRO_MIN_EVENTS", "6"))
 YIN_TRANSITION_RMS_RATIO = float(os.getenv("CURTIS_YIN_TRANSITION_RMS_RATIO", "0.18"))
 YIN_TRANSITION_MIN_SECONDS = float(os.getenv("CURTIS_YIN_TRANSITION_MIN_SECONDS", "0.018"))
 AUDIO_AGREEMENT_SECONDS = float(os.getenv("CURTIS_AUDIO_AGREEMENT_SECONDS", "0.11"))
@@ -301,7 +308,8 @@ def pitch_sanity_filter(events: list[dict[str, Any]]) -> tuple[list[dict[str, An
         if duration <= LOW_CONFIDENCE_GLITCH_SECONDS and confidence < LOW_CONFIDENCE_GLITCH_THRESHOLD:
             detector = str(event.get("detectorSource") or "")
             spectral_score = float(event.get("spectralRelativeScore") or 0.0)
-            if detector.startswith("spectral_") and duration >= SPECTRAL_MIN_SEGMENT_SECONDS and spectral_score >= SPECTRAL_MIN_CONFIDENCE:
+            spectral_min_duration = YIN_TRANSITION_MIN_SECONDS if detector.startswith("spectral_micro") else SPECTRAL_MIN_SEGMENT_SECONDS
+            if detector.startswith("spectral_") and duration >= spectral_min_duration and spectral_score >= SPECTRAL_MIN_CONFIDENCE:
                 event["uncertain"] = True
                 reasons = event.get("uncertaintyReasons")
                 event["uncertaintyReasons"] = [*(reasons if isinstance(reasons, list) else []), "short_fast_spectral_note"]
@@ -454,6 +462,16 @@ def pitch_diversity(events: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def numpy_median_fallback(values: list[int]) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(int(value) for value in values)
+    middle = len(ordered) // 2
+    if len(ordered) % 2:
+        return float(ordered[middle])
+    return (float(ordered[middle - 1]) + float(ordered[middle])) / 2.0
+
+
 def normalize_audio_signal(y: Any, librosa: Any) -> Any:
     try:
         return librosa.util.normalize(y)
@@ -544,7 +562,12 @@ def mark_audio_agreement(
     selected_source: str,
     peer_groups: list[tuple[str, list[dict[str, Any]]]],
 ) -> list[dict[str, Any]]:
-    selected_family = "spectral_onset" if selected_source.startswith("spectral_onset") else selected_source
+    if selected_source.startswith("spectral_onset") or selected_source.startswith("spectral_fast") or selected_source.startswith("spectral_octave"):
+        selected_family = "spectral_onset"
+    elif selected_source.startswith("spectral_micro"):
+        selected_family = "spectral_micro"
+    else:
+        selected_family = selected_source
     marked: list[dict[str, Any]] = []
     for event in events:
         item = dict(event)
@@ -744,6 +767,182 @@ def spectral_onset_events(
     return events
 
 
+def stabilize_micro_pitch_frames(frames: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    stabilized = [dict(frame) for frame in frames]
+    for index in range(1, len(stabilized) - 1):
+        previous_midi = event_midi(stabilized[index - 1])
+        current_midi = event_midi(stabilized[index])
+        next_midi = event_midi(stabilized[index + 1])
+        if previous_midi is None or current_midi is None or next_midi is None:
+            continue
+        if previous_midi != next_midi:
+            continue
+        if abs(current_midi - previous_midi) > VIBRATO_SEMITONE_RANGE:
+            continue
+        current_confidence = float(stabilized[index].get("confidence") or 0.0)
+        neighbor_confidence = max(
+            float(stabilized[index - 1].get("confidence") or 0.0),
+            float(stabilized[index + 1].get("confidence") or 0.0),
+        )
+        if current_confidence > neighbor_confidence + 0.12:
+            continue
+        stabilized[index]["rawMidi"] = current_midi
+        stabilized[index]["rawNote"] = stabilized[index].get("note") or note_name(current_midi)
+        stabilized[index]["midi"] = previous_midi
+        stabilized[index]["note"] = note_name(previous_midi)
+        stabilized[index]["uncertain"] = True
+        reasons = stabilized[index].get("uncertaintyReasons")
+        stabilized[index]["uncertaintyReasons"] = [
+            *(reasons if isinstance(reasons, list) else []),
+            "micro_vibrato_neighbor_absorbed",
+        ]
+    return stabilized
+
+
+def spectral_micro_events(
+    y: Any,
+    sr: int,
+    librosa: Any,
+    numpy: Any,
+) -> list[dict[str, Any]]:
+    if y.size <= 0:
+        return []
+    window_samples = max(256, int(round(SPECTRAL_MICRO_WINDOW_SECONDS * sr)))
+    hop_samples = max(96, int(round(SPECTRAL_MICRO_HOP_SECONDS * sr)))
+    if len(y) < window_samples:
+        return []
+    frame_rms: list[float] = []
+    starts = list(range(0, max(1, len(y) - window_samples + 1), hop_samples))
+    if starts and starts[-1] + window_samples < len(y):
+        starts.append(len(y) - window_samples)
+    for start_sample in starts:
+        segment = y[start_sample : start_sample + window_samples]
+        frame_rms.append(float(numpy.sqrt(numpy.mean(numpy.square(segment)))) if segment.size else 0.0)
+    active_rms = [value for value in frame_rms if value > 0]
+    if not active_rms:
+        return []
+    rms_threshold = max(0.004, float(numpy.percentile(numpy.array(active_rms), 62)) * SPECTRAL_MICRO_MIN_RMS_RATIO)
+    frame_candidates: list[dict[str, Any]] = []
+    for start_sample, rms_value in zip(starts, frame_rms):
+        if rms_value < rms_threshold:
+            continue
+        segment = y[start_sample : start_sample + window_samples]
+        pitch = spectral_pitch_for_segment(segment, sr, librosa, numpy)
+        if not pitch:
+            continue
+        midi = int(pitch["midi"])
+        if midi < SPECTRAL_MICRO_MIN_MIDI:
+            continue
+        start = float(start_sample / sr)
+        end = float((start_sample + window_samples) / sr)
+        event = {
+            "startSeconds": round(start, 3),
+            "endSeconds": round(end, 3),
+            "durationSeconds": round(end - start, 3),
+            "midi": midi,
+            "note": pitch["note"],
+            "confidence": pitch["confidence"],
+            "spectralRelativeScore": pitch["spectralRelativeScore"],
+            "microRms": round(rms_value, 5),
+        }
+        for key in ("rawMidi", "rawNote", "uncertain", "uncertaintyReasons"):
+            if key in pitch:
+                event[key] = pitch[key]
+        frame_candidates.append(event)
+        if len(frame_candidates) >= MAX_STORED_NOTES:
+            break
+    if not frame_candidates:
+        return []
+
+    stabilized = stabilize_micro_pitch_frames(frame_candidates)
+    events: list[dict[str, Any]] = []
+    current: dict[str, Any] | None = None
+    current_confidences: list[float] = []
+    current_scores: list[float] = []
+    current_rms: list[float] = []
+
+    def close_current() -> None:
+        nonlocal current, current_confidences, current_scores, current_rms
+        if not current:
+            return
+        duration = max(0.0, float(current.get("endSeconds") or 0.0) - float(current.get("startSeconds") or 0.0))
+        if duration >= SPECTRAL_MIN_SEGMENT_SECONDS:
+            current["durationSeconds"] = round(duration, 3)
+            current["confidence"] = round(sum(current_confidences) / max(1, len(current_confidences)), 3)
+            current["spectralRelativeScore"] = round(sum(current_scores) / max(1, len(current_scores)), 3)
+            current["microRms"] = round(sum(current_rms) / max(1, len(current_rms)), 5)
+            current["detectorSource"] = "spectral_micro"
+            events.append(current)
+        current = None
+        current_confidences = []
+        current_scores = []
+        current_rms = []
+
+    for candidate in stabilized:
+        midi = event_midi(candidate)
+        if midi is None:
+            continue
+        if current and event_midi(current) == midi:
+            current["endSeconds"] = candidate.get("endSeconds")
+            current_confidences.append(float(candidate.get("confidence") or 0.0))
+            current_scores.append(float(candidate.get("spectralRelativeScore") or 0.0))
+            current_rms.append(float(candidate.get("microRms") or 0.0))
+            if candidate.get("uncertain"):
+                current["uncertain"] = True
+                reasons = current.get("uncertaintyReasons")
+                current["uncertaintyReasons"] = sorted(
+                    {
+                        *(reasons if isinstance(reasons, list) else []),
+                        *(candidate.get("uncertaintyReasons") if isinstance(candidate.get("uncertaintyReasons"), list) else []),
+                    }
+                )
+            continue
+        close_current()
+        current = dict(candidate)
+        current_confidences = [float(candidate.get("confidence") or 0.0)]
+        current_scores = [float(candidate.get("spectralRelativeScore") or 0.0)]
+        current_rms = [float(candidate.get("microRms") or 0.0)]
+    close_current()
+
+    for index in range(len(events) - 1):
+        next_start = float(events[index + 1].get("startSeconds") or 0.0)
+        current_start = float(events[index].get("startSeconds") or 0.0)
+        current_end = float(events[index].get("endSeconds") or 0.0)
+        if current_end > next_start:
+            adjusted_end = max(current_start + YIN_TRANSITION_MIN_SECONDS, next_start)
+            events[index]["endSeconds"] = round(adjusted_end, 3)
+            events[index]["durationSeconds"] = round(max(0.0, adjusted_end - current_start), 3)
+    return events[:MAX_STORED_NOTES]
+
+
+def choose_spectral_detail_stream(
+    onset_events: list[dict[str, Any]],
+    micro_events: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], str]:
+    if not micro_events:
+        return onset_events, "onset"
+    if not onset_events:
+        return micro_events, "micro"
+    onset_diversity = pitch_diversity(onset_events)
+    micro_diversity = pitch_diversity(micro_events)
+    micro_midi_values = [event_midi(event) for event in micro_events if isinstance(event, dict)]
+    micro_midi_values = [midi for midi in micro_midi_values if midi is not None]
+    micro_high_register = bool(micro_midi_values) and min(micro_midi_values) >= SPECTRAL_MICRO_MIN_MIDI
+    micro_adds_detail = (
+        len(micro_events) >= max(SPECTRAL_MICRO_MIN_EVENTS, len(onset_events) + 2)
+        and micro_diversity["uniquePitchClasses"] >= max(3, onset_diversity["uniquePitchClasses"])
+        and micro_diversity["dominantRatio"] <= 0.80
+    )
+    micro_prevents_collapse = (
+        len(micro_events) >= SPECTRAL_MICRO_MIN_EVENTS
+        and micro_diversity["uniquePitchClasses"] >= onset_diversity["uniquePitchClasses"] + 2
+        and onset_diversity["dominantRatio"] >= 0.60
+    )
+    if micro_high_register and (micro_adds_detail or micro_prevents_collapse):
+        return micro_events, "micro"
+    return onset_events, "onset"
+
+
 def yin_transition_events(
     y: Any,
     sr: int,
@@ -885,6 +1084,11 @@ def f0_to_events(f0: Any, voiced_flag: Any, voiced_prob: Any, sr: int, hop_lengt
             prob_buffer.extend(pending_prob_buffer)
         reset_pending()
 
+    def required_change_frames(from_midi: int, to_midi: int) -> int:
+        if abs(int(from_midi) - int(to_midi)) <= VIBRATO_SEMITONE_RANGE:
+            return max(NOTE_CHANGE_CONFIRM_FRAMES, VIBRATO_CHANGE_CONFIRM_FRAMES)
+        return NOTE_CHANGE_CONFIRM_FRAMES
+
     def close_event(end_time: float) -> None:
         nonlocal current_start, midi_buffer, prob_buffer
         if current_start is None or not midi_buffer:
@@ -941,7 +1145,11 @@ def f0_to_events(f0: Any, voiced_flag: Any, voiced_prob: Any, sr: int, hop_lengt
             pending_midi = midi
             pending_midi_buffer = [midi]
             pending_prob_buffer = [probability]
-        if len(pending_midi_buffer) >= NOTE_CHANGE_CONFIRM_FRAMES and pending_start is not None:
+        if (
+            pending_midi is not None
+            and len(pending_midi_buffer) >= required_change_frames(current_midi, pending_midi)
+            and pending_start is not None
+        ):
             next_start = pending_start
             next_midi_buffer = [*pending_midi_buffer]
             next_prob_buffer = [*pending_prob_buffer]
@@ -950,7 +1158,13 @@ def f0_to_events(f0: Any, voiced_flag: Any, voiced_prob: Any, sr: int, hop_lengt
             midi_buffer = next_midi_buffer
             prob_buffer = next_prob_buffer
             reset_pending()
-    if pending_midi_buffer and pending_start is not None and len(pending_midi_buffer) >= NOTE_CHANGE_CONFIRM_FRAMES:
+    if (
+        pending_midi_buffer
+        and pending_midi is not None
+        and pending_start is not None
+        and midi_buffer
+        and len(pending_midi_buffer) >= required_change_frames(median_midi(midi_buffer), pending_midi)
+    ):
         next_start = pending_start
         next_midi_buffer = [*pending_midi_buffer]
         next_prob_buffer = [*pending_prob_buffer]
@@ -1038,6 +1252,7 @@ def choose_transcription_events(
     pitch_events: list[dict[str, Any]],
     onset_events: list[dict[str, Any]],
     spectral_events: list[dict[str, Any]] | None = None,
+    spectral_family: str = "spectral_onset",
 ) -> tuple[list[dict[str, Any]], str]:
     spectral_events = spectral_events or []
     spectral_diversity = pitch_diversity(spectral_events)
@@ -1065,7 +1280,18 @@ def choose_transcription_events(
             and spectral_ratio >= 0.55
             and any(float(event.get("confidence") or 0.0) >= SPECTRAL_MIN_CONFIDENCE for event in spectral_events)
         ):
-            return spectral_events[:MAX_STORED_NOTES], "spectral_octave_rescue"
+            return spectral_events[:MAX_STORED_NOTES], "spectral_micro_octave_rescue" if spectral_family == "spectral_micro" else "spectral_octave_rescue"
+        base_median = int(round(float(numpy_median_fallback(base_midi_values))))
+        spectral_median = int(round(float(numpy_median_fallback(spectral_midi_values))))
+        spectral_high_register = spectral_median >= SPECTRAL_OCTAVE_RESCUE_MIN_MIDI
+        octave_shifted_trace = (
+            spectral_high_register
+            and 10 <= spectral_median - base_median <= 14
+            and spectral_diversity["uniquePitchClasses"] >= max(3, base_diversity["uniquePitchClasses"] - 1)
+            and len(spectral_events) >= max(SPECTRAL_FAST_MIN_EVENTS, int(len(base_events) * 0.55))
+        )
+        if octave_shifted_trace:
+            return spectral_events[:MAX_STORED_NOTES], "spectral_micro_octave_rescue" if spectral_family == "spectral_micro" else "spectral_octave_rescue"
     spectral_is_useful = (
         len(spectral_events) >= MIN_ACTIVE_WINDOW_NOTES
         and spectral_diversity["uniquePitchClasses"] >= max(3, pitch_diversity_state["uniquePitchClasses"])
@@ -1077,11 +1303,11 @@ def choose_transcription_events(
         and spectral_diversity["dominantRatio"] <= 0.78
     )
     if spectral_is_useful and (pitch_collapsed or onset_collapsed):
-        return spectral_events[:MAX_STORED_NOTES], "spectral_onset_rescue"
+        return spectral_events[:MAX_STORED_NOTES], "spectral_micro_rescue" if spectral_family == "spectral_micro" else "spectral_onset_rescue"
     if spectral_fast_trace:
-        return spectral_events[:MAX_STORED_NOTES], "spectral_fast_note_rescue"
+        return spectral_events[:MAX_STORED_NOTES], "spectral_micro_high_rescue" if spectral_family == "spectral_micro" else "spectral_fast_note_rescue"
     if spectral_is_useful and spectral_diversity["uniquePitchClasses"] > onset_diversity_state["uniquePitchClasses"] + 1:
-        return spectral_events[:MAX_STORED_NOTES], "spectral_onset"
+        return spectral_events[:MAX_STORED_NOTES], "spectral_micro" if spectral_family == "spectral_micro" else "spectral_onset"
     if not onset_events:
         return pitch_events, "pitch_hysteresis"
     if len(onset_events) >= max(len(pitch_events) + 4, int(len(pitch_events) * ONSET_EVENT_MULTIPLIER)):
@@ -1267,13 +1493,38 @@ def transcribe_audio_array(y: Any, sr: int, librosa: Any, numpy: Any) -> dict[st
     onset_events = f0_to_onset_events(f0, voiced_flag, voiced_prob, onset_frames, sr, hop_length, numpy)
     harmonic_spectral_events = spectral_onset_events(pitch_y, onset_frames, sr, hop_length, librosa, numpy)
     source_spectral_events = spectral_onset_events(source_y, onset_frames, sr, hop_length, librosa, numpy)
-    spectral_events, spectral_stream_source = choose_spectral_event_stream(harmonic_spectral_events, source_spectral_events)
+    spectral_onset_stream_events, spectral_onset_stream_source = choose_spectral_event_stream(
+        harmonic_spectral_events,
+        source_spectral_events,
+    )
+    harmonic_micro_events = spectral_micro_events(pitch_y, sr, librosa, numpy)
+    source_micro_events = spectral_micro_events(source_y, sr, librosa, numpy)
+    spectral_micro_stream_events, spectral_micro_stream_source = choose_spectral_event_stream(
+        harmonic_micro_events,
+        source_micro_events,
+    )
+    spectral_events, spectral_detail_source = choose_spectral_detail_stream(
+        spectral_onset_stream_events,
+        spectral_micro_stream_events,
+    )
+    spectral_family = "spectral_micro" if spectral_detail_source == "micro" else "spectral_onset"
+    spectral_stream_source = (
+        f"micro_{spectral_micro_stream_source}"
+        if spectral_family == "spectral_micro"
+        else spectral_onset_stream_source
+    )
     transition_events = yin_transition_events(pitch_y, sr, hop_length, librosa, numpy)
-    raw_events, segmentation_source = choose_transcription_events(pitch_events, onset_events, spectral_events)
+    raw_events, segmentation_source = choose_transcription_events(
+        pitch_events,
+        onset_events,
+        spectral_events,
+        spectral_family=spectral_family,
+    )
     peer_groups = [
         ("pitch_hysteresis", pitch_events),
         ("onset_segmented_pyin", onset_events),
-        ("spectral_onset", spectral_events),
+        ("spectral_onset", spectral_onset_stream_events),
+        ("spectral_micro", spectral_micro_stream_events),
     ]
     raw_events = mark_audio_agreement(raw_events, segmentation_source, peer_groups)
     marked_transition_events = mark_audio_agreement(transition_events, "yin_transition_trace", peer_groups)
@@ -1283,8 +1534,8 @@ def transcribe_audio_array(y: Any, sr: int, librosa: Any, numpy: Any) -> dict[st
     spectral_agreed_count = sum(
         1
         for event in events
-        if event.get("detectorSource") in {"spectral_onset", "spectral_onset_rescue"}
-        or "spectral_onset" in (event.get("agreementSources") if isinstance(event.get("agreementSources"), list) else [])
+        if str(event.get("detectorSource") or "").startswith("spectral_")
+        or bool({"spectral_onset", "spectral_micro"} & set(event.get("agreementSources") if isinstance(event.get("agreementSources"), list) else []))
     )
     quality = {
         "preprocessing": preprocessing,
@@ -1294,6 +1545,10 @@ def transcribe_audio_array(y: Any, sr: int, librosa: Any, numpy: Any) -> dict[st
         "spectralEventCount": len(spectral_events),
         "harmonicSpectralEventCount": len(harmonic_spectral_events),
         "sourceSpectralEventCount": len(source_spectral_events),
+        "spectralOnsetStreamEventCount": len(spectral_onset_stream_events),
+        "spectralMicroEventCount": len(spectral_micro_stream_events),
+        "harmonicSpectralMicroEventCount": len(harmonic_micro_events),
+        "sourceSpectralMicroEventCount": len(source_micro_events),
         "transitionTraceEventCount": len(transition_events),
         "transitionTraceSelectedEventCount": len(score_match_candidate_events),
         "rawSelectedEventCount": len(raw_events),
@@ -1304,9 +1559,12 @@ def transcribe_audio_array(y: Any, sr: int, librosa: Any, numpy: Any) -> dict[st
         "denseHarmonicOnsetCount": len(harmonic_onset_frames),
         "denseSourceOnsetCount": len(source_onset_frames),
         "spectralStreamSource": spectral_stream_source,
+        "spectralDetailSource": spectral_detail_source,
         "pitchDiversity": pitch_diversity(pitch_events),
         "onsetDiversity": pitch_diversity(onset_events),
         "spectralDiversity": pitch_diversity(spectral_events),
+        "spectralOnsetStreamDiversity": pitch_diversity(spectral_onset_stream_events),
+        "spectralMicroDiversity": pitch_diversity(spectral_micro_stream_events),
         "transitionTraceDiversity": pitch_diversity(score_match_candidate_events),
         "transitionTraceSanityGlitchDroppedCount": int(transition_quality.get("sanityGlitchDroppedCount") or 0),
         "transitionTraceSanityOctaveAdjustedCount": int(transition_quality.get("sanityOctaveAdjustedCount") or 0),
@@ -1367,6 +1625,10 @@ def transcribe_active_windows(
             "spectralEventCount",
             "harmonicSpectralEventCount",
             "sourceSpectralEventCount",
+            "spectralOnsetStreamEventCount",
+            "spectralMicroEventCount",
+            "harmonicSpectralMicroEventCount",
+            "sourceSpectralMicroEventCount",
             "transitionTraceEventCount",
             "transitionTraceSelectedEventCount",
             "rawSelectedEventCount",
@@ -1530,6 +1792,8 @@ def transcribe_path(path: Path, active_windows: list[dict[str, float]] | None = 
                 "range": f"{note_name(VIOLIN_MIN_MIDI)}-{note_name(VIOLIN_MAX_MIDI)}",
                 "minimumVoicedProbability": MIN_VOICED_PROBABILITY,
                 "noteChangeConfirmFrames": NOTE_CHANGE_CONFIRM_FRAMES,
+                "vibratoChangeConfirmFrames": VIBRATO_CHANGE_CONFIRM_FRAMES,
+                "vibratoSemitoneRange": VIBRATO_SEMITONE_RANGE,
                 "minimumNoteSeconds": MIN_NOTE_SECONDS,
                 "minimumOnsetNoteSeconds": MIN_ONSET_NOTE_SECONDS,
                 "pitchFrameLength": PITCH_FRAME_LENGTH,
@@ -1546,6 +1810,9 @@ def transcribe_path(path: Path, active_windows: list[dict[str, float]] | None = 
                 "spectralOctaveRescueRatio": SPECTRAL_OCTAVE_RESCUE_RATIO,
                 "spectralOctaveRescueMinMidi": SPECTRAL_OCTAVE_RESCUE_MIN_MIDI,
                 "spectralFastMinEvents": SPECTRAL_FAST_MIN_EVENTS,
+                "spectralMicroWindowSeconds": SPECTRAL_MICRO_WINDOW_SECONDS,
+                "spectralMicroHopSeconds": SPECTRAL_MICRO_HOP_SECONDS,
+                "spectralMicroMinMidi": SPECTRAL_MICRO_MIN_MIDI,
                 "windowMode": window_mode,
                 "activeWindowCount": len(transcription["activeWindows"]),
                 "activeWindows": transcription["activeWindows"],

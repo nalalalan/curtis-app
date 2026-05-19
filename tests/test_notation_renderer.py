@@ -58,14 +58,14 @@ def test_notation_renderer_draws_exact_accidentals():
         assert((noKey.match(/&#xE0A4;/g) || []).length === 4, "pitch-only noteheads must use the Bravura/SMuFL black notehead glyph");
         assert(!noKey.includes('class="note-stem"'), "unverified detected pitches must render as noteheads only, not fake quarter notes");
         assert(!noKey.includes("<ellipse"), "notation renderer must not use rough SVG ellipses for noteheads");
-        assert(noKey.includes('class="treble-clef" x="24" y="67" aria-label="treble clef">&#xE050;</text>'), "treble clef must use the Bravura/SMuFL glyph and sit higher on the G line");
+        assert(noKey.includes('class="treble-clef" x="24" y="63" aria-label="treble clef">&#xE050;</text>'), "treble clef must use the Bravura/SMuFL glyph and sit higher on the G line");
         assert(noKey.includes('viewBox="0 -18 720 150"'), "notation viewBox must leave room for high ledger notes and the full treble clef");
         assert(noKey.includes('&#119070;') === false, "notation renderer must not fall back to the generic G-clef glyph");
         assert(noKey.includes('font-size: 70px') === false, "notation renderer should not inline clef styling");
         assert(noKey.includes('aria-label="A#4"'), "A# must not render as natural A in aria label");
         assert(noKey.includes('aria-label="D#6"'), "D# must not render as natural D in aria label");
-        assert(noKey.includes('class="note-accidental accidental-glyph accidental-sharp" x="92.0" y="55.0"'), "first-note A# sharp needs professional clearance before the notehead");
-        assert(noKey.includes('class="note-accidental accidental-glyph accidental-sharp" x="282.7" y="5.0"'), "high D# sharp must stay vertically aligned with the high notehead");
+        assert(noKey.includes('class="note-accidental accidental-glyph accidental-sharp" x="110.0" y="55.0"'), "first-note A# sharp needs professional clearance before the notehead");
+        assert(noKey.includes('class="note-accidental accidental-glyph accidental-sharp" x="158.0" y="5.0"'), "high D# sharp must stay vertically aligned with the high notehead");
 
         const flatKey = vm.runInContext(
           `renderNotationSheet([
@@ -78,11 +78,40 @@ def test_notation_renderer_draws_exact_accidentals():
         assert(!flatKey.includes('_B'), "Bb covered by the key signature must not render as a separate local flat in ABC");
         assert(!flatKey.includes('_e'), "Eb covered by the key signature must not render as a separate local flat in ABC");
         assert((flatKey.match(/key-signature-mark accidental-glyph accidental-flat/g) || []).length === 2, "Bb/Eb key signature needs two flat glyphs");
-        assert(flatKey.includes('class="key-signature-mark accidental-glyph accidental-flat" x="63.0" y="50.0"'), "key-signature Bb flat must sit on B, not A");
-        assert(flatKey.includes('class="key-signature-mark accidental-glyph accidental-flat" x="79.0" y="35.0"'), "key-signature Eb flat must sit on E, not D");
+        assert(flatKey.includes('class="key-signature-mark accidental-glyph accidental-flat" x="88.0" y="50.0"'), "key-signature Bb flat must sit on B, not A");
+        assert(flatKey.includes('class="key-signature-mark accidental-glyph accidental-flat" x="108.0" y="35.0"'), "key-signature Eb flat must sit on E, not D");
         assert(!flatKey.includes('note-accidental'), "key-signature-covered Bb/Eb notes must not draw duplicate local accidentals");
         assert(flatKey.includes('aria-label="Bb4 / detected A#4"'), "A# must respell as Bb in a flat key");
         assert(flatKey.includes('aria-label="Eb6 / detected D#6"'), "D# must respell as Eb in a flat key");
+
+        const crowdedFlatKey = vm.runInContext(
+          `renderNotationSheet([
+            {kind:'note',note:'G#4'},
+            {kind:'note',note:'G#4'},
+            {kind:'note',note:'A#4'},
+            {kind:'note',note:'A#4'},
+            {kind:'note',note:'B4'},
+            {kind:'note',note:'E4'},
+            {kind:'note',note:'E4'},
+            {kind:'note',note:'G4'},
+            {kind:'note',note:'F#4'},
+            {kind:'note',note:'F#4'},
+            {kind:'note',note:'F4'},
+            {kind:'note',note:'D4'},
+            {kind:'note',note:'D#4'},
+            {kind:'note',note:'G#4'},
+            {kind:'note',note:'G#4'},
+            {kind:'note',note:'G#4'}
+          ], {keySignature:{accidentalType:'flat',accidentals:['Bb','Eb'],label:'G minor / 2 flats'}, maxNotes:16})`,
+          context
+        );
+        const viewWidth = Number((crowdedFlatKey.match(/viewBox="0 -18 ([0-9.]+) 150"/) || [])[1]);
+        const keyXs = [...crowdedFlatKey.matchAll(/class="key-signature-mark[^"]*" x="([0-9.]+)"/g)].map((match) => Number(match[1]));
+        const noteXs = [...crowdedFlatKey.matchAll(/class="notehead" x="([0-9.]+)"/g)].map((match) => Number(match[1]));
+        assert(viewWidth > 720, "crowded fast-note review rows must widen instead of compressing the staff");
+        assert(crowdedFlatKey.includes('--notation-svg-width:'), "notation SVG must expose its intrinsic width for CSS scrolling");
+        assert(noteXs[0] - keyXs[keyXs.length - 1] >= 54, "first note must not collide with the key signature");
+        assert(noteXs[1] - noteXs[0] >= 48, "fast detected notes need fixed horizontal clearance instead of squeezed spacing");
 
         const naturalInFlatKey = vm.runInContext(
           `renderNotationSheet([
@@ -184,11 +213,16 @@ def test_notation_styles_use_local_music_font_and_professional_glyph_sizes():
     assert ".notation-svg-fallback svg" in css
     assert ".notation-sheet svg" not in css
     assert ".notation-sheet .treble-clef" in css
-    assert "font-size: 68px;" in css
+    assert "width: max(100%, var(--notation-svg-width, 720px));" in css
+    assert "min-width: var(--notation-svg-width, 720px);" in css
+    assert "font-size: 62px;" in css
     assert ".notation-sheet .accidental-flat" in css
-    assert "font-size: 38px;" in css
+    assert "font-size: 33px;" in css
     assert ".notation-sheet .accidental-sharp" in css
-    assert "font-size: 36px;" in css
+    assert "font-size: 31px;" in css
+    assert ".notation-sheet .key-signature-mark.accidental-flat" in css
+    assert "font-size: 29px;" in css
+    assert ".notation-sheet .key-signature-mark.accidental-sharp" in css
     assert "font-synthesis: none;" in css
     assert "text-rendering: geometricPrecision;" in css
 

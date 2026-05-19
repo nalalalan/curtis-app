@@ -1410,23 +1410,30 @@ const TREBLE_STAFF_BOTTOM_Y = TREBLE_STAFF_TOP_Y + (TREBLE_STAFF_LINE_GAP * 4);
 const TREBLE_G4_Y = TREBLE_STAFF_TOP_Y + (TREBLE_STAFF_LINE_GAP * 3);
 const TREBLE_STAFF_STEP_Y = TREBLE_STAFF_LINE_GAP / 2;
 const TREBLE_NOTE_ORDER = { C: 0, D: 1, E: 2, F: 3, G: 4, A: 5, B: 6 };
-const TREBLE_CLEF_BASELINE_Y = 67;
+const TREBLE_CLEF_BASELINE_Y = 63;
 const NOTATION_VIEWBOX_MIN_Y = -18;
 const NOTATION_VIEWBOX_HEIGHT = 150;
-const NOTATION_VIEWBOX = `0 ${NOTATION_VIEWBOX_MIN_Y} 720 ${NOTATION_VIEWBOX_HEIGHT}`;
+const NOTATION_VIEWBOX_BASE_WIDTH = 720;
+function notationViewBox(width = NOTATION_VIEWBOX_BASE_WIDTH) {
+  const safeWidth = Math.max(NOTATION_VIEWBOX_BASE_WIDTH, Math.ceil(Number(width) || NOTATION_VIEWBOX_BASE_WIDTH));
+  return `0 ${NOTATION_VIEWBOX_MIN_Y} ${safeWidth} ${NOTATION_VIEWBOX_HEIGHT}`;
+}
+const NOTATION_VIEWBOX = notationViewBox();
 const NOTATION_STAFF_LINE_X1 = 22;
 const NOTATION_STAFF_LINE_X2 = 698;
-const NOTATION_NOTE_START_X = 110;
+const NOTATION_NOTE_START_X = 132;
 const NOTATION_NOTE_END_X = 682;
+const NOTATION_NOTE_MIN_STEP_X = 48;
+const NOTATION_NOTE_TRAILING_PAD_X = 46;
 const NOTATION_STEM_OFFSET_X = 6.4;
 const NOTATION_LEDGER_HALF_WIDTH = 11.5;
-const NOTATION_NOTE_ACCIDENTAL_X_OFFSET = 18;
+const NOTATION_NOTE_ACCIDENTAL_X_OFFSET = 22;
 const NOTATION_NOTE_ACCIDENTAL_Y_OFFSET = { flat: 0, sharp: 0 };
 const NOTATION_ACCIDENTAL_SAFE_TOP_Y = NOTATION_VIEWBOX_MIN_Y + 10;
 const NOTATION_ACCIDENTAL_SAFE_BOTTOM_Y = TREBLE_STAFF_BOTTOM_Y + 24;
-const NOTATION_KEY_SIGNATURE_START_X = 63;
-const NOTATION_KEY_SIGNATURE_STEP_X = 16;
-const NOTATION_KEY_SIGNATURE_WIDTH_PAD = 18;
+const NOTATION_KEY_SIGNATURE_START_X = 88;
+const NOTATION_KEY_SIGNATURE_STEP_X = 20;
+const NOTATION_KEY_SIGNATURE_WIDTH_PAD = 58;
 const SHARP_TO_FLAT_NOTE = { "C#": "Db", "D#": "Eb", "F#": "Gb", "G#": "Ab", "A#": "Bb" };
 const FLAT_TO_SHARP_NOTE = { Db: "C#", Eb: "D#", Gb: "F#", Ab: "G#", Bb: "A#" };
 const ABC_FLAT_KEYS = ["C", "F", "Bb", "Eb", "Ab", "Db", "Gb", "Cb"];
@@ -1818,13 +1825,33 @@ function renderKeySignatureMarks(signature) {
     .join("");
   return {
     svg: marks ? `<g class="key-signature" aria-label="${escapeHtml(normalized.label)}">${marks}</g>` : "",
-    width: marks ? NOTATION_KEY_SIGNATURE_WIDTH_PAD + (normalized.accidentals.length * NOTATION_KEY_SIGNATURE_STEP_X) : 0,
+    width: marks
+      ? Math.max(0, (NOTATION_KEY_SIGNATURE_START_X - NOTATION_NOTE_START_X) + ((normalized.accidentals.length - 1) * NOTATION_KEY_SIGNATURE_STEP_X) + NOTATION_KEY_SIGNATURE_WIDTH_PAD)
+      : 0,
     label: normalized.label,
   };
 }
 
 function renderTrebleClef() {
   return `<text class="treble-clef" x="24" y="${TREBLE_CLEF_BASELINE_Y}" aria-label="treble clef">&#xE050;</text>`;
+}
+
+function notationSvgOpen(width = NOTATION_VIEWBOX_BASE_WIDTH) {
+  const safeWidth = Math.max(NOTATION_VIEWBOX_BASE_WIDTH, Math.ceil(Number(width) || NOTATION_VIEWBOX_BASE_WIDTH));
+  return `<svg viewBox="${notationViewBox(safeWidth)}" style="--notation-svg-width:${safeWidth}px" role="img">`;
+}
+
+function renderStaffLines(width = NOTATION_VIEWBOX_BASE_WIDTH) {
+  const safeWidth = Math.max(NOTATION_VIEWBOX_BASE_WIDTH, Math.ceil(Number(width) || NOTATION_VIEWBOX_BASE_WIDTH));
+  const x2 = Math.max(NOTATION_STAFF_LINE_X2, safeWidth - NOTATION_STAFF_LINE_X1);
+  return [30, 40, 50, 60, 70].map((y) => `<line x1="${NOTATION_STAFF_LINE_X1}" x2="${x2}" y1="${y}" y2="${y}" />`).join("");
+}
+
+function notationWidthForItemCount(count, noteStartX) {
+  const noteCount = Math.max(0, Number(count) || 0);
+  const firstNoteX = Number(noteStartX) || NOTATION_NOTE_START_X;
+  const lastNoteX = firstNoteX + (Math.max(0, noteCount - 1) * NOTATION_NOTE_MIN_STEP_X);
+  return Math.max(NOTATION_VIEWBOX_BASE_WIDTH, lastNoteX + NOTATION_NOTE_TRAILING_PAD_X);
 }
 
 function renderLedgerLines(y, x) {
@@ -1843,10 +1870,12 @@ function renderLedgerLines(y, x) {
 function renderNotationSheet(events, options = {}) {
   const maxNotes = Number(options?.maxNotes) > 0 ? Number(options.maxNotes) : 32;
   const items = Array.isArray(events) ? events.slice(0, maxNotes) : [];
-  const staffLines = [30, 40, 50, 60, 70].map((y) => `<line x1="${NOTATION_STAFF_LINE_X1}" x2="${NOTATION_STAFF_LINE_X2}" y1="${y}" y2="${y}" />`).join("");
   const repeatGroup = options?.repeatGroup && typeof options.repeatGroup === "object" ? options.repeatGroup : null;
   const normalizedSignature = normalizedKeySignature(options?.keySignature || {});
   const keySignature = renderKeySignatureMarks(normalizedSignature);
+  const noteStartX = NOTATION_NOTE_START_X + keySignature.width;
+  const svgWidth = notationWidthForItemCount(items.length, noteStartX);
+  const staffLines = renderStaffLines(svgWidth);
   const repeatLabel = repeatGroup?.notationLabel || options?.repeatLabel || "";
   const repeatPattern = repeatGroup?.practicePattern || options?.practicePattern || "";
   const qualityLabel = options?.qualityLabel || "";
@@ -1883,7 +1912,7 @@ function renderNotationSheet(events, options = {}) {
       <div id="${sheetId}" class="notation-sheet notation-empty notation-engraved${repeatClass}${draftClass}${rhythmClass}" ${pitchOnly ? "" : `data-abc="${escapeHtml(abc)}"`} aria-label="Sheet-music-style transcription pending">
         ${abcTarget}
         <div class="notation-svg-fallback">
-          <svg viewBox="${NOTATION_VIEWBOX}" role="img">
+          ${notationSvgOpen(svgWidth)}
           <g class="staff-lines">${staffLines}</g>
             ${renderTrebleClef()}
             ${keySignature.svg}
@@ -1900,9 +1929,7 @@ function renderNotationSheet(events, options = {}) {
       </div>
     `;
   }
-  const noteStartX = NOTATION_NOTE_START_X + keySignature.width;
-  const noteEndX = NOTATION_NOTE_END_X;
-  const step = items.length > 1 ? (noteEndX - noteStartX) / (items.length - 1) : 0;
+  const step = items.length > 1 ? NOTATION_NOTE_MIN_STEP_X : 0;
   let fallbackMeasureAccidentals = {};
   const marks = items.map((event, index) => {
     const x = noteStartX + (step * index);
@@ -1938,7 +1965,7 @@ function renderNotationSheet(events, options = {}) {
     <div id="${sheetId}" class="notation-sheet notation-engraved${repeatClass}${draftClass}${rhythmClass}" ${pitchOnly ? "" : `data-abc="${escapeHtml(abc)}"`} aria-label="Sheet-music-style machine transcription">
       ${abcTarget}
       <div class="notation-svg-fallback">
-        <svg viewBox="${NOTATION_VIEWBOX}" role="img">
+        ${notationSvgOpen(svgWidth)}
           <g class="staff-lines">${staffLines}</g>
           ${renderTrebleClef()}
           ${keySignature.svg}
@@ -1961,11 +1988,11 @@ function renderVerifiedNotationGate(
   detail = "Only audio-checked notes render here.",
   keySignature = {}
 ) {
-  const staffLines = [30, 40, 50, 60, 70].map((y) => `<line x1="${NOTATION_STAFF_LINE_X1}" x2="${NOTATION_STAFF_LINE_X2}" y1="${y}" y2="${y}" />`).join("");
   const signature = renderKeySignatureMarks(keySignature);
+  const staffLines = renderStaffLines();
   return `
     <div class="notation-gate" aria-label="${escapeHtml(title)}">
-      <svg viewBox="${NOTATION_VIEWBOX}" role="img">
+      ${notationSvgOpen()}
         <g class="staff-lines">${staffLines}</g>
         ${renderTrebleClef()}
         ${signature.svg}

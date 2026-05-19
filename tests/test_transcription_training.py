@@ -18,6 +18,7 @@ from backend.app.transcription import (
     PITCH_HOP_LENGTH,
     pitch_sanity_filter,
     stable_single_note_fragments,
+    spectral_micro_events,
     spectral_onset_events,
     transcribe_audio_array,
     transcription_failure_state,
@@ -139,6 +140,26 @@ class TranscriptionTrainingTests(unittest.TestCase):
 
         self.assertEqual(len(events), 1)
         self.assertEqual(events[0]["note"], "A4")
+
+    def test_f0_to_events_absorbs_short_semitone_vibrato_wobble(self):
+        import numpy
+
+        f0 = numpy.array([
+            hz_for_midi(93),
+            hz_for_midi(93),
+            hz_for_midi(94),
+            hz_for_midi(94),
+            hz_for_midi(93),
+            hz_for_midi(93),
+            hz_for_midi(93),
+        ])
+        voiced = numpy.array([True] * len(f0))
+        probability = numpy.array([0.95, 0.95, 0.91, 0.91, 0.95, 0.95, 0.95])
+
+        events = f0_to_events(f0, voiced, probability, 22050, 512, numpy)
+
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["note"], "A6")
 
     def test_f0_to_events_requires_sustained_pitch_change(self):
         import numpy
@@ -305,6 +326,39 @@ class TranscriptionTrainingTests(unittest.TestCase):
 
         self.assertGreaterEqual(len(onset_frames), len(pattern) - 2)
 
+    def test_spectral_micro_events_tracks_fast_high_vibrato_notes_between_onsets(self):
+        import librosa  # type: ignore
+        import numpy  # type: ignore
+
+        sr = 22050
+        pattern = [86, 88, 90, 91, 93, 95, 96, 98, 100, 96, 93, 91]
+        duration = 0.032
+        chunks = []
+        for midi in pattern:
+            frequency = hz_for_midi(midi)
+            lower_frequency = hz_for_midi(midi - 12)
+            t = numpy.linspace(0, duration, int(sr * duration), endpoint=False)
+            vibrato_ratio = 2 ** ((32.0 * numpy.sin(2 * numpy.pi * 7.0 * t)) / 1200.0)
+            phase = 2 * numpy.pi * numpy.cumsum(frequency * vibrato_ratio) / sr
+            envelope = numpy.hanning(t.size)
+            chunks.append(
+                (
+                    0.28 * numpy.sin(phase)
+                    + 0.09 * numpy.sin(2 * phase)
+                    + 0.05 * numpy.sin(3 * phase)
+                    + 0.13 * numpy.sin(2 * numpy.pi * lower_frequency * t)
+                )
+                * envelope
+            )
+        y = numpy.concatenate(chunks)
+
+        events = spectral_micro_events(y, sr, librosa, numpy)
+        midi_values = [event["midi"] for event in events]
+
+        self.assertGreaterEqual(len(midi_values), 7)
+        self.assertGreaterEqual(len({midi % 12 for midi in midi_values}), 5)
+        self.assertTrue(all(midi >= 84 for midi in midi_values))
+
     def test_transcribe_audio_array_rescues_fast_high_notes_from_lower_octave_noise(self):
         import librosa  # type: ignore
         import numpy  # type: ignore
@@ -332,9 +386,47 @@ class TranscriptionTrainingTests(unittest.TestCase):
         result = transcribe_audio_array(y, sr, librosa, numpy)
         midi_values = [event["midi"] for event in result["events"]]
 
-        self.assertEqual(result["quality"]["segmentationSource"], "spectral_fast_note_rescue")
-        self.assertEqual(result["quality"]["spectralStreamSource"], "source")
+        self.assertIn(result["quality"]["segmentationSource"], {"spectral_fast_note_rescue", "spectral_micro_high_rescue"})
+        self.assertIn(result["quality"]["spectralStreamSource"], {"source", "micro_source"})
         self.assertGreaterEqual(len(midi_values), 7)
+        self.assertGreaterEqual(len({midi % 12 for midi in midi_values}), 5)
+        self.assertTrue(all(midi >= 84 for midi in midi_values))
+
+    def test_transcribe_audio_array_uses_micro_scan_for_fast_high_vibrato_run(self):
+        import librosa  # type: ignore
+        import numpy  # type: ignore
+
+        sr = 22050
+        pattern = [86, 88, 90, 91, 93, 95, 96, 98, 100, 96, 93, 91]
+        duration = 0.032
+        chunks = []
+        rng = numpy.random.default_rng(7)
+        for midi in pattern:
+            frequency = hz_for_midi(midi)
+            lower_frequency = hz_for_midi(midi - 12)
+            t = numpy.linspace(0, duration, int(sr * duration), endpoint=False)
+            vibrato_ratio = 2 ** ((35.0 * numpy.sin(2 * numpy.pi * 7.0 * t)) / 1200.0)
+            phase = 2 * numpy.pi * numpy.cumsum(frequency * vibrato_ratio) / sr
+            envelope = numpy.hanning(t.size)
+            chunks.append(
+                (
+                    0.26 * numpy.sin(phase)
+                    + 0.08 * numpy.sin(2 * phase)
+                    + 0.05 * numpy.sin(3 * phase)
+                    + 0.15 * numpy.sin(2 * numpy.pi * lower_frequency * t)
+                    + 0.006 * rng.normal(0, 1, t.size)
+                )
+                * envelope
+            )
+        y = numpy.concatenate(chunks)
+
+        result = transcribe_audio_array(y, sr, librosa, numpy)
+        midi_values = [event["midi"] for event in result["events"]]
+
+        self.assertIn(result["quality"]["segmentationSource"], {"spectral_micro_high_rescue", "spectral_micro_octave_rescue"})
+        self.assertEqual(result["quality"]["spectralDetailSource"], "micro")
+        self.assertGreaterEqual(result["quality"]["spectralMicroEventCount"], 7)
+        self.assertGreaterEqual(len(midi_values), 6)
         self.assertGreaterEqual(len({midi % 12 for midi in midi_values}), 5)
         self.assertTrue(all(midi >= 84 for midi in midi_values))
 

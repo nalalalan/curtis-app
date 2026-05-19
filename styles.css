@@ -1880,11 +1880,13 @@ h2 {
 }
 
 .score-anchor-panel .notation-sheet {
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .score-anchor-panel .notation-svg-fallback svg {
-  min-width: 0;
+  width: max(100%, var(--notation-svg-width, 720px));
+  min-width: var(--notation-svg-width, 720px);
   min-height: 96px;
 }
 
@@ -2003,8 +2005,9 @@ h2 {
 }
 
 .matched-notation-panel .notation-svg-fallback svg {
-  min-width: 0;
-  height: 90px;
+  width: max(100%, var(--notation-svg-width, 720px));
+  min-width: var(--notation-svg-width, 720px);
+  height: 104px;
 }
 
 .pending-practice-pair {
@@ -2369,8 +2372,8 @@ h2 {
 
 .notation-svg-fallback svg {
   display: block;
-  width: 100%;
-  min-width: 720px;
+  width: max(100%, var(--notation-svg-width, 720px));
+  min-width: var(--notation-svg-width, 720px);
   height: 128px;
 }
 
@@ -2409,7 +2412,7 @@ h2 {
 .notation-sheet .treble-clef {
   fill: var(--ink);
   font-family: "CurtisBravura", "Bravura", "Noto Music", "Segoe UI Symbol", "Apple Symbols", Georgia, "Times New Roman", serif;
-  font-size: 68px;
+  font-size: 62px;
   font-weight: 400;
   font-synthesis: none;
   text-rendering: geometricPrecision;
@@ -2418,7 +2421,7 @@ h2 {
 .notation-sheet .key-signature-mark {
   fill: var(--ink);
   font-family: "CurtisBravura", "Bravura", "Noto Music", "Segoe UI Symbol", "Apple Symbols", Georgia, "Times New Roman", serif;
-  font-size: 24px;
+  font-size: 28px;
   font-weight: 400;
   font-synthesis: none;
   text-rendering: geometricPrecision;
@@ -2427,7 +2430,7 @@ h2 {
 .notation-sheet .note-accidental {
   fill: var(--ink);
   font-family: "CurtisBravura", "Bravura", "Noto Music", "Segoe UI Symbol", "Apple Symbols", Georgia, "Times New Roman", serif;
-  font-size: 24px;
+  font-size: 28px;
   font-weight: 400;
   font-synthesis: none;
   text-rendering: geometricPrecision;
@@ -2441,18 +2444,30 @@ h2 {
 }
 
 .notation-sheet .accidental-flat {
-  font-size: 38px;
+  font-size: 33px;
 }
 
 .notation-sheet .accidental-sharp {
-  font-size: 36px;
+  font-size: 31px;
+}
+
+.notation-sheet .key-signature-mark.accidental-flat {
+  font-size: 29px;
+}
+
+.notation-sheet .key-signature-mark.accidental-sharp {
+  font-size: 28px;
+}
+
+.notation-sheet .note-accidental.accidental-natural {
+  font-size: 31px;
 }
 
 .notation-sheet .notehead {
   fill: var(--ink);
   stroke: none;
   font-family: "CurtisBravura", "Bravura", "Noto Music", "Segoe UI Symbol", "Apple Symbols", Georgia, "Times New Roman", serif;
-  font-size: 38px;
+  font-size: 34px;
   dominant-baseline: central;
   font-synthesis: none;
   text-anchor: middle;
@@ -2585,13 +2600,13 @@ h2 {
 }
 
 .notation-gate .treble-clef {
-  font-size: 70px;
+  font-size: 62px;
   font-weight: 400;
 }
 
 .notation-gate .key-signature-mark {
-  font-size: 22px;
-  font-weight: 760;
+  font-size: 28px;
+  font-weight: 400;
 }
 
 .notation-gate-title {
@@ -3933,7 +3948,8 @@ h2 {
   }
 
   .matched-notation-panel .notation-svg-fallback svg {
-    min-width: 200px;
+    width: max(100%, var(--notation-svg-width, 720px));
+    min-width: var(--notation-svg-width, 720px);
     height: 118px;
   }
 
@@ -4330,7 +4346,8 @@ h2 {
 }
 
 .notation-svg-fallback svg {
-  min-width: 0;
+  width: max(100%, var(--notation-svg-width, 720px));
+  min-width: var(--notation-svg-width, 720px);
 }
 
 .notation-sheet.notation-abc-ready .notation-abc-target {
@@ -4339,14 +4356,14 @@ h2 {
 
 .notation-sheet .treble-clef {
   font-family: "CurtisBravura", "Bravura", "Noto Music", "Segoe UI Symbol", "Apple Symbols", serif;
-  font-size: 68px;
+  font-size: 62px;
   font-synthesis: none;
   text-rendering: geometricPrecision;
 }
 
 .notation-sheet .key-signature-mark {
   font-family: "CurtisBravura", "Bravura", "Noto Music", "Segoe UI Symbol", "Apple Symbols", serif;
-  font-size: 24px;
+  font-size: 28px;
   font-weight: 400;
   font-synthesis: none;
   text-rendering: geometricPrecision;
@@ -4354,7 +4371,7 @@ h2 {
 
 .notation-sheet .note-accidental {
   font-family: "CurtisBravura", "Bravura", "Noto Music", "Segoe UI Symbol", "Apple Symbols", serif;
-  font-size: 24px;
+  font-size: 28px;
   font-weight: 400;
   font-synthesis: none;
   text-rendering: geometricPrecision;
@@ -4368,18 +4385,30 @@ h2 {
 }
 
 .notation-sheet .accidental-flat {
-  font-size: 38px;
+  font-size: 33px;
 }
 
 .notation-sheet .accidental-sharp {
-  font-size: 36px;
+  font-size: 31px;
+}
+
+.notation-sheet .key-signature-mark.accidental-flat {
+  font-size: 29px;
+}
+
+.notation-sheet .key-signature-mark.accidental-sharp {
+  font-size: 28px;
+}
+
+.notation-sheet .note-accidental.accidental-natural {
+  font-size: 31px;
 }
 
 .notation-sheet .notehead {
   fill: var(--ink);
   stroke: none;
   font-family: "CurtisBravura", "Bravura", "Noto Music", "Segoe UI Symbol", "Apple Symbols", serif;
-  font-size: 38px;
+  font-size: 34px;
   dominant-baseline: central;
   font-synthesis: none;
   text-anchor: middle;
