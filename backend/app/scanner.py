@@ -4381,6 +4381,140 @@ def rejected_staff4_expansion_cases() -> list[dict[str, Any]]:
     return cases
 
 
+def user_confirmed_measure16_target() -> dict[str, Any]:
+    manifest = load_long_phrase_truth()
+    rejected = manifest.get("rejectedRegressionPhrases") if isinstance(manifest.get("rejectedRegressionPhrases"), list) else []
+    for item in rejected:
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("id") or "") != "rejected-user-flagged-may3-wrong-measure16-score-crop-eb-eb-c":
+            continue
+        target_midi = int_sequence(item.get("expectedSourceMidiSequence"))
+        target_sequence = item.get("expectedSourceSequence") if isinstance(item.get("expectedSourceSequence"), list) else []
+        if not target_midi or not target_sequence:
+            break
+        return {
+            "status": "user_confirmed_measure16_target_ready",
+            "targetId": "user-confirmed-may3-measure16-eb-d-c",
+            "practiceDay": str(item.get("practiceDay") or "2026-05-03"),
+            "pieceTitle": "Wieniawski Scherzo-Tarantelle, Op. 16",
+            "measureLabel": str(item.get("measureLabel") or "m. 16"),
+            "measureNumber": int(item.get("measureNumber") or 16),
+            "sampleId": str(item.get("sampleId") or ""),
+            "sourceWindow": str(item.get("sourceWindow") or ""),
+            "targetSequence": " ".join(str(note) for note in target_sequence),
+            "targetMidiSequence": target_midi,
+            "rejectedDisplayedSequence": " ".join(
+                str(note) for note in item.get("rejectedDisplayedSourceSequence", []) if str(note or "").strip()
+            ),
+            "rejectedDisplayedMidiSequence": int_sequence(item.get("midiSequence")),
+            "sourceCropDisplayAllowed": False,
+            "truthEvidenceAccepted": False,
+            "basis": str(
+                item.get("basis")
+                or "Alan identified the May 3 audio as measure 16 and corrected the target notes."
+            ),
+            "acceptanceRule": (
+                "Candidate only. Do not display as accepted evidence until exact source notes, rendered transcription, "
+                "paired audio notes, and the actual score crop all agree."
+            ),
+        }
+    return {
+        "status": "user_confirmed_measure16_target_missing",
+        "targetId": "user-confirmed-may3-measure16-eb-d-c",
+        "practiceDay": "2026-05-03",
+        "pieceTitle": "Wieniawski Scherzo-Tarantelle, Op. 16",
+        "measureLabel": "m. 16",
+        "measureNumber": 16,
+        "targetSequence": "Eb5 D5 C5",
+        "targetMidiSequence": [75, 74, 72],
+        "sourceCropDisplayAllowed": False,
+        "truthEvidenceAccepted": False,
+        "basis": "Fallback target from Alan's correction: May 3 measure 16 should begin Eb-D-C.",
+        "acceptanceRule": (
+            "Candidate only. Do not display as accepted evidence until exact source notes, rendered transcription, "
+            "paired audio notes, and the actual score crop all agree."
+        ),
+    }
+
+
+def user_confirmed_measure16_audio_search(
+    daily_records: dict[str, Any],
+    extra_audio_runs: list[dict[str, Any]] | None = None,
+    limit: int = 8,
+) -> dict[str, Any]:
+    target = user_confirmed_measure16_target()
+    target_midi = int_sequence(target.get("targetMidiSequence"))
+    if not target_midi:
+        return {
+            "status": "blocked_missing_target_midi",
+            "target": target,
+            "targetSequence": str(target.get("targetSequence") or ""),
+            "targetMidiSequence": [],
+            "displayAllowed": False,
+        }
+    runs = detected_audio_runs_for_expansion(daily_records, extra_audio_runs)
+    search = audio_window_search_for_exact_midi(
+        runs,
+        target_midi,
+        practice_day=str(target.get("practiceDay") or ""),
+        anchor_sample_id=str(target.get("sampleId") or ""),
+    )
+    exact_candidates = search.get("exactCandidates") if isinstance(search.get("exactCandidates"), list) else []
+    exact_audio_candidates = [
+        item for item in exact_candidates if isinstance(item, dict) and item.get("audioAgreed")
+    ]
+    exact_continuous_candidates = [
+        item for item in exact_audio_candidates if item.get("phraseContinuous") is not False
+    ]
+    nearest = search.get("nearestWindow") if isinstance(search.get("nearestWindow"), dict) else {}
+    status = (
+        "continuous_exact_audio_candidate"
+        if exact_continuous_candidates
+        else "exact_midi_discontinuous"
+        if exact_audio_candidates
+        else "exact_midi_audio_unverified"
+        if exact_candidates
+        else "no_exact_audio_candidate"
+    )
+    best_candidate = (exact_continuous_candidates or exact_audio_candidates or exact_candidates or [{}])[0]
+    best_sequence = str(best_candidate.get("windowSequence") or "") if isinstance(best_candidate, dict) else ""
+    nearest_sequence = str(nearest.get("windowSequence") or "")
+    return {
+        "status": status,
+        "target": target,
+        "targetSequence": str(target.get("targetSequence") or ""),
+        "targetMidiSequence": target_midi,
+        "practiceDay": str(target.get("practiceDay") or ""),
+        "measureLabel": str(target.get("measureLabel") or ""),
+        "measureNumber": int(target.get("measureNumber") or 0),
+        "searchedRunCount": len(runs),
+        "searchedWindowCount": int(search.get("searchedWindowCount") or 0),
+        "exactCandidateCount": len(exact_candidates),
+        "exactAudioCandidateCount": len(exact_audio_candidates),
+        "continuousCandidateCount": len(exact_continuous_candidates),
+        "bestCandidate": best_candidate if isinstance(best_candidate, dict) else {},
+        "nearestWindow": nearest,
+        "candidatePreview": exact_candidates[: max(0, int(limit))],
+        "displayAllowed": False,
+        "sourceCropDisplayAllowed": False,
+        "truthEvidenceAccepted": False,
+        "rejectedDisplayedSequence": str(target.get("rejectedDisplayedSequence") or ""),
+        "rejectedDisplayedMidiSequence": int_sequence(target.get("rejectedDisplayedMidiSequence")),
+        "bestCandidateSequence": best_sequence,
+        "nearestSequence": nearest_sequence,
+        "nextAction": (
+            "Audit the user-confirmed m.16 Eb-D-C audio candidate against the actual score crop before accepting it."
+            if exact_continuous_candidates
+            else "Reject the discontinuous user-confirmed m.16 Eb-D-C candidate; find one continuous attempt before accepting it."
+            if exact_audio_candidates
+            else "Find an audio-agreed May 3 window for the user-confirmed m.16 Eb-D-C target before showing any score match."
+            if exact_candidates
+            else "Search more May 3 active-audio note runs for the user-confirmed m.16 Eb-D-C target."
+        ),
+    }
+
+
 def source_crop_reverification_targets(limit: int = 3) -> list[dict[str, Any]]:
     manifest = load_long_phrase_truth()
     sources = manifest.get("sources") if isinstance(manifest.get("sources"), list) else []
@@ -5771,6 +5905,10 @@ def build_transcription_completion(
     )
     phrase_expansion = source_phrase_expansion_harness(daily_records, staff4_source_rescan_runs)
     staff4_mining = staff4_adjacent_phrase_mining(daily_records, staff4_source_rescan_runs, staff4_source_rescan)
+    measure16_user_target_search = user_confirmed_measure16_audio_search(daily_records, staff4_source_rescan_runs)
+    measure16_user_target_status = str(measure16_user_target_search.get("status") or "")
+    measure16_user_target_exact_count = int(measure16_user_target_search.get("exactCandidateCount") or 0)
+    measure16_user_target_continuous_count = int(measure16_user_target_search.get("continuousCandidateCount") or 0)
     phrase_expansion_status = str(phrase_expansion.get("status") or "")
     phrase_expansion_target_count = int(phrase_expansion.get("targetCount") or 0)
     phrase_expansion_accepted_count = int(phrase_expansion.get("acceptedExpansionCount") or 0)
@@ -6122,6 +6260,11 @@ def build_transcription_completion(
             "label": "Score windows",
             "value": str(score_verified_count),
             "detail": f"{actual_source_score_snippet_lock_count} source locks",
+        },
+        {
+            "label": "m. 16 target",
+            "value": str(measure16_user_target_exact_count),
+            "detail": "Eb-D-C search",
         },
         {
             "label": "Score map queue",
@@ -6714,6 +6857,8 @@ def build_transcription_completion(
         )
     else:
         next_action = "Extend the accepted score-coordinate phrase into longer passages, repeated attempts, and problem-density layers."
+    if not long_phrase_count and measure16_user_target_exact_count:
+        next_action = str(measure16_user_target_search.get("nextAction") or next_action)
     return {
         "status": "partial" if completed_points else "pending",
         "completionPercent": completion_percent,
@@ -6765,6 +6910,10 @@ def build_transcription_completion(
         "staff4AdjacentMiningSearchedWindowCount": staff4_mining_searched_count,
         "staff4AdjacentMiningExactCandidateCount": staff4_mining_exact_count,
         "staff4AdjacentMiningNearestSequence": str(staff4_mining_nearest.get("windowSequence") or ""),
+        "measure16UserTargetSearch": measure16_user_target_search,
+        "measure16UserTargetStatus": measure16_user_target_status,
+        "measure16UserTargetExactCandidateCount": measure16_user_target_exact_count,
+        "measure16UserTargetContinuousCandidateCount": measure16_user_target_continuous_count,
         "staff4PhraseAudit": staff4_audit,
         "staff4PhraseAuditStatus": staff4_audit_status,
         "staff4PhraseAuditPacketId": staff4_audit.get("packetId") or "",

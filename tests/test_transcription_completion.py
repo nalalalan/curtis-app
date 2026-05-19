@@ -22,6 +22,8 @@ from backend.app.scanner import (
     staff4_continuity_probe_for_anchor,
     staff4_failed_adjacent_probe_for_anchor,
     staff4_source_audio_rescan_record,
+    user_confirmed_measure16_audio_search,
+    user_confirmed_measure16_target,
 )
 
 
@@ -30,13 +32,17 @@ NOTE_CLASS = {
     "C#": 1,
     "D": 2,
     "D#": 3,
+    "Eb": 3,
     "E": 4,
     "F": 5,
     "F#": 6,
+    "Gb": 6,
     "G": 7,
     "G#": 8,
+    "Ab": 8,
     "A": 9,
     "A#": 10,
+    "Bb": 10,
     "B": 11,
 }
 
@@ -127,6 +133,93 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertGreater(archive_gate["precisePoints"], archive_gate["points"])
         self.assertEqual(completion["completedPoints"], 32.614)
         self.assertEqual(completion["completionExactLabel"], "32.614%")
+
+    def test_user_confirmed_measure16_target_uses_eb_d_c_not_rejected_eb_eb_c(self):
+        target = user_confirmed_measure16_target()
+
+        self.assertEqual(target["measureNumber"], 16)
+        self.assertEqual(target["targetSequence"], "Eb5 D5 C5")
+        self.assertEqual(target["targetMidiSequence"], [75, 74, 72])
+        self.assertEqual(target["rejectedDisplayedSequence"], "Eb5 Eb5 C5 Eb5 Eb5")
+        self.assertFalse(target["sourceCropDisplayAllowed"])
+        self.assertFalse(target["truthEvidenceAccepted"])
+
+    def test_user_confirmed_measure16_search_finds_exact_continuous_eb_d_c_candidate_only(self):
+        daily_records = {
+            "records": [
+                {
+                    "practiceDay": "2026-05-03",
+                    "transcription": {
+                        "detectedSeries": [
+                            {
+                                "sampleId": "Njh8_zq9_DM-8835",
+                                "sourceWindow": "*8835-8925",
+                                "notes": [
+                                    note("A4", 0.00),
+                                    note("Eb5", 0.14),
+                                    note("D5", 0.28),
+                                    note("C5", 0.42),
+                                    note("A4", 0.56),
+                                ],
+                            }
+                        ]
+                    },
+                }
+            ]
+        }
+
+        search = user_confirmed_measure16_audio_search(daily_records)
+
+        self.assertEqual(search["status"], "continuous_exact_audio_candidate")
+        self.assertEqual(search["targetSequence"], "Eb5 D5 C5")
+        self.assertEqual(search["targetMidiSequence"], [75, 74, 72])
+        self.assertEqual(search["exactCandidateCount"], 1)
+        self.assertEqual(search["continuousCandidateCount"], 1)
+        self.assertEqual(search["bestCandidateSequence"], "Eb5 D5 C5")
+        self.assertFalse(search["displayAllowed"])
+        self.assertFalse(search["sourceCropDisplayAllowed"])
+        self.assertIn("actual score crop", search["nextAction"])
+
+    def test_completion_prioritizes_user_corrected_measure16_target_over_rejected_old_lane(self):
+        daily_records = {
+            "records": [
+                {
+                    "practiceDay": "2026-05-03",
+                    "transcription": {
+                        "detectedSeries": [
+                            {
+                                "sampleId": "Njh8_zq9_DM-8835",
+                                "sourceWindow": "*8835-8925",
+                                "notes": [
+                                    note("Eb5", 0.00),
+                                    note("D5", 0.14),
+                                    note("C5", 0.28),
+                                ],
+                            }
+                        ]
+                    },
+                    "matchGroups": [],
+                }
+            ]
+        }
+
+        completion = build_transcription_completion(
+            training={},
+            daily_records=daily_records,
+            repertoire_evidence={"entries": []},
+            active_practice_coverage={},
+            evidence_progress={},
+            media_samples=[],
+            transcriptions=[],
+        )
+
+        self.assertEqual(completion["measure16UserTargetStatus"], "continuous_exact_audio_candidate")
+        self.assertEqual(completion["measure16UserTargetExactCandidateCount"], 1)
+        self.assertEqual(completion["measure16UserTargetSearch"]["targetSequence"], "Eb5 D5 C5")
+        self.assertEqual(completion["longPhraseAcceptedCount"], 0)
+        self.assertEqual(completion["acceptedMeasureMatchCount"], 0)
+        self.assertIn("Eb-D-C", completion["nextAction"])
+        self.assertNotIn("Eb5 Eb5 C5", completion["nextAction"])
 
     def test_verified_measure_phrase_with_media_counts_as_long_phrase(self):
         daily_records = {
