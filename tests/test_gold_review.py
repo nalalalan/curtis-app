@@ -742,6 +742,53 @@ class GoldReviewTests(unittest.TestCase):
         self.assertTrue(review["queue"][0]["adaptiveReview"])
         self.assertNotEqual(review["queue"][0]["reviewItemId"], first["reviewItemId"])
 
+    def test_adaptive_review_generates_fresh_windows_when_primary_queue_is_only_soft_rejected(self):
+        state = {}
+        names = ["D5", "E5", "F5", "G5", "A5", "B5", "C6", "D6"]
+        midis = [74, 76, 77, 79, 81, 83, 84, 86]
+        daily_records = {
+            "records": [
+                {
+                    "practiceDay": "2026-05-03",
+                    "transcription": {
+                        "detectedSeries": [
+                            {
+                                "sampleId": f"soft-reject-refresh-{sample_index}",
+                                "sourceTitle": "5-3-26",
+                                "sourceUrl": "https://www.youtube.com/watch?v=abc",
+                                "startSeconds": 120.0 + sample_index,
+                                "localStartSeconds": 0.0,
+                                "notes": [note(name, midi, index * 0.2) for index, (name, midi) in enumerate(zip(names, midis))],
+                            }
+                            for sample_index in range(3)
+                        ]
+                    },
+                }
+            ]
+        }
+        primary = build_gold_review_loop(state, daily_records)["queue"][0]
+        for sample_index in range(3):
+            record_gold_review_item(
+                state,
+                {
+                    **primary,
+                    "reviewItemId": f"gold-audio-phrase-soft-reject-refresh-{sample_index}-0-6",
+                    "sampleId": f"soft-reject-refresh-{sample_index}",
+                    "type": primary["reviewType"],
+                    "status": "rejected_mismatch",
+                    "reason": "human review negative but not infallible",
+                },
+            )
+
+        review = build_gold_review_loop(state, daily_records)
+
+        self.assertEqual(review["queueStatus"], "adaptive_review_ready")
+        self.assertEqual(review["adaptiveReason"], "primary_queue_only_soft_rejected")
+        self.assertGreater(review["adaptiveCandidateCount"], 0)
+        self.assertTrue(review["queue"][0]["adaptiveReview"])
+        self.assertGreater(review["queueCount"], review["adaptiveCandidateCount"])
+        self.assertNotIn("soft_rejected_pattern", [item["reviewLearningStatus"] for item in review["queue"][:3]])
+
     def test_adaptive_review_prefers_phrase_shaped_windows_over_repeated_notes(self):
         state = {}
         names = ["C6", "C6", "C6", "C6", "C6", "C6", "D5", "E5", "F5", "G5", "A5", "B5"]

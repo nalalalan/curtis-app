@@ -843,7 +843,10 @@ def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any],
     adaptive_suppressed_candidates: list[dict[str, Any]] = []
     adaptive_candidate_pool_count = 0
     adaptive_mode = False
-    if not candidates:
+    primary_queue_is_only_soft_rejected = len(candidates) >= 2 and all(
+        item.get("reviewLearningStatus") == "soft_rejected_pattern" for item in candidates
+    )
+    if not candidates or primary_queue_is_only_soft_rejected:
         raw_adaptive_candidates = [
             candidate
             for candidate in _queue_candidates(daily_records, adaptive=True)
@@ -854,7 +857,7 @@ def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any],
         adaptive_candidate_pool_count = len(adaptive_candidates)
         adaptive_candidates = adaptive_candidates[:MAX_ADAPTIVE_REVIEW_QUEUE]
         if adaptive_candidates:
-            candidates = adaptive_candidates
+            candidates = [*adaptive_candidates, *candidates]
             adaptive_mode = True
     score_candidates = [item for item in candidates if item.get("reviewTask") == "audio_score_exact_match"]
     exact_score_candidates = [item for item in score_candidates if item.get("scoreAgreement") is True]
@@ -896,6 +899,7 @@ def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any],
         "longPhraseQueueCount": len(long_candidates),
         "rawQueueCount": len(raw_candidates),
         "adaptiveMode": adaptive_mode,
+        "adaptiveReason": "primary_queue_only_soft_rejected" if primary_queue_is_only_soft_rejected and adaptive_mode else "primary_queue_empty" if adaptive_mode else "",
         "adaptiveCandidateCount": len(adaptive_candidates),
         "adaptiveCandidatePoolCount": adaptive_candidate_pool_count,
         "adaptiveQueueLimit": MAX_ADAPTIVE_REVIEW_QUEUE,
