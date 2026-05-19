@@ -15,6 +15,7 @@ from backend.app.scanner import (
     reference_phrase_candidate_top,
     source_verification_target_count,
     source_verification_target_top,
+    source_crop_adjacent_source_attempt_search_for_target,
     source_crop_alternate_attempt_search_for_target,
     source_crop_failed_note_probe_for_target,
     source_crop_wide_attempt_search_for_target,
@@ -500,6 +501,13 @@ class TranscriptionCompletionTests(unittest.TestCase):
                 "recordCount": 24,
                 "continuousCandidateCount": 0,
             },
+        ), patch(
+            "backend.app.scanner.source_crop_adjacent_source_attempt_search_for_target",
+            return_value={
+                "status": "no_adjacent_source_exact_midi_in_source_window",
+                "recordCount": 32,
+                "continuousCandidateCount": 0,
+            },
         ):
             completion = build_transcription_completion(
                 {"scoreReferenceTargetCount": 1},
@@ -543,6 +551,7 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertEqual(completion["sourceCropFailedNoteProbeStatus"], "no_continuous_exact_midi_in_probe")
         self.assertEqual(completion["sourceCropAlternateAttemptStatus"], "no_alternate_exact_midi_in_source_window")
         self.assertEqual(completion["sourceCropWideAttemptStatus"], "no_wide_exact_midi_in_source_window")
+        self.assertEqual(completion["sourceCropAdjacentSourceAttemptStatus"], "no_adjacent_source_exact_midi_in_source_window")
 
     def test_staff4_exact_midi_search_rejects_stitched_discontinuous_phrase(self):
         runs = [
@@ -1962,6 +1971,79 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertGreaterEqual(search["alternateAudioCandidateCount"], 1)
         self.assertTrue(search["bestCandidate"]["audioAgreed"])
 
+    def test_source_crop_adjacent_source_attempt_search_finds_neighbor_chunk_exact_midi_window(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            base_path = Path(temp_dir) / "testvideo-90.wav"
+            next_path = Path(temp_dir) / "testvideo-180.wav"
+            write_tiny_wav(base_path, seconds=90)
+            write_tiny_wav(next_path, seconds=90)
+            scans = []
+
+            def fake_extract(source, target, start, _end):
+                scans.append((Path(source).name, round(float(start), 3)))
+                write_tiny_wav(target, seconds=5)
+                return True, ""
+
+            def fake_transcribe(*_args):
+                if scans and scans[-1] == ("testvideo-180.wav", 12.0):
+                    return {
+                        "events": [
+                            note("D#5", 0.06),
+                            note("D#5", 0.20),
+                            note("C5", 0.34),
+                            note("D#5", 0.48),
+                            note("D#5", 0.62),
+                            note("D#5", 0.76),
+                        ],
+                        "scoreMatchCandidateNotes": [],
+                        "quality": {"segmentationSource": "test_source_crop_adjacent_source_attempt_search"},
+                    }
+                return {
+                    "events": [note("D5", 0.06), note("A4", 0.20)],
+                    "scoreMatchCandidateNotes": [],
+                    "quality": {"segmentationSource": "test_source_crop_adjacent_source_attempt_search_empty"},
+                }
+
+            target = {
+                "reviewKind": "staff4_source_crop_audio_review_required",
+                "practiceDay": "2026-05-03",
+                "pieceTitle": "Wieniawski Scherzo-Tarantelle, Op. 16",
+                "sampleId": "testvideo-90",
+                "sourceWindow": "*90-180",
+                "targetSequence": "Eb5 Eb5 C5 Eb5 Eb5 Eb5",
+                "targetMidiSequence": [75, 75, 72, 75, 75, 75],
+                "bestAudioSequence": "Eb5 Eb5 C5 Eb5 Eb5 D5",
+                "audioLocalStartSeconds": 20.225,
+                "audioLocalEndSeconds": 20.949,
+                "bestAudioNotes": [
+                    note("D#5", 20.225),
+                    note("D#5", 20.345),
+                    note("C5", 20.465),
+                    note("D#5", 20.585),
+                    note("D#5", 20.705),
+                    note("D5", 20.829),
+                ],
+            }
+            media_samples = [
+                {"id": "testvideo-90", "path": str(base_path), "window": "*90-180"},
+                {"id": "testvideo-180", "path": str(next_path), "window": "*180-270"},
+            ]
+
+            with patch("backend.app.scanner.run_ffmpeg_extract_audio", side_effect=fake_extract), patch(
+                "backend.app.scanner.transcribe_audio_array",
+                side_effect=fake_transcribe,
+            ):
+                search = source_crop_adjacent_source_attempt_search_for_target(target, media_samples)
+
+        self.assertEqual(search["status"], "continuous_exact_audio_candidate")
+        self.assertIn(("testvideo-180.wav", 12.0), scans)
+        self.assertEqual(search["searchedSampleIds"], ["testvideo-180"])
+        self.assertEqual(search["targetMidiSequence"], [75, 75, 72, 75, 75, 75])
+        self.assertGreaterEqual(search["recordCount"], 3)
+        self.assertGreaterEqual(search["continuousCandidateCount"], 1)
+        self.assertEqual(search["bestCandidate"]["sampleId"], "testvideo-180")
+        self.assertTrue(search["bestCandidate"]["audioAgreed"])
+
     def test_completion_rejects_source_crop_window_after_failed_note_probe_finds_no_phrase(self):
         target = {
             "reviewKind": "staff4_source_crop_audio_review_required",
@@ -1999,6 +2081,12 @@ class TranscriptionCompletionTests(unittest.TestCase):
             "continuousCandidateCount": 0,
             "targetSequence": "Eb5 Eb5 C5 Eb5 Eb5 Eb5",
         }
+        adjacent_search = {
+            "status": "no_adjacent_source_exact_midi_in_source_window",
+            "recordCount": 32,
+            "continuousCandidateCount": 0,
+            "targetSequence": "Eb5 Eb5 C5 Eb5 Eb5 Eb5",
+        }
         with patch("backend.app.scanner.source_crop_reverification_targets", return_value=[target]), patch(
             "backend.app.scanner.source_crop_failed_note_probe_for_target",
             return_value=failed_probe,
@@ -2008,6 +2096,9 @@ class TranscriptionCompletionTests(unittest.TestCase):
         ), patch(
             "backend.app.scanner.source_crop_wide_attempt_search_for_target",
             return_value=wide_search,
+        ), patch(
+            "backend.app.scanner.source_crop_adjacent_source_attempt_search_for_target",
+            return_value=adjacent_search,
         ), patch(
             "backend.app.scanner.staff4_source_audio_rescan",
             return_value={"status": "no_staff4_anchor", "runs": []},
@@ -2049,6 +2140,9 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertEqual(completion["sourceCropWideAttemptStatus"], "no_wide_exact_midi_in_source_window")
         self.assertEqual(completion["sourceCropWideAttemptRecordCount"], 24)
         self.assertEqual(completion["sourceCropWideAttemptContinuousCandidateCount"], 0)
+        self.assertEqual(completion["sourceCropAdjacentSourceAttemptStatus"], "no_adjacent_source_exact_midi_in_source_window")
+        self.assertEqual(completion["sourceCropAdjacentSourceAttemptRecordCount"], 32)
+        self.assertEqual(completion["sourceCropAdjacentSourceAttemptContinuousCandidateCount"], 0)
         self.assertIn("No continuous Staff 4 six-note", completion["nextAction"])
         self.assertIn("measure-16", completion["nextAction"])
 

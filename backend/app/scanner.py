@@ -114,6 +114,10 @@ STAFF4_ALTERNATE_ATTEMPT_MIN_START_DISTANCE_SECONDS = 1.5
 STAFF4_WIDE_ATTEMPT_WINDOW_SECONDS = 10.0
 STAFF4_WIDE_ATTEMPT_STEP_SECONDS = 4.0
 STAFF4_WIDE_ATTEMPT_MAX_WINDOWS = 24
+STAFF4_ADJACENT_SOURCE_ATTEMPT_WINDOW_SECONDS = 12.0
+STAFF4_ADJACENT_SOURCE_ATTEMPT_STEP_SECONDS = 6.0
+STAFF4_ADJACENT_SOURCE_ATTEMPT_RADIUS = 1
+STAFF4_ADJACENT_SOURCE_ATTEMPT_MAX_WINDOWS_PER_SAMPLE = 16
 MEDIA_REVIEW_PENDING_BLOCKERS = {"youtube_data_api_returns_metadata_not_video_media"}
 WEAK_EVIDENCE_TERMS = (
     "background noise",
@@ -4689,6 +4693,101 @@ def source_crop_wide_attempt_windows(target: dict[str, Any], sample: dict[str, A
     return windows[:max_windows]
 
 
+def source_crop_adjacent_source_samples(
+    target: dict[str, Any],
+    media_samples: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    sample_id = str(target.get("sampleId") or "").strip()
+    source_window = str(target.get("sourceWindow") or "")
+    source_start, source_end = parse_window_bounds(source_window)
+    chunk_seconds = source_end - source_start
+    match = re.match(r"^(.+)-(\d+)$", sample_id)
+    if not match or chunk_seconds <= 0:
+        return []
+    prefix = match.group(1)
+    try:
+        sample_start = int(match.group(2))
+    except (TypeError, ValueError):
+        return []
+    radius = max(1, int(STAFF4_ADJACENT_SOURCE_ATTEMPT_RADIUS))
+    samples: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for offset in range(-radius, radius + 1):
+        if offset == 0:
+            continue
+        candidate_start = sample_start + offset * chunk_seconds
+        if candidate_start < 0:
+            continue
+        candidate_id = f"{prefix}-{candidate_start}"
+        if candidate_id in seen:
+            continue
+        seen.add(candidate_id)
+        sample = media_sample_for_id(media_samples, candidate_id)
+        if not sample:
+            continue
+        sample = dict(sample)
+        sample.setdefault("id", candidate_id)
+        sample["window"] = str(sample.get("window") or f"*{candidate_start}-{candidate_start + chunk_seconds}")
+        samples.append(sample)
+    return samples
+
+
+def source_crop_adjacent_source_attempt_windows(
+    target: dict[str, Any],
+    sample: dict[str, Any],
+) -> list[dict[str, Any]]:
+    source_window = str(sample.get("window") or target.get("sourceWindow") or "")
+    source_window_start, source_window_end = parse_window_bounds(source_window)
+    source_duration = float(source_window_end - source_window_start) if source_window_end > source_window_start else 0.0
+    window_seconds = float(STAFF4_ADJACENT_SOURCE_ATTEMPT_WINDOW_SECONDS)
+    step_seconds = float(STAFF4_ADJACENT_SOURCE_ATTEMPT_STEP_SECONDS)
+    max_windows = max(1, int(STAFF4_ADJACENT_SOURCE_ATTEMPT_MAX_WINDOWS_PER_SAMPLE))
+    windows: list[dict[str, Any]] = []
+    seen: set[tuple[float, float]] = set()
+
+    def add_window(label: str, start: float, end: float) -> None:
+        if source_duration:
+            start = min(max(0.0, start), source_duration)
+            end = min(max(0.0, end), source_duration)
+            if end - start < 0.75:
+                start = max(0.0, min(start, source_duration - 0.75))
+                end = min(source_duration, start + window_seconds)
+        else:
+            start = max(0.0, start)
+            end = max(0.0, end)
+        if end - start < 0.75:
+            return
+        identity = (round(start, 3), round(end, 3))
+        if identity in seen:
+            return
+        seen.add(identity)
+        windows.append(
+            {
+                "label": label,
+                "scanLocalStartSeconds": round(start, 3),
+                "scanLocalEndSeconds": round(end, 3),
+                "scanDurationSeconds": round(end - start, 3),
+                "probeKind": "source_crop_adjacent_source_attempt_search",
+                "guidedContext": False,
+            }
+        )
+
+    if source_duration <= 0:
+        add_window("adjacent_source_unknown_span", 0.0, window_seconds)
+        return windows[:max_windows]
+
+    span = max(0.0, source_duration - window_seconds)
+    start = 0.0
+    index = 1
+    while start <= span + 0.001 and len(windows) < max_windows:
+        add_window(f"adjacent_source_{index:02d}", start, start + window_seconds)
+        index += 1
+        start += max(0.75, step_seconds)
+    if windows and windows[-1]["scanLocalEndSeconds"] < source_duration:
+        add_window(f"adjacent_source_{index:02d}", span, source_duration)
+    return windows[:max_windows]
+
+
 def source_crop_attempt_search_for_windows(
     target: dict[str, Any],
     media_samples: list[dict[str, Any]],
@@ -4696,6 +4795,8 @@ def source_crop_attempt_search_for_windows(
     *,
     search_label: str,
     no_match_status: str,
+    failed_sample_id: str | None = None,
+    failed_local_start_seconds: float | None = None,
 ) -> dict[str, Any]:
     if str(target.get("reviewKind") or "") != "staff4_source_crop_audio_review_required":
         return {"status": "not_applicable"}
@@ -4726,6 +4827,15 @@ def source_crop_attempt_search_for_windows(
         current_start = float(target.get("audioLocalStartSeconds"))
     except (TypeError, ValueError):
         current_start = float(best_audio_notes[0].get("startSeconds") or 0.0) if best_audio_notes else 0.0
+    failed_sample_id = str(failed_sample_id or sample_id).strip()
+    try:
+        failed_local_start = (
+            float(failed_local_start_seconds)
+            if failed_local_start_seconds is not None
+            else current_start
+        )
+    except (TypeError, ValueError):
+        failed_local_start = current_start
     try:
         current_end = float(target.get("audioLocalEndSeconds"))
     except (TypeError, ValueError):
@@ -4770,11 +4880,13 @@ def source_crop_attempt_search_for_windows(
     exact_candidates = search.get("exactCandidates") if isinstance(search.get("exactCandidates"), list) else []
 
     def is_current_failed_window(candidate: dict[str, Any]) -> bool:
+        if failed_sample_id and str(candidate.get("sampleId") or "") != failed_sample_id:
+            return False
         try:
             candidate_start = float(candidate.get("localStartSeconds"))
         except (TypeError, ValueError):
             return False
-        return abs(candidate_start - current_start) < STAFF4_ALTERNATE_ATTEMPT_MIN_START_DISTANCE_SECONDS
+        return abs(candidate_start - failed_local_start) < STAFF4_ALTERNATE_ATTEMPT_MIN_START_DISTANCE_SECONDS
 
     alternate_exact = [
         item
@@ -4871,6 +4983,100 @@ def source_crop_wide_attempt_search_for_target(
         search_label="wide overlapping source-window search",
         no_match_status="no_wide_exact_midi_in_source_window",
     )
+
+
+def source_crop_adjacent_source_attempt_search_for_target(
+    target: dict[str, Any],
+    media_samples: list[dict[str, Any]],
+) -> dict[str, Any]:
+    if str(target.get("reviewKind") or "") != "staff4_source_crop_audio_review_required":
+        return {"status": "not_applicable"}
+    target_midi = int_sequence(target.get("targetMidiSequence"))
+    if not target_midi:
+        return {
+            "status": "blocked_missing_target_midi",
+            "limit": "The source-crop audio-review target is missing exact source MIDI.",
+        }
+    base_sample_id = str(target.get("sampleId") or "").strip()
+    adjacent_samples = source_crop_adjacent_source_samples(target, media_samples)
+    if not adjacent_samples:
+        return {
+            "status": "blocked_no_adjacent_source_samples",
+            "sampleId": base_sample_id,
+            "limit": "No adjacent local owner-media source chunks are available for larger-span Staff 4 search.",
+        }
+    try:
+        failed_local_start = float(target.get("audioLocalStartSeconds"))
+    except (TypeError, ValueError):
+        failed_local_start = None
+    results: list[dict[str, Any]] = []
+    for sample in adjacent_samples:
+        sample_id = str(sample.get("id") or "")
+        sample_target = dict(target)
+        sample_target["sampleId"] = sample_id
+        sample_target["sourceWindow"] = str(sample.get("window") or target.get("sourceWindow") or "")
+        result = source_crop_attempt_search_for_windows(
+            sample_target,
+            [sample],
+            source_crop_adjacent_source_attempt_windows(sample_target, sample),
+            search_label="adjacent source-chunk search",
+            no_match_status="no_adjacent_source_exact_midi_in_source_window",
+            failed_sample_id=base_sample_id,
+            failed_local_start_seconds=failed_local_start,
+        )
+        result["searchedSampleId"] = sample_id
+        results.append(result)
+
+    continuous_results = [item for item in results if item.get("status") == "continuous_exact_audio_candidate"]
+    discontinuous_results = [item for item in results if item.get("status") == "exact_midi_discontinuous"]
+    same_failed_results = [item for item in results if item.get("status") == "same_failed_window_only"]
+    best_source = (continuous_results or discontinuous_results or same_failed_results or results or [{}])[0]
+    best_candidate = best_source.get("bestCandidate") if isinstance(best_source.get("bestCandidate"), dict) else {}
+    status = (
+        "continuous_exact_audio_candidate"
+        if continuous_results
+        else "exact_midi_discontinuous"
+        if discontinuous_results
+        else "same_failed_window_only"
+        if same_failed_results and len(same_failed_results) == len(results)
+        else "no_adjacent_source_exact_midi_in_source_window"
+    )
+    record_count = sum(int(item.get("recordCount") or 0) for item in results)
+    continuous_count = sum(int(item.get("continuousCandidateCount") or 0) for item in results)
+    return {
+        "status": status,
+        "searchLabel": "adjacent source-chunk search",
+        "targetSequence": str(target.get("targetSequence") or ""),
+        "targetMidiSequence": target_midi,
+        "sampleId": base_sample_id,
+        "searchedSampleCount": len(adjacent_samples),
+        "searchedSampleIds": [str(sample.get("id") or "") for sample in adjacent_samples],
+        "searchedWindowCount": sum(int(item.get("searchedWindowCount") or 0) for item in results),
+        "recordCount": record_count,
+        "runCount": sum(int(item.get("runCount") or 0) for item in results),
+        "eventCount": sum(int(item.get("eventCount") or 0) for item in results),
+        "exactCandidateCount": sum(int(item.get("exactCandidateCount") or 0) for item in results),
+        "alternateExactCandidateCount": sum(int(item.get("alternateExactCandidateCount") or 0) for item in results),
+        "alternateAudioCandidateCount": sum(int(item.get("alternateAudioCandidateCount") or 0) for item in results),
+        "continuousCandidateCount": continuous_count,
+        "sameFailedWindowExactCandidateCount": sum(int(item.get("sameFailedWindowExactCandidateCount") or 0) for item in results),
+        "bestCandidate": best_candidate,
+        "nearestWindow": best_source.get("nearestWindow") if isinstance(best_source.get("nearestWindow"), dict) else {},
+        "sampleResults": results,
+        "windows": [
+            window
+            for item in results
+            for window in (item.get("windows") if isinstance(item.get("windows"), list) else [])
+            if isinstance(window, dict)
+        ],
+        "nextAction": (
+            "Audit the adjacent source-chunk continuous Staff 4 six-note source/audio candidate before accepting it."
+            if continuous_count
+            else "Reject the adjacent source-chunk exact-MIDI Staff 4 candidate as discontinuous; find one continuous attempt before accepting it."
+            if status == "exact_midi_discontinuous"
+            else "No continuous exact-MIDI Staff 4 six-note attempt was found in adjacent source chunks."
+        ),
+    }
 
 
 def int_sequence(value: Any) -> list[int]:
@@ -5680,6 +5886,22 @@ def build_transcription_completion(
     source_crop_wide_attempt_status = str(source_crop_wide_attempt_search.get("status") or "")
     source_crop_wide_attempt_record_count = int(source_crop_wide_attempt_search.get("recordCount") or 0)
     source_crop_wide_attempt_continuous_count = int(source_crop_wide_attempt_search.get("continuousCandidateCount") or 0)
+    source_crop_adjacent_source_attempt_search = (
+        source_crop_adjacent_source_attempt_search_for_target(source_crop_reverification_target, media_samples)
+        if source_crop_reverification_target
+        and source_crop_wide_attempt_status
+        in {
+            "no_wide_exact_midi_in_source_window",
+            "same_failed_window_only",
+            "exact_midi_discontinuous",
+        }
+        else {}
+    )
+    source_crop_adjacent_source_attempt_status = str(source_crop_adjacent_source_attempt_search.get("status") or "")
+    source_crop_adjacent_source_attempt_record_count = int(source_crop_adjacent_source_attempt_search.get("recordCount") or 0)
+    source_crop_adjacent_source_attempt_continuous_count = int(
+        source_crop_adjacent_source_attempt_search.get("continuousCandidateCount") or 0
+    )
     phrase_expansion_detail = (
         "source extent exhausted"
         if phrase_expansion_status == "source_extent_exhausted"
@@ -5999,6 +6221,11 @@ def build_transcription_completion(
                 f" / wide {source_crop_wide_attempt_status.replace('_', ' ')}"
                 if source_crop_wide_attempt_record_count
                 else ""
+            )
+            + (
+                f" / adjacent {source_crop_adjacent_source_attempt_status.replace('_', ' ')}"
+                if source_crop_adjacent_source_attempt_record_count
+                else ""
             ),
         },
         {
@@ -6073,6 +6300,8 @@ def build_transcription_completion(
         done_summary.append("The source-crop six-note gate now searches alternate raw measure-16 windows after the current failed timing is rejected.")
     if source_crop_wide_attempt_record_count:
         done_summary.append("The source-crop six-note gate now widens to overlapping source-window scans when the first alternate pass finds no continuous exact-MIDI phrase.")
+    if source_crop_adjacent_source_attempt_record_count:
+        done_summary.append("The source-crop six-note gate now searches adjacent May 3 source chunks after the current chunk still has no continuous exact-MIDI phrase.")
     if truth_manifest_live_phrase_count == 0 and staff4_source_rescan_status == "no_staff4_anchor":
         done_summary.append("The May 3 Staff 4 visible score/transcription mismatch is now a rejected regression, so the old accepted Staff 4 lanes are blocked from display.")
     if source_crop_reverification_count:
@@ -6316,6 +6545,24 @@ def build_transcription_completion(
                         next_action = "Audit the alternate continuous Staff 4 six-note measure-16 candidate before accepting it."
                     elif source_crop_wide_attempt_continuous_count:
                         next_action = "Audit the wide-search continuous Staff 4 six-note measure-16 candidate before accepting it."
+                    elif source_crop_adjacent_source_attempt_continuous_count:
+                        next_action = "Audit the adjacent-source continuous Staff 4 six-note measure-16 candidate before accepting it."
+                    elif source_crop_adjacent_source_attempt_status == "exact_midi_discontinuous":
+                        next_action = (
+                            "Reject the adjacent-source exact-MIDI Staff 4 six-note candidate as discontinuous; "
+                            "find one continuous measure-16 attempt before accepting the phrase."
+                        )
+                    elif source_crop_adjacent_source_attempt_status == "no_adjacent_source_exact_midi_in_source_window":
+                        next_action = (
+                            f"No continuous Staff 4 six-note measure-16 attempt was found after {source_crop_wide_attempt_record_count} "
+                            f"wide scans plus {source_crop_adjacent_source_attempt_record_count} adjacent-source scans; improve the note segmentation "
+                            "or move to a full-day Staff 4 attempt index."
+                        )
+                    elif source_crop_adjacent_source_attempt_status == "blocked_no_adjacent_source_samples":
+                        next_action = (
+                            "Make adjacent May 3 source chunks available locally or move to full-day Staff 4 attempt indexing; "
+                            "the current chunk has no continuous exact-MIDI six-note phrase."
+                        )
                     elif source_crop_wide_attempt_status == "exact_midi_discontinuous":
                         next_action = (
                             "Reject the wide-search exact-MIDI Staff 4 six-note candidate as discontinuous; "
@@ -6383,6 +6630,24 @@ def build_transcription_completion(
                     next_action = "Audit the alternate continuous Staff 4 six-note measure-16 candidate before accepting it."
                 elif source_crop_wide_attempt_continuous_count:
                     next_action = "Audit the wide-search continuous Staff 4 six-note measure-16 candidate before accepting it."
+                elif source_crop_adjacent_source_attempt_continuous_count:
+                    next_action = "Audit the adjacent-source continuous Staff 4 six-note measure-16 candidate before accepting it."
+                elif source_crop_adjacent_source_attempt_status == "exact_midi_discontinuous":
+                    next_action = (
+                        "Reject the adjacent-source exact-MIDI Staff 4 six-note candidate as discontinuous; "
+                        "find one continuous measure-16 attempt before accepting the phrase."
+                    )
+                elif source_crop_adjacent_source_attempt_status == "no_adjacent_source_exact_midi_in_source_window":
+                    next_action = (
+                        f"No continuous Staff 4 six-note measure-16 attempt was found after {source_crop_wide_attempt_record_count} "
+                        f"wide scans plus {source_crop_adjacent_source_attempt_record_count} adjacent-source scans; improve the note segmentation "
+                        "or move to a full-day Staff 4 attempt index."
+                    )
+                elif source_crop_adjacent_source_attempt_status == "blocked_no_adjacent_source_samples":
+                    next_action = (
+                        "Make adjacent May 3 source chunks available locally or move to full-day Staff 4 attempt indexing; "
+                        "the current chunk has no continuous exact-MIDI six-note phrase."
+                    )
                 elif source_crop_wide_attempt_status == "exact_midi_discontinuous":
                     next_action = (
                         "Reject the wide-search exact-MIDI Staff 4 six-note candidate as discontinuous; "
@@ -6519,6 +6784,10 @@ def build_transcription_completion(
         "sourceCropWideAttemptStatus": source_crop_wide_attempt_status,
         "sourceCropWideAttemptRecordCount": source_crop_wide_attempt_record_count,
         "sourceCropWideAttemptContinuousCandidateCount": source_crop_wide_attempt_continuous_count,
+        "sourceCropAdjacentSourceAttemptSearch": source_crop_adjacent_source_attempt_search,
+        "sourceCropAdjacentSourceAttemptStatus": source_crop_adjacent_source_attempt_status,
+        "sourceCropAdjacentSourceAttemptRecordCount": source_crop_adjacent_source_attempt_record_count,
+        "sourceCropAdjacentSourceAttemptContinuousCandidateCount": source_crop_adjacent_source_attempt_continuous_count,
         "sourceVerificationTargetCount": source_target_count,
         "sourceVerificationTargets": source_targets,
         "sourceVerificationTargetTop": source_target_top,
