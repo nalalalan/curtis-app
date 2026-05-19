@@ -279,6 +279,104 @@ class GoldReviewTests(unittest.TestCase):
         self.assertEqual(review["acceptedCount"], 0)
         self.assertEqual(review["acceptedEvidenceReadyCount"], 0)
 
+    def test_rejected_pattern_suppresses_future_matching_candidates(self):
+        state = {}
+        record_gold_review_item(
+            state,
+            {
+                "reviewItemId": "gold-reject-pattern",
+                "type": "audio_phrase",
+                "status": "rejected_mismatch",
+                "sampleId": "old-sample",
+                "detectedNotes": ["Eb5", "Eb5", "C5"],
+                "reason": "same wrong pattern should not keep returning",
+            },
+        )
+        daily_records = {
+            "records": [
+                {
+                    "practiceDay": "2026-05-03",
+                    "transcription": {
+                        "detectedSeries": [
+                            {
+                                "sampleId": "new-sample",
+                                "sourceTitle": "5-3-26",
+                                "sourceUrl": "https://www.youtube.com/watch?v=abc",
+                                "startSeconds": 120.0,
+                                "localStartSeconds": 0.0,
+                                "notes": [
+                                    note("Eb5", 75, 0.0),
+                                    note("Eb5", 75, 0.2),
+                                    note("C5", 72, 0.4),
+                                ],
+                            }
+                        ]
+                    },
+                }
+            ]
+        }
+
+        review = build_gold_review_loop(state, daily_records)
+
+        self.assertEqual(review["rawQueueCount"], 1)
+        self.assertEqual(review["queueCount"], 0)
+        self.assertEqual(review["suppressedByLearningCount"], 1)
+        self.assertEqual(review["reviewLearningStatus"], "reducing_review_load")
+        self.assertEqual(review["suppressedQueuePreview"][0]["reviewLearningStatus"], "rejected_pattern")
+
+    def test_later_acceptance_releases_previously_rejected_pattern(self):
+        state = {}
+        record_gold_review_item(
+            state,
+            {
+                "reviewItemId": "gold-reject-pattern",
+                "type": "audio_phrase",
+                "status": "rejected_mismatch",
+                "sampleId": "old-sample",
+                "detectedNotes": ["D5", "D5"],
+            },
+        )
+        record_gold_review_item(
+            state,
+            {
+                "reviewItemId": "gold-accept-pattern",
+                "type": "audio_phrase",
+                "status": "accepted_truth",
+                "sampleId": "accepted-sample",
+                "acceptedNotes": ["D5"],
+            },
+        )
+        daily_records = {
+            "records": [
+                {
+                    "practiceDay": "2026-05-03",
+                    "transcription": {
+                        "detectedSeries": [
+                            {
+                                "sampleId": "new-sample",
+                                "sourceTitle": "5-3-26",
+                                "sourceUrl": "https://www.youtube.com/watch?v=abc",
+                                "startSeconds": 120.0,
+                                "localStartSeconds": 0.0,
+                                "notes": [
+                                    note("D5", 74, 0.0),
+                                    note("D5", 74, 0.2),
+                                    note("D5", 74, 0.4),
+                                ],
+                            }
+                        ]
+                    },
+                }
+            ]
+        }
+
+        review = build_gold_review_loop(state, daily_records)
+
+        self.assertEqual(review["rawQueueCount"], 1)
+        self.assertEqual(review["queueCount"], 1)
+        self.assertEqual(review["suppressedByLearningCount"], 0)
+        self.assertEqual(review["queue"][0]["reviewLearningStatus"], "accepted_pattern")
+
 
 if __name__ == "__main__":
     unittest.main()

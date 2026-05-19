@@ -3191,6 +3191,7 @@ function renderGoldReview() {
   const accepted = Number(review.acceptedCount) || 0;
   const queued = Number(review.queueCount) || 0;
   const rejected = Number(review.rejectedCount) || 0;
+  const hidden = Number(review.suppressedByLearningCount) || 0;
   setText(elements.goldReviewCount, `${accepted} accepted / ${queued} queued`);
   const queue = Array.isArray(review.queue) ? review.queue.slice(0, 4) : [];
   const recent = Array.isArray(review.recentItems) ? review.recentItems.slice(0, 3) : [];
@@ -3201,6 +3202,7 @@ function renderGoldReview() {
         <article><span>Accepted</span><strong>${escapeHtml(String(accepted))}</strong></article>
         <article><span>Queue</span><strong>${escapeHtml(String(queued))}</strong></article>
         <article><span>Rejected</span><strong>${escapeHtml(String(rejected))}</strong></article>
+        <article><span>Hidden</span><strong>${escapeHtml(String(hidden))}</strong></article>
         <article><span>Score</span><strong>${escapeHtml(String(Number(review.acceptedScorePhraseCount) || 0))}</strong></article>
       </div>
       <p class="empty">No review clips queued.</p>
@@ -3212,6 +3214,7 @@ function renderGoldReview() {
       <article><span>Accepted</span><strong>${escapeHtml(String(accepted))}</strong></article>
       <article><span>Queue</span><strong>${escapeHtml(String(queued))}</strong></article>
       <article><span>Rejected</span><strong>${escapeHtml(String(rejected))}</strong></article>
+      <article><span>Hidden</span><strong>${escapeHtml(String(hidden))}</strong></article>
       <article><span>Score</span><strong>${escapeHtml(String(Number(review.acceptedScorePhraseCount) || 0))}</strong></article>
     </div>
     <div class="gold-review-list">

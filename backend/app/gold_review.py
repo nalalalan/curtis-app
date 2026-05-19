@@ -60,6 +60,33 @@ def _normalized_review_note_agreement(left: list[str], right: list[str]) -> bool
     return bool(left_midi and right_midi and left_midi == right_midi)
 
 
+def _review_sequence_key(names: list[str]) -> str:
+    sequence = _normalized_review_midi_sequence(names)
+    return " ".join(str(value) for value in sequence)
+
+
+def _candidate_sequence_key(candidate: dict[str, Any]) -> str:
+    if isinstance(candidate.get("normalizedDetectedMidiSequence"), list):
+        values = [int(value) for value in candidate["normalizedDetectedMidiSequence"] if isinstance(value, int)]
+        if values:
+            return " ".join(str(value) for value in values)
+    return _review_sequence_key(_clean_note_names(candidate.get("detectedNotes")))
+
+
+def _item_learning_key(item: dict[str, Any]) -> str:
+    for field in ("normalizedAcceptedMidiSequence", "normalizedDetectedMidiSequence", "normalizedScoreMidiSequence"):
+        values = item.get(field)
+        if isinstance(values, list):
+            cleaned = [int(value) for value in values if isinstance(value, int)]
+            if cleaned:
+                return " ".join(str(value) for value in cleaned)
+    for field in ("acceptedNotes", "detectedNotes", "scoreNotes"):
+        key = _review_sequence_key(_clean_note_names(item.get(field)))
+        if key:
+            return key
+    return ""
+
+
 def _note_dicts(value: Any) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     if not isinstance(value, list):
@@ -215,6 +242,7 @@ def _candidate_from_series(record: dict[str, Any], series: dict[str, Any]) -> di
         "localEndSeconds": clip["localEndSeconds"],
         "detectedNotes": note_names,
         "detectedMidiSequence": note_midi_sequence(notes),
+        "normalizedDetectedMidiSequence": collapse_consecutive_duplicate_midi(note_midi_sequence(notes)),
         "detectedNoteCount": len(note_names),
         "sourceDetectedNoteCount": int(series.get("noteCount") or len(_note_dicts(series.get("notes")))),
         "audioAgreementCount": sum(1 for note in notes if note.get("audioAgreement") is True),
@@ -260,6 +288,7 @@ def _candidate_from_group(record: dict[str, Any], group: dict[str, Any]) -> dict
         "localEndSeconds": _safe_float(clip.get("localEndSeconds")),
         "detectedNotes": note_names,
         "detectedMidiSequence": note_midi_sequence(notes),
+        "normalizedDetectedMidiSequence": collapse_consecutive_duplicate_midi(note_midi_sequence(notes)),
         "detectedNoteCount": len(note_names),
         "matchedNoteRun": int(group.get("matchedNoteRun") or 0),
         "audioAgreementCount": sum(1 for note in notes if note.get("audioAgreement") is True),
@@ -334,6 +363,7 @@ def normalize_gold_review_item(raw: dict[str, Any]) -> dict[str, Any]:
         "detectedNotes": detected_notes,
         "acceptedNotes": accepted_notes,
         "scoreNotes": score_notes,
+        "normalizedDetectedMidiSequence": _normalized_review_midi_sequence(detected_notes),
         "normalizedAcceptedMidiSequence": _normalized_review_midi_sequence(accepted_notes),
         "normalizedScoreMidiSequence": _normalized_review_midi_sequence(score_notes),
         "duplicateTolerance": "consecutive_duplicate_notes_collapsed",
@@ -393,6 +423,50 @@ def record_gold_review_item(state: dict[str, Any], raw: dict[str, Any]) -> dict[
     return {"goldReviewItem": item, "truthMirror": mirror}
 
 
+def build_review_learning_profile(items: list[dict[str, Any]]) -> dict[str, Any]:
+    accepted_keys: set[str] = set()
+    rejected_keys: set[str] = set()
+    for item in items:
+        key = _item_learning_key(item)
+        if not key:
+            continue
+        if item.get("status") == "accepted_truth":
+            accepted_keys.add(key)
+        elif item.get("status") == "rejected_mismatch":
+            rejected_keys.add(key)
+    rejected_only = rejected_keys - accepted_keys
+    return {
+        "acceptedKeys": accepted_keys,
+        "rejectedKeys": rejected_keys,
+        "rejectedOnlyKeys": rejected_only,
+        "acceptedPatternCount": len(accepted_keys),
+        "rejectedPatternCount": len(rejected_keys),
+        "suppressionRule": "Candidates with the same normalized MIDI pattern as a rejected review are hidden unless that pattern was later accepted.",
+    }
+
+
+def apply_review_learning_to_candidates(
+    candidates: list[dict[str, Any]],
+    profile: dict[str, Any],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    accepted_keys = profile.get("acceptedKeys") if isinstance(profile.get("acceptedKeys"), set) else set()
+    rejected_only_keys = profile.get("rejectedOnlyKeys") if isinstance(profile.get("rejectedOnlyKeys"), set) else set()
+    active: list[dict[str, Any]] = []
+    suppressed: list[dict[str, Any]] = []
+    for candidate in candidates:
+        key = _candidate_sequence_key(candidate)
+        enriched = {
+            **candidate,
+            "reviewLearningKey": key,
+            "reviewLearningStatus": "accepted_pattern" if key in accepted_keys else "rejected_pattern" if key in rejected_only_keys else "new_pattern",
+        }
+        if key and key in rejected_only_keys:
+            suppressed.append(enriched)
+        else:
+            active.append(enriched)
+    return active, suppressed
+
+
 def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any], *, limit: int = 10) -> dict[str, Any]:
     review = state.get("goldReview") if isinstance(state.get("goldReview"), dict) else {}
     items = [entry for entry in review.get("items", []) if isinstance(entry, dict)]
@@ -405,10 +479,13 @@ def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any],
         if item.get("status") == "accepted_truth" and item.get("type") in {"score_phrase", "audio_score_match"}
     ]
     reviewed_ids = {_clean(item.get("reviewItemId")) for item in items if _clean(item.get("reviewItemId"))}
-    candidates = [candidate for candidate in _queue_candidates(daily_records) if _clean(candidate.get("reviewItemId")) not in reviewed_ids]
+    learning_profile = build_review_learning_profile(items)
+    raw_candidates = [candidate for candidate in _queue_candidates(daily_records) if _clean(candidate.get("reviewItemId")) not in reviewed_ids]
+    candidates, suppressed_candidates = apply_review_learning_to_candidates(raw_candidates, learning_profile)
     candidates.sort(
         key=lambda item: (
             0 if item.get("reviewKind") == "score_phrase_candidate" else 1,
+            0 if item.get("reviewLearningStatus") == "accepted_pattern" else 1,
             -int(item.get("detectedNoteCount") or 0),
             str(item.get("practiceDay") or ""),
             str(item.get("sampleId") or ""),
@@ -427,14 +504,23 @@ def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any],
         "scoreReadyTruthCount": int(truth_progress.get("scoreReadyTruthCount") or 0),
         "acceptedEvidenceReadyCount": int(truth_progress.get("acceptedEvidenceReadyCount") or 0),
         "queueCount": len(candidates),
+        "rawQueueCount": len(raw_candidates),
+        "suppressedByLearningCount": len(suppressed_candidates),
         "reviewedIds": len(reviewed_ids),
+        "acceptedPatternCount": int(learning_profile.get("acceptedPatternCount") or 0),
+        "rejectedPatternCount": int(learning_profile.get("rejectedPatternCount") or 0),
+        "reviewLearningStatus": "reducing_review_load" if suppressed_candidates else "learning_no_suppression_yet",
+        "reviewLearningRule": learning_profile.get("suppressionRule") or "",
         "itemsByType": dict(by_type),
         "itemsByStatus": dict(by_status),
         "queue": candidates[: max(0, int(limit))],
+        "suppressedQueuePreview": suppressed_candidates[:5],
         "recentItems": items[:8],
         "nextAction": (
             "Review one queued clip: confirm exact notes, mark mismatch, or add score notes and location before accepting score evidence."
             if candidates
+            else "Gold review learned from prior rejections; no new unsuppressed candidates are queued."
+            if suppressed_candidates
             else "Gold review queue is empty for current analyzed evidence."
         ),
         "acceptanceRule": "Accepted score labels require exact audio-note and score-note MIDI agreement after consecutive duplicate detections are collapsed. Audio-only labels improve transcription truth but stay out of score evidence.",
