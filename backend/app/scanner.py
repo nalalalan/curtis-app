@@ -108,6 +108,9 @@ STAFF4_CONTINUITY_PROBE_MAX_SECONDS = 5.0
 STAFF4_FAILED_ADJACENT_PROBE_BEFORE_SECONDS = 0.9
 STAFF4_FAILED_ADJACENT_PROBE_AFTER_SECONDS = 2.2
 STAFF4_FAILED_ADJACENT_PROBE_MAX_SECONDS = 4.25
+STAFF4_ALTERNATE_ATTEMPT_WINDOW_SECONDS = 6.0
+STAFF4_ALTERNATE_ATTEMPT_MAX_WINDOWS = 12
+STAFF4_ALTERNATE_ATTEMPT_MIN_START_DISTANCE_SECONDS = 1.5
 MEDIA_REVIEW_PENDING_BLOCKERS = {"youtube_data_api_returns_metadata_not_video_media"}
 WEAK_EVIDENCE_TERMS = (
     "background noise",
@@ -4559,6 +4562,194 @@ def source_crop_failed_note_probe_for_target(
     }
 
 
+def source_crop_alternate_attempt_windows(target: dict[str, Any], sample: dict[str, Any]) -> list[dict[str, Any]]:
+    source_window = str(target.get("sourceWindow") or sample.get("window") or "")
+    source_window_start, source_window_end = parse_window_bounds(source_window)
+    source_duration = float(source_window_end - source_window_start) if source_window_end > source_window_start else 0.0
+    window_seconds = float(STAFF4_ALTERNATE_ATTEMPT_WINDOW_SECONDS)
+    max_windows = max(1, int(STAFF4_ALTERNATE_ATTEMPT_MAX_WINDOWS))
+    windows: list[dict[str, Any]] = []
+    seen: set[tuple[float, float]] = set()
+
+    def add_window(label: str, start: float, end: float) -> None:
+        if source_duration:
+            start = min(max(0.0, start), source_duration)
+            end = min(max(0.0, end), source_duration)
+            if end - start < 0.75:
+                start = max(0.0, min(start, source_duration - 0.75))
+                end = min(source_duration, start + window_seconds)
+        else:
+            start = max(0.0, start)
+            end = max(0.0, end)
+        if end - start < 0.75:
+            return
+        identity = (round(start, 3), round(end, 3))
+        if identity in seen:
+            return
+        seen.add(identity)
+        windows.append(
+            {
+                "label": label,
+                "scanLocalStartSeconds": round(start, 3),
+                "scanLocalEndSeconds": round(end, 3),
+                "scanDurationSeconds": round(end - start, 3),
+                "probeKind": "source_crop_alternate_attempt_search",
+                "guidedContext": False,
+            }
+        )
+
+    try:
+        current_start = float(target.get("audioLocalStartSeconds"))
+    except (TypeError, ValueError):
+        current_start = 0.0
+    try:
+        current_end = float(target.get("audioLocalEndSeconds"))
+    except (TypeError, ValueError):
+        current_end = current_start
+
+    if source_duration <= 0:
+        add_window("alternate_current_context", max(0.0, current_start - 2.0), current_end + 3.0)
+        return windows[:max_windows]
+
+    span = max(0.0, source_duration - window_seconds)
+    add_window("alternate_after_failed_window", min(max(0.0, current_end + 0.35), span), min(max(0.0, current_end + 0.35), span) + window_seconds)
+    add_window("alternate_before_failed_window", max(0.0, current_start - window_seconds - 0.35), max(0.0, current_start - 0.35))
+    if max_windows == 1:
+        starts = [0.0]
+    else:
+        starts = [round((span * index) / (max_windows - 1), 3) for index in range(max_windows)]
+    for index, start in enumerate(starts):
+        add_window(f"alternate_{index + 1}", start, start + window_seconds)
+    return windows[:max_windows]
+
+
+def source_crop_alternate_attempt_search_for_target(
+    target: dict[str, Any],
+    media_samples: list[dict[str, Any]],
+) -> dict[str, Any]:
+    if str(target.get("reviewKind") or "") != "staff4_source_crop_audio_review_required":
+        return {"status": "not_applicable"}
+    target_midi = int_sequence(target.get("targetMidiSequence"))
+    if not target_midi:
+        return {
+            "status": "blocked_missing_target_midi",
+            "limit": "The source-crop audio-review target is missing exact source MIDI.",
+        }
+    sample_id = str(target.get("sampleId") or "")
+    sample = media_sample_for_id(media_samples, sample_id)
+    source_path = source_media_path(sample) if sample else None
+    if not source_path:
+        return {
+            "status": "blocked_media_missing",
+            "sampleId": sample_id,
+            "limit": "The source-crop audio-review sample is not available locally for alternate-attempt search.",
+        }
+    best_audio_notes = target.get("bestAudioNotes") if isinstance(target.get("bestAudioNotes"), list) else []
+    best_audio_notes = [note for note in best_audio_notes if isinstance(note, dict)]
+    try:
+        current_start = float(target.get("audioLocalStartSeconds"))
+    except (TypeError, ValueError):
+        current_start = float(best_audio_notes[0].get("startSeconds") or 0.0) if best_audio_notes else 0.0
+    try:
+        current_end = float(target.get("audioLocalEndSeconds"))
+    except (TypeError, ValueError):
+        current_end = float(best_audio_notes[-1].get("endSeconds") or current_start) if best_audio_notes else current_start
+    prefix_notes = best_audio_notes[: max(1, min(len(best_audio_notes), len(target_midi) - 1))]
+    anchor_start = float(prefix_notes[0].get("startSeconds") or current_start) if prefix_notes else current_start
+    anchor_end = float(prefix_notes[-1].get("endSeconds") or prefix_notes[-1].get("startSeconds") or current_end) if prefix_notes else current_end
+    anchor = {
+        "practiceDay": str(target.get("practiceDay") or ""),
+        "pieceTitle": str(target.get("pieceTitle") or "Wieniawski Scherzo-Tarantelle, Op. 16"),
+        "sampleId": sample_id,
+        "sourceWindow": str(target.get("sourceWindow") or sample.get("window") or ""),
+        "anchorSequence": " ".join(str(note) for note in str(target.get("bestAudioSequence") or "").split()[: len(prefix_notes)]),
+        "anchorMidiSequence": target_midi[: len(prefix_notes)],
+        "anchorLocalStartSeconds": round(anchor_start, 3),
+        "anchorLocalEndSeconds": round(anchor_end, 3),
+    }
+    records: list[dict[str, Any]] = []
+    runs: list[dict[str, Any]] = []
+    for window in source_crop_alternate_attempt_windows(target, sample):
+        record = staff4_source_audio_rescan_record(
+            anchor=anchor,
+            sample=sample,
+            source_path=source_path,
+            scan_window=window,
+            guided_context=False,
+        )
+        records.append(record)
+        for run in record.get("runs") if isinstance(record.get("runs"), list) else []:
+            if isinstance(run, dict):
+                runs.append(run)
+    anchor_absolute_start = parse_window_start(str(anchor.get("sourceWindow") or sample.get("window") or "")) + float(
+        anchor.get("anchorLocalStartSeconds") or 0.0
+    )
+    search = audio_window_search_for_exact_midi(
+        runs,
+        target_midi,
+        practice_day=str(target.get("practiceDay") or ""),
+        anchor_sample_id=sample_id,
+        anchor_absolute_start=anchor_absolute_start,
+    )
+    exact_candidates = search.get("exactCandidates") if isinstance(search.get("exactCandidates"), list) else []
+
+    def is_current_failed_window(candidate: dict[str, Any]) -> bool:
+        try:
+            candidate_start = float(candidate.get("localStartSeconds"))
+        except (TypeError, ValueError):
+            return False
+        return abs(candidate_start - current_start) < STAFF4_ALTERNATE_ATTEMPT_MIN_START_DISTANCE_SECONDS
+
+    alternate_exact = [
+        item
+        for item in exact_candidates
+        if isinstance(item, dict) and item.get("sameSampleAsAnchor") and not is_current_failed_window(item)
+    ]
+    alternate_audio = [item for item in alternate_exact if item.get("audioAgreed")]
+    alternate_continuous = [item for item in alternate_audio if item.get("phraseContinuous") is not False]
+    same_failed_count = sum(1 for item in exact_candidates if isinstance(item, dict) and is_current_failed_window(item))
+    status = (
+        "continuous_exact_audio_candidate"
+        if alternate_continuous
+        else "exact_midi_discontinuous"
+        if alternate_audio
+        else "same_failed_window_only"
+        if exact_candidates and same_failed_count == len(exact_candidates)
+        else "no_alternate_exact_midi_in_source_window"
+    )
+    best_candidate = (alternate_continuous or alternate_audio or alternate_exact or exact_candidates or [{}])[0]
+    return {
+        "status": status,
+        "targetSequence": str(target.get("targetSequence") or ""),
+        "targetMidiSequence": target_midi,
+        "sampleId": sample_id,
+        "sourceWindow": str(target.get("sourceWindow") or ""),
+        "searchedWindowCount": int(search.get("searchedWindowCount") or 0),
+        "recordCount": len(records),
+        "runCount": len(runs),
+        "eventCount": sum(int(record.get("eventCount") or 0) + int(record.get("candidateEventCount") or 0) for record in records),
+        "exactCandidateCount": len(exact_candidates),
+        "alternateExactCandidateCount": len(alternate_exact),
+        "alternateAudioCandidateCount": len(alternate_audio),
+        "continuousCandidateCount": len(alternate_continuous),
+        "sameFailedWindowExactCandidateCount": same_failed_count,
+        "bestCandidate": best_candidate if isinstance(best_candidate, dict) else {},
+        "nearestWindow": search.get("nearestWindow") if isinstance(search.get("nearestWindow"), dict) else {},
+        "windows": [
+            record.get("scanWindow") if isinstance(record.get("scanWindow"), dict) else {}
+            for record in records
+            if isinstance(record, dict)
+        ],
+        "nextAction": (
+            "Audit the alternate continuous Staff 4 six-note source/audio candidate before accepting it."
+            if alternate_continuous
+            else "Reject the same failed Staff 4 timing and widen alternate-attempt search."
+            if status == "same_failed_window_only"
+            else "No alternate continuous exact-MIDI Staff 4 six-note attempt was found in the searched source windows."
+        ),
+    }
+
+
 def int_sequence(value: Any) -> list[int]:
     if not isinstance(value, list):
         return []
@@ -5341,6 +5532,17 @@ def build_transcription_completion(
     source_crop_failed_note_probe_status = str(source_crop_failed_note_probe.get("status") or "")
     source_crop_failed_note_probe_count = int(source_crop_failed_note_probe.get("probeCount") or 0)
     source_crop_failed_note_probe_continuous_count = int(source_crop_failed_note_probe.get("continuousCandidateCount") or 0)
+    source_crop_alternate_attempt_search = (
+        source_crop_alternate_attempt_search_for_target(source_crop_reverification_target, media_samples)
+        if source_crop_reverification_target
+        and source_crop_failed_note_probe_status in {"no_continuous_exact_midi_in_probe", "same_failed_window_only"}
+        else {}
+    )
+    source_crop_alternate_attempt_status = str(source_crop_alternate_attempt_search.get("status") or "")
+    source_crop_alternate_attempt_record_count = int(source_crop_alternate_attempt_search.get("recordCount") or 0)
+    source_crop_alternate_attempt_continuous_count = int(
+        source_crop_alternate_attempt_search.get("continuousCandidateCount") or 0
+    )
     phrase_expansion_detail = (
         "source extent exhausted"
         if phrase_expansion_status == "source_extent_exhausted"
@@ -5650,6 +5852,11 @@ def build_transcription_completion(
                 f" / probe {source_crop_failed_note_probe_status.replace('_', ' ')}"
                 if source_crop_failed_note_probe_count
                 else ""
+            )
+            + (
+                f" / alternate {source_crop_alternate_attempt_status.replace('_', ' ')}"
+                if source_crop_alternate_attempt_record_count
+                else ""
             ),
         },
         {
@@ -5720,6 +5927,8 @@ def build_transcription_completion(
         done_summary.append("Staff 4 failed-note probing now rescans the rejected adjacent-note neighborhood as raw audio before Curtis retries a longer phrase.")
     if source_crop_failed_note_probe_count:
         done_summary.append("The source-crop six-note gate now runs the same failed-note raw-audio probe before repeating the current window.")
+    if source_crop_alternate_attempt_record_count:
+        done_summary.append("The source-crop six-note gate now searches alternate raw measure-16 windows after the current failed timing is rejected.")
     if truth_manifest_live_phrase_count == 0 and staff4_source_rescan_status == "no_staff4_anchor":
         done_summary.append("The May 3 Staff 4 visible score/transcription mismatch is now a rejected regression, so the old accepted Staff 4 lanes are blocked from display.")
     if source_crop_reverification_count:
@@ -5959,10 +6168,27 @@ def build_transcription_completion(
                         "Audit the source-crop failed-note raw-audio probe candidate before accepting the six-note Staff 4 phrase."
                     )
                 elif source_crop_failed_note_probe_status == "no_continuous_exact_midi_in_probe":
-                    next_action = (
-                        "Reject the current Staff 4 six-note audio window and search another continuous measure-16 attempt; "
-                        "the failed-note raw probe found no exact source MIDI phrase."
-                    )
+                    if source_crop_alternate_attempt_continuous_count:
+                        next_action = "Audit the alternate continuous Staff 4 six-note measure-16 candidate before accepting it."
+                    elif source_crop_alternate_attempt_status == "same_failed_window_only":
+                        next_action = (
+                            "Reject the same Staff 4 six-note timing and widen alternate-attempt search; "
+                            "only the known failed window matched."
+                        )
+                    elif source_crop_alternate_attempt_status == "no_alternate_exact_midi_in_source_window":
+                        next_action = (
+                            "No alternate continuous Staff 4 six-note measure-16 attempt was found in the searched raw windows; "
+                            "widen the scan or improve segmentation."
+                        )
+                    elif source_crop_alternate_attempt_status == "blocked_media_missing":
+                        next_action = (
+                            "Make the May 3 source media available locally, then run alternate-attempt search for the six-note gate."
+                        )
+                    else:
+                        next_action = (
+                            "Reject the current Staff 4 six-note audio window and search another continuous measure-16 attempt; "
+                            "the failed-note raw probe found no exact source MIDI phrase."
+                        )
                 elif source_crop_failed_note_probe_status == "blocked_media_missing":
                     next_action = (
                         "Make the May 3 source media available locally, then run the failed-note raw-audio probe for the six-note gate."
@@ -5993,10 +6219,27 @@ def build_transcription_completion(
                     "Audit the source-crop failed-note raw-audio probe candidate before accepting the six-note Staff 4 phrase."
                 )
             elif source_crop_failed_note_probe_status == "no_continuous_exact_midi_in_probe":
-                next_action = (
-                    "Reject the current Staff 4 six-note audio window and search another continuous measure-16 attempt; "
-                    "the failed-note raw probe found no exact source MIDI phrase."
-                )
+                if source_crop_alternate_attempt_continuous_count:
+                    next_action = "Audit the alternate continuous Staff 4 six-note measure-16 candidate before accepting it."
+                elif source_crop_alternate_attempt_status == "same_failed_window_only":
+                    next_action = (
+                        "Reject the same Staff 4 six-note timing and widen alternate-attempt search; "
+                        "only the known failed window matched."
+                    )
+                elif source_crop_alternate_attempt_status == "no_alternate_exact_midi_in_source_window":
+                    next_action = (
+                        "No alternate continuous Staff 4 six-note measure-16 attempt was found in the searched raw windows; "
+                        "widen the scan or improve segmentation."
+                    )
+                elif source_crop_alternate_attempt_status == "blocked_media_missing":
+                    next_action = (
+                        "Make the May 3 source media available locally, then run alternate-attempt search for the six-note gate."
+                    )
+                else:
+                    next_action = (
+                        "Reject the current Staff 4 six-note audio window and search another continuous measure-16 attempt; "
+                        "the failed-note raw probe found no exact source MIDI phrase."
+                    )
             elif source_crop_failed_note_probe_status == "blocked_media_missing":
                 next_action = (
                     "Make the May 3 source media available locally, then run the failed-note raw-audio probe for the six-note gate."
@@ -6092,6 +6335,10 @@ def build_transcription_completion(
         "sourceCropFailedNoteProbeStatus": source_crop_failed_note_probe_status,
         "sourceCropFailedNoteProbeCount": source_crop_failed_note_probe_count,
         "sourceCropFailedNoteProbeContinuousCandidateCount": source_crop_failed_note_probe_continuous_count,
+        "sourceCropAlternateAttemptSearch": source_crop_alternate_attempt_search,
+        "sourceCropAlternateAttemptStatus": source_crop_alternate_attempt_status,
+        "sourceCropAlternateAttemptRecordCount": source_crop_alternate_attempt_record_count,
+        "sourceCropAlternateAttemptContinuousCandidateCount": source_crop_alternate_attempt_continuous_count,
         "sourceVerificationTargetCount": source_target_count,
         "sourceVerificationTargets": source_targets,
         "sourceVerificationTargetTop": source_target_top,
