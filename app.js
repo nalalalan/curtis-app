@@ -1731,17 +1731,7 @@ function normalizedKeySignature(signature) {
   };
 }
 
-function inferredReadableKeySignature(notes, context = {}) {
-  const provided = normalizedKeySignature(context?.keySignature || {});
-  if (provided.accidentals.length && provided.accidentalType !== "none") return provided;
-  const pieceTitle = String(context?.pieceTitle || "").toLowerCase();
-  if (pieceTitle.includes("scherzo") || pieceTitle.includes("tarantelle") || pieceTitle.includes("wieniawski")) {
-    return {
-      label: "G minor / 2 flats",
-      accidentalType: "flat",
-      accidentals: ["Bb", "Eb"],
-    };
-  }
+function pitchCountsForNotes(notes) {
   const sequence = noteInputSequence(noteInputText(notes));
   const pitchCounts = new Map();
   for (const token of sequence) {
@@ -1749,23 +1739,43 @@ function inferredReadableKeySignature(notes, context = {}) {
     if (!parsed) continue;
     pitchCounts.set(parsed.pitch, (pitchCounts.get(parsed.pitch) || 0) + 1);
   }
+  return pitchCounts;
+}
+
+function flatDisplaySignatureFromCounts(pitchCounts, baseAccidentals = [], baseLabel = "") {
+  const flatNeeded = new Set(baseAccidentals);
+  for (const [sharp, flat] of Object.entries(SHARP_TO_FLAT_NOTE)) {
+    if (pitchCounts.get(sharp)) flatNeeded.add(flat);
+  }
+  for (const flat of FLAT_KEY_ORDER) {
+    if (pitchCounts.get(flat)) flatNeeded.add(flat);
+  }
+  const furthest = FLAT_KEY_ORDER.reduce((max, flat, index) => flatNeeded.has(flat) ? Math.max(max, index) : max, -1);
+  const accidentals = FLAT_KEY_ORDER.slice(0, Math.max(baseAccidentals.length, furthest + 1));
+  const label = baseLabel && accidentals.length === baseAccidentals.length
+    ? baseLabel
+    : accidentals.length
+      ? `${accidentals.join(" ")} display`
+      : "flat display";
+  return {
+    label,
+    accidentalType: "flat",
+    accidentals,
+  };
+}
+
+function inferredReadableKeySignature(notes, context = {}) {
+  const provided = normalizedKeySignature(context?.keySignature || {});
+  if (provided.accidentals.length && provided.accidentalType !== "none") return provided;
+  const pitchCounts = pitchCountsForNotes(notes);
+  const pieceTitle = String(context?.pieceTitle || "").toLowerCase();
+  if (pieceTitle.includes("scherzo") || pieceTitle.includes("tarantelle") || pieceTitle.includes("wieniawski")) {
+    return flatDisplaySignatureFromCounts(pitchCounts, ["Bb", "Eb"], "G minor / 2 flats");
+  }
   const sharpWeight = ["A#", "D#", "G#"].reduce((sum, pitch) => sum + (pitchCounts.get(pitch) || 0), 0);
   const flatWeight = ["Bb", "Eb", "Ab"].reduce((sum, pitch) => sum + (pitchCounts.get(pitch) || 0), 0);
   if (flatWeight || sharpWeight >= 2 || (pitchCounts.get("G#") || 0) >= 1) {
-    const flatNeeded = new Set();
-    for (const [sharp, flat] of Object.entries(SHARP_TO_FLAT_NOTE)) {
-      if (pitchCounts.get(sharp)) flatNeeded.add(flat);
-    }
-    for (const flat of FLAT_KEY_ORDER) {
-      if (pitchCounts.get(flat)) flatNeeded.add(flat);
-    }
-    const furthest = FLAT_KEY_ORDER.reduce((max, flat, index) => flatNeeded.has(flat) ? Math.max(max, index) : max, -1);
-    const accidentals = FLAT_KEY_ORDER.slice(0, Math.max(0, furthest + 1));
-    return {
-      label: accidentals.length ? `${accidentals.join(" ")} display` : "flat display",
-      accidentalType: "flat",
-      accidentals,
-    };
+    return flatDisplaySignatureFromCounts(pitchCounts);
   }
   const sharpNeeded = new Set();
   for (const sharp of SHARP_KEY_ORDER) {
