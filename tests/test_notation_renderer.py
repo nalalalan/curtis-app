@@ -95,6 +95,31 @@ def test_notation_renderer_draws_exact_accidentals():
         assert(naturalInFlatKey.includes('=B =e'), "natural B/E in a flat key must carry natural signs in ABC");
         assert((naturalInFlatKey.match(/accidental-glyph accidental-natural/g) || []).length === 2, "manual fallback must draw natural signs when a flat-key note is naturalized");
         assert((naturalInFlatKey.match(/&#xE261;/g) || []).length === 2, "naturals must use the Bravura/SMuFL natural glyph");
+
+        const readableGoldReview = vm.runInContext(
+          `(() => {
+            const item = {
+              detectedNotes: ['G#6', 'F6', 'D#6', 'C#6', 'D#6', 'D#6', 'E6', 'E5', 'G#5', 'G5'],
+              pieceTitle: 'Wieniawski Scherzo-Tarantelle, Op. 16'
+            };
+            const readable = readableGoldReviewNotes(item);
+            return {
+              signature: readable.keySignature,
+              display: readable.displayNotes,
+              sheet: renderNotationSheet(goldReviewNotationEvents(item.detectedNotes), {keySignature: readable.keySignature, maxNotes: 10})
+            };
+          })()`,
+          context
+        );
+        assert(readableGoldReview.signature.accidentalType === 'flat', "Scherzo-Tarantelle review snippets should prefer flat-key spelling");
+        assert(readableGoldReview.signature.accidentals.includes('Bb'), "flat-key review display should include Bb in the key signature");
+        assert(readableGoldReview.signature.accidentals.includes('Eb'), "flat-key review display should include Eb in the key signature");
+        assert(readableGoldReview.display[0] === 'Ab6', "G# should respell as Ab for readability");
+        assert(readableGoldReview.display[2] === 'Eb6', "D# should respell as Eb for readability");
+        assert(readableGoldReview.display[3] === 'Db6', "C# should respell as Db when the flat display needs it");
+        assert(readableGoldReview.sheet.includes('K:Bb clef=treble'), "flat-key Gold Review snippets should engrave with a flat key context");
+        assert(!readableGoldReview.sheet.includes('^G'), "flat-key Gold Review snippets should not show G# as a sharp-heavy local accidental");
+        assert(readableGoldReview.sheet.includes('aria-label="Ab6 / detected G#6"'), "fallback SVG should preserve the original detected pitch in aria label");
         """
     )
     completed = subprocess.run(["node", "-e", script], cwd=".", text=True, capture_output=True)

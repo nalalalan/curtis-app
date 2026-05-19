@@ -1431,6 +1431,8 @@ const SHARP_TO_FLAT_NOTE = { "C#": "Db", "D#": "Eb", "F#": "Gb", "G#": "Ab", "A#
 const FLAT_TO_SHARP_NOTE = { Db: "C#", Eb: "D#", Gb: "F#", Ab: "G#", Bb: "A#" };
 const ABC_FLAT_KEYS = ["C", "F", "Bb", "Eb", "Ab", "Db", "Gb", "Cb"];
 const ABC_SHARP_KEYS = ["C", "G", "D", "A", "E", "B", "F#", "C#"];
+const FLAT_KEY_ORDER = ["Bb", "Eb", "Ab", "Db", "Gb", "Cb", "Fb"];
+const SHARP_KEY_ORDER = ["F#", "C#", "G#", "D#", "A#", "E#", "B#"];
 let notationSheetIdCounter = 0;
 
 function normalizeAccidentalToken(value) {
@@ -1727,6 +1729,58 @@ function normalizedKeySignature(signature) {
     accidentalType: accidentalType === "flat" || accidentalType === "sharp" ? accidentalType : "none",
     accidentals,
   };
+}
+
+function inferredReadableKeySignature(notes, context = {}) {
+  const provided = normalizedKeySignature(context?.keySignature || {});
+  if (provided.accidentals.length && provided.accidentalType !== "none") return provided;
+  const pieceTitle = String(context?.pieceTitle || "").toLowerCase();
+  if (pieceTitle.includes("scherzo") || pieceTitle.includes("tarantelle") || pieceTitle.includes("wieniawski")) {
+    return {
+      label: "G minor / 2 flats",
+      accidentalType: "flat",
+      accidentals: ["Bb", "Eb"],
+    };
+  }
+  const sequence = noteInputSequence(noteInputText(notes));
+  const pitchCounts = new Map();
+  for (const token of sequence) {
+    const parsed = parseExactNote(token);
+    if (!parsed) continue;
+    pitchCounts.set(parsed.pitch, (pitchCounts.get(parsed.pitch) || 0) + 1);
+  }
+  const sharpWeight = ["A#", "D#", "G#"].reduce((sum, pitch) => sum + (pitchCounts.get(pitch) || 0), 0);
+  const flatWeight = ["Bb", "Eb", "Ab"].reduce((sum, pitch) => sum + (pitchCounts.get(pitch) || 0), 0);
+  if (flatWeight || sharpWeight >= 2 || (pitchCounts.get("G#") || 0) >= 1) {
+    const flatNeeded = new Set();
+    for (const [sharp, flat] of Object.entries(SHARP_TO_FLAT_NOTE)) {
+      if (pitchCounts.get(sharp)) flatNeeded.add(flat);
+    }
+    for (const flat of FLAT_KEY_ORDER) {
+      if (pitchCounts.get(flat)) flatNeeded.add(flat);
+    }
+    const furthest = FLAT_KEY_ORDER.reduce((max, flat, index) => flatNeeded.has(flat) ? Math.max(max, index) : max, -1);
+    const accidentals = FLAT_KEY_ORDER.slice(0, Math.max(0, furthest + 1));
+    return {
+      label: accidentals.length ? `${accidentals.join(" ")} display` : "flat display",
+      accidentalType: "flat",
+      accidentals,
+    };
+  }
+  const sharpNeeded = new Set();
+  for (const sharp of SHARP_KEY_ORDER) {
+    if (pitchCounts.get(sharp)) sharpNeeded.add(sharp);
+  }
+  const furthestSharp = SHARP_KEY_ORDER.reduce((max, sharp, index) => sharpNeeded.has(sharp) ? Math.max(max, index) : max, -1);
+  if (furthestSharp >= 0) {
+    const accidentals = SHARP_KEY_ORDER.slice(0, furthestSharp + 1);
+    return {
+      label: `${accidentals.join(" ")} display`,
+      accidentalType: "sharp",
+      accidentals,
+    };
+  }
+  return {};
 }
 
 function renderKeySignatureMarks(signature) {
@@ -3109,8 +3163,21 @@ function goldReviewNotationEvents(notes) {
   }));
 }
 
+function readableGoldReviewNotes(item) {
+  const keySignature = inferredReadableKeySignature(item.detectedNotes, {
+    keySignature: item.keySignature || item.scoreKeySignature || item.transcriptionKeySignature,
+    pieceTitle: item.pieceTitle,
+  });
+  const signature = normalizedKeySignature(keySignature);
+  const notes = noteInputSequence(noteInputText(item.detectedNotes));
+  const displayNotes = notes.map((note) => notationDisplayNote(note, signature));
+  return { keySignature: signature, displayNotes };
+}
+
 function renderGoldReviewItem(item, index) {
   const detectedNotes = noteInputText(item.detectedNotes);
+  const readableNotes = readableGoldReviewNotes(item);
+  const displayDetectedNotes = readableNotes.displayNotes.join(" ");
   const scoreNotes = noteInputText(item.scoreNotes);
   const clip = item.clip && typeof item.clip === "object" ? item.clip : item;
   const status = item.status || item.defaultStatus || "pending_review";
@@ -3133,10 +3200,10 @@ function renderGoldReviewItem(item, index) {
         <section class="gold-review-notation">
           <div class="matched-notation-head">
             <span>Detected</span>
-            <strong>${escapeHtml(shortText(detectedNotes || "pending", 64))}</strong>
+            <strong>${escapeHtml(shortText(displayDetectedNotes || detectedNotes || "pending", 64))}</strong>
           </div>
           ${renderNotationSheet(goldReviewNotationEvents(item.detectedNotes), {
-            keySignature: {},
+            keySignature: readableNotes.keySignature,
             maxNotes: 16
           })}
           ${scoreNotes ? `<small>${escapeHtml([item.scoreLocation || "score", shortText(scoreNotes, 80)].filter(Boolean).join(" / "))}</small>` : ""}
