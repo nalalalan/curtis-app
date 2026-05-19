@@ -328,6 +328,68 @@ class GoldReviewTests(unittest.TestCase):
         self.assertEqual(review["trainingSet"]["recentExamples"][0]["label"], "negative")
         self.assertEqual(review["trainingSet"]["recentExamples"][0]["task"], "audio_exact_notes")
 
+    def test_latest_review_label_wins_when_user_corrects_mistake(self):
+        state = {}
+        base = {
+            "reviewItemId": "gold-correctable-label",
+            "type": "audio_phrase",
+            "sampleId": "sample-correctable",
+            "detectedNotes": ["A4", "D5", "E5"],
+            "acceptedNotes": ["A4", "D5", "E5"],
+            "startSeconds": 30.0,
+            "endSeconds": 31.0,
+        }
+
+        record_gold_review_item(state, {**base, "status": "accepted_truth"})
+        flipped = record_gold_review_item(
+            state,
+            {
+                **base,
+                "status": "rejected_mismatch",
+                "reason": "mistaken accept corrected by reviewer",
+            },
+        )
+        review = build_gold_review_loop(state, {"records": []})
+
+        self.assertEqual(review["labelCount"], 1)
+        self.assertEqual(review["acceptedCount"], 0)
+        self.assertEqual(review["rejectedCount"], 1)
+        self.assertEqual(review["correctedLabelCount"], 1)
+        self.assertEqual(review["reviewRevisionCount"], 1)
+        self.assertEqual(review["trainingExampleCount"], 1)
+        self.assertEqual(review["trainingPositiveCount"], 0)
+        self.assertEqual(review["trainingNegativeCount"], 1)
+        self.assertEqual(review["trainingSet"]["recentExamples"][0]["label"], "negative")
+        self.assertEqual(review["trainingSet"]["recentExamples"][0]["labelRevision"], 2)
+        self.assertTrue(review["trainingSet"]["recentExamples"][0]["correctedLabel"])
+        self.assertEqual(flipped["goldReviewItem"]["previousStatus"], "accepted_truth")
+        self.assertEqual(flipped["goldReviewItem"]["labelHistory"][0]["status"], "accepted_truth")
+        truth = state["truthWorkbench"]["items"][0]
+        self.assertEqual(truth["itemId"], "gold-correctable-label")
+        self.assertEqual(truth["status"], "rejected_mismatch")
+
+    def test_corrected_rejection_can_become_positive_training_example(self):
+        state = {}
+        base = {
+            "reviewItemId": "gold-correctable-reject",
+            "type": "audio_phrase",
+            "sampleId": "sample-correctable-reject",
+            "detectedNotes": ["D5", "E5", "F#5"],
+            "acceptedNotes": ["D5", "E5", "F#5"],
+        }
+
+        record_gold_review_item(state, {**base, "status": "rejected_mismatch"})
+        record_gold_review_item(state, {**base, "status": "accepted_truth"})
+        review = build_gold_review_loop(state, {"records": []})
+
+        self.assertEqual(review["labelCount"], 1)
+        self.assertEqual(review["acceptedCount"], 1)
+        self.assertEqual(review["rejectedCount"], 0)
+        self.assertEqual(review["correctedLabelCount"], 1)
+        self.assertEqual(review["trainingPositiveCount"], 1)
+        self.assertEqual(review["trainingNegativeCount"], 0)
+        self.assertEqual(review["recentItems"][0]["previousStatus"], "rejected_mismatch")
+
     def test_binary_long_phrase_review_becomes_training_example(self):
         state = {}
 

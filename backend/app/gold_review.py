@@ -126,6 +126,8 @@ def _training_example_from_item(item: dict[str, Any]) -> dict[str, Any]:
         "duplicateTolerance": item.get("duplicateTolerance"),
         "reason": item.get("reason"),
         "createdAt": item.get("createdAt"),
+        "labelRevision": item.get("labelRevision") or 1,
+        "correctedLabel": bool(item.get("correctedLabel")),
     }
 
 
@@ -667,6 +669,28 @@ def record_gold_review_item(state: dict[str, Any], raw: dict[str, Any]) -> dict[
     item = normalize_gold_review_item(raw)
     review = state.get("goldReview") if isinstance(state.get("goldReview"), dict) else {}
     items = [entry for entry in review.get("items", []) if isinstance(entry, dict)]
+    previous = next((entry for entry in items if entry.get("reviewItemId") == item["reviewItemId"]), None)
+    if previous:
+        item["labelRevision"] = int(previous.get("labelRevision") or 1) + 1
+        item["previousStatus"] = _clean(previous.get("status"))
+        item["correctedLabel"] = item["previousStatus"] != item["status"]
+        history = [entry for entry in previous.get("labelHistory", []) if isinstance(entry, dict)]
+        history.append(
+            {
+                "status": _clean(previous.get("status")),
+                "trainingLabel": _clean(previous.get("trainingLabel")),
+                "acceptedNotes": previous.get("acceptedNotes") or [],
+                "scoreNotes": previous.get("scoreNotes") or [],
+                "createdAt": _clean(previous.get("createdAt")),
+                "labelRevision": int(previous.get("labelRevision") or 1),
+            }
+        )
+        item["labelHistory"] = history[-12:]
+    else:
+        item["labelRevision"] = 1
+        item["previousStatus"] = ""
+        item["correctedLabel"] = False
+        item["labelHistory"] = []
     items = [entry for entry in items if entry.get("reviewItemId") != item["reviewItemId"]]
     mirror: dict[str, Any] = {}
     if item["status"] in {"accepted_truth", "rejected_mismatch"}:
@@ -828,6 +852,8 @@ def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any],
         "status": "ready" if candidates or items else "empty",
         "version": GOLD_REVIEW_VERSION,
         "labelCount": len(items),
+        "correctedLabelCount": len([item for item in items if item.get("correctedLabel") is True]),
+        "reviewRevisionCount": sum(max(0, int(item.get("labelRevision") or 1) - 1) for item in items),
         "acceptedCount": by_status.get("accepted_truth", 0),
         "rejectedCount": by_status.get("rejected_mismatch", 0),
         "pendingCount": by_status.get("pending_review", 0),

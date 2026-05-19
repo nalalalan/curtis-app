@@ -3240,6 +3240,7 @@ function renderGoldReview() {
   const scoreTraining = Number(review.trainingScoreExampleCount ?? training.scoreExampleCount) || 0;
   const scoreQueued = Number(review.scoreQueueCount) || 0;
   const scoreExactQueued = Number(review.scoreExactAgreementQueueCount) || 0;
+  const corrected = Number(review.correctedLabelCount) || 0;
   const adaptiveCount = Number(review.adaptiveCandidateCount) || 0;
   const adaptivePool = Number(review.adaptiveCandidatePoolCount) || adaptiveCount;
   const adaptiveLabel = adaptivePool && adaptivePool !== adaptiveCount ? `${adaptiveCount}/${adaptivePool}` : String(adaptiveCount);
@@ -3261,6 +3262,7 @@ function renderGoldReview() {
         <article><span>Training</span><strong>${escapeHtml(String(trainingExamples))}</strong></article>
         <article><span>Score</span><strong>${escapeHtml(String(scoreTraining))}</strong></article>
         <article><span>Long</span><strong>${escapeHtml(String(longTraining))}</strong></article>
+        ${corrected ? `<article><span>Corrected</span><strong>${escapeHtml(String(corrected))}</strong></article>` : ""}
         <article><span>Adaptive</span><strong>${escapeHtml(adaptiveLabel)}</strong></article>
       </div>
       <p class="empty">${escapeHtml(rejectionDigest.message || emptyQueueText)}</p>
@@ -3277,6 +3279,7 @@ function renderGoldReview() {
       <article><span>Score</span><strong>${escapeHtml(String(scoreTraining))}</strong></article>
       <article><span>Long</span><strong>${escapeHtml(String(longTraining))}</strong></article>
       <article><span>Score queue</span><strong>${escapeHtml(scoreExactQueued ? `${scoreExactQueued}/${scoreQueued}` : String(scoreQueued))}</strong></article>
+      ${corrected ? `<article><span>Corrected</span><strong>${escapeHtml(String(corrected))}</strong></article>` : ""}
       <article><span>Adaptive</span><strong>${escapeHtml(adaptiveLabel)}</strong></article>
     </div>
     <div class="gold-review-list">
