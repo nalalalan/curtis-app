@@ -669,7 +669,7 @@ class Staff4AuditTests(unittest.TestCase):
         self.assertFalse(packet["score"]["sourceCropRejected"])
         self.assertEqual(
             packet["score"]["sourceImageUrl"],
-            "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-context-review.png",
+            "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-user-bracket-confirmed.png",
         )
         self.assertTrue(all(note["audioAgreement"] for note in packet["storedAudioNotes"]))
 
@@ -731,6 +731,8 @@ class Staff4AuditTests(unittest.TestCase):
         self.assertEqual(packet["sourceCropScoreReview"]["status"], "source_crop_visual_verified_audio_pending")
         self.assertTrue(packet["sourceCropScoreReview"]["visualAccepted"])
         self.assertFalse(packet["sourceCropScoreReview"]["accepted"])
+        self.assertEqual(packet["sourceCropScoreReview"]["measureLabel"], "m. 16")
+        self.assertEqual(packet["sourceCropScoreReview"]["measureNumber"], 16)
         self.assertEqual(packet["sourceCropAudioAgreement"]["status"], "audio_review_required")
         self.assertEqual(packet["sourceCropAudioAgreement"]["agreedNoteCount"], 5)
         self.assertEqual(packet["sourceCropAudioAgreement"]["noteWindows"][5]["targetNote"], "Eb5")

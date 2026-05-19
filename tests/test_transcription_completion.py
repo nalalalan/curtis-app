@@ -258,7 +258,7 @@ class TranscriptionCompletionTests(unittest.TestCase):
                             "truthEvidenceAccepted": True,
                             "scoreSnippetStatus": "exact_score_location_verified",
                             "scoreLocationStatus": "exact_score_location_verified",
-                            "scoreSequenceLabel": "m. staff4-packet-1",
+                            "scoreSequenceLabel": "m. 16",
                             "referenceStart": 9,
                             "referenceEnd": 14,
                             "detectedSeries": {
@@ -291,7 +291,7 @@ class TranscriptionCompletionTests(unittest.TestCase):
                             "score": {
                                 "assetId": "wieniawski-scherzo-tarantelle-vln",
                                 "cropStatus": "exact_score_location_verified",
-                                "measureLabel": "m. staff4-packet-1",
+                                "measureLabel": "m. 16",
                                 "imageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-verified.png",
                                 "actualSourceSnippetDisplayed": True,
                                 "visualRangeAgreement": True,
@@ -421,7 +421,7 @@ class TranscriptionCompletionTests(unittest.TestCase):
                             "truthEvidenceAccepted": True,
                             "scoreSnippetStatus": "exact_score_location_verified",
                             "scoreLocationStatus": "exact_score_location_verified",
-                            "scoreSequenceLabel": "m. staff4-packet-1",
+                            "scoreSequenceLabel": "m. 16",
                             "referenceStart": 9,
                             "referenceEnd": 14,
                             "detectedSeries": {
@@ -764,7 +764,7 @@ class TranscriptionCompletionTests(unittest.TestCase):
                                 "truthEvidenceAccepted": True,
                                 "scoreSnippetStatus": "exact_score_location_verified",
                                 "scoreLocationStatus": "exact_score_location_verified",
-                                "scoreSequenceLabel": "m. staff4-packet-1",
+                                "scoreSequenceLabel": "m. 16",
                                 "referenceStart": 9,
                                 "referenceEnd": 14,
                                 "detectedSeries": {

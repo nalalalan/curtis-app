@@ -5355,6 +5355,8 @@
     "targetSequence": "Eb5 Eb5 C5 Eb5 Eb5 Eb5"
   },
   "limit": "The six-note Staff 4 source crop now has a full-context actual-PDF review image, but the paired audio is not accepted. The source-crop audit agrees on five of six note windows; for note 6 the expected Eb5/D#5 MIDI 75 is heard as D5 by pYIN and YIN, while only spectralPeak returns D#5. This remains queued for audio/source-crop review and cannot appear as an accepted match.",
+  "measureLabel": "m. 16",
+  "measureNumber": 16,
   "nextAction": "Reverify the visible Staff 4 source crop against the transcription and paired audio before reopening this lane.",
   "observedFailureAudioMidi": null,
   "observedFailureAudioNote": "",
@@ -5365,6 +5367,8 @@
   "practiceDay": "2026-05-03",
   "sampleId": "Njh8_zq9_DM-8835",
   "score": {
+    "measureLabel": "m. 16",
+    "measureNumber": 16,
     "sourceCropContextReady": true,
     "sourceCropContextRequirement": "Use a full-context source-score crop from the local PDF for review; do not show the rejected tight crop as a match.",
     "sourceCropDisplayAllowed": false,
@@ -5927,6 +5931,8 @@
           "y": 1435.0
         }
       ],
+      "measureLabel": "m. 16",
+      "measureNumber": 16,
       "referenceEnd": 15,
       "referenceStart": 9,
       "scoreBoxCenterAgreement": true,
@@ -6009,6 +6015,8 @@
         "y": 1435.0
       }
     ],
+    "measureLabel": "m. 16",
+    "measureNumber": 16,
     "referenceEnd": 15,
     "referenceStart": 9,
     "scoreBoxCenterAgreement": true,

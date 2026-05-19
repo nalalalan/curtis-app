@@ -3209,6 +3209,7 @@ function renderStaff4Audit(audit) {
   const decision = audit.decision && typeof audit.decision === "object" ? audit.decision : {};
   const decisionLabel = String(decision.outcome || decision.status || status).replace(/_/g, " ");
   const scoreBlock = audit.score && typeof audit.score === "object" ? audit.score : {};
+  const scoreReview = audit.sourceCropScoreReview && typeof audit.sourceCropScoreReview === "object" ? audit.sourceCropScoreReview : {};
   const isCropReview = audit.auditFocus === "staff4_source_crop_reverification";
   const score = isCropReview
     ? audit.targetSequence || decision.targetSequence || "score crop"
@@ -3216,6 +3217,8 @@ function renderStaff4Audit(audit) {
   const audio = isCropReview
     ? audit.bestAudioSequence || decision.bestAudioSequence || "audio"
     : decision.observedNote || audit.observedFailureAudioNote || audit.observedNextAudioNote || "unverified";
+  const measureLabel = String(scoreBlock.measureLabel || scoreReview.measureLabel || decision.measureLabel || audit.measureLabel || "").trim();
+  const headerDetail = [measureLabel, score, audio].filter(Boolean).join(" / ");
   const rejectedCrop = scoreBlock.sourceCropRejected === true || decision.sourceCropRejected === true;
   const displayAllowed = scoreBlock.sourceCropDisplayAllowed === true && scoreBlock.sourceCropReady === true && scoreBlock.truthEvidenceAccepted === true;
   const sourceCrop = isCropReview && !rejectedCrop && displayAllowed ? assetUrl(scoreBlock.sourceImageUrl || "") : "";
@@ -3224,7 +3227,7 @@ function renderStaff4Audit(audit) {
     <section class="staff4-audit-card" aria-label="Staff 4 audit packet">
       <div class="staff4-audit-head">
         <strong>${escapeHtml(decisionLabel)}</strong>
-        <span>${escapeHtml(score)} / ${escapeHtml(audio)}</span>
+        <span>${escapeHtml(headerDetail)}</span>
         ${packetUrl ? `<a href="${escapeHtml(packetUrl)}" target="_blank" rel="noreferrer">JSON</a>` : ""}
       </div>
       <div class="staff4-audit-grid">
@@ -3322,6 +3325,13 @@ function renderTranscriptionCompletion() {
     ["Staff 4 audit", completion.staff4PhraseAuditStatus ? String(completion.staff4PhraseAuditStatus).replace(/_/g, " ") : "not generated"],
     ["Crop review", completion.sourceCropReverificationStatus ? String(completion.sourceCropReverificationStatus).replace(/_/g, " ") : "empty"],
   ];
+  const staff4Audit = completion.staff4PhraseAudit && typeof completion.staff4PhraseAudit === "object" ? completion.staff4PhraseAudit : {};
+  const staff4AuditScore = staff4Audit.score && typeof staff4Audit.score === "object" ? staff4Audit.score : {};
+  const staff4AuditReview = staff4Audit.sourceCropScoreReview && typeof staff4Audit.sourceCropScoreReview === "object" ? staff4Audit.sourceCropScoreReview : {};
+  const staff4MeasureLabel = String(staff4AuditScore.measureLabel || staff4AuditReview.measureLabel || staff4Audit.measureLabel || "").trim();
+  if (staff4MeasureLabel) {
+    rows.splice(8, 0, ["Source", staff4MeasureLabel]);
+  }
   const rescanStatus = String(completion.staff4SourceAudioRescanStatus || "");
   const miningStatus = String(completion.staff4AdjacentMiningStatus || "");
   if (rescanStatus && rescanStatus !== "no_staff4_anchor") {

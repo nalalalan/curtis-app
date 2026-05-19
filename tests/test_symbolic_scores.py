@@ -347,12 +347,12 @@ class SymbolicScoreTests(unittest.TestCase):
         self.assertEqual(matches[0]["matchedNoteRun"], 5)
         self.assertEqual(matches[0]["minimumDistinctPitchClasses"], 2)
         self.assertEqual(matches[0]["referenceStart"], 9)
-        self.assertEqual(matches[0]["scoreSequenceLabel"], "m. staff4-packet-1")
+        self.assertEqual(matches[0]["scoreSequenceLabel"], "m. 16")
         self.assertTrue(matches[0]["scoreVisualAgreement"])
         self.assertTrue(matches[0]["truthEvidenceAccepted"])
         self.assertEqual(
             matches[0]["score"]["imageUrl"],
-            "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-context-review.png",
+            "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-user-bracket-confirmed.png",
         )
         self.assertEqual(matches[0]["score"]["sourceSnippetHiddenReason"], "")
         self.assertEqual([item["note"] for item in matches[0]["scoreMatchedNotes"]], ["Eb5", "Eb5", "C5", "Eb5", "Eb5"])
@@ -435,7 +435,7 @@ class SymbolicScoreTests(unittest.TestCase):
         self.assertEqual([item["note"] for item in matches[0]["scoreMatchedNotes"]], ["Eb5", "Eb5", "C5", "Eb5", "Eb5"])
         self.assertEqual(
             matches[0]["score"]["imageUrl"],
-            "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-context-review.png",
+            "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-user-bracket-confirmed.png",
         )
         extension = next(
             item

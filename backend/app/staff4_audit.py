@@ -91,6 +91,25 @@ def with_packaged_audit_fallback(packet: dict[str, Any]) -> dict[str, Any]:
     if str(packet.get("auditFocus") or packaged.get("auditFocus") or "") != str(packaged.get("auditFocus") or ""):
         return packet
     merged = dict(packaged)
+    if str(merged.get("auditFocus") or "") == "staff4_source_crop_reverification":
+        source_review = source_crop_score_review_for_packet(merged)
+        if source_review.get("status") != "blocked_missing_source_reference":
+            merged["sourceCropScoreReview"] = source_review
+            score = merged.get("score") if isinstance(merged.get("score"), dict) else {}
+            score["measureLabel"] = source_review.get("measureLabel") or score.get("measureLabel") or ""
+            score["measureNumber"] = source_review.get("measureNumber") or score.get("measureNumber") or ""
+            score["sourceImageUrl"] = source_review.get("sourceImageUrl") or score.get("sourceImageUrl") or ""
+            score["sourceReviewImageUrl"] = source_review.get("sourceReviewImageUrl") or score.get("sourceReviewImageUrl") or ""
+            merged["score"] = score
+            reverification = (
+                merged.get("sourceCropReverification")
+                if isinstance(merged.get("sourceCropReverification"), dict)
+                else {}
+            )
+            reverification["sourceCropScoreReview"] = source_review
+            reverification["scoreImageUrl"] = source_review.get("sourceImageUrl") or reverification.get("scoreImageUrl") or ""
+            reverification["reviewImageUrl"] = source_review.get("sourceReviewImageUrl") or reverification.get("reviewImageUrl") or ""
+            merged["sourceCropReverification"] = reverification
     merged["packagedArtifactFallback"] = True
     return merged
 
@@ -1089,6 +1108,8 @@ def source_crop_score_review_for_packet(packet: dict[str, Any]) -> dict[str, Any
             "sourceImageUrl": review_image,
             "sourcePdfLocalPath": target.get("scorePdfLocalPath") or score_config.get("sourcePdfLocalPath") or "",
             "sourcePdfPage": target.get("scorePage") or snippet.get("sourcePdfPage") or 0,
+            "measureLabel": snippet.get("measureLabel") or snippet.get("label") or "",
+            "measureNumber": snippet.get("measureNumber") or "",
             "matchedNoteheadCenters": centers,
             "scoreBoxCenterAgreement": bool(snippet.get("scoreBoxCenterAgreement")),
             "truthEvidenceAccepted": bool(snippet.get("truthEvidenceAccepted")),
