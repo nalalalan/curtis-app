@@ -48,6 +48,7 @@ from .settings import (
 from .staff4_audit import (
     harmonic_pitch_energy,
     latest_staff4_phrase_audit_packet_for_completion,
+    note_label_for_midi,
     owner_media_sample_for_id,
     run_ffmpeg_extract_audio,
     source_media_path,
@@ -82,7 +83,7 @@ from .symbolic_scores import (
 )
 
 DEFAULT_YOUTUBE_SOURCE = "https://www.youtube.com/@nalalan"
-STAFF4_SOURCE_AUDIO_RESCAN_VERSION = "staff4_source_audio_rescan_v12"
+STAFF4_SOURCE_AUDIO_RESCAN_VERSION = "staff4_source_audio_rescan_v13"
 STAFF4_SOURCE_AUDIO_RESCAN_DIR = RUNTIME_DIR / "staff4-source-rescan"
 STAFF4_SOURCE_AUDIO_RESCAN_PAD_BEFORE_SECONDS = 4.0
 STAFF4_SOURCE_AUDIO_RESCAN_PAD_AFTER_SECONDS = 10.0
@@ -104,6 +105,9 @@ STAFF4_CONTINUATION_SEARCH_MAX_EXPECTED_RANK = 3
 STAFF4_CONTINUITY_PROBE_BEFORE_SECONDS = 3.25
 STAFF4_CONTINUITY_PROBE_AFTER_SECONDS = 0.75
 STAFF4_CONTINUITY_PROBE_MAX_SECONDS = 5.0
+STAFF4_FAILED_ADJACENT_PROBE_BEFORE_SECONDS = 0.9
+STAFF4_FAILED_ADJACENT_PROBE_AFTER_SECONDS = 2.2
+STAFF4_FAILED_ADJACENT_PROBE_MAX_SECONDS = 4.25
 MEDIA_REVIEW_PENDING_BLOCKERS = {"youtube_data_api_returns_metadata_not_video_media"}
 WEAK_EVIDENCE_TERMS = (
     "background noise",
@@ -3316,6 +3320,126 @@ def staff4_compact_exact_search(search: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def staff4_failed_adjacent_probe_window_from_failure(
+    anchor: dict[str, Any],
+    sample: dict[str, Any],
+    failure: dict[str, Any],
+) -> dict[str, Any]:
+    try:
+        failed_start = float(failure.get("bestAttemptStartSeconds"))
+    except (TypeError, ValueError):
+        return {}
+    try:
+        failed_end = float(failure.get("bestAttemptEndSeconds"))
+    except (TypeError, ValueError):
+        failed_end = failed_start
+    if failed_end < failed_start:
+        failed_end = failed_start
+    target_midi = [int(value) for value in failure.get("targetMidiSequence") or [] if isinstance(value, int)]
+    if not target_midi:
+        return {}
+    source_window = str(anchor.get("sourceWindow") or sample.get("window") or "")
+    source_window_start, source_window_end = parse_window_bounds(source_window)
+    source_duration = float(source_window_end - source_window_start) if source_window_end > source_window_start else 0.0
+    probe_start = max(0.0, failed_start - STAFF4_FAILED_ADJACENT_PROBE_BEFORE_SECONDS)
+    probe_end = failed_end + STAFF4_FAILED_ADJACENT_PROBE_AFTER_SECONDS
+    if probe_end - probe_start > STAFF4_FAILED_ADJACENT_PROBE_MAX_SECONDS:
+        center = (failed_start + failed_end) / 2.0
+        half_span = STAFF4_FAILED_ADJACENT_PROBE_MAX_SECONDS / 2.0
+        probe_start = max(0.0, center - half_span)
+        probe_end = probe_start + STAFF4_FAILED_ADJACENT_PROBE_MAX_SECONDS
+    if source_duration:
+        probe_end = min(source_duration, probe_end)
+        probe_start = min(max(0.0, probe_start), max(0.0, probe_end - 0.25))
+    if probe_end - probe_start < 0.5:
+        return {}
+    return {
+        "label": f"failed_adjacent_probe_{failure.get('direction') or 'adjacent'}",
+        "scanLocalStartSeconds": round(probe_start, 3),
+        "scanLocalEndSeconds": round(probe_end, 3),
+        "scanDurationSeconds": round(probe_end - probe_start, 3),
+        "probeKind": "failed_adjacent_note_repair",
+        "guidedContext": False,
+        "triggerExpectedNote": str(failure.get("expectedNote") or ""),
+        "triggerExpectedMidi": int(failure.get("expectedMidi") or 0),
+        "triggerObservedNote": str(failure.get("bestAttemptObservedConsensusNote") or ""),
+        "triggerObservedMidi": int(failure.get("bestAttemptObservedConsensusMidi") or 0),
+        "triggerBestAttemptStartSeconds": round(failed_start, 3),
+        "triggerBestAttemptEndSeconds": round(failed_end, 3),
+        "triggerFailedNoteIndex": int(failure.get("failedNoteIndex") or 0),
+        "targetDirection": str(failure.get("direction") or ""),
+        "targetSequence": str(failure.get("targetSequence") or ""),
+        "targetMidiSequence": target_midi,
+    }
+
+
+def staff4_failed_adjacent_probe_for_anchor(
+    anchor: dict[str, Any],
+    sample: dict[str, Any],
+    source_path: Path,
+    failure: dict[str, Any],
+) -> list[dict[str, Any]]:
+    if not failure:
+        return []
+    probe_window = staff4_failed_adjacent_probe_window_from_failure(anchor, sample, failure)
+    if not probe_window:
+        return [
+            {
+                "status": "blocked_probe_window_missing",
+                "targetDirection": str(failure.get("direction") or ""),
+                "targetSequence": str(failure.get("targetSequence") or ""),
+                "targetMidiSequence": [
+                    int(value) for value in failure.get("targetMidiSequence") or [] if isinstance(value, int)
+                ],
+                "triggerFailure": failure,
+            }
+        ]
+    record = staff4_source_audio_rescan_record(
+        anchor=anchor,
+        sample=sample,
+        source_path=source_path,
+        scan_window=probe_window,
+        guided_context=False,
+    )
+    target_midi = [int(value) for value in failure.get("targetMidiSequence") or [] if isinstance(value, int)]
+    practice_day = str(anchor.get("practiceDay") or "")
+    sample_id = str(anchor.get("sampleId") or sample.get("id") or "")
+    anchor_absolute_start = parse_window_start(str(anchor.get("sourceWindow") or sample.get("window") or "")) + float(
+        anchor.get("anchorLocalStartSeconds") or 0.0
+    )
+    probe_search = audio_window_search_for_exact_midi(
+        record.get("runs") if isinstance(record.get("runs"), list) else [],
+        target_midi,
+        practice_day=practice_day,
+        anchor_sample_id=sample_id,
+        anchor_absolute_start=anchor_absolute_start,
+    )
+    probe_exact = probe_search.get("exactCandidates") if isinstance(probe_search.get("exactCandidates"), list) else []
+    probe_exact_audio = [
+        item for item in probe_exact if isinstance(item, dict) and item.get("audioAgreed") and item.get("sameSampleAsAnchor")
+    ]
+    probe_continuous = [item for item in probe_exact_audio if item.get("phraseContinuous")]
+    status = (
+        "continuous_exact_audio_candidate"
+        if probe_continuous
+        else "exact_midi_discontinuous"
+        if probe_exact_audio
+        else "no_continuous_exact_midi_in_probe"
+    )
+    return [
+        {
+            "status": status,
+            "targetDirection": str(failure.get("direction") or ""),
+            "targetSequence": str(failure.get("targetSequence") or ""),
+            "targetMidiSequence": target_midi,
+            "triggerFailure": failure,
+            "probeWindow": probe_window,
+            "probeSearch": staff4_compact_exact_search(probe_search),
+            "record": record,
+        }
+    ]
+
+
 def staff4_continuity_probe_for_anchor(
     anchor: dict[str, Any],
     sample: dict[str, Any],
@@ -3452,6 +3576,7 @@ def staff4_source_audio_rescan(daily_records: dict[str, Any], media_samples: lis
     runs: list[dict[str, Any]] = []
     anchor_reproduction_targets: list[dict[str, Any]] = []
     continuity_probes: list[dict[str, Any]] = []
+    failed_adjacent_probes: list[dict[str, Any]] = []
     blocked = 0
     for anchor in anchors[: max(0, int(limit))]:
         sample_id = str(anchor.get("sampleId") or "")
@@ -3470,6 +3595,7 @@ def staff4_source_audio_rescan(daily_records: dict[str, Any], media_samples: lis
                 }
             )
             continue
+        anchor_record_start = len(records)
         for scan_window in staff4_source_audio_rescan_windows(anchor, sample):
             record = staff4_source_audio_rescan_record(
                 anchor=anchor,
@@ -3481,6 +3607,23 @@ def staff4_source_audio_rescan(daily_records: dict[str, Any], media_samples: lis
             for run in record.get("runs") if isinstance(record.get("runs"), list) else []:
                 if isinstance(run, dict):
                     runs.append(run)
+        anchor_adjacent_targets = [
+            target
+            for record in records[anchor_record_start:]
+            if isinstance(record, dict)
+            for target in (record.get("guidedAdjacentTargets") if isinstance(record.get("guidedAdjacentTargets"), list) else [])
+            if isinstance(target, dict)
+        ]
+        anchor_adjacent_failure = staff4_first_adjacent_failure(anchor_adjacent_targets)
+        if anchor_adjacent_failure:
+            for probe in staff4_failed_adjacent_probe_for_anchor(anchor, sample, source_path, anchor_adjacent_failure):
+                failed_adjacent_probes.append(probe)
+                record = probe.get("record") if isinstance(probe.get("record"), dict) else {}
+                if record:
+                    records.append(record)
+                    for run in record.get("runs") if isinstance(record.get("runs"), list) else []:
+                        if isinstance(run, dict):
+                            runs.append(run)
         anchor_midi = [int(value) for value in anchor.get("anchorMidiSequence") or [] if isinstance(value, int)]
         if anchor_midi:
             anchor_absolute_start = parse_window_start(str(anchor.get("sourceWindow") or "")) + float(anchor.get("anchorLocalStartSeconds") or 0.0)
@@ -3568,8 +3711,35 @@ def staff4_source_audio_rescan(daily_records: dict[str, Any], media_samples: lis
         (probe for probe in continuity_probes if isinstance(probe, dict) and probe.get("status") == "continuous_exact_audio_candidate"),
         next((probe for probe in continuity_probes if isinstance(probe, dict)), {}),
     )
+    failed_adjacent_probe_continuous_count = sum(
+        1 for probe in failed_adjacent_probes if isinstance(probe, dict) and probe.get("status") == "continuous_exact_audio_candidate"
+    )
+    failed_adjacent_probe_record_count = sum(
+        1 for probe in failed_adjacent_probes if isinstance(probe, dict) and isinstance(probe.get("record"), dict)
+    )
+    failed_adjacent_probe_status = (
+        "continuous_exact_audio_candidate"
+        if failed_adjacent_probe_continuous_count
+        else "no_continuous_exact_midi_in_probe"
+        if any(probe.get("status") == "no_continuous_exact_midi_in_probe" for probe in failed_adjacent_probes if isinstance(probe, dict))
+        else "exact_midi_discontinuous"
+        if any(probe.get("status") == "exact_midi_discontinuous" for probe in failed_adjacent_probes if isinstance(probe, dict))
+        else "blocked_probe_window_missing"
+        if any(probe.get("status") == "blocked_probe_window_missing" for probe in failed_adjacent_probes if isinstance(probe, dict))
+        else "not_checked"
+    )
+    failed_adjacent_probe_best = next(
+        (probe for probe in failed_adjacent_probes if isinstance(probe, dict) and probe.get("status") == "continuous_exact_audio_candidate"),
+        next((probe for probe in failed_adjacent_probes if isinstance(probe, dict)), {}),
+    )
     adjacent_failure_action = (
-        "Improve note-window segmentation for the next Staff 4 source note "
+        "The current Staff 4 adjacent window is rejected at "
+        f"{adjacent_failure_label or 'the next source note'}; the failed-note neighborhood probe found no continuous exact-MIDI phrase. "
+        "Search a different continuous attempt from the same measure-16 source lane."
+        if failed_adjacent_probe_status == "no_continuous_exact_midi_in_probe"
+        else "Audit the failed-note Staff 4 probe candidate before accepting the next phrase."
+        if failed_adjacent_probe_continuous_count
+        else "Improve note-window segmentation for the next Staff 4 source note "
         f"{adjacent_failure_label or 'unknown'}; the best swept offset "
         f"{adjacent_failure_offset}s heard "
         f"{adjacent_first_failure.get('bestAttemptObservedConsensusNote') or 'no stable MIDI'}."
@@ -3620,6 +3790,24 @@ def staff4_source_audio_rescan(daily_records: dict[str, Any], media_samples: lis
             for key, value in continuity_probe_best.items()
             if key != "record"
         } if isinstance(continuity_probe_best, dict) else {},
+        "failedAdjacentProbeStatus": failed_adjacent_probe_status,
+        "failedAdjacentProbeCount": len(failed_adjacent_probes),
+        "failedAdjacentProbeRecordCount": failed_adjacent_probe_record_count,
+        "failedAdjacentProbeContinuousCandidateCount": failed_adjacent_probe_continuous_count,
+        "failedAdjacentProbeTargets": [
+            {
+                key: value
+                for key, value in probe.items()
+                if key != "record"
+            }
+            for probe in failed_adjacent_probes
+            if isinstance(probe, dict)
+        ],
+        "failedAdjacentProbeBest": {
+            key: value
+            for key, value in failed_adjacent_probe_best.items()
+            if key != "record"
+        } if isinstance(failed_adjacent_probe_best, dict) else {},
         "audioAgreementEventCount": sum(int(record.get("audioAgreementEventCount") or 0) for record in records if isinstance(record, dict)),
         "cacheHitCount": sum(1 for record in records if isinstance(record, dict) and record.get("cacheHit")),
         "records": records,
@@ -3631,6 +3819,13 @@ def staff4_source_audio_rescan(daily_records: dict[str, Any], media_samples: lis
             if continuity_probe_continuous_count
             else "Continuity probe checked the late Staff 4 note neighborhood; no continuous exact MIDI phrase was found there."
             if continuity_probe_status == "no_continuous_exact_midi_in_probe"
+            else "Audit the failed-note Staff 4 probe candidate before accepting the next phrase."
+            if failed_adjacent_probe_continuous_count
+            else (
+                "The current Staff 4 adjacent window is rejected; the failed-note neighborhood probe found no continuous exact-MIDI phrase. "
+                "Search a different continuous attempt from the same measure-16 source lane."
+            )
+            if failed_adjacent_probe_status == "no_continuous_exact_midi_in_probe"
             else "Audit the adjacent-guided Staff 4 phrase reproduced by current audio detectors."
             if adjacent_reproduced_count
             else adjacent_failure_action
@@ -4046,10 +4241,20 @@ def staff4_adjacent_phrase_mining(
         ):
             expected_note = str(adjacent_failure.get("expectedNote") or "the next source note")
             best_offset = adjacent_failure.get("bestAttemptOffsetSeconds")
-            next_action = (
-                "Adjacent-guided Staff 4 source-note windows were tested, but current detectors did not reproduce exact MIDI; "
-                f"calibrate the failed {expected_note} window at best offset {best_offset}s."
-            )
+            failed_probe_status = str(source_audio_rescan.get("failedAdjacentProbeStatus") or "")
+            failed_probe_count = int(source_audio_rescan.get("failedAdjacentProbeCount") or 0)
+            if int(source_audio_rescan.get("failedAdjacentProbeContinuousCandidateCount") or 0):
+                next_action = "Audit the failed-note Staff 4 raw-audio probe candidate before accepting the next phrase."
+            elif failed_probe_status == "no_continuous_exact_midi_in_probe":
+                next_action = (
+                    f"Reject the current Staff 4 {expected_note} adjacent window; "
+                    f"the failed-note probe found no continuous exact-MIDI phrase after {failed_probe_count} probe."
+                )
+            else:
+                next_action = (
+                    "Adjacent-guided Staff 4 source-note windows were tested, but current detectors did not reproduce exact MIDI; "
+                    f"calibrate the failed {expected_note} window at best offset {best_offset}s."
+                )
         elif int(source_audio_rescan.get("runCount") or 0):
             next_action = "No exact adjacent Staff 4 MIDI window was found after source-audio rescanning; widen the source window or improve note segmentation."
         else:
@@ -4070,6 +4275,11 @@ def staff4_adjacent_phrase_mining(
         "sourceAudioRescanGuidedAdjacentStatus": str(source_audio_rescan.get("guidedAdjacentStatus") or ""),
         "sourceAudioRescanGuidedAdjacentTargetCount": int(source_audio_rescan.get("guidedAdjacentTargetCount") or 0),
         "sourceAudioRescanGuidedAdjacentReproducedCount": int(source_audio_rescan.get("guidedAdjacentReproducedCount") or 0),
+        "sourceAudioRescanFailedAdjacentProbeStatus": str(source_audio_rescan.get("failedAdjacentProbeStatus") or ""),
+        "sourceAudioRescanFailedAdjacentProbeCount": int(source_audio_rescan.get("failedAdjacentProbeCount") or 0),
+        "sourceAudioRescanFailedAdjacentProbeContinuousCandidateCount": int(
+            source_audio_rescan.get("failedAdjacentProbeContinuousCandidateCount") or 0
+        ),
         "sourceAudioRescanGuidedAdjacentFirstFailure": (
             source_audio_rescan.get("guidedAdjacentFirstFailure")
             if isinstance(source_audio_rescan.get("guidedAdjacentFirstFailure"), dict)
@@ -4262,6 +4472,91 @@ def source_crop_reverification_targets(limit: int = 3) -> list[dict[str, Any]]:
             }
         )
     return targets[: max(0, int(limit))]
+
+
+def source_crop_failed_note_probe_for_target(
+    target: dict[str, Any],
+    media_samples: list[dict[str, Any]],
+) -> dict[str, Any]:
+    if str(target.get("reviewKind") or "") != "staff4_source_crop_audio_review_required":
+        return {"status": "not_applicable"}
+    best_audio_notes = target.get("bestAudioNotes") if isinstance(target.get("bestAudioNotes"), list) else []
+    best_audio_notes = [note for note in best_audio_notes if isinstance(note, dict)]
+    target_midi = int_sequence(target.get("targetMidiSequence"))
+    if not best_audio_notes or len(best_audio_notes) < 2 or not target_midi:
+        return {
+            "status": "blocked_missing_note_windows",
+            "limit": "The source-crop audio-review target is missing note windows, so Curtis cannot probe the failed note.",
+        }
+    failed_index = min(len(best_audio_notes) - 1, len(target_midi) - 1)
+    failed_note = best_audio_notes[failed_index]
+    try:
+        failed_start = float(failed_note.get("startSeconds"))
+    except (TypeError, ValueError):
+        return {
+            "status": "blocked_missing_failed_note_time",
+            "limit": "The failed source-crop audio note does not have a usable start time.",
+        }
+    try:
+        failed_end = float(failed_note.get("endSeconds"))
+    except (TypeError, ValueError):
+        failed_end = failed_start
+    sample_id = str(target.get("sampleId") or "")
+    sample = media_sample_for_id(media_samples, sample_id)
+    source_path = source_media_path(sample) if sample else None
+    if not source_path:
+        return {
+            "status": "blocked_media_missing",
+            "sampleId": sample_id,
+            "limit": "The source-crop audio-review sample is not available locally for the failed-note probe.",
+        }
+    prefix_notes = best_audio_notes[:failed_index]
+    anchor_start = float(prefix_notes[0].get("startSeconds") or 0.0) if prefix_notes else 0.0
+    anchor_end = float(prefix_notes[-1].get("endSeconds") or prefix_notes[-1].get("startSeconds") or anchor_start) if prefix_notes else failed_start
+    anchor = {
+        "practiceDay": str(target.get("practiceDay") or ""),
+        "pieceTitle": str(target.get("pieceTitle") or "Wieniawski Scherzo-Tarantelle, Op. 16"),
+        "sampleId": sample_id,
+        "sourceWindow": str(target.get("sourceWindow") or sample.get("window") or ""),
+        "anchorSequence": " ".join(str(note) for note in str(target.get("bestAudioSequence") or "").split()[:failed_index]),
+        "anchorMidiSequence": target_midi[:failed_index],
+        "anchorLocalStartSeconds": round(anchor_start, 3),
+        "anchorLocalEndSeconds": round(anchor_end, 3),
+    }
+    failure = {
+        "direction": "source-crop-audio-review",
+        "targetSequence": str(target.get("targetSequence") or ""),
+        "targetMidiSequence": target_midi,
+        "failedNoteIndex": failed_index,
+        "expectedMidi": target_midi[failed_index],
+        "expectedNote": note_label_for_midi(target_midi[failed_index], prefer_flats=True),
+        "bestAttemptStartSeconds": round(failed_start, 3),
+        "bestAttemptEndSeconds": round(failed_end, 3),
+    }
+    probes = staff4_failed_adjacent_probe_for_anchor(anchor, sample, source_path, failure)
+    best_probe = probes[0] if probes and isinstance(probes[0], dict) else {}
+    if not best_probe:
+        return {"status": "not_checked"}
+    record = best_probe.get("record") if isinstance(best_probe.get("record"), dict) else {}
+    probe_midi = best_probe.get("targetMidiSequence")
+    if not isinstance(probe_midi, list):
+        probe_midi = target_midi
+    return {
+        "status": str(best_probe.get("status") or "not_checked"),
+        "probeCount": len(probes),
+        "continuousCandidateCount": 1 if best_probe.get("status") == "continuous_exact_audio_candidate" else 0,
+        "targetSequence": str(best_probe.get("targetSequence") or target.get("targetSequence") or ""),
+        "targetMidiSequence": [int(value) for value in probe_midi if isinstance(value, int)],
+        "failedNoteIndex": failed_index,
+        "expectedMidi": target_midi[failed_index],
+        "expectedNote": failure["expectedNote"],
+        "sampleId": sample_id,
+        "sourceWindow": str(target.get("sourceWindow") or ""),
+        "probeWindow": best_probe.get("probeWindow") if isinstance(best_probe.get("probeWindow"), dict) else {},
+        "probeSearch": best_probe.get("probeSearch") if isinstance(best_probe.get("probeSearch"), dict) else {},
+        "recordStatus": str(record.get("status") or ""),
+        "recordEventCount": int(record.get("eventCount") or 0) + int(record.get("candidateEventCount") or 0),
+    }
 
 
 def int_sequence(value: Any) -> list[int]:
@@ -4996,6 +5291,11 @@ def build_transcription_completion(
     staff4_source_rescan_continuity_probe_continuous_count = int(
         staff4_source_rescan.get("continuityProbeContinuousCandidateCount") or 0
     )
+    staff4_source_rescan_failed_probe_status = str(staff4_source_rescan.get("failedAdjacentProbeStatus") or "")
+    staff4_source_rescan_failed_probe_count = int(staff4_source_rescan.get("failedAdjacentProbeCount") or 0)
+    staff4_source_rescan_failed_probe_continuous_count = int(
+        staff4_source_rescan.get("failedAdjacentProbeContinuousCandidateCount") or 0
+    )
     staff4_mining_status = str(staff4_mining.get("status") or "")
     staff4_mining_searched_count = int(staff4_mining.get("searchedWindowCount") or 0)
     staff4_mining_exact_count = int(staff4_mining.get("exactCandidateCount") or 0)
@@ -5033,6 +5333,14 @@ def build_transcription_completion(
     )
     if source_crop_audit_accepted and not source_crop_reverification_target:
         source_crop_reverification_status = "accepted_truth_candidate"
+    source_crop_failed_note_probe = (
+        source_crop_failed_note_probe_for_target(source_crop_reverification_target, media_samples)
+        if source_crop_reverification_target
+        else {}
+    )
+    source_crop_failed_note_probe_status = str(source_crop_failed_note_probe.get("status") or "")
+    source_crop_failed_note_probe_count = int(source_crop_failed_note_probe.get("probeCount") or 0)
+    source_crop_failed_note_probe_continuous_count = int(source_crop_failed_note_probe.get("continuousCandidateCount") or 0)
     phrase_expansion_detail = (
         "source extent exhausted"
         if phrase_expansion_status == "source_extent_exhausted"
@@ -5309,6 +5617,11 @@ def build_transcription_completion(
                     if staff4_source_rescan_continuity_probe_count
                     else ""
                 )
+                + (
+                    f" / failed-note probe {staff4_source_rescan_failed_probe_status.replace('_', ' ')}"
+                    if staff4_source_rescan_failed_probe_count
+                    else ""
+                )
             ),
         },
         {
@@ -5332,6 +5645,11 @@ def build_transcription_completion(
                 str(source_crop_reverification_target.get("targetSequence") or "")
                 if source_crop_reverification_target
                 else source_crop_audit_target or "none"
+            )
+            + (
+                f" / probe {source_crop_failed_note_probe_status.replace('_', ' ')}"
+                if source_crop_failed_note_probe_count
+                else ""
             ),
         },
         {
@@ -5398,6 +5716,10 @@ def build_transcription_completion(
     ]
     if staff4_source_rescan_continuity_probe_count:
         done_summary.append("Staff 4 continuity probing now rescans the late-note neighborhood without truth-anchor or guided-note stitching before any longer phrase can enter review.")
+    if staff4_source_rescan_failed_probe_count:
+        done_summary.append("Staff 4 failed-note probing now rescans the rejected adjacent-note neighborhood as raw audio before Curtis retries a longer phrase.")
+    if source_crop_failed_note_probe_count:
+        done_summary.append("The source-crop six-note gate now runs the same failed-note raw-audio probe before repeating the current window.")
     if truth_manifest_live_phrase_count == 0 and staff4_source_rescan_status == "no_staff4_anchor":
         done_summary.append("The May 3 Staff 4 visible score/transcription mismatch is now a rejected regression, so the old accepted Staff 4 lanes are blocked from display.")
     if source_crop_reverification_count:
@@ -5417,7 +5739,7 @@ def build_transcription_completion(
         "Build longer phrase candidates that survive the second-pass audio gate instead of relying on loose transition traces or reference-audio coincidences.",
         "Keep extending the accepted Staff 4 anchor only when each adjacent source note agrees with paired audio.",
         "Lock the eight-note Staff 4 continuation candidate only if the full source crop, local media, transcription, and truth review agree.",
-        "Continue using source-audio rescan and continuation search to find real adjacent Staff 4 audio runs without accepting wrong-window matches.",
+        "Continue using source-audio rescan, failed-note probes, and continuation search to find real adjacent Staff 4 audio runs without accepting wrong-window matches.",
         (
             "Extend outward from the reverified May 3 Staff 4 source/audio anchor; dependent old six-, seven-, and eight-note ranges stay blocked until they pass a fresh exact source/audio audit."
             if source_crop_audit_accepted
@@ -5565,12 +5887,20 @@ def build_transcription_completion(
                         f"{staff4_mining_searched_count} stored/rescanned windows."
                     )
                 elif staff4_source_rescan_adjacent_target_count and staff4_source_rescan_adjacent_status == "not_reproduced":
-                    next_action = (
-                        "Calibrate the Staff 4 adjacent note-window segmentation; source-audio rescan reproduces the anchor, "
-                        f"but the first failed adjacent note is {staff4_source_rescan_adjacent_failure_note or 'unknown'} "
-                        f"at best swept offset {staff4_source_rescan_adjacent_failure_offset}s; detectors heard "
-                        f"{staff4_source_rescan_adjacent_first_failure.get('bestAttemptObservedConsensusNote') or 'no stable MIDI'}."
-                    )
+                    if staff4_source_rescan_failed_probe_continuous_count:
+                        next_action = "Audit the failed-note Staff 4 raw-audio probe candidate before accepting the next phrase."
+                    elif staff4_source_rescan_failed_probe_status == "no_continuous_exact_midi_in_probe":
+                        next_action = (
+                            "Reject the current Staff 4 adjacent window and search a different continuous attempt from measure 16; "
+                            f"the failed-note probe found no exact MIDI phrase after {staff4_source_rescan_failed_probe_count} probe."
+                        )
+                    else:
+                        next_action = (
+                            "Calibrate the Staff 4 adjacent note-window segmentation; source-audio rescan reproduces the anchor, "
+                            f"but the first failed adjacent note is {staff4_source_rescan_adjacent_failure_note or 'unknown'} "
+                            f"at best swept offset {staff4_source_rescan_adjacent_failure_offset}s; detectors heard "
+                            f"{staff4_source_rescan_adjacent_first_failure.get('bestAttemptObservedConsensusNote') or 'no stable MIDI'}."
+                        )
                 elif staff4_source_rescan_run_count:
                     next_action = (
                         "Widen the Staff 4 source-audio rescan or improve note segmentation; exact MIDI search found no "
@@ -5593,12 +5923,20 @@ def build_transcription_completion(
                         f"{staff4_mining_searched_count} stored/rescanned windows."
                     )
                 elif staff4_source_rescan_adjacent_target_count and staff4_source_rescan_adjacent_status == "not_reproduced":
-                    next_action = (
-                        "Calibrate the Staff 4 adjacent note-window segmentation; source-audio rescan reproduces the anchor, "
-                        f"but the first failed adjacent note is {staff4_source_rescan_adjacent_failure_note or 'unknown'} "
-                        f"at best swept offset {staff4_source_rescan_adjacent_failure_offset}s; detectors heard "
-                        f"{staff4_source_rescan_adjacent_first_failure.get('bestAttemptObservedConsensusNote') or 'no stable MIDI'}."
-                    )
+                    if staff4_source_rescan_failed_probe_continuous_count:
+                        next_action = "Audit the failed-note Staff 4 raw-audio probe candidate before accepting the next phrase."
+                    elif staff4_source_rescan_failed_probe_status == "no_continuous_exact_midi_in_probe":
+                        next_action = (
+                            "Reject the current Staff 4 adjacent window and search a different continuous attempt from measure 16; "
+                            f"the failed-note probe found no exact MIDI phrase after {staff4_source_rescan_failed_probe_count} probe."
+                        )
+                    else:
+                        next_action = (
+                            "Calibrate the Staff 4 adjacent note-window segmentation; source-audio rescan reproduces the anchor, "
+                            f"but the first failed adjacent note is {staff4_source_rescan_adjacent_failure_note or 'unknown'} "
+                            f"at best swept offset {staff4_source_rescan_adjacent_failure_offset}s; detectors heard "
+                            f"{staff4_source_rescan_adjacent_first_failure.get('bestAttemptObservedConsensusNote') or 'no stable MIDI'}."
+                        )
                 else:
                     next_action = (
                         "Widen the Staff 4 source-audio rescan or improve note segmentation; exact MIDI search found no "
@@ -5614,22 +5952,60 @@ def build_transcription_completion(
                 )
     elif truth_manifest_live_phrase_count == 0 and staff4_source_rescan_status == "no_staff4_anchor":
         if source_crop_reverification_target:
-            next_action = (
-                "Reverify the queued May 3 source-score crop "
-                f"{source_crop_reverification_target.get('targetSequence') or 'score'} against "
-                f"{source_crop_reverification_target.get('bestAudioSequence') or 'audio'} and the paired clip, "
-                "then allow phrase matching to restart from that accepted anchor."
-            )
+            review_kind = str(source_crop_reverification_target.get("reviewKind") or "")
+            if review_kind == "staff4_source_crop_audio_review_required":
+                if source_crop_failed_note_probe_continuous_count:
+                    next_action = (
+                        "Audit the source-crop failed-note raw-audio probe candidate before accepting the six-note Staff 4 phrase."
+                    )
+                elif source_crop_failed_note_probe_status == "no_continuous_exact_midi_in_probe":
+                    next_action = (
+                        "Reject the current Staff 4 six-note audio window and search another continuous measure-16 attempt; "
+                        "the failed-note raw probe found no exact source MIDI phrase."
+                    )
+                elif source_crop_failed_note_probe_status == "blocked_media_missing":
+                    next_action = (
+                        "Make the May 3 source media available locally, then run the failed-note raw-audio probe for the six-note gate."
+                    )
+                elif source_crop_failed_note_probe_status == "blocked_missing_note_windows":
+                    next_action = (
+                        "Regenerate the May 3 source-crop audio-review note windows, then run the failed-note raw-audio probe."
+                    )
+                else:
+                    next_action = (
+                        "Run the failed-note raw-audio probe for the Staff 4 six-note gate; keep the source crop hidden until "
+                        f"{source_crop_reverification_target.get('targetSequence') or 'the source phrase'} has exact per-note audio agreement."
+                    )
+            else:
+                next_action = (
+                    "Reverify the queued May 3 source-score crop "
+                    f"{source_crop_reverification_target.get('targetSequence') or 'score'} against "
+                    f"{source_crop_reverification_target.get('bestAudioSequence') or 'audio'} and the paired clip, "
+                    "then allow phrase matching to restart from that accepted anchor."
+                )
         else:
             next_action = "Reverify the queued May 3 source-score crop against the transcription and paired audio, then allow phrase matching to restart from that accepted anchor."
     elif source_crop_reverification_target:
         review_kind = str(source_crop_reverification_target.get("reviewKind") or "")
         if review_kind == "staff4_source_crop_audio_review_required":
-            next_action = (
-                "Resolve the Staff 4 six-note audio gate: keep the visually reverified source crop hidden from accepted display "
-                f"until {source_crop_reverification_target.get('targetSequence') or 'the source phrase'} has per-note detector agreement "
-                "for the sixth Eb5/D#5 window."
-            )
+            if source_crop_failed_note_probe_continuous_count:
+                next_action = (
+                    "Audit the source-crop failed-note raw-audio probe candidate before accepting the six-note Staff 4 phrase."
+                )
+            elif source_crop_failed_note_probe_status == "no_continuous_exact_midi_in_probe":
+                next_action = (
+                    "Reject the current Staff 4 six-note audio window and search another continuous measure-16 attempt; "
+                    "the failed-note raw probe found no exact source MIDI phrase."
+                )
+            elif source_crop_failed_note_probe_status == "blocked_media_missing":
+                next_action = (
+                    "Make the May 3 source media available locally, then run the failed-note raw-audio probe for the six-note gate."
+                )
+            else:
+                next_action = (
+                    "Run the failed-note raw-audio probe for the Staff 4 six-note gate; keep the source crop hidden until "
+                    f"{source_crop_reverification_target.get('targetSequence') or 'the source phrase'} has exact per-note audio agreement."
+                )
         else:
             next_action = (
                 "Reverify the queued May 3 source-score crop "
@@ -5697,6 +6073,9 @@ def build_transcription_completion(
         "staff4SourceAudioRescanContinuityProbeStatus": staff4_source_rescan_continuity_probe_status,
         "staff4SourceAudioRescanContinuityProbeCount": staff4_source_rescan_continuity_probe_count,
         "staff4SourceAudioRescanContinuityProbeContinuousCandidateCount": staff4_source_rescan_continuity_probe_continuous_count,
+        "staff4SourceAudioRescanFailedAdjacentProbeStatus": staff4_source_rescan_failed_probe_status,
+        "staff4SourceAudioRescanFailedAdjacentProbeCount": staff4_source_rescan_failed_probe_count,
+        "staff4SourceAudioRescanFailedAdjacentProbeContinuousCandidateCount": staff4_source_rescan_failed_probe_continuous_count,
         "staff4AdjacentMining": staff4_mining,
         "staff4AdjacentMiningStatus": staff4_mining_status,
         "staff4AdjacentMiningSearchedWindowCount": staff4_mining_searched_count,
@@ -5709,6 +6088,10 @@ def build_transcription_completion(
         "sourceCropReverificationStatus": source_crop_reverification_status,
         "sourceCropReverificationTarget": source_crop_reverification_target,
         "sourceCropReverificationQueue": source_crop_reverification_queue,
+        "sourceCropFailedNoteProbe": source_crop_failed_note_probe,
+        "sourceCropFailedNoteProbeStatus": source_crop_failed_note_probe_status,
+        "sourceCropFailedNoteProbeCount": source_crop_failed_note_probe_count,
+        "sourceCropFailedNoteProbeContinuousCandidateCount": source_crop_failed_note_probe_continuous_count,
         "sourceVerificationTargetCount": source_target_count,
         "sourceVerificationTargets": source_targets,
         "sourceVerificationTargetTop": source_target_top,

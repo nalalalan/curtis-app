@@ -15,7 +15,9 @@ from backend.app.scanner import (
     reference_phrase_candidate_top,
     source_verification_target_count,
     source_verification_target_top,
+    source_crop_failed_note_probe_for_target,
     staff4_continuity_probe_for_anchor,
+    staff4_failed_adjacent_probe_for_anchor,
     staff4_source_audio_rescan_record,
 )
 
@@ -360,7 +362,8 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertEqual(mining["searchedWindowCount"], 0)
         self.assertEqual(mining.get("nearestWindow") or {}, {})
         self.assertEqual(completion["staff4AdjacentMiningStatus"], "no_staff4_anchor")
-        self.assertIn("Reverify the queued May 3 source-score crop", completion["nextAction"])
+        self.assertIn("Make the May 3 source media available locally", completion["nextAction"])
+        self.assertEqual(completion["sourceCropFailedNoteProbeStatus"], "blocked_media_missing")
         self.assertEqual(completion["sourceCropReverificationStatus"], "queued_source_crop_reverification")
         self.assertEqual(
             completion["sourceCropReverificationTarget"]["rejectedRegressionId"],
@@ -474,30 +477,38 @@ class TranscriptionCompletionTests(unittest.TestCase):
             ],
         }
 
-        completion = build_transcription_completion(
-            {"scoreReferenceTargetCount": 1},
-            daily_records,
-            {"entries": [{"title": "Wieniawski Scherzo-Tarantelle, Op. 16"}]},
-            {
-                "ledgerVideoCount": 1,
-                "uploadedVideoSeconds": 120,
-                "uploadedVideoLabel": "2m",
-                "checkedVideoSeconds": 120,
-                "checkedVideoLabel": "2m",
-                "activePracticeLabel": "2m",
-                "estimatedTotalPracticeLabel": "2m",
-                "activePracticeScan": {
-                    "activeIntervalCount": 1,
-                    "sampleResultCount": 1,
-                    "activeViolinSampleCount": 1,
-                    "checkedNoViolinSampleCount": 0,
-                    "pendingWindowCount": 0,
-                },
+        with patch(
+            "backend.app.scanner.source_crop_failed_note_probe_for_target",
+            return_value={
+                "status": "no_continuous_exact_midi_in_probe",
+                "probeCount": 1,
+                "continuousCandidateCount": 0,
             },
-            {"benchmarkCount": 1, "wrongScoreNoteRegressionCount": 1},
-            [{"id": "accepted-anchor"}, {"id": "raw-staff4-window"}],
-            [{"transcriptionId": "t1"}],
-        )
+        ):
+            completion = build_transcription_completion(
+                {"scoreReferenceTargetCount": 1},
+                daily_records,
+                {"entries": [{"title": "Wieniawski Scherzo-Tarantelle, Op. 16"}]},
+                {
+                    "ledgerVideoCount": 1,
+                    "uploadedVideoSeconds": 120,
+                    "uploadedVideoLabel": "2m",
+                    "checkedVideoSeconds": 120,
+                    "checkedVideoLabel": "2m",
+                    "activePracticeLabel": "2m",
+                    "estimatedTotalPracticeLabel": "2m",
+                    "activePracticeScan": {
+                        "activeIntervalCount": 1,
+                        "sampleResultCount": 1,
+                        "activeViolinSampleCount": 1,
+                        "checkedNoViolinSampleCount": 0,
+                        "pendingWindowCount": 0,
+                    },
+                },
+                {"benchmarkCount": 1, "wrongScoreNoteRegressionCount": 1},
+                [{"id": "accepted-anchor"}, {"id": "raw-staff4-window"}],
+                [{"transcriptionId": "t1"}],
+            )
 
         harness = completion["phraseExpansionHarness"]
         current = harness["currentBest"]
@@ -512,7 +523,8 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertEqual(mining["exactCandidateCount"], 0)
         self.assertEqual(mining["bestCandidate"], {})
         self.assertEqual(completion["staff4AdjacentMiningStatus"], "no_staff4_anchor")
-        self.assertIn("Reverify the queued May 3 source-score crop", completion["nextAction"])
+        self.assertIn("Reject the current Staff 4 six-note audio window", completion["nextAction"])
+        self.assertEqual(completion["sourceCropFailedNoteProbeStatus"], "no_continuous_exact_midi_in_probe")
 
     def test_staff4_exact_midi_search_rejects_stitched_discontinuous_phrase(self):
         runs = [
@@ -860,7 +872,8 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertEqual(completion["phraseExpansionHarness"]["currentBest"], {})
         self.assertEqual(completion["staff4AdjacentMiningStatus"], "no_staff4_anchor")
         self.assertEqual(completion["staff4AdjacentMining"]["bestCandidate"], {})
-        self.assertIn("Reverify the queued May 3 source-score crop", completion["nextAction"])
+        self.assertIn("Make the May 3 source media available locally", completion["nextAction"])
+        self.assertEqual(completion["sourceCropFailedNoteProbeStatus"], "blocked_media_missing")
 
     def test_staff4_source_audio_rescan_guided_anchor_reproduces_when_broad_pass_misses(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1692,6 +1705,188 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertTrue(guided_runs[0]["notes"][-1]["continuationSearchUsed"])
         self.assertEqual(calls["count"], 10)
 
+    def test_staff4_failed_adjacent_probe_searches_raw_neighborhood_before_retrying(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source_path = Path(temp_dir) / "staff4-source.wav"
+            write_tiny_wav(source_path)
+
+            def fake_extract(_source, target, _start, _end):
+                write_tiny_wav(target, seconds=5)
+                return True, ""
+
+            fake_transcription = {
+                "events": [
+                    note("D#5", 0.06),
+                    note("D#5", 0.20),
+                    note("C5", 0.34),
+                    note("D#5", 0.48),
+                    note("D#5", 0.62),
+                    note("D#5", 0.76),
+                ],
+                "scoreMatchCandidateNotes": [],
+                "quality": {"segmentationSource": "test_failed_adjacent_probe"},
+            }
+            anchor = {
+                "practiceDay": "2026-05-03",
+                "pieceTitle": "Wieniawski Scherzo-Tarantelle, Op. 16",
+                "anchorSequence": "Eb5 Eb5 C5 Eb5 Eb5",
+                "anchorMidiSequence": [75, 75, 72, 75, 75],
+                "sampleId": "Njh8_zq9_DM-8835",
+                "sourceWindow": "*8835-8925",
+                "anchorLocalStartSeconds": 20.225,
+                "anchorLocalEndSeconds": 22.535,
+            }
+            sample = {"id": "Njh8_zq9_DM-8835", "path": str(source_path), "window": "*8835-8925"}
+            failure = {
+                "direction": "right-1",
+                "targetSequence": "Eb5 Eb5 C5 Eb5 Eb5 Eb5",
+                "targetMidiSequence": [75, 75, 72, 75, 75, 75],
+                "failedNoteIndex": 5,
+                "expectedMidi": 75,
+                "expectedNote": "Eb5",
+                "bestAttemptStartSeconds": 22.829,
+                "bestAttemptEndSeconds": 22.992,
+                "bestAttemptObservedConsensusMidi": 74,
+                "bestAttemptObservedConsensusNote": "D5",
+            }
+
+            with patch("backend.app.scanner.run_ffmpeg_extract_audio", side_effect=fake_extract), patch(
+                "backend.app.scanner.transcribe_audio_array",
+                return_value=fake_transcription,
+            ):
+                probes = staff4_failed_adjacent_probe_for_anchor(anchor, sample, source_path, failure)
+
+        self.assertEqual(len(probes), 1)
+        probe = probes[0]
+        self.assertEqual(probe["status"], "continuous_exact_audio_candidate")
+        self.assertEqual(probe["targetMidiSequence"], [75, 75, 72, 75, 75, 75])
+        self.assertEqual(probe["probeWindow"]["probeKind"], "failed_adjacent_note_repair")
+        self.assertFalse(probe["record"]["guidedContext"])
+        self.assertEqual(probe["record"]["scanLabel"], "failed_adjacent_probe_right-1")
+        self.assertEqual(probe["record"]["eventCount"], 6)
+        self.assertEqual(probe["probeSearch"]["bestExactSequence"], "D#5 D#5 C5 D#5 D#5 D#5")
+        self.assertTrue(probe["probeSearch"]["bestExactContinuous"])
+
+    def test_source_crop_failed_note_probe_checks_raw_audio_before_accepting_target(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source_path = Path(temp_dir) / "staff4-source.wav"
+            write_tiny_wav(source_path)
+
+            def fake_extract(_source, target, _start, _end):
+                write_tiny_wav(target, seconds=5)
+                return True, ""
+
+            fake_transcription = {
+                "events": [
+                    note("D#5", 0.06),
+                    note("D#5", 0.20),
+                    note("C5", 0.34),
+                    note("D#5", 0.48),
+                    note("D#5", 0.62),
+                    note("D#5", 0.76),
+                ],
+                "scoreMatchCandidateNotes": [],
+                "quality": {"segmentationSource": "test_source_crop_failed_note_probe"},
+            }
+            target = {
+                "reviewKind": "staff4_source_crop_audio_review_required",
+                "practiceDay": "2026-05-03",
+                "pieceTitle": "Wieniawski Scherzo-Tarantelle, Op. 16",
+                "sampleId": "Njh8_zq9_DM-8835",
+                "sourceWindow": "*8835-8925",
+                "targetSequence": "Eb5 Eb5 C5 Eb5 Eb5 Eb5",
+                "targetMidiSequence": [75, 75, 72, 75, 75, 75],
+                "bestAudioSequence": "Eb5 Eb5 C5 Eb5 Eb5 D5",
+                "bestAudioNotes": [
+                    note("D#5", 20.225),
+                    note("D#5", 20.345),
+                    note("C5", 20.465),
+                    note("D#5", 20.585),
+                    note("D#5", 20.705),
+                    note("D5", 20.829),
+                ],
+            }
+            sample = {"id": "Njh8_zq9_DM-8835", "path": str(source_path), "window": "*8835-8925"}
+
+            with patch("backend.app.scanner.run_ffmpeg_extract_audio", side_effect=fake_extract), patch(
+                "backend.app.scanner.transcribe_audio_array",
+                return_value=fake_transcription,
+            ):
+                probe = source_crop_failed_note_probe_for_target(target, [sample])
+
+        self.assertEqual(probe["status"], "continuous_exact_audio_candidate")
+        self.assertEqual(probe["continuousCandidateCount"], 1)
+        self.assertEqual(probe["targetMidiSequence"], [75, 75, 72, 75, 75, 75])
+        self.assertEqual(probe["expectedNote"], "Eb5")
+        self.assertEqual(probe["recordEventCount"], 6)
+        self.assertEqual(probe["probeWindow"]["probeKind"], "failed_adjacent_note_repair")
+
+    def test_completion_rejects_source_crop_window_after_failed_note_probe_finds_no_phrase(self):
+        target = {
+            "reviewKind": "staff4_source_crop_audio_review_required",
+            "practiceDay": "2026-05-03",
+            "pieceTitle": "Wieniawski Scherzo-Tarantelle, Op. 16",
+            "sampleId": "Njh8_zq9_DM-8835",
+            "sourceWindow": "*8835-8925",
+            "targetSequence": "Eb5 Eb5 C5 Eb5 Eb5 Eb5",
+            "targetMidiSequence": [75, 75, 72, 75, 75, 75],
+            "bestAudioSequence": "Eb5 Eb5 C5 Eb5 Eb5 D5",
+            "bestAudioNotes": [
+                note("D#5", 20.225),
+                note("D#5", 20.345),
+                note("C5", 20.465),
+                note("D#5", 20.585),
+                note("D#5", 20.705),
+                note("D5", 20.829),
+            ],
+        }
+        failed_probe = {
+            "status": "no_continuous_exact_midi_in_probe",
+            "probeCount": 1,
+            "continuousCandidateCount": 0,
+            "targetSequence": "Eb5 Eb5 C5 Eb5 Eb5 Eb5",
+        }
+        with patch("backend.app.scanner.source_crop_reverification_targets", return_value=[target]), patch(
+            "backend.app.scanner.source_crop_failed_note_probe_for_target",
+            return_value=failed_probe,
+        ), patch(
+            "backend.app.scanner.staff4_source_audio_rescan",
+            return_value={"status": "no_staff4_anchor", "runs": []},
+        ), patch(
+            "backend.app.scanner.source_phrase_expansion_harness",
+            return_value={"status": "pending", "targetCount": 0},
+        ), patch("backend.app.scanner.staff4_adjacent_phrase_mining", return_value={"status": "pending"}):
+            completion = build_transcription_completion(
+                {"scoreReferenceTargetCount": 1},
+                {"recordCount": 1, "records": []},
+                {"entries": [{"title": "Wieniawski Scherzo-Tarantelle, Op. 16"}]},
+                {
+                    "ledgerVideoCount": 1,
+                    "uploadedVideoSeconds": 120,
+                    "uploadedVideoLabel": "2m",
+                    "checkedVideoSeconds": 120,
+                    "checkedVideoLabel": "2m",
+                    "activePracticeLabel": "2m",
+                    "estimatedTotalPracticeLabel": "2m",
+                    "activePracticeScan": {
+                        "activeIntervalCount": 1,
+                        "sampleResultCount": 1,
+                        "activeViolinSampleCount": 1,
+                        "checkedNoViolinSampleCount": 0,
+                        "pendingWindowCount": 0,
+                    },
+                },
+                {"benchmarkCount": 1, "wrongScoreNoteRegressionCount": 1},
+                [],
+                [],
+            )
+
+        self.assertEqual(completion["sourceCropFailedNoteProbeStatus"], "no_continuous_exact_midi_in_probe")
+        self.assertEqual(completion["sourceCropFailedNoteProbeCount"], 1)
+        self.assertEqual(completion["sourceCropFailedNoteProbeContinuousCandidateCount"], 0)
+        self.assertIn("Reject the current Staff 4 six-note audio window", completion["nextAction"])
+        self.assertIn("measure-16", completion["nextAction"])
+
     def test_completion_surfaces_staff4_adjacent_failure_without_losing_detector_detail(self):
         failure = {
             "direction": "right-1",
@@ -1706,7 +1901,7 @@ class TranscriptionCompletionTests(unittest.TestCase):
             "bestAttemptObservedConsensusNote": "D5",
         }
         fake_rescan = {
-            "version": "staff4_source_audio_rescan_v12",
+            "version": "staff4_source_audio_rescan_v13",
             "status": "rescanned",
             "runCount": 1,
             "eventCount": 0,
@@ -1781,6 +1976,100 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertEqual(completion["staff4AdjacentMining"]["sourceAudioRescanGuidedAdjacentFirstFailure"], failure)
         self.assertIn("Eb5", completion["nextAction"])
         self.assertIn("D5", completion["nextAction"])
+
+    def test_completion_locks_failed_staff4_window_after_raw_probe_finds_no_phrase(self):
+        failure = {
+            "direction": "right-1",
+            "targetSequence": "Eb5 Eb5 C5 Eb5 Eb5 Eb5",
+            "targetMidiSequence": [75, 75, 72, 75, 75, 75],
+            "failedNoteIndex": 5,
+            "expectedMidi": 75,
+            "expectedNote": "Eb5",
+            "failureKind": "wrong_midi_detected",
+            "bestAttemptOffsetSeconds": -0.06,
+            "bestAttemptObservedConsensusMidi": 74,
+            "bestAttemptObservedConsensusNote": "D5",
+        }
+        fake_rescan = {
+            "version": "staff4_source_audio_rescan_v13",
+            "status": "rescanned",
+            "runCount": 2,
+            "eventCount": 0,
+            "candidateEventCount": 0,
+            "guidedAnchorEventCount": 5,
+            "guidedAdjacentEventCount": 0,
+            "guidedAdjacentTargetCount": 1,
+            "guidedAdjacentReproducedCount": 0,
+            "guidedAdjacentStatus": "not_reproduced",
+            "guidedAdjacentFirstFailure": failure,
+            "failedAdjacentProbeStatus": "no_continuous_exact_midi_in_probe",
+            "failedAdjacentProbeCount": 1,
+            "failedAdjacentProbeContinuousCandidateCount": 0,
+            "runs": [],
+        }
+        fake_expansion = {
+            "targetCount": 1,
+            "acceptedExpansionCount": 0,
+            "readyForReviewCount": 0,
+            "blockedExpansionCount": 1,
+            "rejectedRegressionCount": 1,
+            "audioRunCount": 4,
+            "rawDetectedAudioRunCount": 0,
+            "sourceAudioRescanRunCount": 2,
+            "currentBest": {
+                "direction": "right-1",
+                "targetSequence": "D#5 D#5 C5 D#5 D#5 D#5",
+                "anchorSequence": "D#5 D#5 C5 D#5 D#5",
+                "expectedNextScoreNote": "D#5",
+                "observedNextAudioNote": "D5",
+            },
+        }
+        fake_mining = {
+            "status": "not_found",
+            "searchedWindowCount": 48,
+            "exactCandidateCount": 0,
+            "sourceAudioRescanRunCount": 2,
+            "sourceAudioRescanEventCount": 5,
+            "sourceAudioRescanGuidedAdjacentStatus": "not_reproduced",
+            "sourceAudioRescanGuidedAdjacentTargetCount": 1,
+            "sourceAudioRescanGuidedAdjacentFirstFailure": failure,
+            "sourceAudioRescanFailedAdjacentProbeStatus": "no_continuous_exact_midi_in_probe",
+            "sourceAudioRescanFailedAdjacentProbeCount": 1,
+            "sourceAudioRescanFailedAdjacentProbeContinuousCandidateCount": 0,
+        }
+        with patch("backend.app.scanner.staff4_source_audio_rescan", return_value=fake_rescan), patch(
+            "backend.app.scanner.source_phrase_expansion_harness",
+            return_value=fake_expansion,
+        ), patch("backend.app.scanner.staff4_adjacent_phrase_mining", return_value=fake_mining):
+            completion = build_transcription_completion(
+                {"scoreReferenceTargetCount": 1},
+                {"recordCount": 1, "records": []},
+                {"entries": [{"title": "Wieniawski Scherzo-Tarantelle, Op. 16"}]},
+                {
+                    "ledgerVideoCount": 1,
+                    "uploadedVideoSeconds": 120,
+                    "uploadedVideoLabel": "2m",
+                    "checkedVideoSeconds": 120,
+                    "checkedVideoLabel": "2m",
+                    "activePracticeLabel": "2m",
+                    "estimatedTotalPracticeLabel": "2m",
+                    "activePracticeScan": {
+                        "activeIntervalCount": 1,
+                        "sampleResultCount": 1,
+                        "activeViolinSampleCount": 1,
+                        "checkedNoViolinSampleCount": 0,
+                        "pendingWindowCount": 0,
+                    },
+                },
+                {"benchmarkCount": 1, "wrongScoreNoteRegressionCount": 1},
+                [],
+                [],
+            )
+
+        self.assertEqual(completion["staff4SourceAudioRescanFailedAdjacentProbeStatus"], "no_continuous_exact_midi_in_probe")
+        self.assertEqual(completion["staff4SourceAudioRescanFailedAdjacentProbeCount"], 1)
+        self.assertIn("Reject the current Staff 4 adjacent window", completion["nextAction"])
+        self.assertIn("measure 16", completion["nextAction"])
 
     def test_staff4_truth_manifest_anchor_reopens_after_source_crop_reverification(self):
         with tempfile.TemporaryDirectory() as temp_dir:
