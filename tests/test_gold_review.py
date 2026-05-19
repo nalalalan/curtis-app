@@ -518,8 +518,10 @@ class GoldReviewTests(unittest.TestCase):
 
         self.assertEqual(review["rawQueueCount"], 1)
         self.assertEqual(review["queueCount"], 0)
+        self.assertEqual(review["queueStatus"], "current_batch_exhausted_by_rejections")
         self.assertEqual(review["suppressedByLearningCount"], 1)
         self.assertEqual(review["reviewLearningStatus"], "reducing_review_load")
+        self.assertEqual(review["rejectionDigest"]["hiddenRejectedPatternCount"], 1)
         self.assertEqual(review["suppressedQueuePreview"][0]["reviewLearningStatus"], "rejected_pattern")
 
     def test_later_acceptance_releases_previously_rejected_pattern(self):
@@ -572,6 +574,7 @@ class GoldReviewTests(unittest.TestCase):
 
         self.assertEqual(review["rawQueueCount"], 1)
         self.assertEqual(review["queueCount"], 1)
+        self.assertEqual(review["queueStatus"], "review_queue_ready")
         self.assertEqual(review["suppressedByLearningCount"], 0)
         self.assertEqual(review["queue"][0]["reviewLearningStatus"], "accepted_pattern")
 

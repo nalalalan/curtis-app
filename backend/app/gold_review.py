@@ -645,6 +645,13 @@ def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any],
     )
     truth_progress = build_truth_progress(state)
     training_set = build_gold_training_set(items)
+    queue_status = (
+        "review_queue_ready"
+        if candidates
+        else "current_batch_exhausted_by_rejections"
+        if suppressed_candidates
+        else "review_queue_empty"
+    )
     return {
         "status": "ready" if candidates or items else "empty",
         "version": GOLD_REVIEW_VERSION,
@@ -657,6 +664,7 @@ def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any],
         "scoreReadyTruthCount": int(truth_progress.get("scoreReadyTruthCount") or 0),
         "acceptedEvidenceReadyCount": int(truth_progress.get("acceptedEvidenceReadyCount") or 0),
         "queueCount": len(candidates),
+        "queueStatus": queue_status,
         "scoreQueueCount": len(score_candidates),
         "scoreExactAgreementQueueCount": len(exact_score_candidates),
         "longPhraseQueueCount": len(long_candidates),
@@ -675,6 +683,18 @@ def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any],
         "trainingNegativeScoreExampleCount": int(training_set.get("negativeScoreExampleCount") or 0),
         "reviewLearningStatus": "reducing_review_load" if suppressed_candidates else "learning_no_suppression_yet",
         "reviewLearningRule": learning_profile.get("suppressionRule") or "",
+        "rejectionDigest": {
+            "status": queue_status,
+            "hiddenRejectedPatternCount": len(suppressed_candidates),
+            "rejectedPatternCount": int(learning_profile.get("rejectedPatternCount") or 0),
+            "message": (
+                "Current review batch is exhausted; remaining candidates repeat rejected note patterns."
+                if queue_status == "current_batch_exhausted_by_rejections"
+                else "Review the next queued clip."
+                if queue_status == "review_queue_ready"
+                else "No review candidates are available from current analyzed evidence."
+            ),
+        },
         "itemsByType": dict(by_type),
         "itemsByStatus": dict(by_status),
         "queue": candidates[: max(0, int(limit))],
@@ -683,7 +703,7 @@ def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any],
         "nextAction": (
             "Review one queued clip: accept only if the displayed claim is exact; reject if one note is wrong."
             if candidates
-            else "Gold review learned from prior rejections; no new unsuppressed candidates are queued."
+            else "Current batch complete: remaining candidates repeat rejected patterns. Generate fresh candidates from unreviewed or rescanned audio."
             if suppressed_candidates
             else "Gold review queue is empty for current analyzed evidence."
         ),

@@ -3177,6 +3177,10 @@ function renderGoldReview() {
   const scoreTraining = Number(review.trainingScoreExampleCount ?? training.scoreExampleCount) || 0;
   const scoreQueued = Number(review.scoreQueueCount) || 0;
   const scoreExactQueued = Number(review.scoreExactAgreementQueueCount) || 0;
+  const rejectionDigest = review.rejectionDigest && typeof review.rejectionDigest === "object" ? review.rejectionDigest : {};
+  const emptyQueueText = review.queueStatus === "current_batch_exhausted_by_rejections"
+    ? `Batch complete. ${Number(review.suppressedByLearningCount) || 0} repeats hidden.`
+    : "No review clips queued.";
   setText(elements.goldReviewCount, scoreQueued ? `${scoreQueued} score / ${queued} queued` : `${accepted} accepted / ${queued} queued`);
   const queue = Array.isArray(review.queue) ? review.queue.slice(0, 4) : [];
   const recent = Array.isArray(review.recentItems) ? review.recentItems.slice(0, 3) : [];
@@ -3192,7 +3196,7 @@ function renderGoldReview() {
         <article><span>Score</span><strong>${escapeHtml(String(scoreTraining))}</strong></article>
         <article><span>Long</span><strong>${escapeHtml(String(longTraining))}</strong></article>
       </div>
-      <p class="empty">No review clips queued.</p>
+      <p class="empty">${escapeHtml(rejectionDigest.message || emptyQueueText)}</p>
     `;
     return;
   }
