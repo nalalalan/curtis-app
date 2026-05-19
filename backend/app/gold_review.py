@@ -16,6 +16,7 @@ GOLD_REVIEW_TYPES = {"audio_phrase", "score_phrase", "audio_score_match", "pract
 MAX_REVIEW_CLIP_SECONDS = 14.75
 MIN_LONG_REVIEW_NOTES = 6
 MAX_LONG_REVIEW_NOTES = 16
+MAX_ADAPTIVE_REVIEW_WINDOWS_PER_SERIES = 10
 
 
 def _clean(value: Any) -> str:
@@ -266,6 +267,41 @@ def long_review_note_slice(notes: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return clean_notes[start : start + length]
 
 
+def adaptive_review_note_windows(
+    notes: list[dict[str, Any]],
+    *,
+    max_windows: int = MAX_ADAPTIVE_REVIEW_WINDOWS_PER_SERIES,
+) -> list[list[dict[str, Any]]]:
+    clean_notes = [note for note in notes if _clean(note.get("note")) and note_midi_value(note) is not None]
+    if not clean_notes:
+        return []
+    scored: list[tuple[float, int, list[dict[str, Any]]]] = []
+    seen: set[str] = set()
+    search_limit = min(len(clean_notes), 160)
+    for start in range(0, search_limit):
+        max_length = min(MAX_LONG_REVIEW_NOTES, search_limit - start)
+        for length in range(3, max_length + 1):
+            window = clean_notes[start : start + length]
+            span = _note_span_seconds(window)
+            if span > MAX_REVIEW_CLIP_SECONDS - 0.25:
+                continue
+            key = _review_sequence_key(_clean_note_names(window))
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            distinct = _pitch_class_count(window)
+            audio_agreed = sum(1 for note in window if note.get("audioAgreement") is True)
+            spectral = sum(1 for note in window if "spectral_onset" in (note.get("agreementSources") or []))
+            confidence = sum(float(note.get("confidence") or 0.0) for note in window) / max(1, len(window))
+            repeated_penalty = max(0, length - distinct - 2)
+            if start > 0 and note_midi_value(clean_notes[start - 1]) == note_midi_value(window[0]):
+                repeated_penalty += 2
+            score = (length * 3) + (distinct * 6) + (audio_agreed * 2) + spectral + confidence - repeated_penalty
+            scored.append((score, start, window))
+    scored.sort(key=lambda item: (-item[0], item[1], -len(item[2])))
+    return [window for _, _, window in scored[: max(0, int(max_windows))]]
+
+
 def _clip_from_series(series: dict[str, Any], notes: list[dict[str, Any]]) -> dict[str, Any]:
     sample_id = _clean(series.get("sampleId"))
     source_url = _clean(series.get("sourceUrl"))
@@ -326,8 +362,14 @@ def _candidate_id(payload: dict[str, Any]) -> str:
     )
 
 
-def _candidate_from_series(record: dict[str, Any], series: dict[str, Any]) -> dict[str, Any]:
-    notes = long_review_note_slice(_note_dicts(series.get("notes")))
+def _candidate_from_series(
+    record: dict[str, Any],
+    series: dict[str, Any],
+    *,
+    notes_override: list[dict[str, Any]] | None = None,
+    adaptive_index: int | None = None,
+) -> dict[str, Any]:
+    notes = notes_override if notes_override is not None else long_review_note_slice(_note_dicts(series.get("notes")))
     note_names = _clean_note_names(notes)
     if len(note_names) < 3:
         return {}
@@ -362,6 +404,9 @@ def _candidate_from_series(record: dict[str, Any], series: dict[str, Any]) -> di
         "reviewTask": "audio_long_phrase_exact_notes" if len(note_names) >= MIN_LONG_REVIEW_NOTES else "audio_exact_notes",
         "binaryReview": True,
         "binaryOnly": True,
+        "adaptiveReview": adaptive_index is not None,
+        "adaptiveWindowIndex": adaptive_index,
+        "reviewTrainingLane": "audio_notes",
         "reviewQuestion": "Do the displayed notes match the paired audio? Reject if one note is wrong.",
         "acceptanceRule": "Accept only if every displayed note matches the paired audio after adjacent duplicate detections are collapsed.",
         "rejectionRule": "Reject if any displayed note is wrong, missing, extra, out of order, or not audible in the paired clip.",
@@ -440,7 +485,7 @@ def _candidate_from_group(record: dict[str, Any], group: dict[str, Any]) -> dict
     return payload
 
 
-def _queue_candidates(daily_records: dict[str, Any]) -> list[dict[str, Any]]:
+def _queue_candidates(daily_records: dict[str, Any], *, adaptive: bool = False) -> list[dict[str, Any]]:
     candidates: list[dict[str, Any]] = []
     for record in daily_records.get("records", []) if isinstance(daily_records.get("records"), list) else []:
         if not isinstance(record, dict):
@@ -451,9 +496,15 @@ def _queue_candidates(daily_records: dict[str, Any]) -> list[dict[str, Any]]:
                 candidates.append(candidate)
         transcription = record.get("transcription") if isinstance(record.get("transcription"), dict) else {}
         for series in transcription.get("detectedSeries", []) if isinstance(transcription.get("detectedSeries"), list) else []:
-            candidate = _candidate_from_series(record, series)
-            if candidate:
-                candidates.append(candidate)
+            if adaptive:
+                for index, window in enumerate(adaptive_review_note_windows(_note_dicts(series.get("notes")))):
+                    candidate = _candidate_from_series(record, series, notes_override=window, adaptive_index=index)
+                    if candidate:
+                        candidates.append(candidate)
+            else:
+                candidate = _candidate_from_series(record, series)
+                if candidate:
+                    candidates.append(candidate)
     unique: dict[str, dict[str, Any]] = {}
     for candidate in candidates:
         unique.setdefault(str(candidate.get("reviewItemId") or ""), candidate)
@@ -630,6 +681,19 @@ def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any],
     learning_profile = build_review_learning_profile(items)
     raw_candidates = [candidate for candidate in _queue_candidates(daily_records) if _clean(candidate.get("reviewItemId")) not in reviewed_ids]
     candidates, suppressed_candidates = apply_review_learning_to_candidates(raw_candidates, learning_profile)
+    adaptive_candidates: list[dict[str, Any]] = []
+    adaptive_suppressed_candidates: list[dict[str, Any]] = []
+    adaptive_mode = False
+    if not candidates:
+        raw_adaptive_candidates = [
+            candidate
+            for candidate in _queue_candidates(daily_records, adaptive=True)
+            if _clean(candidate.get("reviewItemId")) not in reviewed_ids
+        ]
+        adaptive_candidates, adaptive_suppressed_candidates = apply_review_learning_to_candidates(raw_adaptive_candidates, learning_profile)
+        if adaptive_candidates:
+            candidates = adaptive_candidates
+            adaptive_mode = True
     score_candidates = [item for item in candidates if item.get("reviewTask") == "audio_score_exact_match"]
     exact_score_candidates = [item for item in score_candidates if item.get("scoreAgreement") is True]
     long_candidates = [item for item in candidates if item.get("reviewKind") == "long_audio_phrase_candidate"]
@@ -645,11 +709,18 @@ def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any],
     )
     truth_progress = build_truth_progress(state)
     training_set = build_gold_training_set(items)
+    hidden_rejected_keys = {
+        str(item.get("reviewLearningKey") or "")
+        for item in [*suppressed_candidates, *adaptive_suppressed_candidates]
+        if str(item.get("reviewLearningKey") or "")
+    }
     queue_status = (
-        "review_queue_ready"
+        "adaptive_review_ready"
+        if adaptive_mode
+        else "review_queue_ready"
         if candidates
         else "current_batch_exhausted_by_rejections"
-        if suppressed_candidates
+        if suppressed_candidates or adaptive_suppressed_candidates
         else "review_queue_empty"
     )
     return {
@@ -669,6 +740,9 @@ def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any],
         "scoreExactAgreementQueueCount": len(exact_score_candidates),
         "longPhraseQueueCount": len(long_candidates),
         "rawQueueCount": len(raw_candidates),
+        "adaptiveMode": adaptive_mode,
+        "adaptiveCandidateCount": len(adaptive_candidates),
+        "adaptiveSuppressedByLearningCount": len(adaptive_suppressed_candidates),
         "suppressedByLearningCount": len(suppressed_candidates),
         "reviewedIds": len(reviewed_ids),
         "acceptedPatternCount": int(learning_profile.get("acceptedPatternCount") or 0),
@@ -685,9 +759,13 @@ def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any],
         "reviewLearningRule": learning_profile.get("suppressionRule") or "",
         "rejectionDigest": {
             "status": queue_status,
-            "hiddenRejectedPatternCount": len(suppressed_candidates),
+            "hiddenRejectedPatternCount": len(hidden_rejected_keys),
+            "hiddenRejectedCandidateCount": len(suppressed_candidates) + len(adaptive_suppressed_candidates),
             "rejectedPatternCount": int(learning_profile.get("rejectedPatternCount") or 0),
             "message": (
+                "Adaptive review is mining fresh windows from analyzed audio while skipping exact rejected patterns."
+                if queue_status == "adaptive_review_ready"
+                else
                 "Current review batch is exhausted; remaining candidates repeat rejected note patterns."
                 if queue_status == "current_batch_exhausted_by_rejections"
                 else "Review the next queued clip."
@@ -698,9 +776,12 @@ def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any],
         "itemsByType": dict(by_type),
         "itemsByStatus": dict(by_status),
         "queue": candidates[: max(0, int(limit))],
-        "suppressedQueuePreview": suppressed_candidates[:5],
+        "suppressedQueuePreview": (suppressed_candidates + adaptive_suppressed_candidates)[:5],
         "recentItems": items[:8],
         "nextAction": (
+            "Adaptive review is ready: keep accepting exact clips and rejecting any wrong note."
+            if adaptive_mode
+            else
             "Review one queued clip: accept only if the displayed claim is exact; reject if one note is wrong."
             if candidates
             else "Current batch complete: remaining candidates repeat rejected patterns. Generate fresh candidates from unreviewed or rescanned audio."

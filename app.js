@@ -3115,7 +3115,7 @@ function renderGoldReviewItem(item, index) {
   const clip = item.clip && typeof item.clip === "object" ? item.clip : item;
   const status = item.status || item.defaultStatus || "pending_review";
   const isRecent = status !== "pending_review";
-  const lane = item.reviewTrainingLane === "score_alignment" || scoreNotes ? "Score" : item.reviewTask === "audio_long_phrase_exact_notes" ? "Phrase" : "Audio";
+  const lane = item.reviewTrainingLane === "score_alignment" || scoreNotes ? "Score" : item.adaptiveReview ? "Adaptive" : item.reviewTask === "audio_long_phrase_exact_notes" ? "Phrase" : "Audio";
   const agreement = item.scoreAgreementStatus === "exact_midi_agreement"
     ? "same MIDI"
     : item.scoreAgreementStatus === "score_midi_mismatch"
@@ -3177,6 +3177,7 @@ function renderGoldReview() {
   const scoreTraining = Number(review.trainingScoreExampleCount ?? training.scoreExampleCount) || 0;
   const scoreQueued = Number(review.scoreQueueCount) || 0;
   const scoreExactQueued = Number(review.scoreExactAgreementQueueCount) || 0;
+  const adaptiveCount = Number(review.adaptiveCandidateCount) || 0;
   const rejectionDigest = review.rejectionDigest && typeof review.rejectionDigest === "object" ? review.rejectionDigest : {};
   const emptyQueueText = review.queueStatus === "current_batch_exhausted_by_rejections"
     ? `Batch complete. ${Number(review.suppressedByLearningCount) || 0} repeats hidden.`
@@ -3195,6 +3196,7 @@ function renderGoldReview() {
         <article><span>Training</span><strong>${escapeHtml(String(trainingExamples))}</strong></article>
         <article><span>Score</span><strong>${escapeHtml(String(scoreTraining))}</strong></article>
         <article><span>Long</span><strong>${escapeHtml(String(longTraining))}</strong></article>
+        <article><span>Adaptive</span><strong>${escapeHtml(String(adaptiveCount))}</strong></article>
       </div>
       <p class="empty">${escapeHtml(rejectionDigest.message || emptyQueueText)}</p>
     `;
@@ -3210,6 +3212,7 @@ function renderGoldReview() {
       <article><span>Score</span><strong>${escapeHtml(String(scoreTraining))}</strong></article>
       <article><span>Long</span><strong>${escapeHtml(String(longTraining))}</strong></article>
       <article><span>Score queue</span><strong>${escapeHtml(scoreExactQueued ? `${scoreExactQueued}/${scoreQueued}` : String(scoreQueued))}</strong></article>
+      <article><span>Adaptive</span><strong>${escapeHtml(String(adaptiveCount))}</strong></article>
     </div>
     <div class="gold-review-list">
       ${items.map((item, index) => renderGoldReviewItem(item, index)).join("")}

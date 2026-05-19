@@ -198,7 +198,8 @@ class GoldReviewTests(unittest.TestCase):
         self.assertEqual(review["acceptedAudioPhraseCount"], 1)
         self.assertEqual(review["trainingExampleCount"], 1)
         self.assertEqual(review["trainingPositiveCount"], 1)
-        self.assertEqual(review["queueCount"], 0)
+        self.assertEqual(review["queueStatus"], "adaptive_review_ready")
+        self.assertGreater(review["queueCount"], 0)
 
     def test_score_phrase_acceptance_requires_matching_score_notes(self):
         state = {}
@@ -577,6 +578,49 @@ class GoldReviewTests(unittest.TestCase):
         self.assertEqual(review["queueStatus"], "review_queue_ready")
         self.assertEqual(review["suppressedByLearningCount"], 0)
         self.assertEqual(review["queue"][0]["reviewLearningStatus"], "accepted_pattern")
+
+    def test_adaptive_review_generates_more_windows_after_primary_candidate_is_rejected(self):
+        state = {}
+        names = ["D5", "E5", "F5", "G5", "A5", "B5", "C6", "D6"]
+        midis = [74, 76, 77, 79, 81, 83, 84, 86]
+        daily_records = {
+            "records": [
+                {
+                    "practiceDay": "2026-05-03",
+                    "transcription": {
+                        "detectedSeries": [
+                            {
+                                "sampleId": "adaptive-sample",
+                                "sourceTitle": "5-3-26",
+                                "sourceUrl": "https://www.youtube.com/watch?v=abc",
+                                "startSeconds": 120.0,
+                                "localStartSeconds": 0.0,
+                                "notes": [note(name, midi, index * 0.2) for index, (name, midi) in enumerate(zip(names, midis))],
+                            }
+                        ]
+                    },
+                }
+            ]
+        }
+        first = build_gold_review_loop(state, daily_records)["queue"][0]
+        record_gold_review_item(
+            state,
+            {
+                **first,
+                "type": first["reviewType"],
+                "status": "rejected_mismatch",
+                "reason": "primary window is wrong",
+            },
+        )
+
+        review = build_gold_review_loop(state, daily_records)
+
+        self.assertEqual(review["queueStatus"], "adaptive_review_ready")
+        self.assertTrue(review["adaptiveMode"])
+        self.assertGreater(review["adaptiveCandidateCount"], 0)
+        self.assertGreater(review["queueCount"], 0)
+        self.assertTrue(review["queue"][0]["adaptiveReview"])
+        self.assertNotEqual(review["queue"][0]["reviewItemId"], first["reviewItemId"])
 
 
 if __name__ == "__main__":
