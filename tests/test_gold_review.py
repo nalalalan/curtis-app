@@ -179,6 +179,54 @@ class GoldReviewTests(unittest.TestCase):
                 },
             )
 
+    def test_score_phrase_acceptance_collapses_repeated_detected_notes(self):
+        state = {}
+
+        result = record_gold_review_item(
+            state,
+            {
+                "reviewItemId": "gold-score-duplicate-d",
+                "type": "score_phrase",
+                "status": "accepted_truth",
+                "sampleId": "sample-dup",
+                "practiceDay": "2026-05-03",
+                "sourceUrl": "https://www.youtube.com/watch?v=abc",
+                "sourceTitle": "5-3-26",
+                "startSeconds": 10.0,
+                "endSeconds": 11.0,
+                "pieceTitle": "Wieniawski Scherzo-Tarantelle, Op. 16",
+                "acceptedNotes": ["D5", "D5"],
+                "scoreNotes": ["D5"],
+                "scoreLocation": "m. 16",
+                "scoreSource": "IMSLP source PDF",
+                "scoreImageUrl": "/assets/score/m16.png",
+            },
+        )
+
+        item = result["goldReviewItem"]
+        self.assertEqual(item["status"], "accepted_truth")
+        self.assertEqual(item["normalizedAcceptedMidiSequence"], [74])
+        self.assertEqual(item["normalizedScoreMidiSequence"], [74])
+        self.assertEqual(result["truthMirror"]["truthItem"]["status"], "accepted_truth")
+
+    def test_score_phrase_acceptance_still_rejects_wrong_order_after_duplicate_collapse(self):
+        state = {}
+
+        with self.assertRaises(ValueError):
+            record_gold_review_item(
+                state,
+                {
+                    "reviewItemId": "gold-score-wrong-eb",
+                    "type": "score_phrase",
+                    "status": "accepted_truth",
+                    "sampleId": "sample-wrong",
+                    "acceptedNotes": ["Eb5", "D5", "C5"],
+                    "scoreNotes": ["Eb5", "Eb5", "C5"],
+                    "scoreLocation": "m. 16",
+                    "scoreImageUrl": "/assets/score/m16.png",
+                },
+            )
+
     def test_exact_score_phrase_acceptance_becomes_score_ready_truth(self):
         state = {}
 

@@ -180,6 +180,37 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertFalse(search["sourceCropDisplayAllowed"])
         self.assertIn("actual score crop", search["nextAction"])
 
+    def test_user_confirmed_measure16_search_collapses_duplicate_detected_notes(self):
+        daily_records = {
+            "records": [
+                {
+                    "practiceDay": "2026-05-03",
+                    "transcription": {
+                        "detectedSeries": [
+                            {
+                                "sampleId": "Njh8_zq9_DM-8835",
+                                "sourceWindow": "*8835-8925",
+                                "notes": [
+                                    note("Eb5", 0.00),
+                                    note("Eb5", 0.08),
+                                    note("D5", 0.18),
+                                    note("C5", 0.30),
+                                ],
+                            }
+                        ]
+                    },
+                }
+            ]
+        }
+
+        search = user_confirmed_measure16_audio_search(daily_records)
+
+        self.assertEqual(search["status"], "continuous_exact_audio_candidate")
+        self.assertEqual(search["duplicateTolerance"], "consecutive_duplicate_notes_collapsed")
+        self.assertEqual(search["bestCandidate"]["windowMidiSequence"], [75, 74, 72])
+        self.assertEqual(search["bestCandidate"]["rawWindowMidiSequence"], [75, 75, 74])
+        self.assertEqual(search["bestCandidateSequence"], "Eb5 D5 C5")
+
     def test_completion_prioritizes_user_corrected_measure16_target_over_rejected_old_lane(self):
         daily_records = {
             "records": [

@@ -154,6 +154,55 @@ class LongPhraseTruthTests(unittest.TestCase):
         self.assertEqual(gate["bestOverlapExactSequence"], ["Eb5", "Eb5", "C5", "Eb5", "Eb5"])
         self.assertEqual(gate["bestOverlapMidiSequence"], [75, 75, 72, 75, 75])
 
+    def test_gate_can_collapse_repeated_audio_detections_when_review_accepts_note_identity(self):
+        source_notes = [
+            detected_note("D5", 74, 0.00),
+            detected_note("C5", 72, 0.12),
+            detected_note("Bb4", 70, 0.24),
+        ]
+        detected = [
+            detected_note("D5", 74, 0.00),
+            detected_note("D5", 74, 0.06),
+            detected_note("C5", 72, 0.12),
+            detected_note("Bb4", 70, 0.24),
+        ]
+
+        gate = exact_midi_phrase_gate(
+            detected,
+            source_notes,
+            audio_agreed=True,
+            min_exact_notes=3,
+            collapse_repeated_detections=True,
+        )
+
+        self.assertTrue(gate["accepted"])
+        self.assertEqual(gate["comparableQueryMidiSequence"], [74, 72, 70])
+        self.assertEqual(gate["comparableReferenceMidiSequence"], [74, 72, 70])
+
+    def test_gate_duplicate_collapse_still_rejects_wrong_measure16_order(self):
+        source_notes = [
+            detected_note("Eb5", 75, 0.00),
+            detected_note("Eb5", 75, 0.12),
+            detected_note("C5", 72, 0.24),
+        ]
+        detected = [
+            detected_note("Eb5", 75, 0.00),
+            detected_note("D5", 74, 0.12),
+            detected_note("C5", 72, 0.24),
+        ]
+
+        gate = exact_midi_phrase_gate(
+            detected,
+            source_notes,
+            audio_agreed=True,
+            min_exact_notes=3,
+            collapse_repeated_detections=True,
+        )
+
+        self.assertFalse(gate["accepted"])
+        self.assertEqual(gate["comparableQueryMidiSequence"], [75, 74, 72])
+        self.assertEqual(gate["comparableReferenceMidiSequence"], [75, 72])
+
     def test_gate_rejects_pitch_letter_match_in_the_wrong_octave(self):
         source_notes = symbolic_score_from_target(wieniawski_reference_target())["notes"]
         detected = [

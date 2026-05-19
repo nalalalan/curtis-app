@@ -177,6 +177,41 @@ class EvidenceLedgerTests(unittest.TestCase):
                 },
             )
 
+    def test_truth_item_accepts_repeated_audio_detection_against_single_score_note(self):
+        state = {}
+
+        result = record_truth_item(
+            state,
+            {
+                "type": "audio_score_match",
+                "status": "accepted_truth",
+                "sampleId": "sample-dup",
+                "acceptedNotes": ["D5", "D5"],
+                "scoreNotes": ["D5"],
+                "scoreLocation": "m. 16",
+                "scoreImageUrl": "/assets/score/m16.png",
+            },
+        )
+
+        self.assertEqual(result["truthItem"]["status"], "accepted_truth")
+        self.assertTrue(result["truthItem"]["gateState"]["acceptedEvidenceReady"])
+        self.assertTrue(result["truthItem"]["gateState"]["audioScoreAgreement"])
+
+    def test_truth_item_duplicate_tolerance_does_not_accept_wrong_sequence(self):
+        with self.assertRaises(ValueError):
+            record_truth_item(
+                {},
+                {
+                    "type": "audio_score_match",
+                    "status": "accepted_truth",
+                    "sampleId": "sample-wrong",
+                    "acceptedNotes": ["Eb5", "D5", "C5"],
+                    "scoreNotes": ["Eb5", "Eb5", "C5"],
+                    "scoreLocation": "m. 16",
+                    "scoreImageUrl": "/assets/score/m16.png",
+                },
+            )
+
     def test_truth_item_rejects_same_pitch_class_different_octave_score_sequence(self):
         with self.assertRaises(ValueError):
             record_truth_item(

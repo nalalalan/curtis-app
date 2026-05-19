@@ -134,14 +134,23 @@ def _midi_sequence(notes: list[str]) -> list[int]:
     return [midi for midi in (_note_midi_value(note) for note in notes) if midi is not None]
 
 
+def _collapse_consecutive_duplicates(values: list[Any]) -> list[Any]:
+    collapsed: list[Any] = []
+    for value in values:
+        if collapsed and collapsed[-1] == value:
+            continue
+        collapsed.append(value)
+    return collapsed
+
+
 def _all_notes_have_midi(notes: list[str]) -> bool:
     return bool(notes) and len(_midi_sequence(notes)) == len(notes)
 
 
 def _same_exact_note_sequence(left: list[str], right: list[str]) -> bool:
     if _all_notes_have_midi(left) and _all_notes_have_midi(right):
-        return _midi_sequence(left) == _midi_sequence(right)
-    return _same_pitch_sequence(left, right)
+        return _collapse_consecutive_duplicates(_midi_sequence(left)) == _collapse_consecutive_duplicates(_midi_sequence(right))
+    return _collapse_consecutive_duplicates(_pitch_class_sequence(left)) == _collapse_consecutive_duplicates(_pitch_class_sequence(right))
 
 
 def _score_truth_requires_exact_notes(item_type: str) -> bool:
@@ -550,7 +559,8 @@ def normalize_truth_item(raw: dict[str, Any]) -> dict[str, Any]:
         and accepted_notes
         and _all_notes_have_midi(accepted_notes)
         and _all_notes_have_midi(score_notes)
-        and _midi_sequence(accepted_notes) == _midi_sequence(score_notes)
+        and _collapse_consecutive_duplicates(_midi_sequence(accepted_notes))
+        == _collapse_consecutive_duplicates(_midi_sequence(score_notes))
     )
     score_exact_note_sequence_ready = (
         not _score_truth_requires_exact_notes(item_type)

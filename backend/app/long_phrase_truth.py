@@ -70,6 +70,15 @@ def note_midi_sequence(notes: list[dict[str, Any]]) -> list[int]:
     return sequence
 
 
+def collapse_consecutive_duplicate_midi(sequence: list[int]) -> list[int]:
+    collapsed: list[int] = []
+    for value in sequence:
+        if collapsed and collapsed[-1] == value:
+            continue
+        collapsed.append(value)
+    return collapsed
+
+
 def note_pitch_class_sequence(notes: list[dict[str, Any]]) -> list[str]:
     return [midi_pitch_class(value) for value in note_midi_sequence(notes)]
 
@@ -194,13 +203,16 @@ def exact_midi_phrase_gate(
     audio_agreed: bool,
     min_exact_notes: int = 5,
     require_full_query: bool = True,
+    collapse_repeated_detections: bool = False,
 ) -> dict[str, Any]:
     query_midi = note_midi_sequence(detected_notes)
     source_midi = note_midi_sequence(source_notes)
+    comparable_query_midi = collapse_consecutive_duplicate_midi(query_midi) if collapse_repeated_detections else query_midi
+    comparable_source_midi = collapse_consecutive_duplicate_midi(source_midi) if collapse_repeated_detections else source_midi
     query_exact = note_exact_sequence(detected_notes)
     source_exact = note_exact_sequence(source_notes)
-    query_pitch = [midi_pitch_class(value) for value in query_midi]
-    source_pitch = [midi_pitch_class(value) for value in source_midi]
+    query_pitch = [midi_pitch_class(value) for value in comparable_query_midi]
+    source_pitch = [midi_pitch_class(value) for value in comparable_source_midi]
     if not detected_notes or not query_midi:
         status = "source_score_exact_midi_missing"
     elif len(query_midi) != len(detected_notes):
@@ -216,6 +228,8 @@ def exact_midi_phrase_gate(
             "bestOverlap": 0,
             "queryLength": len(query_midi),
             "referenceLength": len(source_midi),
+            "comparableQueryLength": len(comparable_query_midi),
+            "comparableReferenceLength": len(comparable_source_midi),
             "exactMidiChecked": False,
             "audioAgreed": bool(audio_agreed),
             "queryExactSequence": query_exact,
@@ -224,26 +238,33 @@ def exact_midi_phrase_gate(
             "referenceExactSequence": source_exact,
             "referencePitchClassSequence": source_pitch,
             "referenceMidiSequence": source_midi,
+            "comparableQueryMidiSequence": comparable_query_midi,
+            "comparableReferenceMidiSequence": comparable_source_midi,
             "bestOverlapExactSequence": [],
             "bestOverlapMidiSequence": [],
             "orderedOverlap": 0,
+            "collapseRepeatedDetections": bool(collapse_repeated_detections),
         }
 
-    contiguous = longest_common_contiguous_midi_run(query_midi, source_midi)
-    ordered = best_ordered_midi_subsequence_run(query_midi, source_midi)
+    contiguous = longest_common_contiguous_midi_run(comparable_query_midi, comparable_source_midi)
+    ordered = best_ordered_midi_subsequence_run(comparable_query_midi, comparable_source_midi)
     overlap = int(contiguous.get("length") or 0)
     query_start = int(contiguous.get("queryStart") or 0)
     reference_start = int(contiguous.get("referenceStart") or 0)
     reference_end = reference_start + overlap
-    required_overlap = len(query_midi) if require_full_query else min(int(min_exact_notes), len(query_midi))
-    accepted = bool(audio_agreed) and len(query_midi) >= int(min_exact_notes) and overlap >= required_overlap
+    required_overlap = (
+        len(comparable_query_midi)
+        if require_full_query
+        else min(int(min_exact_notes), len(comparable_query_midi))
+    )
+    accepted = bool(audio_agreed) and len(comparable_query_midi) >= int(min_exact_notes) and overlap >= required_overlap
     status = (
         "source_score_exact_midi_sequence_verified"
         if accepted
         else "source_audio_agreement_missing"
         if not audio_agreed
         else "source_score_exact_midi_phrase_too_short"
-        if len(query_midi) < int(min_exact_notes)
+        if len(comparable_query_midi) < int(min_exact_notes)
         else "source_score_exact_midi_sequence_not_found"
     )
     return {
@@ -255,6 +276,8 @@ def exact_midi_phrase_gate(
         "referenceEnd": reference_end,
         "queryLength": len(query_midi),
         "referenceLength": len(source_midi),
+        "comparableQueryLength": len(comparable_query_midi),
+        "comparableReferenceLength": len(comparable_source_midi),
         "exactMidiChecked": True,
         "audioAgreed": bool(audio_agreed),
         "queryExactSequence": query_exact,
@@ -263,11 +286,14 @@ def exact_midi_phrase_gate(
         "referenceExactSequence": source_exact,
         "referencePitchClassSequence": source_pitch,
         "referenceMidiSequence": source_midi,
+        "comparableQueryMidiSequence": comparable_query_midi,
+        "comparableReferenceMidiSequence": comparable_source_midi,
         "bestOverlapExactSequence": source_exact[reference_start:reference_end],
-        "bestOverlapMidiSequence": source_midi[reference_start:reference_end],
+        "bestOverlapMidiSequence": comparable_source_midi[reference_start:reference_end],
         "orderedOverlap": int(ordered.get("length") or 0),
         "orderedReferenceStart": int(ordered.get("referenceStart") or 0),
         "orderedReferenceEnd": int(ordered.get("referenceEnd") or 0),
         "minimumExactNotes": int(min_exact_notes),
         "requireFullQuery": bool(require_full_query),
+        "collapseRepeatedDetections": bool(collapse_repeated_detections),
     }

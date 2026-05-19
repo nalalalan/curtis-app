@@ -6,7 +6,7 @@ from collections import Counter
 from typing import Any
 
 from .evidence_ledger import build_truth_progress, record_truth_item
-from .long_phrase_truth import note_midi_sequence, note_midi_value
+from .long_phrase_truth import collapse_consecutive_duplicate_midi, note_midi_sequence, note_midi_value
 from .state import utc_now
 
 
@@ -44,6 +44,20 @@ def _clean_note_names(value: Any) -> list[str]:
     else:
         names = _clean(value).replace(",", " ").split()
     return [name for name in names if name]
+
+
+def _notes_from_names(names: list[str]) -> list[dict[str, Any]]:
+    return [{"note": name} for name in names]
+
+
+def _normalized_review_midi_sequence(names: list[str]) -> list[int]:
+    return collapse_consecutive_duplicate_midi(note_midi_sequence(_notes_from_names(names)))
+
+
+def _normalized_review_note_agreement(left: list[str], right: list[str]) -> bool:
+    left_midi = _normalized_review_midi_sequence(left)
+    right_midi = _normalized_review_midi_sequence(right)
+    return bool(left_midi and right_midi and left_midi == right_midi)
 
 
 def _note_dicts(value: Any) -> list[dict[str, Any]]:
@@ -256,7 +270,7 @@ def _candidate_from_group(record: dict[str, Any], group: dict[str, Any]) -> dict
         "scoreStatus": _clean(group.get("sourceScoreCheckStatus") or group.get("scoreSnippetStatus") or score.get("status")),
         "clip": clip,
         "defaultStatus": "pending_review",
-        "acceptanceRule": "Score phrase acceptance requires exact audio-note and score-note MIDI agreement plus score location.",
+        "acceptanceRule": "Score phrase acceptance requires exact audio-note and score-note MIDI agreement after collapsing consecutive duplicate detections, plus score location.",
     }
     payload["reviewItemId"] = _candidate_id(payload)
     return payload
@@ -298,6 +312,9 @@ def normalize_gold_review_item(raw: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("Accepted gold review items require accepted notes.")
     if item_type in {"score_phrase", "audio_score_match"} and status == "accepted_truth" and not score_notes:
         raise ValueError("Accepted score phrase labels require score notes.")
+    if item_type in {"score_phrase", "audio_score_match"} and status == "accepted_truth":
+        if not _normalized_review_note_agreement(accepted_notes, score_notes):
+            raise ValueError("Accepted score phrase labels require normalized audio and score MIDI agreement.")
     item = {
         "reviewItemId": _clean(raw.get("reviewItemId") or raw.get("itemId")),
         "type": item_type,
@@ -317,6 +334,9 @@ def normalize_gold_review_item(raw: dict[str, Any]) -> dict[str, Any]:
         "detectedNotes": detected_notes,
         "acceptedNotes": accepted_notes,
         "scoreNotes": score_notes,
+        "normalizedAcceptedMidiSequence": _normalized_review_midi_sequence(accepted_notes),
+        "normalizedScoreMidiSequence": _normalized_review_midi_sequence(score_notes),
+        "duplicateTolerance": "consecutive_duplicate_notes_collapsed",
         "reason": _clean(raw.get("reason") or raw.get("note")),
         "createdAt": _clean(raw.get("createdAt")) or utc_now(),
         "reviewVersion": GOLD_REVIEW_VERSION,
@@ -417,5 +437,5 @@ def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any],
             if candidates
             else "Gold review queue is empty for current analyzed evidence."
         ),
-        "acceptanceRule": "Accepted score labels require exact audio-note and score-note MIDI agreement. Audio-only labels improve transcription truth but stay out of score evidence.",
+        "acceptanceRule": "Accepted score labels require exact audio-note and score-note MIDI agreement after consecutive duplicate detections are collapsed. Audio-only labels improve transcription truth but stay out of score evidence.",
     }

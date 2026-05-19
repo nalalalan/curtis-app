@@ -64,7 +64,7 @@ from .daily_records import (
 from .evidence_ledger import build_active_practice_coverage, build_evidence_progress, build_truth_progress
 from .gold_truth import load_long_phrase_truth, verify_long_phrase_truth_manifest
 from .gold_review import build_gold_review_loop
-from .long_phrase_truth import exact_midi_phrase_gate, note_window_continuity
+from .long_phrase_truth import collapse_consecutive_duplicate_midi, exact_midi_phrase_gate, note_window_continuity
 from .study_packets import build_practice_study, build_practice_totals
 from .transcription import (
     TRANSCRIPTION_PIPELINE_VERSION,
@@ -4001,6 +4001,7 @@ def audio_window_search_for_exact_midi(
     practice_day: str = "",
     anchor_sample_id: str = "",
     anchor_absolute_start: float | None = None,
+    collapse_repeated_detections: bool = False,
 ) -> dict[str, Any]:
     if not target_midi:
         return {
@@ -4011,7 +4012,8 @@ def audio_window_search_for_exact_midi(
     searched = 0
     exact_candidates: list[dict[str, Any]] = []
     nearest: dict[str, Any] = {}
-    target_length = len(target_midi)
+    comparable_target_midi = collapse_consecutive_duplicate_midi(target_midi) if collapse_repeated_detections else target_midi
+    target_length = len(comparable_target_midi)
 
     for run in runs:
         if practice_day and str(run.get("practiceDay") or "") != practice_day:
@@ -4023,16 +4025,33 @@ def audio_window_search_for_exact_midi(
         source_window_start = parse_window_start(str(run.get("sourceWindow") or ""))
         for start in range(0, len(run_midi) - target_length + 1):
             searched += 1
-            window_midi = run_midi[start : start + target_length]
-            window_notes = notes[start : start + target_length]
-            exact_count = sum(1 for observed, expected in zip(window_midi, target_midi) if observed == expected)
+            raw_window_midi = run_midi[start : start + target_length]
+            raw_window_notes = notes[start : start + target_length]
+            if collapse_repeated_detections:
+                window_midi: list[int] = []
+                window_notes: list[dict[str, Any]] = []
+                scan_index = start
+                while scan_index < len(run_midi) and len(window_midi) < target_length:
+                    value = run_midi[scan_index]
+                    if not window_midi or window_midi[-1] != value:
+                        window_midi.append(value)
+                        note = notes[scan_index]
+                        if isinstance(note, dict):
+                            window_notes.append(note)
+                    scan_index += 1
+                if len(window_midi) < target_length:
+                    continue
+            else:
+                window_midi = raw_window_midi
+                window_notes = raw_window_notes
+            exact_count = sum(1 for observed, expected in zip(window_midi, comparable_target_midi) if observed == expected)
             prefix_count = 0
-            for observed, expected in zip(window_midi, target_midi):
+            for observed, expected in zip(window_midi, comparable_target_midi):
                 if observed != expected:
                     break
                 prefix_count += 1
             mismatch_index = next(
-                (index for index, (observed, expected) in enumerate(zip(window_midi, target_midi)) if observed != expected),
+                (index for index, (observed, expected) in enumerate(zip(window_midi, comparable_target_midi)) if observed != expected),
                 -1,
             )
             candidate_only = bool(run.get("candidateOnly"))
@@ -4062,6 +4081,8 @@ def audio_window_search_for_exact_midi(
                 "neighborDistanceSeconds": round(distance, 3),
                 "windowSequence": note_exact_label(window_notes),
                 "windowMidiSequence": window_midi,
+                "rawWindowMidiSequence": raw_window_midi,
+                "duplicateTolerance": "consecutive_duplicate_notes_collapsed" if collapse_repeated_detections else "",
                 "exactCount": exact_count,
                 "prefixCount": prefix_count,
                 "mismatchIndex": mismatch_index,
@@ -4071,7 +4092,7 @@ def audio_window_search_for_exact_midi(
                 "candidateOnly": candidate_only,
                 "windowNotes": expansion_window_note_summary(window_notes),
             }
-            if window_midi == target_midi:
+            if window_midi == comparable_target_midi:
                 exact_candidates.append(item)
             nearest_key = (
                 exact_count,
@@ -4107,6 +4128,9 @@ def audio_window_search_for_exact_midi(
         "searchedWindowCount": searched,
         "exactCandidates": exact_candidates,
         "nearestWindow": nearest,
+        "targetMidiSequence": target_midi,
+        "comparableTargetMidiSequence": comparable_target_midi,
+        "collapseRepeatedDetections": bool(collapse_repeated_detections),
     }
 
 
@@ -4459,6 +4483,7 @@ def user_confirmed_measure16_audio_search(
         target_midi,
         practice_day=str(target.get("practiceDay") or ""),
         anchor_sample_id=str(target.get("sampleId") or ""),
+        collapse_repeated_detections=True,
     )
     exact_candidates = search.get("exactCandidates") if isinstance(search.get("exactCandidates"), list) else []
     exact_audio_candidates = [
@@ -4485,6 +4510,8 @@ def user_confirmed_measure16_audio_search(
         "target": target,
         "targetSequence": str(target.get("targetSequence") or ""),
         "targetMidiSequence": target_midi,
+        "comparableTargetMidiSequence": search.get("comparableTargetMidiSequence") or target_midi,
+        "duplicateTolerance": "consecutive_duplicate_notes_collapsed",
         "practiceDay": str(target.get("practiceDay") or ""),
         "measureLabel": str(target.get("measureLabel") or ""),
         "measureNumber": int(target.get("measureNumber") or 0),
