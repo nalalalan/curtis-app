@@ -96,6 +96,24 @@ def test_notation_renderer_draws_exact_accidentals():
         assert((naturalInFlatKey.match(/accidental-glyph accidental-natural/g) || []).length === 2, "manual fallback must draw natural signs when a flat-key note is naturalized");
         assert((naturalInFlatKey.match(/&#xE261;/g) || []).length === 2, "naturals must use the Bravura/SMuFL natural glyph");
 
+        const measureAccidentals = vm.runInContext(
+          `renderNotationSheet([
+            {kind:'note',note:'G#5'},
+            {kind:'note',note:'G5'},
+            {kind:'note',note:'G#5'},
+            {kind:'note',note:'G5'}
+          ], {keySignature:{accidentalType:'flat',accidentals:['Bb','Eb'],label:'G minor / 2 flats'}, maxNotes:4})`,
+          context
+        );
+        assert(measureAccidentals.includes('^g =g ^g =g'), "same-measure G# G G# G must engrave sharp, natural, sharp, natural");
+        assert((measureAccidentals.match(/accidental-glyph accidental-sharp/g) || []).length === 2, "fallback SVG must redraw G# after an intervening natural");
+        assert((measureAccidentals.match(/accidental-glyph accidental-natural/g) || []).length === 2, "fallback SVG must explicitly naturalize G after same-measure G#");
+        const measureAccidentalText = vm.runInContext(
+          `displayNoteTextWithMeasureAccidentals(['G#5', 'G5', 'G#5', 'G5'], {accidentalType:'flat',accidentals:['Bb','Eb'],label:'G minor / 2 flats'})`,
+          context
+        );
+        assert(measureAccidentalText === 'G#5 G♮5 G#5 G♮5', "review text must mark same-measure naturals so G# G G# is not ambiguous");
+
         const readableGoldReview = vm.runInContext(
           `(() => {
             const item = {

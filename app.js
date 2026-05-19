@@ -1500,6 +1500,35 @@ function keySignatureAlterationForLetter(letter, signature) {
   return "";
 }
 
+function renderedAccidentalTypeForNote(spelledNote, signature, measureAccidentals = {}) {
+  const parsed = parseExactNote(spelledNote);
+  if (!parsed) return "";
+  const keyAlteration = keySignatureAlterationForLetter(parsed.letter, signature);
+  const previousAlteration = Object.prototype.hasOwnProperty.call(measureAccidentals, parsed.letter)
+    ? measureAccidentals[parsed.letter]
+    : keyAlteration;
+  const writtenAlteration = parsed.accidental || "";
+  measureAccidentals[parsed.letter] = writtenAlteration;
+  if (writtenAlteration === previousAlteration) return "";
+  if (writtenAlteration === "b") return "flat";
+  if (writtenAlteration === "#") return "sharp";
+  return "natural";
+}
+
+function displayNoteTextWithMeasureAccidentals(notes, signature = {}) {
+  const sequence = Array.isArray(notes) ? notes : [];
+  const normalized = normalizedKeySignature(signature || {});
+  let measureAccidentals = {};
+  return sequence.map((note, index) => {
+    if (index % 4 === 0) measureAccidentals = {};
+    const parsed = parseExactNote(note);
+    if (!parsed) return String(note || "");
+    const type = renderedAccidentalTypeForNote(note, normalized, measureAccidentals);
+    if (type === "natural") return `${parsed.letter}\u266e${parsed.octave}`;
+    return `${parsed.pitch}${parsed.octave}`;
+  }).join(" ");
+}
+
 function renderAccidentalGlyph(type, x, y, className) {
   const safeType = type === "flat" ? "flat" : type === "natural" ? "natural" : "sharp";
   const glyph = safeType === "flat" ? "&#xE260;" : safeType === "natural" ? "&#xE261;" : "&#xE262;";
@@ -1508,10 +1537,9 @@ function renderAccidentalGlyph(type, x, y, className) {
   `;
 }
 
-function renderNoteAccidental(spelledNote, signature, x, y) {
-  const parsed = parseExactNote(spelledNote);
-  if (!parsed || keySignatureCoversNote(spelledNote, signature)) return "";
-  const type = parsed.accidental === "b" ? "flat" : parsed.accidental === "#" ? "sharp" : "natural";
+function renderNoteAccidental(spelledNote, signature, x, y, measureAccidentals = {}) {
+  const type = renderedAccidentalTypeForNote(spelledNote, signature, measureAccidentals);
+  if (!type) return "";
   const rawY = y + (NOTATION_NOTE_ACCIDENTAL_Y_OFFSET[type] || 0);
   const safeY = Math.max(NOTATION_ACCIDENTAL_SAFE_TOP_Y, Math.min(NOTATION_ACCIDENTAL_SAFE_BOTTOM_Y, rawY));
   const accidentalX = x - NOTATION_NOTE_ACCIDENTAL_X_OFFSET;
@@ -1541,15 +1569,12 @@ function abcDurationToken(kind) {
   }
 }
 
-function abcPitchToken(noteName, signature) {
+function abcPitchToken(noteName, signature, measureAccidentals = {}) {
   const parsed = parseExactNote(noteName);
   if (!parsed) return "z";
   const octave = Number(parsed.octave);
-  const keyAlteration = keySignatureAlterationForLetter(parsed.letter, signature);
-  let accidental = "";
-  if (parsed.accidental === "b" && keyAlteration !== "b") accidental = "_";
-  if (parsed.accidental === "#" && keyAlteration !== "#") accidental = "^";
-  if (!parsed.accidental && keyAlteration) accidental = "=";
+  const accidentalType = renderedAccidentalTypeForNote(noteName, signature, measureAccidentals);
+  const accidental = accidentalType === "flat" ? "_" : accidentalType === "sharp" ? "^" : accidentalType === "natural" ? "=" : "";
   let letter = parsed.letter;
   let octaveMark = "";
   if (octave < 4) {
@@ -1564,10 +1589,12 @@ function abcPitchToken(noteName, signature) {
 function notationAbcForEvents(events, signature) {
   const normalized = normalizedKeySignature(signature || {});
   const notes = Array.isArray(events) ? events : [];
+  let measureAccidentals = {};
   const body = notes.map((event, index) => {
+    if (index % 4 === 0) measureAccidentals = {};
     const token = event.kind === "rest"
       ? `z${abcDurationToken(event.durationKind)}`
-      : `${abcPitchToken(notationDisplayNote(event.note, normalized), normalized)}${abcDurationToken(event.durationKind)}`;
+      : `${abcPitchToken(notationDisplayNote(event.note, normalized), normalized, measureAccidentals)}${abcDurationToken(event.durationKind)}`;
     return `${token}${(index + 1) % 4 === 0 ? " |" : ""}`;
   }).join(" ").trim();
   return [
@@ -1872,7 +1899,9 @@ function renderNotationSheet(events, options = {}) {
   const noteStartX = NOTATION_NOTE_START_X + keySignature.width;
   const noteEndX = NOTATION_NOTE_END_X;
   const step = items.length > 1 ? (noteEndX - noteStartX) / (items.length - 1) : 0;
+  let fallbackMeasureAccidentals = {};
   const marks = items.map((event, index) => {
+    if (index % 4 === 0) fallbackMeasureAccidentals = {};
     const x = noteStartX + (step * index);
     const durationClass = notationDurationClass(event.durationKind);
     if (event.kind === "rest") {
@@ -1896,7 +1925,7 @@ function renderNotationSheet(events, options = {}) {
     return `
       <g class="notation-note ${durationClass}${uncertain}" aria-label="${label}">
         ${renderLedgerLines(y, x)}
-        ${renderNoteAccidental(displayNote, normalizedSignature, x, y)}
+        ${renderNoteAccidental(displayNote, normalizedSignature, x, y, fallbackMeasureAccidentals)}
         <text class="notehead" x="${x.toFixed(1)}" y="${y.toFixed(1)}">${notehead}</text>
         ${durationClass === "whole" ? "" : `<line class="note-stem" x1="${stemX.toFixed(1)}" x2="${stemX.toFixed(1)}" y1="${y.toFixed(1)}" y2="${stemEndY.toFixed(1)}"></line>`}
       </g>
@@ -3147,7 +3176,7 @@ function readableGoldReviewNotes(item) {
 function renderGoldReviewItem(item, index) {
   const detectedNotes = noteInputText(item.detectedNotes);
   const readableNotes = readableGoldReviewNotes(item);
-  const displayDetectedNotes = readableNotes.displayNotes.join(" ");
+  const displayDetectedNotes = displayNoteTextWithMeasureAccidentals(readableNotes.displayNotes, readableNotes.keySignature);
   const scoreNotes = noteInputText(item.scoreNotes);
   const clip = item.clip && typeof item.clip === "object" ? item.clip : item;
   const status = item.status || item.defaultStatus || "pending_review";
