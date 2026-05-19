@@ -48,6 +48,7 @@ def test_notation_renderer_draws_exact_accidentals():
         assert(noKey.includes('data-abc='), "browser notation must carry ABC source for the real engraver");
         assert(noKey.includes('M:none'), "ABC snippets must not invent a visible time signature when rhythm is not accepted");
         assert(noKey.includes('K:C clef=treble'), "ABC source must force treble clef");
+        assert(!noKey.includes(' |'), "unverified transcription snippets must not invent bar lines");
         assert(noKey.includes('^A ^d'), "ABC source must preserve sharp pitches instead of dropping accidentals");
         assert(noKey.includes('_B _e'), "ABC source must preserve flat pitches instead of dropping accidentals");
         assert(noKey.includes('notation-svg-fallback'), "manual SVG must remain only as a no-JavaScript fallback");
@@ -106,6 +107,7 @@ def test_notation_renderer_draws_exact_accidentals():
           context
         );
         assert(measureAccidentals.includes('^g =g ^g =g'), "same-measure G# G G# G must engrave sharp, natural, sharp, natural");
+        assert(!measureAccidentals.includes(' |'), "same-measure accidental test must not rely on artificial bar lines");
         assert((measureAccidentals.match(/accidental-glyph accidental-sharp/g) || []).length === 2, "fallback SVG must redraw G# after an intervening natural");
         assert((measureAccidentals.match(/accidental-glyph accidental-natural/g) || []).length === 2, "fallback SVG must explicitly naturalize G after same-measure G#");
         const measureAccidentalText = vm.runInContext(

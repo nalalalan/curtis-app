@@ -1519,8 +1519,7 @@ function displayNoteTextWithMeasureAccidentals(notes, signature = {}) {
   const sequence = Array.isArray(notes) ? notes : [];
   const normalized = normalizedKeySignature(signature || {});
   let measureAccidentals = {};
-  return sequence.map((note, index) => {
-    if (index % 4 === 0) measureAccidentals = {};
+  return sequence.map((note) => {
     const parsed = parseExactNote(note);
     if (!parsed) return String(note || "");
     const type = renderedAccidentalTypeForNote(note, normalized, measureAccidentals);
@@ -1590,19 +1589,18 @@ function notationAbcForEvents(events, signature) {
   const normalized = normalizedKeySignature(signature || {});
   const notes = Array.isArray(events) ? events : [];
   let measureAccidentals = {};
-  const body = notes.map((event, index) => {
-    if (index % 4 === 0) measureAccidentals = {};
+  const body = notes.map((event) => {
     const token = event.kind === "rest"
       ? `z${abcDurationToken(event.durationKind)}`
       : `${abcPitchToken(notationDisplayNote(event.note, normalized), normalized, measureAccidentals)}${abcDurationToken(event.durationKind)}`;
-    return `${token}${(index + 1) % 4 === 0 ? " |" : ""}`;
+    return token;
   }).join(" ").trim();
   return [
     "X:1",
     "M:none",
     "L:1/4",
     `K:${abcKeyNameForSignature(normalized)} clef=treble`,
-    body || "z4 |",
+    body || "z4",
   ].join("\n");
 }
 
@@ -1901,7 +1899,6 @@ function renderNotationSheet(events, options = {}) {
   const step = items.length > 1 ? (noteEndX - noteStartX) / (items.length - 1) : 0;
   let fallbackMeasureAccidentals = {};
   const marks = items.map((event, index) => {
-    if (index % 4 === 0) fallbackMeasureAccidentals = {};
     const x = noteStartX + (step * index);
     const durationClass = notationDurationClass(event.durationKind);
     if (event.kind === "rest") {
