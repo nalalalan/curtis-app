@@ -1568,6 +1568,10 @@ function abcDurationToken(kind) {
   }
 }
 
+function notationRhythmVerified(options = {}) {
+  return options?.rhythmVerified === true || options?.durationVerified === true;
+}
+
 function abcPitchToken(noteName, signature, measureAccidentals = {}) {
   const parsed = parseExactNote(noteName);
   if (!parsed) return "z";
@@ -1852,6 +1856,8 @@ function renderNotationSheet(events, options = {}) {
   const captionDetail = [repeatPattern || qualityLimit, keySignature.label && keySignature.label !== "key pending" ? keySignature.label : ""].filter(Boolean).join(" / ");
   const repeatClass = repeatLabel ? " notation-repeat" : "";
   const draftClass = options?.draft ? " notation-draft" : "";
+  const pitchOnly = !notationRhythmVerified(options);
+  const rhythmClass = pitchOnly ? " notation-pitch-events" : "";
   const repeatMarks = repeatLabel ? `
     <g class="notation-repeat-mark" aria-label="${escapeHtml(shortText(repeatLabel, 72))}">
       <line x1="46" x2="46" y1="25" y2="75"></line>
@@ -1868,13 +1874,13 @@ function renderNotationSheet(events, options = {}) {
   ` : "";
   const sheetId = `notationSheet${++notationSheetIdCounter}`;
   const abc = notationAbcForEvents(items, normalizedSignature);
-  const abcTarget = `
+  const abcTarget = pitchOnly ? "" : `
     <div class="notation-abc-target" aria-hidden="true"></div>
   `;
-  queueNotationHydration(sheetId);
+  if (!pitchOnly) queueNotationHydration(sheetId);
   if (!items.length) {
     return `
-      <div id="${sheetId}" class="notation-sheet notation-empty notation-engraved${repeatClass}${draftClass}" data-abc="${escapeHtml(abc)}" aria-label="Sheet-music-style transcription pending">
+      <div id="${sheetId}" class="notation-sheet notation-empty notation-engraved${repeatClass}${draftClass}${rhythmClass}" ${pitchOnly ? "" : `data-abc="${escapeHtml(abc)}"`} aria-label="Sheet-music-style transcription pending">
         ${abcTarget}
         <div class="notation-svg-fallback">
           <svg viewBox="${NOTATION_VIEWBOX}" role="img">
@@ -1900,7 +1906,7 @@ function renderNotationSheet(events, options = {}) {
   let fallbackMeasureAccidentals = {};
   const marks = items.map((event, index) => {
     const x = noteStartX + (step * index);
-    const durationClass = notationDurationClass(event.durationKind);
+    const durationClass = pitchOnly ? "pitch-event" : notationDurationClass(event.durationKind);
     if (event.kind === "rest") {
       return `
         <g class="notation-rest ${durationClass}" transform="translate(${x} 0)">
@@ -1924,12 +1930,12 @@ function renderNotationSheet(events, options = {}) {
         ${renderLedgerLines(y, x)}
         ${renderNoteAccidental(displayNote, normalizedSignature, x, y, fallbackMeasureAccidentals)}
         <text class="notehead" x="${x.toFixed(1)}" y="${y.toFixed(1)}">${notehead}</text>
-        ${durationClass === "whole" ? "" : `<line class="note-stem" x1="${stemX.toFixed(1)}" x2="${stemX.toFixed(1)}" y1="${y.toFixed(1)}" y2="${stemEndY.toFixed(1)}"></line>`}
+        ${pitchOnly || durationClass === "whole" ? "" : `<line class="note-stem" x1="${stemX.toFixed(1)}" x2="${stemX.toFixed(1)}" y1="${y.toFixed(1)}" y2="${stemEndY.toFixed(1)}"></line>`}
       </g>
     `;
   }).join("");
   return `
-    <div id="${sheetId}" class="notation-sheet notation-engraved${repeatClass}${draftClass}" data-abc="${escapeHtml(abc)}" aria-label="Sheet-music-style machine transcription">
+    <div id="${sheetId}" class="notation-sheet notation-engraved${repeatClass}${draftClass}${rhythmClass}" ${pitchOnly ? "" : `data-abc="${escapeHtml(abc)}"`} aria-label="Sheet-music-style machine transcription">
       ${abcTarget}
       <div class="notation-svg-fallback">
         <svg viewBox="${NOTATION_VIEWBOX}" role="img">
@@ -3245,6 +3251,9 @@ function renderGoldReview() {
   const adaptivePool = Number(review.adaptiveCandidatePoolCount) || adaptiveCount;
   const adaptiveLabel = adaptivePool && adaptivePool !== adaptiveCount ? `${adaptiveCount}/${adaptivePool}` : String(adaptiveCount);
   const rejectionDigest = review.rejectionDigest && typeof review.rejectionDigest === "object" ? review.rejectionDigest : {};
+  const rejectionInsights = review.rejectionInsights && typeof review.rejectionInsights === "object" ? review.rejectionInsights : {};
+  const fastRejected = Number(rejectionInsights.rejectedFastDenseCount) || 0;
+  const unstableRejected = Number(rejectionInsights.rejectedUnstableRegisterCount) || 0;
   const emptyQueueText = review.queueStatus === "current_batch_exhausted_by_rejections"
     ? `Batch complete. ${Number(review.suppressedByLearningCount) || 0} repeats hidden.`
     : "No review clips queued.";
@@ -3278,6 +3287,8 @@ function renderGoldReview() {
       <article><span>Training</span><strong>${escapeHtml(String(trainingExamples))}</strong></article>
       <article><span>Score</span><strong>${escapeHtml(String(scoreTraining))}</strong></article>
       <article><span>Long</span><strong>${escapeHtml(String(longTraining))}</strong></article>
+      ${fastRejected ? `<article><span>Fast rejects</span><strong>${escapeHtml(String(fastRejected))}</strong></article>` : ""}
+      ${unstableRejected ? `<article><span>Wide rejects</span><strong>${escapeHtml(String(unstableRejected))}</strong></article>` : ""}
       <article><span>Score queue</span><strong>${escapeHtml(scoreExactQueued ? `${scoreExactQueued}/${scoreQueued}` : String(scoreQueued))}</strong></article>
       ${corrected ? `<article><span>Corrected</span><strong>${escapeHtml(String(corrected))}</strong></article>` : ""}
       <article><span>Adaptive</span><strong>${escapeHtml(adaptiveLabel)}</strong></article>

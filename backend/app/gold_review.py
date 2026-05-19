@@ -161,6 +161,40 @@ def build_gold_training_set(items: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def build_rejection_insights(items: list[dict[str, Any]]) -> dict[str, Any]:
+    rejected = [item for item in items if item.get("status") == "rejected_mismatch"]
+    long_rejected = [item for item in rejected if len(_normalized_review_midi_sequence(_clean_note_names(item.get("detectedNotes")))) >= MIN_LONG_REVIEW_NOTES]
+    dense_rejected = []
+    unstable_rejected = []
+    for item in long_rejected:
+        notes = _clean_note_names(item.get("detectedNotes"))
+        midi = _normalized_review_midi_sequence(notes)
+        duration = max(0.0, _safe_float(item.get("endSeconds")) - _safe_float(item.get("startSeconds")))
+        notes_per_second = len(midi) / duration if duration > 0 else 0.0
+        if len(midi) >= 10 or notes_per_second >= 2.0:
+            dense_rejected.append(item)
+        if _large_leap_count(midi) >= 3 or _midi_range(midi) >= 24:
+            unstable_rejected.append(item)
+    issue = ""
+    if dense_rejected and unstable_rejected:
+        issue = "rejected_fast_dense_unstable_windows"
+    elif dense_rejected:
+        issue = "rejected_fast_dense_windows"
+    elif unstable_rejected:
+        issue = "rejected_unstable_register_windows"
+    return {
+        "rejectedLongPhraseCount": len(long_rejected),
+        "rejectedFastDenseCount": len(dense_rejected),
+        "rejectedUnstableRegisterCount": len(unstable_rejected),
+        "dominantIssue": issue,
+        "nextAction": (
+            "Rank shorter, steadier onset-bounded windows ahead of long fast candidates until accepted examples prove the fast-note detector."
+            if issue
+            else ""
+        ),
+    }
+
+
 def _item_learning_key(item: dict[str, Any]) -> str:
     for field in ("normalizedAcceptedMidiSequence", "normalizedDetectedMidiSequence", "normalizedScoreMidiSequence"):
         values = item.get(field)
@@ -240,6 +274,14 @@ def _max_consecutive_duplicate(values: list[int]) -> int:
     return longest
 
 
+def _large_leap_count(values: list[int]) -> int:
+    return sum(1 for left, right in zip(values, values[1:]) if abs(right - left) >= 12)
+
+
+def _midi_range(values: list[int]) -> int:
+    return max(values) - min(values) if values else 0
+
+
 def _review_note_metrics(notes: list[dict[str, Any]]) -> dict[str, Any]:
     values = _midi_values(notes)
     length = len(values)
@@ -247,11 +289,14 @@ def _review_note_metrics(notes: list[dict[str, Any]]) -> dict[str, Any]:
     distinct_pitch_class = _pitch_class_count(notes)
     adjacent_duplicates = _adjacent_duplicate_count(values)
     max_duplicate_run = _max_consecutive_duplicate(values)
+    large_leaps = _large_leap_count(values)
+    midi_range = _midi_range(values)
     duplicate_ratio = adjacent_duplicates / max(1, length - 1)
     audio_agreed = sum(1 for note in notes if note.get("audioAgreement") is True)
     spectral = sum(1 for note in notes if "spectral_onset" in (note.get("agreementSources") or []))
     confidence = sum(float(note.get("confidence") or 0.0) for note in notes) / max(1, len(notes))
     repetition_penalty = (adjacent_duplicates * 8.0) + (max(0, max_duplicate_run - 2) * 12.0) + (duplicate_ratio * 18.0)
+    unstable_fast_penalty = (large_leaps * 9.0) + max(0, midi_range - 24) * 1.5
     phrase_shape_bonus = min(length, 10) * 2.0
     quality = (
         (distinct_midi * 12.0)
@@ -261,14 +306,18 @@ def _review_note_metrics(notes: list[dict[str, Any]]) -> dict[str, Any]:
         + spectral
         + (confidence * 2.0)
         - repetition_penalty
+        - unstable_fast_penalty
     )
     return {
         "detectedMidiDistinctCount": distinct_midi,
         "distinctPitchClassCount": distinct_pitch_class,
         "adjacentDuplicateCount": adjacent_duplicates,
         "maxConsecutiveDuplicateMidi": max_duplicate_run,
+        "largeLeapCount": large_leaps,
+        "detectedMidiRange": midi_range,
         "duplicateRatio": round(duplicate_ratio, 3),
         "repetitionPenalty": round(repetition_penalty, 3),
+        "unstableFastPenalty": round(unstable_fast_penalty, 3),
         "adaptiveQualityScore": round(quality, 3),
         "audioAgreementCount": audio_agreed,
         "spectralAgreementCount": spectral,
@@ -286,6 +335,8 @@ def _adaptive_window_is_useful(notes: list[dict[str, Any]]) -> bool:
     if int(metrics["maxConsecutiveDuplicateMidi"]) > 4:
         return False
     if float(metrics["duplicateRatio"]) > 0.58:
+        return False
+    if length >= 8 and int(metrics["largeLeapCount"]) >= 4 and int(metrics["detectedMidiRange"]) >= 24:
         return False
     return True
 
@@ -816,6 +867,7 @@ def _review_candidate_rank(item: dict[str, Any]) -> tuple[Any, ...]:
         0 if item.get("scoreAgreement") is True else 1,
         -float(item.get("adaptiveQualityScore") or 0.0),
         float(item.get("repetitionPenalty") or 0.0),
+        float(item.get("unstableFastPenalty") or 0.0),
         -int(item.get("detectedMidiDistinctCount") or 0),
         -int(item.get("audioAgreementCount") or 0),
         -int(item.get("detectedNoteCount") or 0),
@@ -865,6 +917,7 @@ def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any],
     candidates.sort(key=_review_candidate_rank)
     truth_progress = build_truth_progress(state)
     training_set = build_gold_training_set(items)
+    rejection_insights = build_rejection_insights(items)
     hidden_rejected_keys = {
         str(item.get("reviewLearningKey") or "")
         for item in [*suppressed_candidates, *adaptive_suppressed_candidates]
@@ -918,6 +971,7 @@ def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any],
         "trainingScoreExampleCount": int(training_set.get("scoreExampleCount") or 0),
         "trainingPositiveScoreExampleCount": int(training_set.get("positiveScoreExampleCount") or 0),
         "trainingNegativeScoreExampleCount": int(training_set.get("negativeScoreExampleCount") or 0),
+        "rejectionInsights": rejection_insights,
         "reviewLearningStatus": "reducing_review_load" if suppressed_candidates else "learning_no_suppression_yet",
         "reviewLearningRule": learning_profile.get("suppressionRule") or "",
         "rejectionDigest": {

@@ -45,19 +45,18 @@ def test_notation_renderer_draws_exact_accidentals():
           context
         );
         assert(noKey.includes('class="notation-sheet notation-engraved'), "browser notation must use the engraved notation wrapper");
-        assert(noKey.includes('data-abc='), "browser notation must carry ABC source for the real engraver");
-        assert(noKey.includes('M:none'), "ABC snippets must not invent a visible time signature when rhythm is not accepted");
-        assert(noKey.includes('K:C clef=treble'), "ABC source must force treble clef");
+        assert(!noKey.includes('data-abc='), "unverified detected pitches must not hydrate into fake rhythmic ABC notation");
+        assert(!noKey.includes('M:none'), "pitch-only snippets should not carry fake ABC rhythm metadata");
+        assert(!noKey.includes('K:C clef=treble'), "pitch-only snippets should use the local staff renderer until rhythm is verified");
         assert(!noKey.includes(' |'), "unverified transcription snippets must not invent bar lines");
-        assert(noKey.includes('^A ^d'), "ABC source must preserve sharp pitches instead of dropping accidentals");
-        assert(noKey.includes('_B _e'), "ABC source must preserve flat pitches instead of dropping accidentals");
         assert(noKey.includes('notation-svg-fallback'), "manual SVG must remain only as a no-JavaScript fallback");
         assert((noKey.match(/accidental-glyph accidental-sharp/g) || []).length === 2, "A# and D# need visible sharp glyphs");
         assert((noKey.match(/accidental-glyph accidental-flat/g) || []).length === 2, "Bb and Eb need visible flat glyphs");
         assert((noKey.match(/&#xE262;/g) || []).length === 2, "sharps must use the Bravura/SMuFL sharp glyph");
         assert((noKey.match(/&#xE260;/g) || []).length === 2, "flats must use the Bravura/SMuFL flat glyph");
         assert((noKey.match(/class="notehead"/g) || []).length === 4, "notes must use music-font noteheads");
-        assert((noKey.match(/&#xE0A4;/g) || []).length === 4, "quarter-note noteheads must use the Bravura/SMuFL black notehead glyph");
+        assert((noKey.match(/&#xE0A4;/g) || []).length === 4, "pitch-only noteheads must use the Bravura/SMuFL black notehead glyph");
+        assert(!noKey.includes('class="note-stem"'), "unverified detected pitches must render as noteheads only, not fake quarter notes");
         assert(!noKey.includes("<ellipse"), "notation renderer must not use rough SVG ellipses for noteheads");
         assert(noKey.includes('class="treble-clef" x="24" y="67" aria-label="treble clef">&#xE050;</text>'), "treble clef must use the Bravura/SMuFL glyph and sit higher on the G line");
         assert(noKey.includes('viewBox="0 -18 720 150"'), "notation viewBox must leave room for high ledger notes and the full treble clef");
@@ -75,8 +74,7 @@ def test_notation_renderer_draws_exact_accidentals():
           ], {keySignature:{accidentalType:'flat',accidentals:['Bb','Eb'],label:'G minor / 2 flats'}, maxNotes:2})`,
           context
         );
-        assert(flatKey.includes('K:Bb clef=treble'), "ABC source must carry the flat-key treble signature");
-        assert(flatKey.includes('B e'), "key-signature-covered flats should use the key signature, not duplicate local flats");
+        assert(!flatKey.includes('data-abc='), "flat-key pitch-only snippets should not hydrate into fake rhythmic ABC notation");
         assert(!flatKey.includes('_B'), "Bb covered by the key signature must not render as a separate local flat in ABC");
         assert(!flatKey.includes('_e'), "Eb covered by the key signature must not render as a separate local flat in ABC");
         assert((flatKey.match(/key-signature-mark accidental-glyph accidental-flat/g) || []).length === 2, "Bb/Eb key signature needs two flat glyphs");
@@ -93,7 +91,7 @@ def test_notation_renderer_draws_exact_accidentals():
           ], {keySignature:{accidentalType:'flat',accidentals:['Bb','Eb'],label:'G minor / 2 flats'}, maxNotes:2})`,
           context
         );
-        assert(naturalInFlatKey.includes('=B =e'), "natural B/E in a flat key must carry natural signs in ABC");
+        assert(!naturalInFlatKey.includes('data-abc='), "naturalized pitch-only snippets should not carry fake ABC rhythm metadata");
         assert((naturalInFlatKey.match(/accidental-glyph accidental-natural/g) || []).length === 2, "manual fallback must draw natural signs when a flat-key note is naturalized");
         assert((naturalInFlatKey.match(/&#xE261;/g) || []).length === 2, "naturals must use the Bravura/SMuFL natural glyph");
 
@@ -106,7 +104,7 @@ def test_notation_renderer_draws_exact_accidentals():
           ], {keySignature:{accidentalType:'flat',accidentals:['Bb','Eb'],label:'G minor / 2 flats'}, maxNotes:4})`,
           context
         );
-        assert(measureAccidentals.includes('^g =g ^g =g'), "same-measure G# G G# G must engrave sharp, natural, sharp, natural");
+        assert(!measureAccidentals.includes('data-abc='), "same-measure accidental pitch-only snippets should not hydrate into fake rhythmic ABC notation");
         assert(!measureAccidentals.includes(' |'), "same-measure accidental test must not rely on artificial bar lines");
         assert((measureAccidentals.match(/accidental-glyph accidental-sharp/g) || []).length === 2, "fallback SVG must redraw G# after an intervening natural");
         assert((measureAccidentals.match(/accidental-glyph accidental-natural/g) || []).length === 2, "fallback SVG must explicitly naturalize G after same-measure G#");
@@ -138,10 +136,7 @@ def test_notation_renderer_draws_exact_accidentals():
         assert(readableGoldReview.display[0] === 'G#6', "G# is not in the G-minor key signature and should stay a local sharp unless score evidence says Ab");
         assert(readableGoldReview.display[2] === 'Eb6', "D# should respell as Eb for readability");
         assert(readableGoldReview.display[3] === 'C#6', "C# in G-minor context should stay C# rather than respelling as Db");
-        assert(readableGoldReview.sheet.includes('K:Bb clef=treble'), "Scherzo-Tarantelle Gold Review snippets must engrave with G minor/two-flat context");
-        assert(readableGoldReview.sheet.includes('^g'), "G# outside the G-minor key signature must render as a local sharp sign");
-        assert(readableGoldReview.sheet.includes('^c'), "C# outside the G-minor key signature must render as a local sharp sign");
-        assert(!readableGoldReview.sheet.includes('_d'), "C# must not render as Db in G-minor review notation");
+        assert(!readableGoldReview.sheet.includes('data-abc='), "Scherzo-Tarantelle Gold Review snippets are pitch-only until rhythm is verified");
         assert(readableGoldReview.sheet.includes('aria-label="G#6"'), "fallback SVG should preserve G# when the key does not justify Ab");
 
         const unknownReview = vm.runInContext(
@@ -165,8 +160,14 @@ def test_notation_renderer_draws_exact_accidentals():
         );
         assert(unknownReview.signature.accidentalType === 'none', "unlabeled exercises must not get a guessed key signature from pitch counts");
         assert(unknownReview.display.join(' ') === 'A#4 C#5 D#5', "unlabeled review notation must preserve detected spelling instead of respelling into flats");
-        assert(unknownReview.sheet.includes('K:C clef=treble'), "unlabeled review notation should render literal accidentals in neutral treble context");
-        assert(unknownReview.sheet.includes('^A') && unknownReview.sheet.includes('^c') && unknownReview.sheet.includes('^d'), "literal sharps must remain visible for unknown source context");
+        assert(!unknownReview.sheet.includes('data-abc='), "unlabeled review notation should stay pitch-only until rhythm is verified");
+        const rhythmVerified = vm.runInContext(
+          `renderNotationSheet([{kind:'note',note:'A#4',durationKind:'quarter'}], {keySignature:{}, maxNotes:1, rhythmVerified:true})`,
+          context
+        );
+        assert(rhythmVerified.includes('data-abc='), "verified-rhythm snippets may use ABC engraving");
+        assert(rhythmVerified.includes('^A'), "verified-rhythm ABC must preserve accidentals");
+        assert(rhythmVerified.includes('class="note-stem"'), "verified-rhythm fallback may draw stems");
         """
     )
     completed = subprocess.run(["node", "-e", script], cwd=".", text=True, capture_output=True)

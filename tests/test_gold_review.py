@@ -832,6 +832,79 @@ class GoldReviewTests(unittest.TestCase):
         self.assertLessEqual(first_adaptive["maxConsecutiveDuplicateMidi"], 2)
         self.assertEqual(first_adaptive["adaptiveQualityTier"], "phrase_shaped")
 
+    def test_adaptive_review_penalizes_wild_fast_register_jumps_from_rejections(self):
+        state = {}
+        record_gold_review_item(
+            state,
+            {
+                "reviewItemId": "gold-fast-bad",
+                "type": "audio_phrase",
+                "status": "rejected_mismatch",
+                "practiceDay": "2026-05-03",
+                "sampleId": "fast-bad",
+                "startSeconds": 10,
+                "endSeconds": 14,
+                "detectedNotes": ["C4", "G#3", "A3", "C4", "E6", "B5", "G#5", "G5", "G#5", "A5", "G#5", "A#5"],
+                "reason": "one_or_more_notes_wrong",
+            },
+        )
+        daily_records = {
+            "records": [
+                {
+                    "practiceDay": "2026-05-03",
+                    "transcription": {
+                        "detectedSeries": [
+                            {
+                                "sampleId": "fast-bad",
+                                "sourceTitle": "5-3-26",
+                                "sourceUrl": "https://www.youtube.com/watch?v=abc",
+                                "startSeconds": 10.0,
+                                "localStartSeconds": 0.0,
+                                "notes": [
+                                    note("C4", 60, 0.0),
+                                    note("G#3", 56, 0.2),
+                                    note("A3", 57, 0.4),
+                                    note("C4", 60, 0.6),
+                                    note("E6", 88, 0.8),
+                                    note("B5", 83, 1.0),
+                                    note("G#5", 80, 1.2),
+                                    note("G5", 79, 1.4),
+                                    note("G#5", 80, 1.6),
+                                    note("A5", 81, 1.8),
+                                    note("G#5", 80, 2.0),
+                                    note("A#5", 82, 2.2),
+                                ],
+                            },
+                            {
+                                "sampleId": "steady-window",
+                                "sourceTitle": "5-3-26",
+                                "sourceUrl": "https://www.youtube.com/watch?v=abc",
+                                "startSeconds": 20.0,
+                                "localStartSeconds": 0.0,
+                                "notes": [
+                                    note("E5", 76, 0.0),
+                                    note("F#5", 78, 0.2),
+                                    note("G5", 79, 0.4),
+                                    note("A5", 81, 0.6),
+                                    note("B5", 83, 0.8),
+                                    note("C6", 84, 1.0),
+                                ],
+                            },
+                        ]
+                    },
+                }
+            ]
+        }
+
+        review = build_gold_review_loop(state, daily_records)
+
+        self.assertEqual(review["rejectionInsights"]["dominantIssue"], "rejected_fast_dense_unstable_windows")
+        self.assertEqual(review["rejectionInsights"]["rejectedFastDenseCount"], 1)
+        self.assertEqual(review["rejectionInsights"]["rejectedUnstableRegisterCount"], 1)
+        first = review["queue"][0]
+        self.assertEqual(first["sampleId"], "steady-window")
+        self.assertLess(first.get("unstableFastPenalty", 0), 1)
+
     def test_adaptive_review_queue_is_capped_after_quality_ranking(self):
         state = {}
         records = []
