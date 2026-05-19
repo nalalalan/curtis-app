@@ -365,6 +365,53 @@ class GoldReviewTests(unittest.TestCase):
         self.assertEqual(review["trainingSet"]["recentExamples"][0]["task"], "audio_score_exact_match")
         self.assertEqual(review["trainingSet"]["recentExamples"][0]["label"], "negative")
 
+    def test_candidate_group_extracts_score_labels_into_score_review(self):
+        daily_records = {
+            "records": [
+                {
+                    "practiceDay": "2026-05-03",
+                    "pieces": [{"title": "Wieniawski Scherzo-Tarantelle, Op. 16"}],
+                    "candidateMatchGroups": [
+                        {
+                            "pieceTitle": "Wieniawski Scherzo-Tarantelle, Op. 16",
+                            "scoreExactNoteSequenceLabel": "Eb5 Eb5 C5 Eb5 Eb5",
+                            "scoreSequenceLabel": "m. 16",
+                            "clip": {
+                                "sampleId": "sample-score-candidate",
+                                "sourceUrl": "https://www.youtube.com/watch?v=abc",
+                                "sourceTitle": "5-3-26",
+                                "mediaUrl": "/api/curtis/media/sample/sample-score-candidate",
+                                "audioUrl": "/api/curtis/media/sample/sample-score-candidate/clip?start=0.000&end=2.500",
+                                "startSeconds": 8835.0,
+                                "endSeconds": 8837.5,
+                                "localStartSeconds": 20.0,
+                                "localEndSeconds": 22.5,
+                            },
+                            "transcription": {
+                                "sampleId": "sample-score-candidate",
+                                "sourceTitle": "5-3-26",
+                                "sourceUrl": "https://www.youtube.com/watch?v=abc",
+                                "notes": [
+                                    note("Eb5", 75, 20.0),
+                                    note("Eb5", 75, 20.2),
+                                    note("C5", 72, 20.4),
+                                    note("Eb5", 75, 20.6),
+                                    note("Eb5", 75, 20.8),
+                                ],
+                            },
+                        }
+                    ],
+                }
+            ]
+        }
+
+        candidate = build_gold_review_loop({}, daily_records)["queue"][0]
+
+        self.assertEqual(candidate["reviewType"], "audio_score_match")
+        self.assertEqual(candidate["reviewTask"], "audio_score_exact_match")
+        self.assertEqual(candidate["scoreNotes"], ["Eb5", "Eb5", "C5", "Eb5", "Eb5"])
+        self.assertEqual(candidate["scoreLocation"], "m. 16")
+
     def test_rejected_pattern_suppresses_future_matching_candidates(self):
         state = {}
         record_gold_review_item(

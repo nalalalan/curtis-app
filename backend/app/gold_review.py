@@ -48,6 +48,14 @@ def _clean_note_names(value: Any) -> list[str]:
     return [name for name in names if name]
 
 
+def _score_note_names(*values: Any) -> list[str]:
+    for value in values:
+        names = _clean_note_names(value)
+        if names:
+            return names
+    return []
+
+
 def _notes_from_names(names: list[str]) -> list[dict[str, Any]]:
     return [{"note": name} for name in names]
 
@@ -367,11 +375,17 @@ def _candidate_from_group(record: dict[str, Any], group: dict[str, Any]) -> dict
     if not _clip_is_playable(clip):
         return {}
     score = group.get("score") if isinstance(group.get("score"), dict) else {}
-    score_notes = _clean_note_names(
-        group.get("sourceScoreExactSequence")
-        or group.get("visibleScoreExactNoteSequence")
-        or score.get("visibleScoreExactNoteSequence")
-        or score.get("scoreNotes")
+    score_notes = _score_note_names(
+        group.get("sourceScoreExactSequence"),
+        group.get("visibleScoreExactNoteSequence"),
+        group.get("scoreExactNoteSequenceLabel"),
+        group.get("scoreNoteSeriesLabel"),
+        group.get("scoreMatchedNotes"),
+        score.get("visibleScoreExactNoteSequence"),
+        score.get("scoreExactNoteSequenceLabel"),
+        score.get("scoreNoteSeriesLabel"),
+        score.get("scoreMatchedNotes"),
+        score.get("scoreNotes"),
     )
     payload = {
         "reviewKind": "score_phrase_candidate" if score_notes else "reference_phrase_candidate",
@@ -443,7 +457,13 @@ def normalize_gold_review_item(raw: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("Unsupported gold review type.")
     detected_notes = _clean_note_names(raw.get("detectedNotes"))
     accepted_notes = _clean_note_names(raw.get("acceptedNotes") or raw.get("correctedNotes"))
-    score_notes = _clean_note_names(raw.get("scoreNotes") or raw.get("sourceScoreNotes"))
+    score_notes = _score_note_names(
+        raw.get("scoreNotes"),
+        raw.get("sourceScoreNotes"),
+        raw.get("scoreExactNoteSequenceLabel"),
+        raw.get("scoreNoteSeriesLabel"),
+        raw.get("scoreMatchedNotes"),
+    )
     review_task = _review_task(raw, item_type, score_notes)
     if status == "accepted_truth" and not accepted_notes:
         accepted_notes = detected_notes
