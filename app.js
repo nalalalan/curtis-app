@@ -3166,6 +3166,9 @@ function renderGoldReview() {
   const queued = Number(review.queueCount) || 0;
   const rejected = Number(review.rejectedCount) || 0;
   const hidden = Number(review.suppressedByLearningCount) || 0;
+  const training = review.trainingSet && typeof review.trainingSet === "object" ? review.trainingSet : {};
+  const trainingExamples = Number(review.trainingExampleCount ?? training.exampleCount) || 0;
+  const longTraining = Number(review.trainingLongPhraseExampleCount ?? training.longPhraseExampleCount) || 0;
   setText(elements.goldReviewCount, `${accepted} accepted / ${queued} queued`);
   const queue = Array.isArray(review.queue) ? review.queue.slice(0, 4) : [];
   const recent = Array.isArray(review.recentItems) ? review.recentItems.slice(0, 3) : [];
@@ -3177,7 +3180,8 @@ function renderGoldReview() {
         <article><span>Queue</span><strong>${escapeHtml(String(queued))}</strong></article>
         <article><span>Rejected</span><strong>${escapeHtml(String(rejected))}</strong></article>
         <article><span>Hidden</span><strong>${escapeHtml(String(hidden))}</strong></article>
-        <article><span>Score</span><strong>${escapeHtml(String(Number(review.acceptedScorePhraseCount) || 0))}</strong></article>
+        <article><span>Training</span><strong>${escapeHtml(String(trainingExamples))}</strong></article>
+        <article><span>Long</span><strong>${escapeHtml(String(longTraining))}</strong></article>
       </div>
       <p class="empty">No review clips queued.</p>
     `;
@@ -3189,7 +3193,8 @@ function renderGoldReview() {
       <article><span>Queue</span><strong>${escapeHtml(String(queued))}</strong></article>
       <article><span>Rejected</span><strong>${escapeHtml(String(rejected))}</strong></article>
       <article><span>Hidden</span><strong>${escapeHtml(String(hidden))}</strong></article>
-      <article><span>Score</span><strong>${escapeHtml(String(Number(review.acceptedScorePhraseCount) || 0))}</strong></article>
+      <article><span>Training</span><strong>${escapeHtml(String(trainingExamples))}</strong></article>
+      <article><span>Long</span><strong>${escapeHtml(String(longTraining))}</strong></article>
     </div>
     <div class="gold-review-list">
       ${items.map((item, index) => renderGoldReviewItem(item, index)).join("")}

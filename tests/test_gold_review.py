@@ -191,9 +191,13 @@ class GoldReviewTests(unittest.TestCase):
         review = build_gold_review_loop(state, daily_records)
 
         self.assertEqual(result["goldReviewItem"]["status"], "accepted_truth")
+        self.assertEqual(result["goldReviewItem"]["trainingLabel"], "positive")
+        self.assertEqual(result["goldReviewItem"]["reviewTask"], "audio_exact_notes")
         self.assertEqual(result["truthMirror"]["truthItem"]["status"], "accepted_truth")
         self.assertEqual(review["acceptedCount"], 1)
         self.assertEqual(review["acceptedAudioPhraseCount"], 1)
+        self.assertEqual(review["trainingExampleCount"], 1)
+        self.assertEqual(review["trainingPositiveCount"], 1)
         self.assertEqual(review["queueCount"], 0)
 
     def test_score_phrase_acceptance_requires_matching_score_notes(self):
@@ -313,6 +317,53 @@ class GoldReviewTests(unittest.TestCase):
         self.assertEqual(review["rejectedCount"], 1)
         self.assertEqual(review["acceptedCount"], 0)
         self.assertEqual(review["acceptedEvidenceReadyCount"], 0)
+        self.assertEqual(review["trainingExampleCount"], 1)
+        self.assertEqual(review["trainingNegativeCount"], 1)
+        self.assertEqual(review["trainingSet"]["recentExamples"][0]["label"], "negative")
+        self.assertEqual(review["trainingSet"]["recentExamples"][0]["task"], "audio_exact_notes")
+
+    def test_binary_long_phrase_review_becomes_training_example(self):
+        state = {}
+
+        result = record_gold_review_item(
+            state,
+            {
+                "reviewItemId": "gold-long-negative",
+                "type": "audio_phrase",
+                "status": "rejected_mismatch",
+                "sampleId": "sample-long",
+                "detectedNotes": ["Eb5", "D5", "C5", "Bb4", "D5", "Eb5"],
+                "startSeconds": 20.0,
+                "endSeconds": 23.0,
+            },
+        )
+        review = build_gold_review_loop(state, {"records": []})
+
+        self.assertEqual(result["goldReviewItem"]["reviewTask"], "audio_long_phrase_exact_notes")
+        self.assertEqual(result["goldReviewItem"]["trainingLabel"], "negative")
+        self.assertEqual(review["trainingLongPhraseExampleCount"], 1)
+        self.assertEqual(review["trainingSet"]["negativeLongPhraseCount"], 1)
+
+    def test_score_review_becomes_score_alignment_training_example(self):
+        state = {}
+
+        record_gold_review_item(
+            state,
+            {
+                "reviewItemId": "gold-score-negative",
+                "type": "audio_score_match",
+                "status": "rejected_mismatch",
+                "sampleId": "sample-score",
+                "detectedNotes": ["A4"],
+                "scoreNotes": ["B4"],
+                "scoreLocation": "m. 16",
+            },
+        )
+        review = build_gold_review_loop(state, {"records": []})
+
+        self.assertEqual(review["trainingScoreExampleCount"], 1)
+        self.assertEqual(review["trainingSet"]["recentExamples"][0]["task"], "audio_score_exact_match")
+        self.assertEqual(review["trainingSet"]["recentExamples"][0]["label"], "negative")
 
     def test_rejected_pattern_suppresses_future_matching_candidates(self):
         state = {}

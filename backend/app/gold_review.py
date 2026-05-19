@@ -75,6 +75,71 @@ def _candidate_sequence_key(candidate: dict[str, Any]) -> str:
     return _review_sequence_key(_clean_note_names(candidate.get("detectedNotes")))
 
 
+def _review_task(raw: dict[str, Any], item_type: str, score_notes: list[str]) -> str:
+    explicit = _clean(raw.get("reviewTask") or raw.get("trainingTask")).lower()
+    if explicit:
+        return explicit
+    if item_type in {"score_phrase", "audio_score_match"} or score_notes:
+        return "audio_score_exact_match"
+    detected_count = len(_clean_note_names(raw.get("detectedNotes")))
+    if detected_count >= MIN_LONG_REVIEW_NOTES:
+        return "audio_long_phrase_exact_notes"
+    return "audio_exact_notes"
+
+
+def _training_example_from_item(item: dict[str, Any]) -> dict[str, Any]:
+    accepted_midi = item.get("normalizedAcceptedMidiSequence") if isinstance(item.get("normalizedAcceptedMidiSequence"), list) else []
+    detected_midi = item.get("normalizedDetectedMidiSequence") if isinstance(item.get("normalizedDetectedMidiSequence"), list) else []
+    score_midi = item.get("normalizedScoreMidiSequence") if isinstance(item.get("normalizedScoreMidiSequence"), list) else []
+    target_midi = accepted_midi or detected_midi
+    if item.get("type") in {"score_phrase", "audio_score_match"} and score_midi:
+        target_midi = score_midi
+    label = "positive" if item.get("status") == "accepted_truth" else "negative" if item.get("status") == "rejected_mismatch" else "pending"
+    return {
+        "trainingExampleId": item.get("reviewItemId"),
+        "task": item.get("reviewTask") or "audio_exact_notes",
+        "label": label,
+        "type": item.get("type"),
+        "practiceDay": item.get("practiceDay"),
+        "sampleId": item.get("sampleId"),
+        "startSeconds": item.get("startSeconds"),
+        "endSeconds": item.get("endSeconds"),
+        "pieceTitle": item.get("pieceTitle"),
+        "detectedNotes": item.get("detectedNotes") or [],
+        "acceptedNotes": item.get("acceptedNotes") or [],
+        "scoreNotes": item.get("scoreNotes") or [],
+        "normalizedTargetMidiSequence": target_midi,
+        "normalizedDetectedMidiSequence": detected_midi,
+        "normalizedScoreMidiSequence": score_midi,
+        "noteCount": len(target_midi or detected_midi),
+        "duplicateTolerance": item.get("duplicateTolerance"),
+        "reason": item.get("reason"),
+        "createdAt": item.get("createdAt"),
+    }
+
+
+def build_gold_training_set(items: list[dict[str, Any]]) -> dict[str, Any]:
+    examples = [_training_example_from_item(item) for item in items if item.get("status") in {"accepted_truth", "rejected_mismatch"}]
+    positives = [item for item in examples if item.get("label") == "positive"]
+    negatives = [item for item in examples if item.get("label") == "negative"]
+    audio_examples = [item for item in examples if item.get("task") in {"audio_exact_notes", "audio_long_phrase_exact_notes"}]
+    score_examples = [item for item in examples if item.get("task") == "audio_score_exact_match"]
+    long_phrase_examples = [item for item in examples if int(item.get("noteCount") or 0) >= MIN_LONG_REVIEW_NOTES]
+    return {
+        "version": f"{GOLD_REVIEW_VERSION}_training_v1",
+        "exampleCount": len(examples),
+        "positiveCount": len(positives),
+        "negativeCount": len(negatives),
+        "audioExampleCount": len(audio_examples),
+        "scoreExampleCount": len(score_examples),
+        "longPhraseExampleCount": len(long_phrase_examples),
+        "positiveLongPhraseCount": len([item for item in long_phrase_examples if item.get("label") == "positive"]),
+        "negativeLongPhraseCount": len([item for item in long_phrase_examples if item.get("label") == "negative"]),
+        "tasks": dict(Counter(_clean(item.get("task")) for item in examples)),
+        "recentExamples": examples[:8],
+    }
+
+
 def _item_learning_key(item: dict[str, Any]) -> str:
     for field in ("normalizedAcceptedMidiSequence", "normalizedDetectedMidiSequence", "normalizedScoreMidiSequence"):
         values = item.get(field)
@@ -281,6 +346,7 @@ def _candidate_from_series(record: dict[str, Any], series: dict[str, Any]) -> di
         "scoreLocation": "",
         "clip": clip,
         "defaultStatus": "pending_review",
+        "reviewTask": "audio_long_phrase_exact_notes" if len(note_names) >= MIN_LONG_REVIEW_NOTES else "audio_exact_notes",
         "binaryReview": True,
         "binaryOnly": True,
         "reviewQuestion": "Do the displayed notes match the paired audio? Reject if one note is wrong.",
@@ -333,6 +399,7 @@ def _candidate_from_group(record: dict[str, Any], group: dict[str, Any]) -> dict
         "scoreStatus": _clean(group.get("sourceScoreCheckStatus") or group.get("scoreSnippetStatus") or score.get("status")),
         "clip": clip,
         "defaultStatus": "pending_review",
+        "reviewTask": "audio_score_exact_match" if score_notes else "audio_exact_notes",
         "binaryReview": True,
         "binaryOnly": True,
         "reviewQuestion": (
@@ -377,6 +444,7 @@ def normalize_gold_review_item(raw: dict[str, Any]) -> dict[str, Any]:
     detected_notes = _clean_note_names(raw.get("detectedNotes"))
     accepted_notes = _clean_note_names(raw.get("acceptedNotes") or raw.get("correctedNotes"))
     score_notes = _clean_note_names(raw.get("scoreNotes") or raw.get("sourceScoreNotes"))
+    review_task = _review_task(raw, item_type, score_notes)
     if status == "accepted_truth" and not accepted_notes:
         accepted_notes = detected_notes
     if status == "accepted_truth" and not accepted_notes:
@@ -405,6 +473,9 @@ def normalize_gold_review_item(raw: dict[str, Any]) -> dict[str, Any]:
         "detectedNotes": detected_notes,
         "acceptedNotes": accepted_notes,
         "scoreNotes": score_notes,
+        "reviewTask": review_task,
+        "trainingTask": review_task,
+        "trainingLabel": "positive" if status == "accepted_truth" else "negative" if status == "rejected_mismatch" else "pending",
         "normalizedDetectedMidiSequence": _normalized_review_midi_sequence(detected_notes),
         "normalizedAcceptedMidiSequence": _normalized_review_midi_sequence(accepted_notes),
         "normalizedScoreMidiSequence": _normalized_review_midi_sequence(score_notes),
@@ -446,6 +517,9 @@ def record_gold_review_item(state: dict[str, Any], raw: dict[str, Any]) -> dict[
                 "detectedNotes": item["detectedNotes"],
                 "acceptedNotes": item["acceptedNotes"],
                 "scoreNotes": item["scoreNotes"],
+                "reviewTask": item["reviewTask"],
+                "trainingTask": item["trainingTask"],
+                "trainingLabel": item["trainingLabel"],
                 "reason": item["reason"],
                 "createdAt": item["createdAt"],
             },
@@ -534,6 +608,7 @@ def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any],
         )
     )
     truth_progress = build_truth_progress(state)
+    training_set = build_gold_training_set(items)
     return {
         "status": "ready" if candidates or items else "empty",
         "version": GOLD_REVIEW_VERSION,
@@ -551,6 +626,12 @@ def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any],
         "reviewedIds": len(reviewed_ids),
         "acceptedPatternCount": int(learning_profile.get("acceptedPatternCount") or 0),
         "rejectedPatternCount": int(learning_profile.get("rejectedPatternCount") or 0),
+        "trainingSet": training_set,
+        "trainingExampleCount": int(training_set.get("exampleCount") or 0),
+        "trainingPositiveCount": int(training_set.get("positiveCount") or 0),
+        "trainingNegativeCount": int(training_set.get("negativeCount") or 0),
+        "trainingLongPhraseExampleCount": int(training_set.get("longPhraseExampleCount") or 0),
+        "trainingScoreExampleCount": int(training_set.get("scoreExampleCount") or 0),
         "reviewLearningStatus": "reducing_review_load" if suppressed_candidates else "learning_no_suppression_yet",
         "reviewLearningRule": learning_profile.get("suppressionRule") or "",
         "itemsByType": dict(by_type),
