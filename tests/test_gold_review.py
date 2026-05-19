@@ -362,6 +362,8 @@ class GoldReviewTests(unittest.TestCase):
         review = build_gold_review_loop(state, {"records": []})
 
         self.assertEqual(review["trainingScoreExampleCount"], 1)
+        self.assertEqual(review["trainingNegativeScoreExampleCount"], 1)
+        self.assertEqual(review["trainingPositiveScoreExampleCount"], 0)
         self.assertEqual(review["trainingSet"]["recentExamples"][0]["task"], "audio_score_exact_match")
         self.assertEqual(review["trainingSet"]["recentExamples"][0]["label"], "negative")
 
@@ -411,6 +413,69 @@ class GoldReviewTests(unittest.TestCase):
         self.assertEqual(candidate["reviewTask"], "audio_score_exact_match")
         self.assertEqual(candidate["scoreNotes"], ["Eb5", "Eb5", "C5", "Eb5", "Eb5"])
         self.assertEqual(candidate["scoreLocation"], "m. 16")
+        self.assertEqual(candidate["reviewTrainingLane"], "score_alignment")
+        self.assertEqual(candidate["scoreAgreementStatus"], "exact_midi_agreement")
+        self.assertTrue(candidate["scoreAgreement"])
+
+    def test_score_review_candidates_rank_before_audio_only_candidates(self):
+        daily_records = {
+            "records": [
+                {
+                    "practiceDay": "2026-05-03",
+                    "candidateMatchGroups": [
+                        {
+                            "pieceTitle": "Wieniawski Scherzo-Tarantelle, Op. 16",
+                            "scoreExactNoteSequenceLabel": "Eb5 Eb5 C5 Eb5 Eb5",
+                            "scoreSequenceLabel": "m. 16",
+                            "clip": {
+                                "sampleId": "score-sample",
+                                "mediaUrl": "/api/curtis/media/sample/score-sample",
+                                "audioUrl": "/api/curtis/media/sample/score-sample/clip?start=0&end=2",
+                                "startSeconds": 100.0,
+                                "endSeconds": 102.0,
+                                "localStartSeconds": 0.0,
+                                "localEndSeconds": 2.0,
+                            },
+                            "transcription": {
+                                "sampleId": "score-sample",
+                                "notes": [
+                                    note("Eb5", 75, 0.0),
+                                    note("Eb5", 75, 0.2),
+                                    note("C5", 72, 0.4),
+                                    note("Eb5", 75, 0.6),
+                                    note("Eb5", 75, 0.8),
+                                ],
+                            },
+                        }
+                    ],
+                    "transcription": {
+                        "detectedSeries": [
+                            {
+                                "sampleId": "audio-sample",
+                                "mediaUrl": "/api/curtis/media/sample/audio-sample",
+                                "audioUrl": "/api/curtis/media/sample/audio-sample/clip?start=0&end=2",
+                                "startSeconds": 200.0,
+                                "endSeconds": 202.0,
+                                "notes": [
+                                    note("A4", 69, 0.0),
+                                    note("B4", 71, 0.2),
+                                    note("C5", 72, 0.4),
+                                    note("D5", 74, 0.6),
+                                    note("E5", 76, 0.8),
+                                ],
+                            }
+                        ]
+                    },
+                }
+            ]
+        }
+
+        review = build_gold_review_loop({}, daily_records)
+
+        self.assertEqual(review["scoreQueueCount"], 1)
+        self.assertEqual(review["scoreExactAgreementQueueCount"], 1)
+        self.assertEqual(review["queue"][0]["reviewTask"], "audio_score_exact_match")
+        self.assertEqual(review["queue"][0]["sampleId"], "score-sample")
 
     def test_rejected_pattern_suppresses_future_matching_candidates(self):
         state = {}

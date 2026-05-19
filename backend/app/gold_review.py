@@ -119,6 +119,7 @@ def _training_example_from_item(item: dict[str, Any]) -> dict[str, Any]:
         "normalizedTargetMidiSequence": target_midi,
         "normalizedDetectedMidiSequence": detected_midi,
         "normalizedScoreMidiSequence": score_midi,
+        "scoreAgreement": bool(score_midi and detected_midi and score_midi == detected_midi),
         "noteCount": len(target_midi or detected_midi),
         "duplicateTolerance": item.get("duplicateTolerance"),
         "reason": item.get("reason"),
@@ -132,6 +133,8 @@ def build_gold_training_set(items: list[dict[str, Any]]) -> dict[str, Any]:
     negatives = [item for item in examples if item.get("label") == "negative"]
     audio_examples = [item for item in examples if item.get("task") in {"audio_exact_notes", "audio_long_phrase_exact_notes"}]
     score_examples = [item for item in examples if item.get("task") == "audio_score_exact_match"]
+    positive_score_examples = [item for item in score_examples if item.get("label") == "positive"]
+    negative_score_examples = [item for item in score_examples if item.get("label") == "negative"]
     long_phrase_examples = [item for item in examples if int(item.get("noteCount") or 0) >= MIN_LONG_REVIEW_NOTES]
     return {
         "version": f"{GOLD_REVIEW_VERSION}_training_v1",
@@ -140,6 +143,8 @@ def build_gold_training_set(items: list[dict[str, Any]]) -> dict[str, Any]:
         "negativeCount": len(negatives),
         "audioExampleCount": len(audio_examples),
         "scoreExampleCount": len(score_examples),
+        "positiveScoreExampleCount": len(positive_score_examples),
+        "negativeScoreExampleCount": len(negative_score_examples),
         "longPhraseExampleCount": len(long_phrase_examples),
         "positiveLongPhraseCount": len([item for item in long_phrase_examples if item.get("label") == "positive"]),
         "negativeLongPhraseCount": len([item for item in long_phrase_examples if item.get("label") == "negative"]),
@@ -387,6 +392,9 @@ def _candidate_from_group(record: dict[str, Any], group: dict[str, Any]) -> dict
         score.get("scoreMatchedNotes"),
         score.get("scoreNotes"),
     )
+    detected_midi = collapse_consecutive_duplicate_midi(note_midi_sequence(notes))
+    score_midi = _normalized_review_midi_sequence(score_notes)
+    score_agreement = bool(score_midi and detected_midi and score_midi == detected_midi)
     payload = {
         "reviewKind": "score_phrase_candidate" if score_notes else "reference_phrase_candidate",
         "reviewType": "audio_score_match" if score_notes else "audio_phrase",
@@ -402,13 +410,17 @@ def _candidate_from_group(record: dict[str, Any], group: dict[str, Any]) -> dict
         "localEndSeconds": _safe_float(clip.get("localEndSeconds")),
         "detectedNotes": note_names,
         "detectedMidiSequence": note_midi_sequence(notes),
-        "normalizedDetectedMidiSequence": collapse_consecutive_duplicate_midi(note_midi_sequence(notes)),
+        "normalizedDetectedMidiSequence": detected_midi,
         "detectedNoteCount": len(note_names),
         "matchedNoteRun": int(group.get("matchedNoteRun") or 0),
         "audioAgreementCount": sum(1 for note in notes if note.get("audioAgreement") is True),
         "spectralAgreementCount": sum(1 for note in notes if "spectral_onset" in (note.get("agreementSources") or [])),
         "audioAgreed": _all_audio_agreed(notes),
         "scoreNotes": score_notes,
+        "normalizedScoreMidiSequence": score_midi,
+        "scoreAgreement": score_agreement,
+        "scoreAgreementStatus": "exact_midi_agreement" if score_agreement else "score_midi_mismatch" if score_notes else "no_score_context",
+        "reviewTrainingLane": "score_alignment" if score_notes else "audio_notes",
         "scoreLocation": _clean(group.get("scoreLocation") or group.get("scoreSequenceLabel") or score.get("label")),
         "scoreStatus": _clean(group.get("sourceScoreCheckStatus") or group.get("scoreSnippetStatus") or score.get("status")),
         "clip": clip,
@@ -618,9 +630,13 @@ def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any],
     learning_profile = build_review_learning_profile(items)
     raw_candidates = [candidate for candidate in _queue_candidates(daily_records) if _clean(candidate.get("reviewItemId")) not in reviewed_ids]
     candidates, suppressed_candidates = apply_review_learning_to_candidates(raw_candidates, learning_profile)
+    score_candidates = [item for item in candidates if item.get("reviewTask") == "audio_score_exact_match"]
+    exact_score_candidates = [item for item in score_candidates if item.get("scoreAgreement") is True]
+    long_candidates = [item for item in candidates if item.get("reviewKind") == "long_audio_phrase_candidate"]
     candidates.sort(
         key=lambda item: (
             0 if item.get("reviewKind") == "score_phrase_candidate" else 1 if item.get("reviewKind") == "long_audio_phrase_candidate" else 2,
+            0 if item.get("scoreAgreement") is True else 1,
             0 if item.get("reviewLearningStatus") == "accepted_pattern" else 1,
             -int(item.get("detectedNoteCount") or 0),
             str(item.get("practiceDay") or ""),
@@ -641,6 +657,9 @@ def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any],
         "scoreReadyTruthCount": int(truth_progress.get("scoreReadyTruthCount") or 0),
         "acceptedEvidenceReadyCount": int(truth_progress.get("acceptedEvidenceReadyCount") or 0),
         "queueCount": len(candidates),
+        "scoreQueueCount": len(score_candidates),
+        "scoreExactAgreementQueueCount": len(exact_score_candidates),
+        "longPhraseQueueCount": len(long_candidates),
         "rawQueueCount": len(raw_candidates),
         "suppressedByLearningCount": len(suppressed_candidates),
         "reviewedIds": len(reviewed_ids),
@@ -652,6 +671,8 @@ def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any],
         "trainingNegativeCount": int(training_set.get("negativeCount") or 0),
         "trainingLongPhraseExampleCount": int(training_set.get("longPhraseExampleCount") or 0),
         "trainingScoreExampleCount": int(training_set.get("scoreExampleCount") or 0),
+        "trainingPositiveScoreExampleCount": int(training_set.get("positiveScoreExampleCount") or 0),
+        "trainingNegativeScoreExampleCount": int(training_set.get("negativeScoreExampleCount") or 0),
         "reviewLearningStatus": "reducing_review_load" if suppressed_candidates else "learning_no_suppression_yet",
         "reviewLearningRule": learning_profile.get("suppressionRule") or "",
         "itemsByType": dict(by_type),

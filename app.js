@@ -3115,13 +3115,18 @@ function renderGoldReviewItem(item, index) {
   const clip = item.clip && typeof item.clip === "object" ? item.clip : item;
   const status = item.status || item.defaultStatus || "pending_review";
   const isRecent = status !== "pending_review";
-  const claimLabel = scoreNotes ? "Audio + score" : "Audio";
+  const lane = item.reviewTrainingLane === "score_alignment" || scoreNotes ? "Score" : item.reviewTask === "audio_long_phrase_exact_notes" ? "Phrase" : "Audio";
+  const agreement = item.scoreAgreementStatus === "exact_midi_agreement"
+    ? "same MIDI"
+    : item.scoreAgreementStatus === "score_midi_mismatch"
+      ? "mismatch"
+      : "";
   return `
     <article class="gold-review-item" data-status="${escapeHtml(status)}">
       <div class="gold-review-head">
         <span>${escapeHtml(isRecent ? "Label" : `Queue ${index + 1}`)}</span>
         <strong>${escapeHtml(shortText(detectedNotes || item.pieceTitle || "notes pending", 72))}</strong>
-        <em>${escapeHtml([item.practiceDay, claimLabel, item.detectedNoteCount ? `${item.detectedNoteCount} notes` : ""].filter(Boolean).join(" / "))}</em>
+        <em>${escapeHtml([item.practiceDay, lane, agreement, item.detectedNoteCount ? `${item.detectedNoteCount} notes` : ""].filter(Boolean).join(" / "))}</em>
       </div>
       <div class="gold-review-grid">
         ${renderEmbeddedMedia({}, clip)}
@@ -3134,7 +3139,7 @@ function renderGoldReviewItem(item, index) {
             keySignature: {},
             maxNotes: 16
           })}
-          ${scoreNotes ? `<small>Score: ${escapeHtml(shortText(scoreNotes, 80))}</small>` : ""}
+          ${scoreNotes ? `<small>${escapeHtml([item.scoreLocation || "score", shortText(scoreNotes, 80)].filter(Boolean).join(" / "))}</small>` : ""}
         </section>
         <form class="gold-review-form" data-gold-review-form data-review-item-id="${escapeHtml(item.reviewItemId || "")}">
           <p class="gold-review-rule">One note off = reject.</p>
@@ -3169,7 +3174,10 @@ function renderGoldReview() {
   const training = review.trainingSet && typeof review.trainingSet === "object" ? review.trainingSet : {};
   const trainingExamples = Number(review.trainingExampleCount ?? training.exampleCount) || 0;
   const longTraining = Number(review.trainingLongPhraseExampleCount ?? training.longPhraseExampleCount) || 0;
-  setText(elements.goldReviewCount, `${accepted} accepted / ${queued} queued`);
+  const scoreTraining = Number(review.trainingScoreExampleCount ?? training.scoreExampleCount) || 0;
+  const scoreQueued = Number(review.scoreQueueCount) || 0;
+  const scoreExactQueued = Number(review.scoreExactAgreementQueueCount) || 0;
+  setText(elements.goldReviewCount, scoreQueued ? `${scoreQueued} score / ${queued} queued` : `${accepted} accepted / ${queued} queued`);
   const queue = Array.isArray(review.queue) ? review.queue.slice(0, 4) : [];
   const recent = Array.isArray(review.recentItems) ? review.recentItems.slice(0, 3) : [];
   const items = queue.length ? queue : recent;
@@ -3181,6 +3189,7 @@ function renderGoldReview() {
         <article><span>Rejected</span><strong>${escapeHtml(String(rejected))}</strong></article>
         <article><span>Hidden</span><strong>${escapeHtml(String(hidden))}</strong></article>
         <article><span>Training</span><strong>${escapeHtml(String(trainingExamples))}</strong></article>
+        <article><span>Score</span><strong>${escapeHtml(String(scoreTraining))}</strong></article>
         <article><span>Long</span><strong>${escapeHtml(String(longTraining))}</strong></article>
       </div>
       <p class="empty">No review clips queued.</p>
@@ -3194,7 +3203,9 @@ function renderGoldReview() {
       <article><span>Rejected</span><strong>${escapeHtml(String(rejected))}</strong></article>
       <article><span>Hidden</span><strong>${escapeHtml(String(hidden))}</strong></article>
       <article><span>Training</span><strong>${escapeHtml(String(trainingExamples))}</strong></article>
+      <article><span>Score</span><strong>${escapeHtml(String(scoreTraining))}</strong></article>
       <article><span>Long</span><strong>${escapeHtml(String(longTraining))}</strong></article>
+      <article><span>Score queue</span><strong>${escapeHtml(scoreExactQueued ? `${scoreExactQueued}/${scoreQueued}` : String(scoreQueued))}</strong></article>
     </div>
     <div class="gold-review-list">
       ${items.map((item, index) => renderGoldReviewItem(item, index)).join("")}
