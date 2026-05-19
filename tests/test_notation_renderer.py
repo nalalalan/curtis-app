@@ -114,16 +114,39 @@ def test_notation_renderer_draws_exact_accidentals():
         assert(readableGoldReview.signature.accidentalType === 'flat', "Scherzo-Tarantelle review snippets should prefer flat-key spelling");
         assert(readableGoldReview.signature.accidentals.includes('Bb'), "flat-key review display should include Bb in the key signature");
         assert(readableGoldReview.signature.accidentals.includes('Eb'), "flat-key review display should include Eb in the key signature");
-        assert(readableGoldReview.signature.accidentals.includes('Ab'), "sharp-heavy Scherzo review display should expand the readable flat context to Ab");
-        assert(readableGoldReview.signature.accidentals.includes('Db'), "sharp-heavy Scherzo review display should expand the readable flat context to Db");
-        assert(readableGoldReview.display[0] === 'Ab6', "G# should respell as Ab for readability");
+        assert(readableGoldReview.signature.accidentals.length === 2, "Scherzo-Tarantelle review display must stay in G minor with two flats");
+        assert(readableGoldReview.display[0] === 'G#6', "G# is not in the G-minor key signature and should stay a local sharp unless score evidence says Ab");
         assert(readableGoldReview.display[2] === 'Eb6', "D# should respell as Eb for readability");
-        assert(readableGoldReview.display[3] === 'Db6', "C# should respell as Db when the flat display needs it");
-        assert(readableGoldReview.sheet.includes('K:Ab clef=treble'), "sharp-heavy Gold Review snippets should engrave in the expanded readable flat context");
-        assert(!readableGoldReview.sheet.includes('^G'), "flat-key Gold Review snippets should not show G# as a sharp-heavy local accidental");
-        assert(!readableGoldReview.sheet.includes('_A'), "Ab covered by the readable flat context should not duplicate a local flat sign");
-        assert(!readableGoldReview.sheet.includes('_d'), "Db covered by the readable flat context should not duplicate a local flat sign");
-        assert(readableGoldReview.sheet.includes('aria-label="Ab6 / detected G#6"'), "fallback SVG should preserve the original detected pitch in aria label");
+        assert(readableGoldReview.display[3] === 'C#6', "C# in G-minor context should stay C# rather than respelling as Db");
+        assert(readableGoldReview.sheet.includes('K:Bb clef=treble'), "Scherzo-Tarantelle Gold Review snippets must engrave with G minor/two-flat context");
+        assert(readableGoldReview.sheet.includes('^g'), "G# outside the G-minor key signature must render as a local sharp sign");
+        assert(readableGoldReview.sheet.includes('^c'), "C# outside the G-minor key signature must render as a local sharp sign");
+        assert(!readableGoldReview.sheet.includes('_d'), "C# must not render as Db in G-minor review notation");
+        assert(readableGoldReview.sheet.includes('aria-label="G#6"'), "fallback SVG should preserve G# when the key does not justify Ab");
+
+        const unknownReview = vm.runInContext(
+          `(() => {
+            const item = {
+              detectedNotes: ['A#4', 'C#5', 'D#5'],
+              pieceTitle: 'Unlabeled technique exercise'
+            };
+            const readable = readableGoldReviewNotes(item);
+            const sheet = renderNotationSheet(goldReviewNotationEvents(readable.displayNotes), {
+              keySignature: readable.keySignature,
+              maxNotes: readable.displayNotes.length
+            });
+            return {
+              signature: readable.keySignature,
+              display: readable.displayNotes,
+              sheet,
+            };
+          })()`,
+          context
+        );
+        assert(unknownReview.signature.accidentalType === 'none', "unlabeled exercises must not get a guessed key signature from pitch counts");
+        assert(unknownReview.display.join(' ') === 'A#4 C#5 D#5', "unlabeled review notation must preserve detected spelling instead of respelling into flats");
+        assert(unknownReview.sheet.includes('K:C clef=treble'), "unlabeled review notation should render literal accidentals in neutral treble context");
+        assert(unknownReview.sheet.includes('^A') && unknownReview.sheet.includes('^c') && unknownReview.sheet.includes('^d'), "literal sharps must remain visible for unknown source context");
         """
     )
     completed = subprocess.run(["node", "-e", script], cwd=".", text=True, capture_output=True)

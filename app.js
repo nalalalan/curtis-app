@@ -1473,10 +1473,10 @@ function notationDisplayNote(note, signature) {
   const parsed = parseExactNote(note);
   if (!parsed) return String(note || "");
   const accidentalNames = normalizedAccidentalNames(signature);
-  if (parsed.accidental === "#" && (signature?.accidentalType === "flat" || accidentalNames.has(SHARP_TO_FLAT_NOTE[parsed.pitch]))) {
+  if (parsed.accidental === "#" && accidentalNames.has(SHARP_TO_FLAT_NOTE[parsed.pitch])) {
     return `${SHARP_TO_FLAT_NOTE[parsed.pitch] || parsed.pitch}${parsed.octave}`;
   }
-  if (parsed.accidental === "b" && signature?.accidentalType === "sharp" && accidentalNames.has(FLAT_TO_SHARP_NOTE[parsed.pitch])) {
+  if (parsed.accidental === "b" && accidentalNames.has(FLAT_TO_SHARP_NOTE[parsed.pitch])) {
     return `${FLAT_TO_SHARP_NOTE[parsed.pitch] || parsed.pitch}${parsed.octave}`;
   }
   return `${parsed.pitch}${parsed.octave}`;
@@ -1731,65 +1731,25 @@ function normalizedKeySignature(signature) {
   };
 }
 
-function pitchCountsForNotes(notes) {
-  const sequence = noteInputSequence(noteInputText(notes));
-  const pitchCounts = new Map();
-  for (const token of sequence) {
-    const parsed = parseExactNote(token);
-    if (!parsed) continue;
-    pitchCounts.set(parsed.pitch, (pitchCounts.get(parsed.pitch) || 0) + 1);
+function sourceNotationContextForPiece(pieceTitle) {
+  const title = String(pieceTitle || "").toLowerCase();
+  if (title.includes("wieniawski") && (title.includes("scherzo") || title.includes("tarantelle"))) {
+    return {
+      label: "G minor / 2 flats",
+      accidentalType: "flat",
+      accidentals: ["Bb", "Eb"],
+      source: "piece_score_context",
+      scope: "Wieniawski Scherzo-Tarantelle, Op. 16",
+    };
   }
-  return pitchCounts;
-}
-
-function flatDisplaySignatureFromCounts(pitchCounts, baseAccidentals = [], baseLabel = "") {
-  const flatNeeded = new Set(baseAccidentals);
-  for (const [sharp, flat] of Object.entries(SHARP_TO_FLAT_NOTE)) {
-    if (pitchCounts.get(sharp)) flatNeeded.add(flat);
-  }
-  for (const flat of FLAT_KEY_ORDER) {
-    if (pitchCounts.get(flat)) flatNeeded.add(flat);
-  }
-  const furthest = FLAT_KEY_ORDER.reduce((max, flat, index) => flatNeeded.has(flat) ? Math.max(max, index) : max, -1);
-  const accidentals = FLAT_KEY_ORDER.slice(0, Math.max(baseAccidentals.length, furthest + 1));
-  const label = baseLabel && accidentals.length === baseAccidentals.length
-    ? baseLabel
-    : accidentals.length
-      ? `${accidentals.join(" ")} display`
-      : "flat display";
-  return {
-    label,
-    accidentalType: "flat",
-    accidentals,
-  };
+  return {};
 }
 
 function inferredReadableKeySignature(notes, context = {}) {
   const provided = normalizedKeySignature(context?.keySignature || {});
   if (provided.accidentals.length && provided.accidentalType !== "none") return provided;
-  const pitchCounts = pitchCountsForNotes(notes);
-  const pieceTitle = String(context?.pieceTitle || "").toLowerCase();
-  if (pieceTitle.includes("scherzo") || pieceTitle.includes("tarantelle") || pieceTitle.includes("wieniawski")) {
-    return flatDisplaySignatureFromCounts(pitchCounts, ["Bb", "Eb"], "G minor / 2 flats");
-  }
-  const sharpWeight = ["A#", "D#", "G#"].reduce((sum, pitch) => sum + (pitchCounts.get(pitch) || 0), 0);
-  const flatWeight = ["Bb", "Eb", "Ab"].reduce((sum, pitch) => sum + (pitchCounts.get(pitch) || 0), 0);
-  if (flatWeight || sharpWeight >= 2 || (pitchCounts.get("G#") || 0) >= 1) {
-    return flatDisplaySignatureFromCounts(pitchCounts);
-  }
-  const sharpNeeded = new Set();
-  for (const sharp of SHARP_KEY_ORDER) {
-    if (pitchCounts.get(sharp)) sharpNeeded.add(sharp);
-  }
-  const furthestSharp = SHARP_KEY_ORDER.reduce((max, sharp, index) => sharpNeeded.has(sharp) ? Math.max(max, index) : max, -1);
-  if (furthestSharp >= 0) {
-    const accidentals = SHARP_KEY_ORDER.slice(0, furthestSharp + 1);
-    return {
-      label: `${accidentals.join(" ")} display`,
-      accidentalType: "sharp",
-      accidentals,
-    };
-  }
+  const sourceContext = normalizedKeySignature(sourceNotationContextForPiece(context?.pieceTitle));
+  if (sourceContext.accidentals.length && sourceContext.accidentalType !== "none") return sourceContext;
   return {};
 }
 
