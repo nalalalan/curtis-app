@@ -15,7 +15,7 @@ from .state import load_state, save_state, utc_now
 
 MAX_TRANSCRIPTION_SECONDS = int(os.getenv("CURTIS_TRANSCRIPTION_MAX_SECONDS", "180"))
 TRANSCRIPTION_SAMPLE_LIMIT = int(os.getenv("CURTIS_TRANSCRIPTION_SAMPLE_LIMIT", "8"))
-TRANSCRIPTION_PIPELINE_VERSION = "violin_audio_matched_fragment_v11"
+TRANSCRIPTION_PIPELINE_VERSION = "violin_audio_matched_fragment_v12"
 MIN_NOTE_SECONDS = float(os.getenv("CURTIS_MIN_NOTE_SECONDS", "0.055"))
 MIN_ONSET_NOTE_SECONDS = float(os.getenv("CURTIS_MIN_ONSET_NOTE_SECONDS", "0.04"))
 MAX_STORED_NOTES = int(os.getenv("CURTIS_MAX_STORED_NOTES", "240"))
@@ -47,6 +47,12 @@ PITCH_COLLAPSE_MAX_PITCH_CLASSES = int(os.getenv("CURTIS_PITCH_COLLAPSE_MAX_PITC
 SPECTRAL_MIN_CONFIDENCE = float(os.getenv("CURTIS_SPECTRAL_MIN_CONFIDENCE", "0.18"))
 SPECTRAL_MIN_SEGMENT_SECONDS = float(os.getenv("CURTIS_SPECTRAL_MIN_SEGMENT_SECONDS", "0.035"))
 SPECTRAL_HARMONIC_COUNT = int(os.getenv("CURTIS_SPECTRAL_HARMONIC_COUNT", "5"))
+FAST_ONSET_DELTA = float(os.getenv("CURTIS_FAST_ONSET_DELTA", "0.05"))
+FAST_ONSET_WAIT_FRAMES = int(os.getenv("CURTIS_FAST_ONSET_WAIT_FRAMES", "1"))
+FAST_ONSET_MIN_FRAME_GAP = int(os.getenv("CURTIS_FAST_ONSET_MIN_FRAME_GAP", "2"))
+SPECTRAL_OCTAVE_RESCUE_RATIO = float(os.getenv("CURTIS_SPECTRAL_OCTAVE_RESCUE_RATIO", "0.70"))
+SPECTRAL_OCTAVE_RESCUE_MIN_MIDI = int(os.getenv("CURTIS_SPECTRAL_OCTAVE_RESCUE_MIN_MIDI", "81"))
+SPECTRAL_FAST_MIN_EVENTS = int(os.getenv("CURTIS_SPECTRAL_FAST_MIN_EVENTS", "6"))
 YIN_TRANSITION_RMS_RATIO = float(os.getenv("CURTIS_YIN_TRANSITION_RMS_RATIO", "0.18"))
 YIN_TRANSITION_MIN_SECONDS = float(os.getenv("CURTIS_YIN_TRANSITION_MIN_SECONDS", "0.018"))
 AUDIO_AGREEMENT_SECONDS = float(os.getenv("CURTIS_AUDIO_AGREEMENT_SECONDS", "0.11"))
@@ -293,6 +299,14 @@ def pitch_sanity_filter(events: list[dict[str, Any]]) -> tuple[list[dict[str, An
         duration = float(event.get("durationSeconds") or 0.0)
         confidence = float(event.get("confidence") or 0.0)
         if duration <= LOW_CONFIDENCE_GLITCH_SECONDS and confidence < LOW_CONFIDENCE_GLITCH_THRESHOLD:
+            detector = str(event.get("detectorSource") or "")
+            spectral_score = float(event.get("spectralRelativeScore") or 0.0)
+            if detector.startswith("spectral_") and duration >= SPECTRAL_MIN_SEGMENT_SECONDS and spectral_score >= SPECTRAL_MIN_CONFIDENCE:
+                event["uncertain"] = True
+                reasons = event.get("uncertaintyReasons")
+                event["uncertaintyReasons"] = [*(reasons if isinstance(reasons, list) else []), "short_fast_spectral_note"]
+                kept.append(event)
+                continue
             dropped_glitches += 1
             continue
         kept.append(event)
@@ -440,6 +454,56 @@ def pitch_diversity(events: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def normalize_audio_signal(y: Any, librosa: Any) -> Any:
+    try:
+        return librosa.util.normalize(y)
+    except Exception:
+        return y
+
+
+def compact_onset_frames(frames: list[int], min_gap: int = FAST_ONSET_MIN_FRAME_GAP) -> list[int]:
+    compact: list[int] = []
+    for frame in sorted(set(int(value) for value in frames if int(value) >= 0)):
+        if compact and frame - compact[-1] <= max(0, int(min_gap)):
+            continue
+        compact.append(frame)
+    return compact
+
+
+def onset_frames_for_signal(y: Any, sr: int, hop_length: int, librosa: Any, numpy: Any) -> list[int]:
+    frames: list[int] = []
+    try:
+        detected = librosa.onset.onset_detect(y=y, sr=sr, hop_length=hop_length, units="frames")
+        frames.extend(int(frame) for frame in detected)
+    except Exception:
+        pass
+    try:
+        dense = librosa.onset.onset_detect(
+            y=y,
+            sr=sr,
+            hop_length=hop_length,
+            units="frames",
+            backtrack=True,
+            pre_max=1,
+            post_max=1,
+            pre_avg=2,
+            post_avg=2,
+            delta=FAST_ONSET_DELTA,
+            wait=FAST_ONSET_WAIT_FRAMES,
+        )
+        frames.extend(int(frame) for frame in dense)
+    except Exception:
+        pass
+    return compact_onset_frames(frames)
+
+
+def merge_onset_frame_sets(*frame_sets: list[int]) -> list[int]:
+    frames: list[int] = []
+    for frame_set in frame_sets:
+        frames.extend(int(frame) for frame in frame_set)
+    return compact_onset_frames(frames)
+
+
 def event_start_seconds(event: dict[str, Any]) -> float:
     try:
         return float(event.get("startSeconds") or 0.0)
@@ -545,18 +609,85 @@ def spectral_pitch_for_segment(segment: Any, sr: int, librosa: Any, numpy: Any) 
     best_score, best_midi = scores[0]
     if best_score <= 0:
         return None
+    scores_by_midi = {midi: score for score, midi in scores}
+    raw_midi = int(best_midi)
+    octave_rescued = False
+    for shift in (24, 12):
+        shifted = raw_midi + shift
+        shifted_score = scores_by_midi.get(shifted)
+        if (
+            shifted_score is not None
+            and shifted >= SPECTRAL_OCTAVE_RESCUE_MIN_MIDI
+            and shifted_score >= best_score * SPECTRAL_OCTAVE_RESCUE_RATIO
+        ):
+            best_score = shifted_score
+            best_midi = shifted
+            octave_rescued = True
+            break
     second_score = scores[1][0] if len(scores) > 1 else 0.0
     total_top = sum(score for score, _ in scores[:8]) or best_score
     confidence = max(0.0, min(1.0, (best_score - second_score) / max(best_score, 1e-9)))
     relative = best_score / max(total_top, 1e-9)
     if relative < SPECTRAL_MIN_CONFIDENCE:
         return None
-    return {
+    event = {
         "midi": int(best_midi),
         "note": note_name(int(best_midi)),
         "confidence": round(max(confidence, relative), 3),
         "spectralRelativeScore": round(relative, 3),
     }
+    if octave_rescued:
+        event["rawMidi"] = raw_midi
+        event["rawNote"] = note_name(raw_midi)
+        event["uncertain"] = True
+        event["uncertaintyReasons"] = ["spectral_octave_rescue"]
+    return event
+
+
+def spectral_stream_quality(events: list[dict[str, Any]]) -> float:
+    if not events:
+        return -999.0
+    diversity = pitch_diversity(events)
+    midi_values = [event_midi(event) for event in events if isinstance(event, dict)]
+    midi_values = [midi for midi in midi_values if midi is not None]
+    intervals = [abs(midi_values[index + 1] - midi_values[index]) for index in range(len(midi_values) - 1)]
+    average_confidence = sum(float(event.get("confidence") or 0.0) for event in events) / max(1, len(events))
+    large_leaps = sum(1 for interval in intervals if interval >= LARGE_LEAP_SEMITONES)
+    octave_rescues = sum(1 for event in events if "spectral_octave_rescue" in (event.get("uncertaintyReasons") if isinstance(event.get("uncertaintyReasons"), list) else []))
+    return (
+        len(events) * 1.3
+        + float(diversity["uniquePitchClasses"]) * 3.0
+        + average_confidence * 5.0
+        + octave_rescues * 0.7
+        - float(diversity["dominantRatio"]) * 2.0
+        - large_leaps * 1.5
+    )
+
+
+def annotated_spectral_events(events: list[dict[str, Any]], signal_name: str) -> list[dict[str, Any]]:
+    annotated: list[dict[str, Any]] = []
+    for event in events:
+        item = dict(event)
+        item["spectralSignal"] = signal_name
+        annotated.append(item)
+    return annotated
+
+
+def choose_spectral_event_stream(
+    harmonic_events: list[dict[str, Any]],
+    source_events: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], str]:
+    harmonic = annotated_spectral_events(harmonic_events, "harmonic")
+    source = annotated_spectral_events(source_events, "source")
+    if not source:
+        return harmonic, "harmonic"
+    if not harmonic:
+        return source, "source"
+    source_quality = spectral_stream_quality(source)
+    harmonic_quality = spectral_stream_quality(harmonic)
+    if source_quality >= harmonic_quality - 0.75:
+        return source, "source"
+    return harmonic, "harmonic"
 
 
 def spectral_onset_events(
@@ -595,17 +726,19 @@ def spectral_onset_events(
         pitch = spectral_pitch_for_segment(segment, sr, librosa, numpy)
         if not pitch:
             continue
-        events.append(
-            {
-                "startSeconds": round(start, 3),
-                "endSeconds": round(end, 3),
-                "durationSeconds": round(duration, 3),
-                "midi": pitch["midi"],
-                "note": pitch["note"],
-                "confidence": pitch["confidence"],
-                "spectralRelativeScore": pitch["spectralRelativeScore"],
-            }
-        )
+        event = {
+            "startSeconds": round(start, 3),
+            "endSeconds": round(end, 3),
+            "durationSeconds": round(duration, 3),
+            "midi": pitch["midi"],
+            "note": pitch["note"],
+            "confidence": pitch["confidence"],
+            "spectralRelativeScore": pitch["spectralRelativeScore"],
+        }
+        for key in ("rawMidi", "rawNote", "uncertain", "uncertaintyReasons"):
+            if key in pitch:
+                event[key] = pitch[key]
+        events.append(event)
         if len(events) >= MAX_STORED_NOTES:
             break
     return events
@@ -912,13 +1045,41 @@ def choose_transcription_events(
     onset_diversity_state = pitch_diversity(onset_events)
     pitch_collapsed = pitch_collapse_report(pitch_events, len(onset_events)).get("pitchCollapseDetected")
     onset_collapsed = pitch_collapse_report(onset_events, len(onset_events)).get("pitchCollapseDetected")
+    base_events = onset_events if onset_events else pitch_events
+    base_diversity = onset_diversity_state if onset_events else pitch_diversity_state
+    base_midi_values = [event_midi(event) for event in base_events if isinstance(event, dict)]
+    base_midi_values = [midi for midi in base_midi_values if midi is not None]
+    spectral_midi_values = [event_midi(event) for event in spectral_events if isinstance(event, dict)]
+    spectral_midi_values = [midi for midi in spectral_midi_values if midi is not None]
+    if base_midi_values and spectral_midi_values:
+        base_counts = Counter(base_midi_values)
+        spectral_counts = Counter(spectral_midi_values)
+        base_midi, _ = base_counts.most_common(1)[0]
+        spectral_midi, spectral_count = spectral_counts.most_common(1)[0]
+        spectral_ratio = spectral_count / max(1, len(spectral_midi_values))
+        if (
+            spectral_midi > base_midi
+            and (spectral_midi - base_midi) in {12, 24}
+            and spectral_midi % 12 == base_midi % 12
+            and base_diversity["uniquePitchClasses"] <= 2
+            and spectral_ratio >= 0.55
+            and any(float(event.get("confidence") or 0.0) >= SPECTRAL_MIN_CONFIDENCE for event in spectral_events)
+        ):
+            return spectral_events[:MAX_STORED_NOTES], "spectral_octave_rescue"
     spectral_is_useful = (
         len(spectral_events) >= MIN_ACTIVE_WINDOW_NOTES
         and spectral_diversity["uniquePitchClasses"] >= max(3, pitch_diversity_state["uniquePitchClasses"])
         and spectral_diversity["dominantRatio"] <= 0.72
     )
+    spectral_fast_trace = (
+        len(spectral_events) >= max(SPECTRAL_FAST_MIN_EVENTS, int(len(base_events) * 0.65))
+        and spectral_diversity["uniquePitchClasses"] >= max(3, base_diversity["uniquePitchClasses"] + 1)
+        and spectral_diversity["dominantRatio"] <= 0.78
+    )
     if spectral_is_useful and (pitch_collapsed or onset_collapsed):
         return spectral_events[:MAX_STORED_NOTES], "spectral_onset_rescue"
+    if spectral_fast_trace:
+        return spectral_events[:MAX_STORED_NOTES], "spectral_fast_note_rescue"
     if spectral_is_useful and spectral_diversity["uniquePitchClasses"] > onset_diversity_state["uniquePitchClasses"] + 1:
         return spectral_events[:MAX_STORED_NOTES], "spectral_onset"
     if not onset_events:
@@ -942,10 +1103,7 @@ def notation_text(events: list[dict[str, Any]], tempo_bpm: float) -> str:
 
 
 def pitch_tracking_signal(y: Any, librosa: Any, numpy: Any) -> tuple[Any, str]:
-    try:
-        normalized = librosa.util.normalize(y)
-    except Exception:
-        normalized = y
+    normalized = normalize_audio_signal(y, librosa)
     try:
         harmonic = librosa.effects.harmonic(normalized, margin=HARMONIC_MARGIN)
         harmonic_rms = float(numpy.sqrt(numpy.mean(numpy.square(harmonic)))) if harmonic.size else 0.0
@@ -1090,6 +1248,7 @@ def stable_single_note_fragments(y: Any, sr: int, librosa: Any, numpy: Any) -> l
 
 
 def transcribe_audio_array(y: Any, sr: int, librosa: Any, numpy: Any) -> dict[str, Any]:
+    source_y = normalize_audio_signal(y, librosa)
     pitch_y, preprocessing = pitch_tracking_signal(y, librosa, numpy)
     hop_length = PITCH_HOP_LENGTH
     f0, voiced_flag, voiced_prob = librosa.pyin(
@@ -1101,13 +1260,14 @@ def transcribe_audio_array(y: Any, sr: int, librosa: Any, numpy: Any) -> dict[st
         hop_length=hop_length,
     )
     tempo = estimate_tempo(y, sr, librosa)
-    try:
-        onset_frames = librosa.onset.onset_detect(y=pitch_y, sr=sr, hop_length=hop_length, units="frames")
-    except Exception:
-        onset_frames = []
+    harmonic_onset_frames = onset_frames_for_signal(pitch_y, sr, hop_length, librosa, numpy)
+    source_onset_frames = onset_frames_for_signal(source_y, sr, hop_length, librosa, numpy)
+    onset_frames = merge_onset_frame_sets(harmonic_onset_frames, source_onset_frames)
     pitch_events = f0_to_events(f0, voiced_flag, voiced_prob, sr, hop_length, numpy)
     onset_events = f0_to_onset_events(f0, voiced_flag, voiced_prob, onset_frames, sr, hop_length, numpy)
-    spectral_events = spectral_onset_events(pitch_y, onset_frames, sr, hop_length, librosa, numpy)
+    harmonic_spectral_events = spectral_onset_events(pitch_y, onset_frames, sr, hop_length, librosa, numpy)
+    source_spectral_events = spectral_onset_events(source_y, onset_frames, sr, hop_length, librosa, numpy)
+    spectral_events, spectral_stream_source = choose_spectral_event_stream(harmonic_spectral_events, source_spectral_events)
     transition_events = yin_transition_events(pitch_y, sr, hop_length, librosa, numpy)
     raw_events, segmentation_source = choose_transcription_events(pitch_events, onset_events, spectral_events)
     peer_groups = [
@@ -1132,6 +1292,8 @@ def transcribe_audio_array(y: Any, sr: int, librosa: Any, numpy: Any) -> dict[st
         "pitchEventCount": len(pitch_events),
         "onsetEventCount": len(onset_events),
         "spectralEventCount": len(spectral_events),
+        "harmonicSpectralEventCount": len(harmonic_spectral_events),
+        "sourceSpectralEventCount": len(source_spectral_events),
         "transitionTraceEventCount": len(transition_events),
         "transitionTraceSelectedEventCount": len(score_match_candidate_events),
         "rawSelectedEventCount": len(raw_events),
@@ -1139,6 +1301,9 @@ def transcribe_audio_array(y: Any, sr: int, librosa: Any, numpy: Any) -> dict[st
         "audioAgreementEventCount": sum(1 for event in events if event.get("audioAgreement")),
         "spectralAgreedEventCount": spectral_agreed_count,
         "detectedOnsetCount": len(onset_frames),
+        "denseHarmonicOnsetCount": len(harmonic_onset_frames),
+        "denseSourceOnsetCount": len(source_onset_frames),
+        "spectralStreamSource": spectral_stream_source,
         "pitchDiversity": pitch_diversity(pitch_events),
         "onsetDiversity": pitch_diversity(onset_events),
         "spectralDiversity": pitch_diversity(spectral_events),
@@ -1200,6 +1365,8 @@ def transcribe_active_windows(
             "pitchEventCount",
             "onsetEventCount",
             "spectralEventCount",
+            "harmonicSpectralEventCount",
+            "sourceSpectralEventCount",
             "transitionTraceEventCount",
             "transitionTraceSelectedEventCount",
             "rawSelectedEventCount",
@@ -1207,6 +1374,8 @@ def transcribe_active_windows(
             "audioAgreementEventCount",
             "spectralAgreedEventCount",
             "detectedOnsetCount",
+            "denseHarmonicOnsetCount",
+            "denseSourceOnsetCount",
             "sanityGlitchDroppedCount",
             "sanityOctaveAdjustedCount",
             "sanityLargeLeapCount",
@@ -1267,6 +1436,8 @@ def transcribe_active_windows(
             "pitchEventCount": int(quality_totals["pitchEventCount"]),
             "onsetEventCount": int(quality_totals["onsetEventCount"]),
             "spectralEventCount": int(quality_totals["spectralEventCount"]),
+            "harmonicSpectralEventCount": int(quality_totals["harmonicSpectralEventCount"]),
+            "sourceSpectralEventCount": int(quality_totals["sourceSpectralEventCount"]),
             "transitionTraceEventCount": int(quality_totals["transitionTraceEventCount"]),
             "transitionTraceSelectedEventCount": int(quality_totals["transitionTraceSelectedEventCount"]),
             "rawSelectedEventCount": int(quality_totals["rawSelectedEventCount"]),
@@ -1274,6 +1445,8 @@ def transcribe_active_windows(
             "audioAgreementEventCount": int(quality_totals["audioAgreementEventCount"]),
             "spectralAgreedEventCount": int(quality_totals["spectralAgreedEventCount"]),
             "detectedOnsetCount": int(quality_totals["detectedOnsetCount"]),
+            "denseHarmonicOnsetCount": int(quality_totals["denseHarmonicOnsetCount"]),
+            "denseSourceOnsetCount": int(quality_totals["denseSourceOnsetCount"]),
             "sanityGlitchDroppedCount": int(quality_totals["sanityGlitchDroppedCount"]),
             "sanityOctaveAdjustedCount": int(quality_totals["sanityOctaveAdjustedCount"]),
             "sanityLargeLeapCount": int(quality_totals["sanityLargeLeapCount"]),
@@ -1368,6 +1541,11 @@ def transcribe_path(path: Path, active_windows: list[dict[str, float]] | None = 
                 "minimumActiveWindowNotes": MIN_ACTIVE_WINDOW_NOTES,
                 "pitchCollapseMinEvents": PITCH_COLLAPSE_MIN_EVENTS,
                 "pitchCollapseDominantRatio": PITCH_COLLAPSE_DOMINANT_RATIO,
+                "fastOnsetDelta": FAST_ONSET_DELTA,
+                "fastOnsetWaitFrames": FAST_ONSET_WAIT_FRAMES,
+                "spectralOctaveRescueRatio": SPECTRAL_OCTAVE_RESCUE_RATIO,
+                "spectralOctaveRescueMinMidi": SPECTRAL_OCTAVE_RESCUE_MIN_MIDI,
+                "spectralFastMinEvents": SPECTRAL_FAST_MIN_EVENTS,
                 "windowMode": window_mode,
                 "activeWindowCount": len(transcription["activeWindows"]),
                 "activeWindows": transcription["activeWindows"],

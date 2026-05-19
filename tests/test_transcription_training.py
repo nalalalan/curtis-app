@@ -13,9 +13,13 @@ from backend.app.transcription import (
     f0_to_onset_events,
     f0_to_events,
     mark_audio_agreement,
+    normalize_audio_signal,
+    onset_frames_for_signal,
+    PITCH_HOP_LENGTH,
     pitch_sanity_filter,
     stable_single_note_fragments,
     spectral_onset_events,
+    transcribe_audio_array,
     transcription_failure_state,
     reference_matches_for,
     transcription_prior_hint,
@@ -275,6 +279,104 @@ class TranscriptionTrainingTests(unittest.TestCase):
         self.assertGreaterEqual(len(events), 8)
         self.assertGreaterEqual(len({event["midi"] % 12 for event in events}), 4)
         self.assertFalse(failure["pitchCollapseDetected"])
+
+    def test_dense_backtracked_onsets_capture_fast_high_attacks(self):
+        import librosa  # type: ignore
+        import numpy  # type: ignore
+
+        sr = 22050
+        pattern = [86, 88, 90, 91, 93, 95, 96, 98, 100, 96, 93, 91]
+        duration = 0.045
+        chunks = []
+        for midi in pattern:
+            frequency = hz_for_midi(midi)
+            t = numpy.linspace(0, duration, int(sr * duration), endpoint=False)
+            envelope = numpy.hanning(t.size)
+            chunks.append(
+                (
+                    0.32 * numpy.sin(2 * numpy.pi * frequency * t)
+                    + 0.10 * numpy.sin(2 * numpy.pi * frequency * 2 * t)
+                )
+                * envelope
+            )
+        y = normalize_audio_signal(numpy.concatenate(chunks), librosa)
+
+        onset_frames = onset_frames_for_signal(y, sr, PITCH_HOP_LENGTH, librosa, numpy)
+
+        self.assertGreaterEqual(len(onset_frames), len(pattern) - 2)
+
+    def test_transcribe_audio_array_rescues_fast_high_notes_from_lower_octave_noise(self):
+        import librosa  # type: ignore
+        import numpy  # type: ignore
+
+        sr = 22050
+        pattern = [86, 88, 90, 91, 93, 95, 96, 98, 100, 96, 93, 91]
+        duration = 0.045
+        chunks = []
+        for midi in pattern:
+            frequency = hz_for_midi(midi)
+            lower_frequency = hz_for_midi(midi - 12)
+            t = numpy.linspace(0, duration, int(sr * duration), endpoint=False)
+            envelope = numpy.hanning(t.size)
+            chunks.append(
+                (
+                    0.32 * numpy.sin(2 * numpy.pi * frequency * t)
+                    + 0.11 * numpy.sin(2 * numpy.pi * frequency * 2 * t)
+                    + 0.07 * numpy.sin(2 * numpy.pi * frequency * 3 * t)
+                )
+                * envelope
+                + 0.12 * numpy.sin(2 * numpy.pi * lower_frequency * t)
+            )
+        y = numpy.concatenate(chunks)
+
+        result = transcribe_audio_array(y, sr, librosa, numpy)
+        midi_values = [event["midi"] for event in result["events"]]
+
+        self.assertEqual(result["quality"]["segmentationSource"], "spectral_fast_note_rescue")
+        self.assertEqual(result["quality"]["spectralStreamSource"], "source")
+        self.assertGreaterEqual(len(midi_values), 7)
+        self.assertGreaterEqual(len({midi % 12 for midi in midi_values}), 5)
+        self.assertTrue(all(midi >= 84 for midi in midi_values))
+
+    def test_transcribe_audio_array_prefers_high_note_when_background_pulls_octave_down(self):
+        import librosa  # type: ignore
+        import numpy  # type: ignore
+
+        sr = 22050
+        duration = 0.3
+        t = numpy.linspace(0, duration, int(sr * duration), endpoint=False)
+        envelope = numpy.hanning(t.size)
+        y = (
+            0.22 * numpy.sin(2 * numpy.pi * hz_for_midi(81) * t)
+            + 0.08 * numpy.sin(2 * numpy.pi * hz_for_midi(93) * t)
+            + 0.20 * numpy.sin(2 * numpy.pi * hz_for_midi(69) * t)
+        ) * envelope
+
+        result = transcribe_audio_array(y, sr, librosa, numpy)
+
+        self.assertEqual(result["quality"]["segmentationSource"], "spectral_octave_rescue")
+        self.assertTrue(result["events"])
+        self.assertTrue(all(event["midi"] == 81 for event in result["events"]))
+        self.assertTrue(any(event.get("rawMidi") == 69 for event in result["events"]))
+
+    def test_octave_rescue_does_not_promote_normal_second_harmonic(self):
+        import librosa  # type: ignore
+        import numpy  # type: ignore
+
+        sr = 22050
+        duration = 0.3
+        t = numpy.linspace(0, duration, int(sr * duration), endpoint=False)
+        envelope = numpy.hanning(t.size)
+        y = (
+            0.25 * numpy.sin(2 * numpy.pi * hz_for_midi(69) * t)
+            + 0.18 * numpy.sin(2 * numpy.pi * hz_for_midi(81) * t)
+            + 0.06 * numpy.sin(2 * numpy.pi * hz_for_midi(93) * t)
+        ) * envelope
+
+        result = transcribe_audio_array(y, sr, librosa, numpy)
+
+        self.assertTrue(result["events"])
+        self.assertTrue(all(event["midi"] == 69 for event in result["events"]))
 
     def test_yin_transition_events_recovers_fast_note_changes_as_hidden_candidates(self):
         import librosa  # type: ignore
