@@ -622,6 +622,57 @@ class Staff4AuditTests(unittest.TestCase):
         self.assertEqual(packet["clip"]["noteLocalStartSeconds"], 20.225)
         self.assertEqual(packet["clip"]["noteLocalEndSeconds"], 22.535)
 
+    def test_source_crop_reverification_accepts_exact_source_and_note_audio(self):
+        current = staff4_audit.source_crop_reverification_current(source_crop_reverification_completion_state())
+        clip_start = 19.875
+        stored_notes = [
+            staff4_audit.compact_note_event(note, index)
+            for index, note in enumerate(current["bestAudioNotes"])
+        ]
+        packet = {
+            "status": "needs_manual_audio_review",
+            "targetReferenceStart": 9,
+            "targetReferenceEnd": 14,
+            "targetSequence": "Eb5 Eb5 C5 Eb5 Eb5",
+            "targetMidiSequence": [75, 75, 72, 75, 75],
+            "bestAudioSequence": "D#5 D#5 C5 D#5 D#5",
+            "bestAudioMidiSequence": [75, 75, 72, 75, 75],
+            "storedAudioNotes": stored_notes,
+            "score": {
+                "sourceImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-verified.png",
+                "sourceReviewImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-context-review.png",
+                "sourceCropReady": False,
+                "sourceCropRejected": True,
+                "sourceCropDisplayAllowed": False,
+                "sourceCropContextReady": True,
+                "truthEvidenceAccepted": False,
+            },
+            "clip": {"localStartSeconds": clip_start, "localEndSeconds": 22.985},
+        }
+        frames = []
+        for note, midi in zip(stored_notes, packet["targetMidiSequence"]):
+            midpoint = ((note["startSeconds"] + note["endSeconds"]) / 2.0) - clip_start
+            frames.append({"timeSeconds": round(midpoint, 3), "midi": midi, "note": staff4_audit.note_label_for_midi(midi)})
+        analysis = {"frames": {"pyin": frames, "yin": frames, "spectralPeak": frames}}
+
+        packet["sourceCropAudioAgreement"] = staff4_audit.source_crop_note_audio_agreement(packet, analysis, clip_start)
+        packet["sourceCropScoreReview"] = staff4_audit.source_crop_score_review_for_packet(packet)
+        staff4_audit.attach_staff4_source_crop_reverification_decision(packet)
+
+        self.assertEqual(packet["sourceCropAudioAgreement"]["status"], "audio_agreed")
+        self.assertEqual(packet["sourceCropAudioAgreement"]["agreedNoteCount"], 5)
+        self.assertEqual(packet["sourceCropScoreReview"]["status"], "verified_actual_pdf_context")
+        self.assertEqual(packet["decision"]["status"], "accepted_truth_candidate")
+        self.assertEqual(packet["truthDecision"], "accepted")
+        self.assertTrue(packet["canExtendStaff4Lane"])
+        self.assertTrue(packet["score"]["sourceCropDisplayAllowed"])
+        self.assertFalse(packet["score"]["sourceCropRejected"])
+        self.assertEqual(
+            packet["score"]["sourceImageUrl"],
+            "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-context-review.png",
+        )
+        self.assertTrue(all(note["audioAgreement"] for note in packet["storedAudioNotes"]))
+
     def test_latest_completion_packet_targets_source_crop_reverification_queue(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             state = {}

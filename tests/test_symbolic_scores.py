@@ -7,6 +7,7 @@ from backend.app.corrections import wieniawski_reference_target
 from backend.app.symbolic_scores import (
     parse_musicxml_score,
     score_map_candidate_audit,
+    source_image_url_rejected,
     source_range_rejected,
     symbolic_score_audit,
     symbolic_score_from_target,
@@ -217,8 +218,16 @@ class SymbolicScoreTests(unittest.TestCase):
 
         self.assertEqual(audit["status"], "symbolic_score_ready")
         self.assertEqual(audit["symbolicScoreNoteCount"], 17)
-        self.assertEqual(audit["symbolicScoreSourceSnippetCount"], 0)
-        self.assertTrue(source_range_rejected(target, 9, 14))
+        self.assertEqual(audit["symbolicScoreSourceSnippetCount"], 1)
+        self.assertFalse(source_range_rejected(target, 9, 14))
+        self.assertTrue(
+            source_image_url_rejected(
+                target,
+                9,
+                14,
+                "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-verified.png",
+            )
+        )
         self.assertTrue(source_range_rejected(target, 9, 15))
         self.assertTrue(source_range_rejected(target, 9, 16))
         self.assertEqual(candidate_audit["status"], "score_map_candidates_ready")
@@ -309,7 +318,7 @@ class SymbolicScoreTests(unittest.TestCase):
         self.assertEqual([item["note"] for item in matches[0]["scoreMatchedNotes"]], ["G5", "F5", "A5", "G#5", "F5"])
         self.assertEqual([item["note"] for item in matches[0]["displayDetectedNotes"]], ["G5", "F5", "A5", "G#5", "F5"])
 
-    def test_wieniawski_staff4_packet_withholds_user_rejected_visible_score_window(self):
+    def test_wieniawski_staff4_packet_accepts_reverified_context_score_window(self):
         target = wieniawski_reference_target()
         series = detected_note_series(
             [
@@ -339,10 +348,13 @@ class SymbolicScoreTests(unittest.TestCase):
         self.assertEqual(matches[0]["minimumDistinctPitchClasses"], 2)
         self.assertEqual(matches[0]["referenceStart"], 9)
         self.assertEqual(matches[0]["scoreSequenceLabel"], "m. staff4-packet-1")
-        self.assertFalse(matches[0]["scoreVisualAgreement"])
-        self.assertFalse(matches[0]["truthEvidenceAccepted"])
-        self.assertEqual(matches[0]["score"]["imageUrl"], "")
-        self.assertEqual(matches[0]["score"]["sourceSnippetHiddenReason"], "actual_source_snippet_required_before_score_display")
+        self.assertTrue(matches[0]["scoreVisualAgreement"])
+        self.assertTrue(matches[0]["truthEvidenceAccepted"])
+        self.assertEqual(
+            matches[0]["score"]["imageUrl"],
+            "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-context-review.png",
+        )
+        self.assertEqual(matches[0]["score"]["sourceSnippetHiddenReason"], "")
         self.assertEqual([item["note"] for item in matches[0]["scoreMatchedNotes"]], ["Eb5", "Eb5", "C5", "Eb5", "Eb5"])
         self.assertEqual([item["note"] for item in matches[0]["displayDetectedNotes"]], ["Eb5", "Eb5", "C5", "Eb5", "Eb5"])
 
@@ -419,9 +431,12 @@ class SymbolicScoreTests(unittest.TestCase):
         self.assertEqual(matches[0]["matchedNoteRun"], 5)
         self.assertEqual(matches[0]["referenceStart"], 9)
         self.assertEqual(matches[0]["referenceEnd"], 14)
-        self.assertFalse(matches[0]["truthEvidenceAccepted"])
+        self.assertTrue(matches[0]["truthEvidenceAccepted"])
         self.assertEqual([item["note"] for item in matches[0]["scoreMatchedNotes"]], ["Eb5", "Eb5", "C5", "Eb5", "Eb5"])
-        self.assertEqual(matches[0]["score"]["imageUrl"], "")
+        self.assertEqual(
+            matches[0]["score"]["imageUrl"],
+            "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-context-review.png",
+        )
         extension = next(
             item
             for item in target["symbolicScore"]["sourceSnippets"]

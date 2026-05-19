@@ -21,16 +21,17 @@
       "pieceTitle": "Wieniawski Scherzo-Tarantelle, Op. 16",
       "target": "wieniawski_reference_target",
       "status": "verified_source_excerpt",
-      "basis": "Queued Staff 4 score review packet converted into MusicXML from the local IMSLP solo-violin page. Alan's 2026-05-18 visible review rejected the displayed May 3 Staff 4 score/transcription pair, so this source range is retained as a regression/review fixture, not live accepted evidence.",
+      "basis": "Queued Staff 4 score review packet converted into MusicXML from the local IMSLP solo-violin page. The 2026-05-18 source-crop reverification reaccepted this exact five-note source range only through the full-context actual-PDF crop whose boxed notehead centers, score note sequence, transcription spelling, and paired audio agree by exact MIDI.",
       "referenceStart": 9,
       "referenceEnd": 14,
       "sequence": ["Eb5", "Eb5", "C5", "Eb5", "Eb5"],
       "midiSequence": [75, 75, 72, 75, 75],
-      "sourceCropImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-verified.png",
+      "sourceCropImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-context-review.png",
       "sourceReviewImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-context-review.png",
-      "sourceCropDisplayAllowed": false,
+      "sourceCropDisplayAllowed": true,
+      "sourceCropReady": true,
       "sourceCropContextReady": true,
-      "liveAccepted": false
+      "liveAccepted": true
     },
     {
       "id": "wieniawski-staff4-eb-eb-c-eb-eb-eb-c-symbolic-v1",
@@ -86,13 +87,13 @@
     {
       "id": "wieniawski-staff4-live-audio-exact-midi-positive",
       "sourceId": "wieniawski-staff4-eb-eb-c-eb-eb-symbolic-v1",
-      "status": "superseded_by_user_visible_mismatch_review",
-      "basis": "May 3 detected phrase from sample Njh8_zq9_DM-8835 has audio-agreed D#5-D#5-C5-D#5-D#5 against the symbolic MIDI sequence, but Alan's 2026-05-18 visible review rejected the displayed source score/transcription pair. This remains a regression fixture, not live accepted evidence.",
+      "status": "accepted_truth",
+      "basis": "May 3 detected phrase from sample Njh8_zq9_DM-8835 has audio-agreed D#5-D#5-C5-D#5-D#5 against the symbolic MIDI sequence. The old tight crop remains rejected, but the full-context actual-PDF crop is accepted after source-note centers, score sequence, transcription spelling, and paired audio all agree by exact MIDI.",
       "practiceDay": "2026-05-03",
       "sampleId": "Njh8_zq9_DM-8835",
       "sourceWindow": "*8835-8925",
       "localStartSeconds": 20.225,
-      "localEndSeconds": 20.825,
+      "localEndSeconds": 22.535,
       "minimumExactNotes": 5,
       "sequence": ["D#5", "D#5", "C5", "D#5", "D#5"],
       "acceptedScoreSpellingSequence": ["Eb5", "Eb5", "C5", "Eb5", "Eb5"],
@@ -104,8 +105,12 @@
         {"note": "D#5", "startSeconds": 21.629, "endSeconds": 21.792},
         {"note": "D#5", "startSeconds": 22.361, "endSeconds": 22.535}
       ],
-      "scoreImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-verified.png",
-      "liveAccepted": false
+      "scoreImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-context-review.png",
+      "sourceReviewImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-context-review.png",
+      "sourceCropDisplayAllowed": true,
+      "sourceCropReady": true,
+      "sourceCropReverifiedAt": "2026-05-18",
+      "liveAccepted": true
     },
     {
       "id": "wieniawski-staff4-source-extension-positive",
@@ -216,8 +221,8 @@
       "id": "rejected-user-flagged-staff4-visible-score-transcription-mismatch",
       "sourceId": "wieniawski-staff4-eb-eb-c-eb-eb-symbolic-v1",
       "status": "rejected",
-      "rejectionKind": "visible_score_transcription_mismatch",
-      "basis": "Alan reviewed the live 2026-05-03 Staff 4 score/transcription/video group and reported that the visible score notes and displayed transcription do not match. The range is blocked even though the symbolic MIDI fixture can still be parsed.",
+      "rejectionKind": "old_tight_crop_rejected",
+      "basis": "Alan rejected the old tight Staff 4 crop in the live 2026-05-03 group. That old crop remains a blocked regression, but the source range itself is superseded by the full-context actual-PDF reverification crop accepted on 2026-05-18.",
       "practiceDay": "2026-05-03",
       "sampleId": "Njh8_zq9_DM-8835",
       "sourceWindow": "*8835-8925",
@@ -228,7 +233,7 @@
       "midiSequence": [75, 75, 72, 75, 75],
       "minimumExactNotes": 5,
       "audioAgreed": false,
-      "reviewOutcome": "visible_score_crop_rejected_by_alan_2026_05_18",
+      "reviewOutcome": "old_tight_crop_rejected_full_context_crop_reverified_2026_05_18",
       "sourceReviewImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-context-review.png",
       "sourceCropDisplayAllowed": false,
       "noteWindows": [

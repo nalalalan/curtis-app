@@ -29,10 +29,11 @@ class LongPhraseTruthTests(unittest.TestCase):
         self.assertEqual(result["positiveSourcePhraseVerifiedCount"], 4)
         self.assertEqual(result["rejectedRegressionPhraseCount"], 6)
         self.assertEqual(result["rejectedRegressionBlockedCount"], 6)
-        self.assertEqual(result["liveAcceptedPhraseCount"], 0)
+        self.assertEqual(result["liveAcceptedPhraseCount"], 1)
         source_ids = {item["id"] for item in result["sourceResults"]}
         self.assertIn("wieniawski-staff4-eb-eb-c-eb-eb-eb-c-a-symbolic-v1", source_ids)
         accepted_source_ids = {item["sourceId"] for item in result["positiveSourcePhraseResults"] if item["liveAccepted"]}
+        self.assertIn("wieniawski-staff4-eb-eb-c-eb-eb-symbolic-v1", accepted_source_ids)
         self.assertNotIn("wieniawski-staff4-eb-eb-c-eb-eb-eb-c-a-symbolic-v1", accepted_source_ids)
         self.assertIn("rejected-staff4-right2-audit-eb-vs-d", result["blockedRegressionIds"])
         self.assertIn("rejected-staff4-stitched-a4-continuation", result["blockedRegressionIds"])

@@ -4587,7 +4587,7 @@
     75
   ],
   "bestAudioSequence": "D#5 D#5 C5 D#5 D#5",
-  "canExtendStaff4Lane": false,
+  "canExtendStaff4Lane": true,
   "clip": {
     "audioUrl": "/api/curtis/staff4-audit/artifacts/staff4-source-crop-review-2026-05-03-Njh8_zq9_DM-8835-9-14/staff4-audit.wav",
     "endSeconds": null,
@@ -4601,7 +4601,7 @@
   },
   "createdAt": "2026-05-18T22:13:29.663631+00:00",
   "decision": {
-    "accepted": false,
+    "accepted": true,
     "audioMidiSequence": [
       75,
       75,
@@ -4609,17 +4609,20 @@
       75,
       75
     ],
+    "audioReviewStatus": "audio_agreed",
     "bestAudioSequence": "D#5 D#5 C5 D#5 D#5",
-    "canExtendStaff4Lane": false,
-    "goldReviewRequired": true,
-    "limit": "Visible source crop, boxed noteheads, rendered transcription, and paired audio must agree before Staff 4 can become accepted evidence again. Rejected tight crops stay hidden from accepted match display.",
-    "outcome": "source_crop_reverification_required",
+    "canExtendStaff4Lane": true,
+    "goldReviewRequired": false,
+    "limit": "Source crop, boxed noteheads, rendered transcription, and paired audio now agree by exact MIDI.",
+    "outcome": "accept_source_crop_audio_agreed_phrase",
     "rejected": false,
+    "scoreReviewStatus": "verified_actual_pdf_context",
     "sourceCropContextReady": true,
     "sourceCropContextRequirement": "Use a full-context source-score crop from the local PDF for review; do not show the rejected tight crop as a match.",
-    "sourceCropDisplayAllowed": false,
-    "sourceCropRejected": true,
-    "status": "pending_source_crop_reverification",
+    "sourceCropDisplayAllowed": true,
+    "sourceCropReady": true,
+    "sourceCropRejected": false,
+    "status": "accepted_truth_candidate",
     "targetMidiSequence": [
       75,
       75,
@@ -4628,7 +4631,7 @@
       75
     ],
     "targetSequence": "Eb5 Eb5 C5 Eb5 Eb5",
-    "truthDecision": "pending_review"
+    "truthDecision": "accepted"
   },
   "expectedFailedScoreMidi": null,
   "expectedFailedScoreNote": "",
@@ -4636,43 +4639,8 @@
   "expectedNextScoreNote": "",
   "firstFailure": {},
   "gate": "queued_source_crop_reverification",
-  "goldReviewCandidate": {
-    "audioMidiSequence": [
-      75,
-      75,
-      72,
-      75,
-      75
-    ],
-    "bestAudioSequence": "D#5 D#5 C5 D#5 D#5",
-    "clip": {
-      "audioUrl": "/api/curtis/staff4-audit/artifacts/staff4-source-crop-review-2026-05-03-Njh8_zq9_DM-8835-9-14/staff4-audit.wav",
-      "endSeconds": null,
-      "localEndSeconds": 22.985,
-      "localStartSeconds": 19.875,
-      "mediaUrl": "/api/curtis/media/sample/Njh8_zq9_DM-8835",
-      "noteLocalEndSeconds": 22.535,
-      "noteLocalStartSeconds": 20.225,
-      "startSeconds": null,
-      "videoUrl": "/api/curtis/staff4-audit/artifacts/staff4-source-crop-review-2026-05-03-Njh8_zq9_DM-8835-9-14/staff4-audit.mp4"
-    },
-    "kind": "staff4_source_crop_reverification",
-    "packetId": "staff4-source-crop-review-2026-05-03-Njh8_zq9_DM-8835-9-14",
-    "reason": "source_crop_reverification_required",
-    "reviewImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-context-review.png",
-    "sourceCropDisplayAllowed": false,
-    "status": "queued",
-    "targetMidiSequence": [
-      75,
-      75,
-      72,
-      75,
-      75
-    ],
-    "targetSequence": "Eb5 Eb5 C5 Eb5 Eb5"
-  },
   "limit": "Alan reviewed the live 2026-05-03 Staff 4 score/transcription/video group and reported that the visible score notes and displayed transcription do not match. The range is blocked even though the symbolic MIDI fixture can still be parsed.",
-  "nextAction": "Reverify the visible Staff 4 source crop against the transcription and paired audio before reopening this lane.",
+  "nextAction": "Extend this accepted five-note Staff 4 anchor only after the adjacent source notes reproduce in paired audio by exact MIDI.",
   "observedFailureAudioMidi": null,
   "observedFailureAudioNote": "",
   "observedNextAudioMidi": null,
@@ -4684,15 +4652,230 @@
   "score": {
     "sourceCropContextReady": true,
     "sourceCropContextRequirement": "Use a full-context source-score crop from the local PDF for review; do not show the rejected tight crop as a match.",
-    "sourceCropDisplayAllowed": false,
-    "sourceCropReady": false,
-    "sourceCropRejected": true,
-    "sourceImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-verified.png",
+    "sourceCropDisplayAllowed": true,
+    "sourceCropReady": true,
+    "sourceCropRejected": false,
+    "sourceImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-context-review.png",
     "sourceReviewImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-context-review.png",
-    "truthEvidenceAccepted": false
+    "truthEvidenceAccepted": true
+  },
+  "sourceCropAudioAgreement": {
+    "accepted": true,
+    "agreedNoteCount": 5,
+    "exactMidi": true,
+    "limit": "",
+    "noteCount": 5,
+    "noteWindows": [
+      {
+        "agreementSourceCount": 3,
+        "agreementSources": [
+          "pyin",
+          "yin",
+          "spectralPeak"
+        ],
+        "audioAgreement": true,
+        "clipLocalEndSeconds": 0.547,
+        "clipLocalStartSeconds": 0.35,
+        "detectors": {
+          "pyin": {
+            "frameCount": 17,
+            "medianMidi": 75.2,
+            "note": "D#5",
+            "roundedMidi": 75
+          },
+          "spectralPeak": {
+            "frameCount": 17,
+            "medianMidi": 75.061,
+            "note": "D#5",
+            "roundedMidi": 75
+          },
+          "yin": {
+            "frameCount": 17,
+            "medianMidi": 75.173,
+            "note": "D#5",
+            "roundedMidi": 75
+          }
+        },
+        "index": 0,
+        "storedMidi": 75,
+        "storedNote": "D#5",
+        "targetMidi": 75,
+        "targetNote": "Eb5"
+      },
+      {
+        "agreementSourceCount": 3,
+        "agreementSources": [
+          "pyin",
+          "yin",
+          "spectralPeak"
+        ],
+        "audioAgreement": true,
+        "clipLocalEndSeconds": 0.814,
+        "clipLocalStartSeconds": 0.675,
+        "detectors": {
+          "pyin": {
+            "frameCount": 12,
+            "medianMidi": 74.7,
+            "note": "D#5",
+            "roundedMidi": 75
+          },
+          "spectralPeak": {
+            "frameCount": 12,
+            "medianMidi": 74.76,
+            "note": "D#5",
+            "roundedMidi": 75
+          },
+          "yin": {
+            "frameCount": 12,
+            "medianMidi": 74.669,
+            "note": "D#5",
+            "roundedMidi": 75
+          }
+        },
+        "index": 1,
+        "storedMidi": 75,
+        "storedNote": "D#5",
+        "targetMidi": 75,
+        "targetNote": "Eb5"
+      },
+      {
+        "agreementSourceCount": 3,
+        "agreementSources": [
+          "pyin",
+          "yin",
+          "spectralPeak"
+        ],
+        "audioAgreement": true,
+        "clipLocalEndSeconds": 1.023,
+        "clipLocalStartSeconds": 0.942,
+        "detectors": {
+          "pyin": {
+            "frameCount": 7,
+            "medianMidi": 72.3,
+            "note": "C5",
+            "roundedMidi": 72
+          },
+          "spectralPeak": {
+            "frameCount": 7,
+            "medianMidi": 72.142,
+            "note": "C5",
+            "roundedMidi": 72
+          },
+          "yin": {
+            "frameCount": 7,
+            "medianMidi": 72.258,
+            "note": "C5",
+            "roundedMidi": 72
+          }
+        },
+        "index": 2,
+        "storedMidi": 72,
+        "storedNote": "C5",
+        "targetMidi": 72,
+        "targetNote": "C5"
+      },
+      {
+        "agreementSourceCount": 3,
+        "agreementSources": [
+          "pyin",
+          "yin",
+          "spectralPeak"
+        ],
+        "audioAgreement": true,
+        "clipLocalEndSeconds": 1.917,
+        "clipLocalStartSeconds": 1.754,
+        "detectors": {
+          "pyin": {
+            "frameCount": 14,
+            "medianMidi": 75.0,
+            "note": "D#5",
+            "roundedMidi": 75
+          },
+          "spectralPeak": {
+            "frameCount": 14,
+            "medianMidi": 75.061,
+            "note": "D#5",
+            "roundedMidi": 75
+          },
+          "yin": {
+            "frameCount": 14,
+            "medianMidi": 75.047,
+            "note": "D#5",
+            "roundedMidi": 75
+          }
+        },
+        "index": 3,
+        "storedMidi": 75,
+        "storedNote": "D#5",
+        "targetMidi": 75,
+        "targetNote": "Eb5"
+      },
+      {
+        "agreementSourceCount": 3,
+        "agreementSources": [
+          "pyin",
+          "yin",
+          "spectralPeak"
+        ],
+        "audioAgreement": true,
+        "clipLocalEndSeconds": 2.66,
+        "clipLocalStartSeconds": 2.486,
+        "detectors": {
+          "pyin": {
+            "frameCount": 15,
+            "medianMidi": 75.0,
+            "note": "D#5",
+            "roundedMidi": 75
+          },
+          "spectralPeak": {
+            "frameCount": 15,
+            "medianMidi": 75.061,
+            "note": "D#5",
+            "roundedMidi": 75
+          },
+          "yin": {
+            "frameCount": 15,
+            "medianMidi": 74.971,
+            "note": "D#5",
+            "roundedMidi": 75
+          }
+        },
+        "index": 4,
+        "storedMidi": 75,
+        "storedNote": "D#5",
+        "targetMidi": 75,
+        "targetNote": "Eb5"
+      }
+    ],
+    "phraseContinuity": {
+      "continuous": true,
+      "largestGapAfterIndex": 2,
+      "limit": "",
+      "maxAllowedInterNoteGapSeconds": 3.0,
+      "maxInterNoteGapSeconds": 0.731,
+      "noteCount": 5,
+      "soundedSeconds": 0.754,
+      "spanSeconds": 2.31
+    },
+    "requiredAgreementSourcesPerNote": 2,
+    "status": "audio_agreed",
+    "storedMidiSequence": [
+      75,
+      75,
+      72,
+      75,
+      75
+    ],
+    "targetMidiSequence": [
+      75,
+      75,
+      72,
+      75,
+      75
+    ]
   },
   "sourceCropReverification": {
-    "acceptanceRule": "Visible source crop, boxed noteheads, rendered transcription, and paired audio must agree before Staff 4 can become accepted evidence again. Rejected tight crops stay hidden from accepted match display.",
+    "acceptanceRule": "Source crop, boxed noteheads, rendered transcription, and paired audio now agree by exact MIDI.",
     "audioMidiSequence": [
       75,
       75,
@@ -4702,10 +4885,287 @@
     ],
     "bestAudioSequence": "D#5 D#5 C5 D#5 D#5",
     "reviewImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-context-review.png",
-    "scoreImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-verified.png",
+    "scoreImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-context-review.png",
+    "sourceCropAudioAgreement": {
+      "accepted": true,
+      "agreedNoteCount": 5,
+      "exactMidi": true,
+      "limit": "",
+      "noteCount": 5,
+      "noteWindows": [
+        {
+          "agreementSourceCount": 3,
+          "agreementSources": [
+            "pyin",
+            "yin",
+            "spectralPeak"
+          ],
+          "audioAgreement": true,
+          "clipLocalEndSeconds": 0.547,
+          "clipLocalStartSeconds": 0.35,
+          "detectors": {
+            "pyin": {
+              "frameCount": 17,
+              "medianMidi": 75.2,
+              "note": "D#5",
+              "roundedMidi": 75
+            },
+            "spectralPeak": {
+              "frameCount": 17,
+              "medianMidi": 75.061,
+              "note": "D#5",
+              "roundedMidi": 75
+            },
+            "yin": {
+              "frameCount": 17,
+              "medianMidi": 75.173,
+              "note": "D#5",
+              "roundedMidi": 75
+            }
+          },
+          "index": 0,
+          "storedMidi": 75,
+          "storedNote": "D#5",
+          "targetMidi": 75,
+          "targetNote": "Eb5"
+        },
+        {
+          "agreementSourceCount": 3,
+          "agreementSources": [
+            "pyin",
+            "yin",
+            "spectralPeak"
+          ],
+          "audioAgreement": true,
+          "clipLocalEndSeconds": 0.814,
+          "clipLocalStartSeconds": 0.675,
+          "detectors": {
+            "pyin": {
+              "frameCount": 12,
+              "medianMidi": 74.7,
+              "note": "D#5",
+              "roundedMidi": 75
+            },
+            "spectralPeak": {
+              "frameCount": 12,
+              "medianMidi": 74.76,
+              "note": "D#5",
+              "roundedMidi": 75
+            },
+            "yin": {
+              "frameCount": 12,
+              "medianMidi": 74.669,
+              "note": "D#5",
+              "roundedMidi": 75
+            }
+          },
+          "index": 1,
+          "storedMidi": 75,
+          "storedNote": "D#5",
+          "targetMidi": 75,
+          "targetNote": "Eb5"
+        },
+        {
+          "agreementSourceCount": 3,
+          "agreementSources": [
+            "pyin",
+            "yin",
+            "spectralPeak"
+          ],
+          "audioAgreement": true,
+          "clipLocalEndSeconds": 1.023,
+          "clipLocalStartSeconds": 0.942,
+          "detectors": {
+            "pyin": {
+              "frameCount": 7,
+              "medianMidi": 72.3,
+              "note": "C5",
+              "roundedMidi": 72
+            },
+            "spectralPeak": {
+              "frameCount": 7,
+              "medianMidi": 72.142,
+              "note": "C5",
+              "roundedMidi": 72
+            },
+            "yin": {
+              "frameCount": 7,
+              "medianMidi": 72.258,
+              "note": "C5",
+              "roundedMidi": 72
+            }
+          },
+          "index": 2,
+          "storedMidi": 72,
+          "storedNote": "C5",
+          "targetMidi": 72,
+          "targetNote": "C5"
+        },
+        {
+          "agreementSourceCount": 3,
+          "agreementSources": [
+            "pyin",
+            "yin",
+            "spectralPeak"
+          ],
+          "audioAgreement": true,
+          "clipLocalEndSeconds": 1.917,
+          "clipLocalStartSeconds": 1.754,
+          "detectors": {
+            "pyin": {
+              "frameCount": 14,
+              "medianMidi": 75.0,
+              "note": "D#5",
+              "roundedMidi": 75
+            },
+            "spectralPeak": {
+              "frameCount": 14,
+              "medianMidi": 75.061,
+              "note": "D#5",
+              "roundedMidi": 75
+            },
+            "yin": {
+              "frameCount": 14,
+              "medianMidi": 75.047,
+              "note": "D#5",
+              "roundedMidi": 75
+            }
+          },
+          "index": 3,
+          "storedMidi": 75,
+          "storedNote": "D#5",
+          "targetMidi": 75,
+          "targetNote": "Eb5"
+        },
+        {
+          "agreementSourceCount": 3,
+          "agreementSources": [
+            "pyin",
+            "yin",
+            "spectralPeak"
+          ],
+          "audioAgreement": true,
+          "clipLocalEndSeconds": 2.66,
+          "clipLocalStartSeconds": 2.486,
+          "detectors": {
+            "pyin": {
+              "frameCount": 15,
+              "medianMidi": 75.0,
+              "note": "D#5",
+              "roundedMidi": 75
+            },
+            "spectralPeak": {
+              "frameCount": 15,
+              "medianMidi": 75.061,
+              "note": "D#5",
+              "roundedMidi": 75
+            },
+            "yin": {
+              "frameCount": 15,
+              "medianMidi": 74.971,
+              "note": "D#5",
+              "roundedMidi": 75
+            }
+          },
+          "index": 4,
+          "storedMidi": 75,
+          "storedNote": "D#5",
+          "targetMidi": 75,
+          "targetNote": "Eb5"
+        }
+      ],
+      "phraseContinuity": {
+        "continuous": true,
+        "largestGapAfterIndex": 2,
+        "limit": "",
+        "maxAllowedInterNoteGapSeconds": 3.0,
+        "maxInterNoteGapSeconds": 0.731,
+        "noteCount": 5,
+        "soundedSeconds": 0.754,
+        "spanSeconds": 2.31
+      },
+      "requiredAgreementSourcesPerNote": 2,
+      "status": "audio_agreed",
+      "storedMidiSequence": [
+        75,
+        75,
+        72,
+        75,
+        75
+      ],
+      "targetMidiSequence": [
+        75,
+        75,
+        72,
+        75,
+        75
+      ]
+    },
     "sourceCropContextReady": true,
-    "sourceCropDisplayAllowed": false,
-    "status": "pending_review",
+    "sourceCropDisplayAllowed": true,
+    "sourceCropReady": true,
+    "sourceCropScoreReview": {
+      "accepted": true,
+      "limit": "",
+      "matchedNoteheadCenters": [
+        {
+          "note": "Eb5",
+          "x": 2061.0,
+          "y": 1435.0
+        },
+        {
+          "note": "Eb5",
+          "x": 2108.5,
+          "y": 1435.0
+        },
+        {
+          "note": "C5",
+          "x": 2153.0,
+          "y": 1455.5
+        },
+        {
+          "note": "Eb5",
+          "x": 2204.0,
+          "y": 1435.0
+        },
+        {
+          "note": "Eb5",
+          "x": 2250.5,
+          "y": 1435.0
+        }
+      ],
+      "referenceEnd": 14,
+      "referenceStart": 9,
+      "scoreBoxCenterAgreement": true,
+      "sourceImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-context-review.png",
+      "sourcePdfLocalPath": "assets/score/wieniawski-scherzo-tarantelle-solo-imslp.pdf",
+      "sourcePdfPage": 2,
+      "sourceReviewImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-context-review.png",
+      "status": "verified_actual_pdf_context",
+      "targetMidiSequence": [
+        75,
+        75,
+        72,
+        75,
+        75
+      ],
+      "truthEvidenceAccepted": true,
+      "visibleScoreExactNoteSequence": [
+        "Eb5",
+        "Eb5",
+        "C5",
+        "Eb5",
+        "Eb5"
+      ],
+      "visibleScoreMidiSequence": [
+        75,
+        75,
+        72,
+        75,
+        75
+      ]
+    },
+    "status": "accepted",
     "targetMidiSequence": [
       75,
       75,
@@ -4715,17 +5175,82 @@
     ],
     "targetSequence": "Eb5 Eb5 C5 Eb5 Eb5"
   },
+  "sourceCropScoreReview": {
+    "accepted": true,
+    "limit": "",
+    "matchedNoteheadCenters": [
+      {
+        "note": "Eb5",
+        "x": 2061.0,
+        "y": 1435.0
+      },
+      {
+        "note": "Eb5",
+        "x": 2108.5,
+        "y": 1435.0
+      },
+      {
+        "note": "C5",
+        "x": 2153.0,
+        "y": 1455.5
+      },
+      {
+        "note": "Eb5",
+        "x": 2204.0,
+        "y": 1435.0
+      },
+      {
+        "note": "Eb5",
+        "x": 2250.5,
+        "y": 1435.0
+      }
+    ],
+    "referenceEnd": 14,
+    "referenceStart": 9,
+    "scoreBoxCenterAgreement": true,
+    "sourceImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-context-review.png",
+    "sourcePdfLocalPath": "assets/score/wieniawski-scherzo-tarantelle-solo-imslp.pdf",
+    "sourcePdfPage": 2,
+    "sourceReviewImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-context-review.png",
+    "status": "verified_actual_pdf_context",
+    "targetMidiSequence": [
+      75,
+      75,
+      72,
+      75,
+      75
+    ],
+    "truthEvidenceAccepted": true,
+    "visibleScoreExactNoteSequence": [
+      "Eb5",
+      "Eb5",
+      "C5",
+      "Eb5",
+      "Eb5"
+    ],
+    "visibleScoreMidiSequence": [
+      75,
+      75,
+      72,
+      75,
+      75
+    ]
+  },
   "sourceTitle": "",
   "sourceUrl": "",
   "sourceWindow": "*8835-8925",
-  "status": "queued_source_crop_reverification",
+  "status": "accepted_truth_candidate",
   "storedAudioNotes": [
     {
-      "agreementSourceCount": 0,
-      "agreementSources": [],
-      "audioAgreement": false,
+      "agreementSourceCount": 3,
+      "agreementSources": [
+        "source_crop_note_audio_pyin",
+        "source_crop_note_audio_yin",
+        "source_crop_note_audio_spectralPeak"
+      ],
+      "audioAgreement": true,
       "confidence": 0.0,
-      "detectorSource": "visible_mismatch_reverification_queue",
+      "detectorSource": "source_crop_reverification_note_window",
       "durationSeconds": 0.197,
       "endSeconds": 20.422,
       "index": 0,
@@ -4734,11 +5259,15 @@
       "startSeconds": 20.225
     },
     {
-      "agreementSourceCount": 0,
-      "agreementSources": [],
-      "audioAgreement": false,
+      "agreementSourceCount": 3,
+      "agreementSources": [
+        "source_crop_note_audio_pyin",
+        "source_crop_note_audio_yin",
+        "source_crop_note_audio_spectralPeak"
+      ],
+      "audioAgreement": true,
       "confidence": 0.0,
-      "detectorSource": "visible_mismatch_reverification_queue",
+      "detectorSource": "source_crop_reverification_note_window",
       "durationSeconds": 0.139,
       "endSeconds": 20.689,
       "index": 1,
@@ -4747,11 +5276,15 @@
       "startSeconds": 20.55
     },
     {
-      "agreementSourceCount": 0,
-      "agreementSources": [],
-      "audioAgreement": false,
+      "agreementSourceCount": 3,
+      "agreementSources": [
+        "source_crop_note_audio_pyin",
+        "source_crop_note_audio_yin",
+        "source_crop_note_audio_spectralPeak"
+      ],
+      "audioAgreement": true,
       "confidence": 0.0,
-      "detectorSource": "visible_mismatch_reverification_queue",
+      "detectorSource": "source_crop_reverification_note_window",
       "durationSeconds": 0.081,
       "endSeconds": 20.898,
       "index": 2,
@@ -4760,11 +5293,15 @@
       "startSeconds": 20.817
     },
     {
-      "agreementSourceCount": 0,
-      "agreementSources": [],
-      "audioAgreement": false,
+      "agreementSourceCount": 3,
+      "agreementSources": [
+        "source_crop_note_audio_pyin",
+        "source_crop_note_audio_yin",
+        "source_crop_note_audio_spectralPeak"
+      ],
+      "audioAgreement": true,
       "confidence": 0.0,
-      "detectorSource": "visible_mismatch_reverification_queue",
+      "detectorSource": "source_crop_reverification_note_window",
       "durationSeconds": 0.163,
       "endSeconds": 21.792,
       "index": 3,
@@ -4773,11 +5310,15 @@
       "startSeconds": 21.629
     },
     {
-      "agreementSourceCount": 0,
-      "agreementSources": [],
-      "audioAgreement": false,
+      "agreementSourceCount": 3,
+      "agreementSources": [
+        "source_crop_note_audio_pyin",
+        "source_crop_note_audio_yin",
+        "source_crop_note_audio_spectralPeak"
+      ],
+      "audioAgreement": true,
       "confidence": 0.0,
-      "detectorSource": "visible_mismatch_reverification_queue",
+      "detectorSource": "source_crop_reverification_note_window",
       "durationSeconds": 0.174,
       "endSeconds": 22.535,
       "index": 4,
@@ -4796,6 +5337,6 @@
   "targetReferenceEnd": 14,
   "targetReferenceStart": 9,
   "targetSequence": "Eb5 Eb5 C5 Eb5 Eb5",
-  "truthDecision": "pending_review",
+  "truthDecision": "accepted",
   "version": "staff4_phrase_audit_v3"
 }

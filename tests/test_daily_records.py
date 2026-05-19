@@ -10,7 +10,7 @@ from backend.app.daily_records import (
 )
 from backend.app.corrections import wieniawski_reference_target
 from backend.app.media import practice_candidates
-from backend.app.symbolic_scores import source_range_rejected
+from backend.app.symbolic_scores import source_image_url_rejected, source_range_rejected
 from backend.app.transcription import TRANSCRIPTION_PIPELINE_VERSION
 
 
@@ -1217,7 +1217,7 @@ class DailyRecordTests(unittest.TestCase):
         self.assertEqual(target["scoreNoteCropStatus"], "actual_source_phrase_review_pending")
         self.assertEqual(audit["sourcePdfLocalReadyCount"], 1)
         self.assertEqual(audit["symbolicScoreNoteCount"], 17)
-        self.assertEqual(audit["symbolicScoreSourceSnippetCount"], 0)
+        self.assertEqual(audit["symbolicScoreSourceSnippetCount"], 1)
         self.assertGreaterEqual(audit["scoreMapCandidateGlyphCount"], 1)
         self.assertGreaterEqual(audit["scoreMapCandidateStaffCount"], 1)
         self.assertGreaterEqual(audit["scoreMapNoteHypothesisCount"], 1)
@@ -1230,12 +1230,23 @@ class DailyRecordTests(unittest.TestCase):
         )
         self.assertEqual(target["scorePitchClassAnchors"], [])
         verified_source = target["symbolicScore"]["sourceSnippets"][0]
-        self.assertEqual(verified_source["status"], "source_score_phrase_review_rejected")
+        self.assertEqual(verified_source["status"], "source_score_exact_midi_sequence_verified")
         self.assertEqual(verified_source["visibleScoreExactNoteSequence"], ["Eb5", "Eb5", "C5", "Eb5", "Eb5"])
-        self.assertFalse(verified_source["visibleScoreExactNoteSequenceVerified"])
-        self.assertFalse(verified_source["scoreBoxCenterAgreement"])
-        self.assertFalse(verified_source["truthEvidenceAccepted"])
-        self.assertTrue(source_range_rejected(target, 9, 14))
+        self.assertTrue(verified_source["visibleScoreExactNoteSequenceVerified"])
+        self.assertTrue(verified_source["scoreBoxCenterAgreement"])
+        self.assertTrue(verified_source["truthEvidenceAccepted"])
+        self.assertTrue(verified_source["sourceCropDisplayAllowed"])
+        self.assertFalse(verified_source["sourceCropRejected"])
+        self.assertFalse(source_range_rejected(target, 9, 14))
+        self.assertTrue(
+            source_image_url_rejected(
+                target,
+                9,
+                14,
+                "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-verified.png",
+            )
+        )
+        self.assertFalse(source_image_url_rejected(target, 9, 14, verified_source["imageUrl"]))
         self.assertEqual(verified_source["acceptedAudioPhrase"]["midiSequence"], [75, 75, 72, 75, 75])
         six_note_source = next(
             item

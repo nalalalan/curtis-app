@@ -6,7 +6,7 @@ from collections import Counter, defaultdict
 from typing import Any
 
 from .analyzer import parse_window_start
-from .corrections import accepted_source_corrections, compact_text, source_key_from_item, youtube_video_id
+from .corrections import accepted_source_corrections, compact_text, source_key_from_item, wieniawski_reference_target, youtube_video_id
 from .reference_corpus import calibration_anchor_for_item
 from .score_assets import score_asset_source_state
 from .study_packets import (
@@ -17,6 +17,7 @@ from .study_packets import (
 from .symbolic_scores import (
     render_symbolic_score_svg,
     score_map_candidate_audit,
+    source_image_url_rejected,
     source_range_rejected,
     symbolic_score_audit,
     symbolic_score_from_target,
@@ -1157,6 +1158,16 @@ def accepted_score_match_group_ready(match: dict[str, Any]) -> bool:
     image_url = str(score.get("imageUrl") or "").strip()
     if not image_url or image_url.startswith("data:"):
         return False
+    asset_id = str(score.get("assetId") or "").lower()
+    piece_title = str(match.get("pieceTitle") or "").lower()
+    if "wieniawski" in asset_id or "wieniawski" in piece_title:
+        if source_image_url_rejected(
+            wieniawski_reference_target(),
+            match.get("referenceStart"),
+            match.get("referenceEnd"),
+            image_url,
+        ):
+            return False
     return any(
         exact_score_location_ready(value)
         for value in (

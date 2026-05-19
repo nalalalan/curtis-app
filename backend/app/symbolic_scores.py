@@ -313,6 +313,40 @@ def source_range_rejected(target: dict[str, Any], reference_start: Any, referenc
     return False
 
 
+def source_image_url_rejected(
+    target: dict[str, Any],
+    reference_start: Any,
+    reference_end: Any,
+    image_url: Any,
+) -> bool:
+    image = str(image_url or "").strip()
+    if not image:
+        return False
+    score_config = target.get("symbolicScore") if isinstance(target.get("symbolicScore"), dict) else {}
+    rejected = score_config.get("rejectedSourceSnippetRanges")
+    if not isinstance(rejected, list):
+        return False
+    try:
+        start = int(reference_start)
+        end = int(reference_end)
+    except (TypeError, ValueError):
+        return False
+    for item in rejected:
+        if not isinstance(item, dict):
+            continue
+        try:
+            rejected_start = int(item.get("referenceStart"))
+            rejected_end = int(item.get("referenceEnd"))
+        except (TypeError, ValueError):
+            continue
+        if rejected_start != start or rejected_end != end:
+            continue
+        blocked_image = str(item.get("blockedImageUrl") or "").strip()
+        if blocked_image and blocked_image == image:
+            return True
+    return False
+
+
 def score_map_candidate_audit(target: dict[str, Any]) -> dict[str, Any]:
     score_config = target.get("symbolicScore") if isinstance(target.get("symbolicScore"), dict) else {}
     path_value = str(

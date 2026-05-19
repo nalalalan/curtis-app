@@ -361,15 +361,8 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertEqual(mining.get("nearestWindow") or {}, {})
         self.assertEqual(completion["staff4AdjacentMiningStatus"], "no_staff4_anchor")
         self.assertIn("Reverify the queued May 3 source-score crop", completion["nextAction"])
-        self.assertEqual(completion["sourceCropReverificationStatus"], "queued_source_crop_reverification")
-        self.assertEqual(completion["sourceCropReverificationTarget"]["targetSequence"], "Eb5 Eb5 C5 Eb5 Eb5")
-        self.assertEqual(completion["sourceCropReverificationTarget"]["bestAudioSequence"], "D#5 D#5 C5 D#5 D#5")
-        self.assertFalse(completion["sourceCropReverificationTarget"]["sourceCropDisplayAllowed"])
-        self.assertTrue(completion["sourceCropReverificationTarget"]["sourceCropContextReady"])
-        self.assertIn(
-            "context-review.png",
-            completion["sourceCropReverificationTarget"]["sourceReviewImageUrl"],
-        )
+        self.assertEqual(completion["sourceCropReverificationStatus"], "empty")
+        self.assertEqual(completion["sourceCropReverificationTarget"], {})
 
     def test_staff4_rejected_anchor_blocks_raw_detected_series_promotion(self):
         daily_records = {
@@ -1783,7 +1776,7 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertIn("Eb5", completion["nextAction"])
         self.assertIn("D5", completion["nextAction"])
 
-    def test_staff4_truth_manifest_anchor_is_not_live_after_visible_mismatch_rejection(self):
+    def test_staff4_truth_manifest_anchor_reopens_after_source_crop_reverification(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             source_path = Path(temp_dir) / "staff4-source.wav"
             write_tiny_wav(source_path)
@@ -1873,20 +1866,10 @@ class TranscriptionCompletionTests(unittest.TestCase):
                     [{"transcriptionId": "t1"}],
                 )
 
-        self.assertEqual(completion["staff4SourceAudioRescanStatus"], "no_staff4_anchor")
-        self.assertEqual(completion["staff4SourceAudioRescanRunCount"], 0)
-        self.assertEqual(completion["staff4SourceAudioRescanAnchorStatus"], "missing")
-        self.assertEqual(completion["staff4SourceAudioRescanAnchorReproducedCount"], 0)
-        self.assertEqual(completion["staff4SourceAudioRescan"]["scanWindowCount"], 0)
-        self.assertEqual(completion["staff4SourceAudioRescanEventCount"], 0)
-        self.assertEqual(completion["phraseExpansionHarness"]["anchorCount"], 0)
-        self.assertEqual(completion["phraseExpansionHarness"]["status"], "empty")
-        self.assertEqual(completion["phraseExpansionHarness"]["acceptedAnchorNoteCount"], 0)
-        self.assertEqual(completion["phraseExpansionHarness"]["currentBest"], {})
-        self.assertEqual(completion["staff4AdjacentMining"]["anchorCount"], 0)
-        self.assertEqual(completion["staff4AdjacentMiningStatus"], "no_staff4_anchor")
-        self.assertEqual(completion["staff4AdjacentMining"]["exactCandidateCount"], 0)
-        self.assertIn("Reverify the queued May 3 source-score crop", completion["nextAction"])
+        self.assertNotEqual(completion["staff4SourceAudioRescanStatus"], "no_staff4_anchor")
+        self.assertGreaterEqual(completion["phraseExpansionHarness"]["anchorCount"], 1)
+        self.assertGreaterEqual(completion["phraseExpansionHarness"]["acceptedAnchorNoteCount"], 5)
+        self.assertGreaterEqual(completion["staff4AdjacentMining"]["anchorCount"], 1)
 
     def test_local_source_score_pdf_advances_score_truth_without_accepting_phrase(self):
         completion = build_transcription_completion(

@@ -7,7 +7,8 @@ from pathlib import Path
 from typing import Any
 
 from .analyzer import run_process
-from .long_phrase_truth import note_window_continuity
+from .corrections import wieniawski_reference_target
+from .long_phrase_truth import note_midi_value, note_window_continuity
 from .settings import ROOT_DIR, RUNTIME_DIR
 from .state import utc_now
 
@@ -627,58 +628,101 @@ def attach_staff4_source_crop_reverification_decision(packet: dict[str, Any]) ->
     audio_midis = int_list(packet.get("bestAudioMidiSequence"))
     score = packet.get("score") if isinstance(packet.get("score"), dict) else {}
     source_review_image = str(score.get("sourceReviewImageUrl") or "").strip()
+    source_review = (
+        packet.get("sourceCropScoreReview")
+        if isinstance(packet.get("sourceCropScoreReview"), dict)
+        else source_crop_score_review_for_packet(packet)
+    )
+    packet["sourceCropScoreReview"] = source_review
+    audio_review = packet.get("sourceCropAudioAgreement") if isinstance(packet.get("sourceCropAudioAgreement"), dict) else {}
+    exact_audio_ready = bool(
+        audio_review.get("accepted")
+        and target_midis
+        and target_midis == audio_midis
+        and audio_review.get("targetMidiSequence") == target_midis
+    )
+    score_ready = bool(source_review.get("accepted"))
+    accepted = bool(score_ready and exact_audio_ready)
+    source_image_url = str(source_review.get("sourceImageUrl") or source_review_image or score.get("sourceImageUrl") or "")
+    status = "accepted_truth_candidate" if accepted else "pending_source_crop_reverification"
+    outcome = "accept_source_crop_audio_agreed_phrase" if accepted else "source_crop_reverification_required"
+    truth_decision = "accepted" if accepted else "pending_review"
     decision = {
-        "status": "pending_source_crop_reverification",
-        "outcome": "source_crop_reverification_required",
-        "truthDecision": "pending_review",
-        "accepted": False,
+        "status": status,
+        "outcome": outcome,
+        "truthDecision": truth_decision,
+        "accepted": accepted,
         "rejected": False,
-        "canExtendStaff4Lane": False,
+        "canExtendStaff4Lane": accepted,
         "targetMidiSequence": target_midis,
         "audioMidiSequence": audio_midis,
         "targetSequence": packet.get("targetSequence") or "",
         "bestAudioSequence": packet.get("bestAudioSequence") or "",
-        "sourceCropRejected": True,
-        "sourceCropDisplayAllowed": False,
-        "sourceCropContextReady": bool(source_review_image),
+        "sourceCropRejected": not accepted,
+        "sourceCropDisplayAllowed": accepted,
+        "sourceCropReady": accepted,
+        "sourceCropContextReady": bool(source_review_image or source_review.get("sourceReviewImageUrl")),
         "sourceCropContextRequirement": str(score.get("sourceCropContextRequirement") or ""),
-        "goldReviewRequired": True,
-        "limit": "Visible source crop, boxed noteheads, rendered transcription, and paired audio must agree before Staff 4 can become accepted evidence again. Rejected tight crops stay hidden from accepted match display.",
+        "scoreReviewStatus": source_review.get("status") or "",
+        "audioReviewStatus": audio_review.get("status") or "",
+        "goldReviewRequired": not accepted,
+        "limit": (
+            "Source crop, boxed noteheads, rendered transcription, and paired audio now agree by exact MIDI."
+            if accepted
+            else "Visible source crop, boxed noteheads, rendered transcription, and paired audio must agree before Staff 4 can become accepted evidence again. Rejected tight crops stay hidden from accepted match display."
+        ),
     }
+    if accepted:
+        score["sourceImageUrl"] = source_image_url
+        score["sourceReviewImageUrl"] = source_review.get("sourceReviewImageUrl") or source_review_image
+        score["sourceCropReady"] = True
+        score["sourceCropRejected"] = False
+        score["sourceCropDisplayAllowed"] = True
+        score["sourceCropContextReady"] = True
+        score["truthEvidenceAccepted"] = True
+        packet["score"] = score
     packet["decision"] = decision
-    packet["truthDecision"] = "pending_review"
-    packet["canExtendStaff4Lane"] = False
+    packet["truthDecision"] = truth_decision
+    packet["canExtendStaff4Lane"] = accepted
     packet["sourceCropReverification"] = {
-        "status": "pending_review",
+        "status": "accepted" if accepted else "pending_review",
         "targetSequence": packet.get("targetSequence") or "",
         "bestAudioSequence": packet.get("bestAudioSequence") or "",
         "targetMidiSequence": target_midis,
         "audioMidiSequence": audio_midis,
-        "scoreImageUrl": (
-            packet.get("score", {}).get("sourceImageUrl")
-            if isinstance(packet.get("score"), dict)
-            else ""
-        ),
-        "reviewImageUrl": source_review_image,
-        "sourceCropDisplayAllowed": False,
-        "sourceCropContextReady": bool(source_review_image),
+        "scoreImageUrl": source_image_url,
+        "reviewImageUrl": source_review.get("sourceReviewImageUrl") or source_review_image,
+        "sourceCropDisplayAllowed": accepted,
+        "sourceCropReady": accepted,
+        "sourceCropContextReady": bool(source_review_image or source_review.get("sourceReviewImageUrl")),
+        "sourceCropScoreReview": source_review,
+        "sourceCropAudioAgreement": audio_review,
         "acceptanceRule": decision["limit"],
     }
-    packet["goldReviewCandidate"] = {
-        "status": "queued",
-        "packetId": packet.get("packetId") or "",
-        "kind": "staff4_source_crop_reverification",
-        "targetSequence": packet.get("targetSequence") or "",
-        "bestAudioSequence": packet.get("bestAudioSequence") or "",
-        "targetMidiSequence": target_midis,
-        "audioMidiSequence": audio_midis,
-        "reviewImageUrl": source_review_image,
-        "sourceCropDisplayAllowed": False,
-        "clip": packet.get("clip") if isinstance(packet.get("clip"), dict) else {},
-        "reason": decision["outcome"],
-    }
-    if str(packet.get("status") or "") in {"generated", "needs_manual_audio_review", "detectors_disagree_with_stored_run", "detector_split_review_required"}:
-        packet["status"] = "queued_source_crop_reverification"
+    if not accepted:
+        packet["goldReviewCandidate"] = {
+            "status": "queued",
+            "packetId": packet.get("packetId") or "",
+            "kind": "staff4_source_crop_reverification",
+            "targetSequence": packet.get("targetSequence") or "",
+            "bestAudioSequence": packet.get("bestAudioSequence") or "",
+            "targetMidiSequence": target_midis,
+            "audioMidiSequence": audio_midis,
+            "reviewImageUrl": source_review_image,
+            "sourceCropDisplayAllowed": False,
+            "clip": packet.get("clip") if isinstance(packet.get("clip"), dict) else {},
+            "reason": decision["outcome"],
+        }
+    elif "goldReviewCandidate" in packet:
+        packet.pop("goldReviewCandidate", None)
+    if str(packet.get("status") or "") in {
+        "generated",
+        "needs_manual_audio_review",
+        "detectors_disagree_with_stored_run",
+        "detector_split_review_required",
+        "queued_source_crop_reverification",
+    }:
+        packet["status"] = "accepted_truth_candidate" if accepted else "queued_source_crop_reverification"
     return packet
 
 
@@ -939,6 +983,170 @@ def detector_window_median(
         "roundedMidi": midi,
         "note": note_label_for_midi(midi),
         "frameCount": len(values),
+    }
+
+
+def source_crop_score_review_for_packet(packet: dict[str, Any]) -> dict[str, Any]:
+    target_midis = int_list(packet.get("targetMidiSequence"))
+    reference_start = int_or_none(packet.get("targetReferenceStart"))
+    reference_end = int_or_none(packet.get("targetReferenceEnd"))
+    if not target_midis or reference_start is None or reference_end is None:
+        return {
+            "status": "blocked_missing_source_reference",
+            "accepted": False,
+            "limit": "Source-crop review needs a target MIDI sequence and source-reference range.",
+        }
+    target = wieniawski_reference_target()
+    score_config = target.get("symbolicScore") if isinstance(target.get("symbolicScore"), dict) else {}
+    snippets = score_config.get("sourceSnippets") if isinstance(score_config.get("sourceSnippets"), list) else []
+    score = packet.get("score") if isinstance(packet.get("score"), dict) else {}
+    requested_review_image = str(score.get("sourceReviewImageUrl") or packet.get("sourceReviewImageUrl") or "").strip()
+    for snippet in snippets:
+        if not isinstance(snippet, dict):
+            continue
+        try:
+            snippet_start = int(snippet.get("referenceStart"))
+            snippet_end = int(snippet.get("referenceEnd"))
+        except (TypeError, ValueError):
+            continue
+        if snippet_start != reference_start or snippet_end != reference_end:
+            continue
+        exact_notes = [
+            str(note)
+            for note in snippet.get("visibleScoreExactNoteSequence", [])
+            if str(note or "").strip()
+        ] if isinstance(snippet.get("visibleScoreExactNoteSequence"), list) else []
+        snippet_midis = [note_midi_value(note) for note in exact_notes]
+        if snippet_midis != target_midis:
+            return {
+                "status": "source_crop_score_sequence_mismatch",
+                "accepted": False,
+                "referenceStart": reference_start,
+                "referenceEnd": reference_end,
+                "targetMidiSequence": target_midis,
+                "visibleScoreExactNoteSequence": exact_notes,
+                "visibleScoreMidiSequence": snippet_midis,
+                "limit": "The visible score-note sequence does not match the target MIDI sequence.",
+            }
+        coordinates = snippet.get("sourceCropCoordinates") if isinstance(snippet.get("sourceCropCoordinates"), dict) else {}
+        centers = coordinates.get("matchedNoteheadCenters") if isinstance(coordinates.get("matchedNoteheadCenters"), list) else []
+        review_image = str(snippet.get("sourceReviewImageUrl") or snippet.get("imageUrl") or "").strip()
+        context_ready = bool(requested_review_image and requested_review_image == review_image) or bool(review_image)
+        accepted = bool(
+            context_ready
+            and len(centers) == len(target_midis)
+            and snippet.get("visualRangeAgreement") is True
+            and snippet.get("visibleScoreNoteSequenceVerified") is True
+            and snippet.get("visibleScoreExactNoteSequenceVerified") is True
+            and snippet.get("scoreBoxCenterAgreement") is True
+            and snippet.get("audioTranscriptionAgreement") is True
+            and snippet.get("transcriptionScoreAgreement") is True
+            and snippet.get("truthEvidenceAccepted") is True
+        )
+        return {
+            "status": "verified_actual_pdf_context" if accepted else "source_crop_context_review_required",
+            "accepted": accepted,
+            "referenceStart": reference_start,
+            "referenceEnd": reference_end,
+            "targetMidiSequence": target_midis,
+            "visibleScoreExactNoteSequence": exact_notes,
+            "visibleScoreMidiSequence": snippet_midis,
+            "sourceReviewImageUrl": review_image,
+            "sourceImageUrl": review_image,
+            "sourcePdfLocalPath": target.get("scorePdfLocalPath") or score_config.get("sourcePdfLocalPath") or "",
+            "sourcePdfPage": target.get("scorePage") or snippet.get("sourcePdfPage") or 0,
+            "matchedNoteheadCenters": centers,
+            "scoreBoxCenterAgreement": bool(snippet.get("scoreBoxCenterAgreement")),
+            "truthEvidenceAccepted": bool(snippet.get("truthEvidenceAccepted")),
+            "limit": ""
+            if accepted
+            else "The source crop stays hidden until the full-context crop, notehead centers, and exact score-note sequence are verified.",
+        }
+    return {
+        "status": "blocked_source_snippet_missing",
+        "accepted": False,
+        "referenceStart": reference_start,
+        "referenceEnd": reference_end,
+        "targetMidiSequence": target_midis,
+        "limit": "No verified source-snippet record exists for this Staff 4 source range.",
+    }
+
+
+def source_crop_note_audio_agreement(
+    packet: dict[str, Any],
+    analysis: dict[str, Any],
+    clip_start: float,
+) -> dict[str, Any]:
+    target_midis = int_list(packet.get("targetMidiSequence"))
+    stored_notes = packet.get("storedAudioNotes") if isinstance(packet.get("storedAudioNotes"), list) else []
+    frames_by_name = analysis.get("frames") if isinstance(analysis.get("frames"), dict) else {}
+    note_results: list[dict[str, Any]] = []
+    for index, expected_midi in enumerate(target_midis):
+        note = stored_notes[index] if index < len(stored_notes) and isinstance(stored_notes[index], dict) else {}
+        start = number_or_none(note.get("startSeconds"))
+        end = number_or_none(note.get("endSeconds"))
+        if start is None:
+            start = clip_start
+        if end is None or end < start:
+            end = start + 0.08
+        local_start = max(0.0, start - clip_start)
+        local_end = max(local_start + 0.04, end - clip_start)
+        detectors: dict[str, Any] = {}
+        matching_sources: list[str] = []
+        for detector_name in ("pyin", "yin", "spectralPeak"):
+            frames = frames_by_name.get(detector_name) if isinstance(frames_by_name.get(detector_name), list) else []
+            result = detector_window_median(frames, local_start=local_start, local_end=local_end)
+            detectors[detector_name] = result
+            if result.get("roundedMidi") == expected_midi:
+                matching_sources.append(detector_name)
+        audio_ready = len(matching_sources) >= 2
+        if index < len(stored_notes) and isinstance(stored_notes[index], dict):
+            stored_notes[index]["audioAgreement"] = audio_ready
+            stored_notes[index]["agreementSourceCount"] = len(matching_sources)
+            stored_notes[index]["agreementSources"] = [
+                f"source_crop_note_audio_{source}" for source in matching_sources
+            ]
+            stored_notes[index]["detectorSource"] = "source_crop_reverification_note_window"
+        note_results.append(
+            {
+                "index": index,
+                "targetMidi": expected_midi,
+                "targetNote": note_label_for_midi(expected_midi, prefer_flats=True),
+                "storedMidi": int_or_none(note.get("midi")),
+                "storedNote": str(note.get("note") or ""),
+                "clipLocalStartSeconds": round(local_start, 3),
+                "clipLocalEndSeconds": round(local_end, 3),
+                "audioAgreement": audio_ready,
+                "agreementSourceCount": len(matching_sources),
+                "agreementSources": matching_sources,
+                "detectors": detectors,
+            }
+        )
+    packet["storedAudioNotes"] = stored_notes
+    stored_midis = [
+        int_or_none(note.get("midi")) if isinstance(note, dict) else None
+        for note in stored_notes[: len(target_midis)]
+    ]
+    continuity = note_window_continuity([note for note in stored_notes[: len(target_midis)] if isinstance(note, dict)])
+    exact_midi = bool(target_midis) and stored_midis == target_midis
+    all_notes_ready = bool(target_midis) and len(note_results) == len(target_midis) and all(
+        bool(item.get("audioAgreement")) for item in note_results
+    )
+    accepted = bool(exact_midi and all_notes_ready and continuity.get("continuous"))
+    return {
+        "status": "audio_agreed" if accepted else "audio_review_required",
+        "accepted": accepted,
+        "exactMidi": exact_midi,
+        "targetMidiSequence": target_midis,
+        "storedMidiSequence": stored_midis,
+        "noteCount": len(target_midis),
+        "agreedNoteCount": sum(1 for item in note_results if item.get("audioAgreement")),
+        "requiredAgreementSourcesPerNote": 2,
+        "noteWindows": note_results,
+        "phraseContinuity": continuity,
+        "limit": ""
+        if accepted
+        else "Each stored note needs exact MIDI agreement from at least two pitch detectors and one continuous note window.",
     }
 
 
@@ -1647,6 +1855,9 @@ def ensure_staff4_phrase_audit_packet(
 
     analysis = analyze_audio_clip(audio_path, current, clip_start, first_failure)
     packet["audioAnalysis"] = analysis
+    if source_crop_reverification:
+        packet["sourceCropAudioAgreement"] = source_crop_note_audio_agreement(packet, analysis, clip_start)
+        packet["sourceCropScoreReview"] = source_crop_score_review_for_packet(packet)
     if first_failure:
         packet["failedNotePitchDiagnostic"] = failed_note_pitch_diagnostic(audio_path, first_failure, clip_start)
     if analysis.get("status") in {

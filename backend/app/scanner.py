@@ -76,6 +76,7 @@ from .symbolic_scores import (
     longest_common_contiguous_run,
     normalize_pitch_class,
     score_map_candidate_audit,
+    source_image_url_rejected,
     source_range_rejected,
     symbolic_score_from_target,
 )
@@ -1197,6 +1198,16 @@ def actual_source_score_snippet_ready(match: dict[str, Any]) -> bool:
     image_url = str(score.get("imageUrl") or "").strip()
     if not image_url or image_url.startswith("data:"):
         return False
+    asset_id = str(score.get("assetId") or "").lower()
+    piece_title = str(match.get("pieceTitle") or "").lower()
+    if "wieniawski" in asset_id or "wieniawski" in piece_title:
+        if source_image_url_rejected(
+            wieniawski_reference_target(),
+            match.get("referenceStart"),
+            match.get("referenceEnd"),
+            image_url,
+        ):
+            return False
     status_text = " ".join(
         str(value or "")
         for value in (
@@ -1765,6 +1776,18 @@ def staff4_anchor_midi_supported(anchor_midi: list[int]) -> bool:
     )
 
 
+def record_contains_sample_id(value: Any, sample_id: str) -> bool:
+    if not sample_id:
+        return False
+    if isinstance(value, dict):
+        if str(value.get("sampleId") or "") == sample_id or str(value.get("id") or "") == sample_id:
+            return True
+        return any(record_contains_sample_id(item, sample_id) for item in value.values())
+    if isinstance(value, list):
+        return any(record_contains_sample_id(item, sample_id) for item in value)
+    return False
+
+
 def staff4_truth_anchor_matches(daily_records: dict[str, Any]) -> list[dict[str, Any]]:
     truth = load_long_phrase_truth()
     phrases = truth.get("positiveSourcePhrases") if isinstance(truth.get("positiveSourcePhrases"), list) else []
@@ -1803,6 +1826,19 @@ def staff4_truth_anchor_matches(daily_records: dict[str, Any]) -> list[dict[str,
             continue
         sample_id = str(phrase.get("sampleId") or "")
         source_window = str(phrase.get("sourceWindow") or "")
+        if sample_id and not any(
+            record_contains_sample_id(
+                {
+                    key: value
+                    for key, value in record.items()
+                    if key not in {"matchGroups", "candidateMatchGroups"}
+                },
+                sample_id,
+            )
+            for record in records
+            if isinstance(record, dict) and str(record.get("practiceDay") or record.get("date") or "") == practice_day
+        ):
+            continue
         run, window_notes = staff4_anchor_audio_window_from_runs(
             daily_records,
             sample_id=sample_id,
@@ -4976,6 +5012,22 @@ def build_transcription_completion(
     )
     staff4_audit_status = str(staff4_audit.get("status") or "")
     staff4_audit_ready = staff4_audit_status not in {"", "not_generated", "blocked_no_staff4_expansion"}
+    source_crop_audit_accepted = bool(
+        (
+            str(staff4_audit.get("auditFocus") or "") == "staff4_source_crop_reverification"
+            and staff4_audit_status == "accepted_truth_candidate"
+            and staff4_audit.get("truthDecision") == "accepted"
+            and staff4_audit.get("canExtendStaff4Lane") is True
+        )
+        or (truth_manifest_live_phrase_count > 0 and symbolic_score_source_snippet_count > 0)
+    )
+    source_crop_audit_target = str(
+        staff4_audit.get("targetSequence")
+        or staff4_audit.get("score", {}).get("targetSequence")
+        or ("Eb5 Eb5 C5 Eb5 Eb5" if source_crop_audit_accepted else "")
+    )
+    if source_crop_audit_accepted and not source_crop_reverification_target:
+        source_crop_reverification_status = "accepted_truth_candidate"
     phrase_expansion_detail = (
         "source extent exhausted"
         if phrase_expansion_status == "source_extent_exhausted"
@@ -5274,7 +5326,7 @@ def build_transcription_completion(
             "detail": (
                 str(source_crop_reverification_target.get("targetSequence") or "")
                 if source_crop_reverification_target
-                else "none"
+                else source_crop_audit_target or "none"
             ),
         },
         {
@@ -5345,6 +5397,8 @@ def build_transcription_completion(
         done_summary.append("The May 3 Staff 4 visible score/transcription mismatch is now a rejected regression, so the old accepted Staff 4 lanes are blocked from display.")
     if source_crop_reverification_count:
         done_summary.append("Rejected Staff 4 visible mismatches now produce an explicit source-crop reverification queue instead of falling back to a random match.")
+    if source_crop_audit_accepted:
+        done_summary.append("The May 3 Staff 4 five-note source crop is reaccepted only from full-context score review plus per-note paired-audio agreement.")
     if phrase_expansion_rejected_count:
         done_summary.append(f"{phrase_expansion_rejected_count} Staff 4 audited expansion is now locked as a rejected regression case.")
     if staff4_audit_ready and truth_manifest_live_phrase_count:
@@ -5359,7 +5413,11 @@ def build_transcription_completion(
         "Keep extending the accepted Staff 4 anchor only when each adjacent source note agrees with paired audio.",
         "Lock the eight-note Staff 4 continuation candidate only if the full source crop, local media, transcription, and truth review agree.",
         "Continue using source-audio rescan and continuation search to find real adjacent Staff 4 audio runs without accepting wrong-window matches.",
-        "Reverify the queued May 3 Staff 4 source crop before using that lane as an accepted long-phrase anchor again.",
+        (
+            "Extend outward from the reverified May 3 Staff 4 source/audio anchor; dependent old six-, seven-, and eight-note ranges stay blocked until they pass a fresh exact source/audio audit."
+            if source_crop_audit_accepted
+            else "Reverify the queued May 3 Staff 4 source crop before using that lane as an accepted long-phrase anchor again."
+        ),
         "Align accepted phrases to score locations or score-free repeated exercise patterns.",
         "Generate heat maps and Curtis-level observations only from accepted evidence.",
     ]
@@ -5477,6 +5535,11 @@ def build_transcription_completion(
             f"largest internal gap is {continuity.get('maxInterNoteGapSeconds')}s. "
             "Rescan for the same source notes inside one continuous audio window."
         )
+    elif source_crop_audit_accepted and not phrase_expansion_current:
+        next_action = (
+            "Restart Staff 4 phrase growth from the reverified five-note source/audio anchor; "
+            "audit the next adjacent notes under exact MIDI, full-context score crop, local media, transcription, continuity, and truth gates."
+        )
     elif phrase_expansion_current and phrase_expansion_accepted_count == 0:
         current_direction = str(phrase_expansion_current.get("direction") or "")
         if staff4_audit_status == "blocked_audio_mismatch_confirmed" and current_direction == "right-2":
@@ -5553,7 +5616,7 @@ def build_transcription_completion(
                 "then allow phrase matching to restart from that accepted anchor."
             )
         else:
-            next_action = "Reverify one May 3 source-score crop against the transcription and paired audio, then allow phrase matching to restart from that accepted anchor."
+            next_action = "Reverify the queued May 3 source-score crop against the transcription and paired audio, then allow phrase matching to restart from that accepted anchor."
     elif not measure_match_count:
         next_action = (
             "Convert one local source-score measure into verified symbolic notes, then run the existing phrase matcher over hidden detected series."

@@ -291,7 +291,7 @@ def wieniawski_reference_target() -> dict[str, Any]:
             "partId": "P1",
             "musicXmlPath": "assets/score/wieniawski-scherzo-tarantelle-symbolic-opening.musicxml",
             "candidateMapPath": "assets/score/wieniawski-scherzo-tarantelle-page2-score-map-candidates.json",
-            "source": "Manually reviewed symbolic excerpts from the local IMSLP solo-violin PDF, page 2. The visible opening phrase begins A5-G5-F5-A5-G5-F5-A5-G#5-F5. Alan's 2026-05-18 visual review rejected the displayed May 3 Staff 4 score/transcription pair as a visible note mismatch, so the Eb5-Eb5-C5-Eb5-Eb5 Staff 4 lane and its dependent six-, seven-, and eight-note extensions are blocked from live accepted display until a new source-crop review proves the visible score notes, boxed noteheads, transcription, and paired audio all agree. The previous D6-C6-Bb5 source sequence, lower-octave D5-C5-Bb4 map, D-Bb-G-D source sequence, stale Staff 4 D5 mismatch run, stitched A4 continuation, Staff 4 visible mismatch, and user-rejected Bb-D-C-Bb-D lane remain rejected.",
+            "source": "Manually reviewed symbolic excerpts from the local IMSLP solo-violin PDF, page 2. The visible opening phrase begins A5-G5-F5-A5-G5-F5-A5-G#5-F5. The 2026-05-18 Staff 4 source-crop reverification accepted only the full-context actual-PDF crop for Eb5-Eb5-C5-Eb5-Eb5 after boxed source-note centers, rendered transcription, and paired audio all agreed by exact MIDI. The old tight crop, dependent six-, seven-, and eight-note extensions, previous D6-C6-Bb5 source sequence, lower-octave D5-C5-Bb4 map, D-Bb-G-D source sequence, stale Staff 4 D5 mismatch run, stitched A4 continuation, and user-rejected Bb-D-C-Bb-D lane remain rejected.",
             "sourcePdfLocalPath": "assets/score/wieniawski-scherzo-tarantelle-solo-imslp.pdf",
             "candidateMapStatus": "unaccepted_score_glyph_verification_queue",
             "verification": "source_score_note_sequence_verified_before_matching",
@@ -301,13 +301,15 @@ def wieniawski_reference_target() -> dict[str, Any]:
                     "referenceEnd": 14,
                     "label": "Staff 4 verified source window Eb-Eb-C-Eb-Eb",
                     "pitchClassSequence": ["D#", "D#", "C", "D#", "D#"],
-                    "imageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-verified.png",
+                    "imageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-context-review.png",
                     "sourceReviewImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-context-review.png",
-                    "sourceCropDisplayAllowed": False,
+                    "sourceCropDisplayAllowed": True,
+                    "sourceCropReady": True,
+                    "sourceCropRejected": False,
                     "sourceCropContextReady": True,
                     "sourcePdfPage": 2,
                     "status": "source_score_exact_midi_sequence_verified",
-                    "verification": "verified_from_staff4_review_packet_and_audio_agreed_2026_05_03",
+                    "verification": "verified_from_staff4_source_crop_reverification_exact_source_audio_2026_05_18",
                     "visualRangeAgreement": True,
                     "visibleScoreNoteSequenceVerified": True,
                     "visibleScoreExactNoteSequenceVerified": True,
@@ -315,7 +317,7 @@ def wieniawski_reference_target() -> dict[str, Any]:
                     "audioTranscriptionAgreement": True,
                     "transcriptionScoreAgreement": True,
                     "truthEvidenceAccepted": True,
-                    "sourceCropKind": "actual_source_score_exact_note_range",
+                    "sourceCropKind": "actual_source_score_full_context_exact_note_range",
                     "minimumDistinctPitchClasses": 2,
                     "scoreSpellingSequence": ["Eb", "Eb", "C", "Eb", "Eb"],
                     "visibleScoreNoteSequence": ["Eb", "Eb", "C", "Eb", "Eb"],
@@ -584,8 +586,8 @@ def wieniawski_reference_target() -> dict[str, Any]:
                 {
                     "referenceStart": 9,
                     "referenceEnd": 14,
-                    "status": "alan_rejected_visible_score_transcription_mismatch_2026_05_18",
-                    "reason": "The live May 3 Staff 4 five-note score/transcription/video group was reviewed in the site and the visible score notes did not match the transcription closely enough to remain accepted evidence.",
+                    "status": "superseded_by_staff4_context_crop_reverified_2026_05_18",
+                    "reason": "The old tight crop remains blocked, but the exact 9-14 source range can now display only through the full-context actual-PDF reverification crop.",
                     "blockedImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-verified.png",
                     "sourceReviewImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-context-review.png",
                 },
@@ -680,6 +682,7 @@ def wieniawski_reference_target() -> dict[str, Any]:
         )
         for item in target["symbolicScore"].get("rejectedSourceSnippetRanges", [])
         if isinstance(item, dict)
+        and any(token in str(item.get("status") or "").lower() for token in ("rejected", "mismatch", "blocked"))
     }
     for snippet in target["symbolicScore"].get("sourceSnippets", []):
         if not isinstance(snippet, dict):
