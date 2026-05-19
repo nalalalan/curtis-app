@@ -17,6 +17,7 @@ MAX_REVIEW_CLIP_SECONDS = 14.75
 MIN_LONG_REVIEW_NOTES = 6
 MAX_LONG_REVIEW_NOTES = 16
 MAX_ADAPTIVE_REVIEW_WINDOWS_PER_SERIES = 10
+MAX_ADAPTIVE_REVIEW_QUEUE = 80
 
 
 def _clean(value: Any) -> str:
@@ -206,6 +207,83 @@ def _note_span_seconds(notes: list[dict[str, Any]]) -> float:
     return max(0.0, end - start)
 
 
+def _midi_values(notes: list[dict[str, Any]]) -> list[int]:
+    values: list[int] = []
+    for note in notes:
+        midi = note_midi_value(note)
+        if midi is not None:
+            values.append(int(midi))
+    return values
+
+
+def _adjacent_duplicate_count(values: list[int]) -> int:
+    return sum(1 for left, right in zip(values, values[1:]) if left == right)
+
+
+def _max_consecutive_duplicate(values: list[int]) -> int:
+    longest = 0
+    current = 0
+    previous: int | None = None
+    for value in values:
+        if value == previous:
+            current += 1
+        else:
+            current = 1
+            previous = value
+        longest = max(longest, current)
+    return longest
+
+
+def _review_note_metrics(notes: list[dict[str, Any]]) -> dict[str, Any]:
+    values = _midi_values(notes)
+    length = len(values)
+    distinct_midi = len(set(values))
+    distinct_pitch_class = _pitch_class_count(notes)
+    adjacent_duplicates = _adjacent_duplicate_count(values)
+    max_duplicate_run = _max_consecutive_duplicate(values)
+    duplicate_ratio = adjacent_duplicates / max(1, length - 1)
+    audio_agreed = sum(1 for note in notes if note.get("audioAgreement") is True)
+    spectral = sum(1 for note in notes if "spectral_onset" in (note.get("agreementSources") or []))
+    confidence = sum(float(note.get("confidence") or 0.0) for note in notes) / max(1, len(notes))
+    repetition_penalty = (adjacent_duplicates * 8.0) + (max(0, max_duplicate_run - 2) * 12.0) + (duplicate_ratio * 18.0)
+    phrase_shape_bonus = min(length, 10) * 2.0
+    quality = (
+        (distinct_midi * 12.0)
+        + (distinct_pitch_class * 4.0)
+        + phrase_shape_bonus
+        + (audio_agreed * 1.5)
+        + spectral
+        + (confidence * 2.0)
+        - repetition_penalty
+    )
+    return {
+        "detectedMidiDistinctCount": distinct_midi,
+        "distinctPitchClassCount": distinct_pitch_class,
+        "adjacentDuplicateCount": adjacent_duplicates,
+        "maxConsecutiveDuplicateMidi": max_duplicate_run,
+        "duplicateRatio": round(duplicate_ratio, 3),
+        "repetitionPenalty": round(repetition_penalty, 3),
+        "adaptiveQualityScore": round(quality, 3),
+        "audioAgreementCount": audio_agreed,
+        "spectralAgreementCount": spectral,
+        "averageConfidence": round(confidence, 3),
+    }
+
+
+def _adaptive_window_is_useful(notes: list[dict[str, Any]]) -> bool:
+    metrics = _review_note_metrics(notes)
+    length = len(_midi_values(notes))
+    if length < 3:
+        return False
+    if length >= 6 and int(metrics["detectedMidiDistinctCount"]) <= 2:
+        return False
+    if int(metrics["maxConsecutiveDuplicateMidi"]) > 4:
+        return False
+    if float(metrics["duplicateRatio"]) > 0.58:
+        return False
+    return True
+
+
 def best_review_note_slice(
     notes: list[dict[str, Any]],
     *,
@@ -289,14 +367,12 @@ def adaptive_review_note_windows(
             if not key or key in seen:
                 continue
             seen.add(key)
-            distinct = _pitch_class_count(window)
-            audio_agreed = sum(1 for note in window if note.get("audioAgreement") is True)
-            spectral = sum(1 for note in window if "spectral_onset" in (note.get("agreementSources") or []))
-            confidence = sum(float(note.get("confidence") or 0.0) for note in window) / max(1, len(window))
-            repeated_penalty = max(0, length - distinct - 2)
+            if not _adaptive_window_is_useful(window):
+                continue
+            metrics = _review_note_metrics(window)
+            score = float(metrics["adaptiveQualityScore"])
             if start > 0 and note_midi_value(clean_notes[start - 1]) == note_midi_value(window[0]):
-                repeated_penalty += 2
-            score = (length * 3) + (distinct * 6) + (audio_agreed * 2) + spectral + confidence - repeated_penalty
+                score -= 10.0
             scored.append((score, start, window))
     scored.sort(key=lambda item: (-item[0], item[1], -len(item[2])))
     return [window for _, _, window in scored[: max(0, int(max_windows))]]
@@ -376,6 +452,7 @@ def _candidate_from_series(
     clip = _clip_from_series(series, notes)
     if not _clip_is_playable(clip):
         return {}
+    note_metrics = _review_note_metrics(notes)
     payload = {
         "reviewKind": "long_audio_phrase_candidate" if len(note_names) >= MIN_LONG_REVIEW_NOTES else "audio_phrase_candidate",
         "reviewType": "audio_phrase",
@@ -394,8 +471,15 @@ def _candidate_from_series(
         "normalizedDetectedMidiSequence": collapse_consecutive_duplicate_midi(note_midi_sequence(notes)),
         "detectedNoteCount": len(note_names),
         "sourceDetectedNoteCount": int(series.get("noteCount") or len(_note_dicts(series.get("notes")))),
-        "audioAgreementCount": sum(1 for note in notes if note.get("audioAgreement") is True),
-        "spectralAgreementCount": sum(1 for note in notes if "spectral_onset" in (note.get("agreementSources") or [])),
+        "audioAgreementCount": note_metrics["audioAgreementCount"],
+        "spectralAgreementCount": note_metrics["spectralAgreementCount"],
+        "detectedMidiDistinctCount": note_metrics["detectedMidiDistinctCount"],
+        "distinctPitchClassCount": note_metrics["distinctPitchClassCount"],
+        "adjacentDuplicateCount": note_metrics["adjacentDuplicateCount"],
+        "maxConsecutiveDuplicateMidi": note_metrics["maxConsecutiveDuplicateMidi"],
+        "duplicateRatio": note_metrics["duplicateRatio"],
+        "repetitionPenalty": note_metrics["repetitionPenalty"],
+        "adaptiveQualityScore": note_metrics["adaptiveQualityScore"],
         "audioAgreed": _all_audio_agreed(notes),
         "scoreNotes": [],
         "scoreLocation": "",
@@ -406,6 +490,13 @@ def _candidate_from_series(
         "binaryOnly": True,
         "adaptiveReview": adaptive_index is not None,
         "adaptiveWindowIndex": adaptive_index,
+        "adaptiveQualityTier": (
+            "phrase_shaped"
+            if float(note_metrics["adaptiveQualityScore"]) >= 45.0
+            else "usable"
+            if float(note_metrics["adaptiveQualityScore"]) >= 25.0
+            else "low"
+        ),
         "reviewTrainingLane": "audio_notes",
         "reviewQuestion": "Do the displayed notes match the paired audio? Reject if one note is wrong.",
         "acceptanceRule": "Accept only if every displayed note matches the paired audio after adjacent duplicate detections are collapsed.",
@@ -666,6 +757,21 @@ def apply_review_learning_to_candidates(
     return active, suppressed
 
 
+def _review_candidate_rank(item: dict[str, Any]) -> tuple[Any, ...]:
+    return (
+        0 if item.get("reviewKind") == "score_phrase_candidate" else 1 if item.get("reviewKind") == "long_audio_phrase_candidate" else 2,
+        0 if item.get("scoreAgreement") is True else 1,
+        0 if item.get("reviewLearningStatus") == "accepted_pattern" else 1,
+        -float(item.get("adaptiveQualityScore") or 0.0),
+        float(item.get("repetitionPenalty") or 0.0),
+        -int(item.get("detectedMidiDistinctCount") or 0),
+        -int(item.get("audioAgreementCount") or 0),
+        -int(item.get("detectedNoteCount") or 0),
+        str(item.get("practiceDay") or ""),
+        str(item.get("sampleId") or ""),
+    )
+
+
 def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any], *, limit: int = 10) -> dict[str, Any]:
     review = state.get("goldReview") if isinstance(state.get("goldReview"), dict) else {}
     items = [entry for entry in review.get("items", []) if isinstance(entry, dict)]
@@ -683,6 +789,7 @@ def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any],
     candidates, suppressed_candidates = apply_review_learning_to_candidates(raw_candidates, learning_profile)
     adaptive_candidates: list[dict[str, Any]] = []
     adaptive_suppressed_candidates: list[dict[str, Any]] = []
+    adaptive_candidate_pool_count = 0
     adaptive_mode = False
     if not candidates:
         raw_adaptive_candidates = [
@@ -691,22 +798,16 @@ def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any],
             if _clean(candidate.get("reviewItemId")) not in reviewed_ids
         ]
         adaptive_candidates, adaptive_suppressed_candidates = apply_review_learning_to_candidates(raw_adaptive_candidates, learning_profile)
+        adaptive_candidates.sort(key=_review_candidate_rank)
+        adaptive_candidate_pool_count = len(adaptive_candidates)
+        adaptive_candidates = adaptive_candidates[:MAX_ADAPTIVE_REVIEW_QUEUE]
         if adaptive_candidates:
             candidates = adaptive_candidates
             adaptive_mode = True
     score_candidates = [item for item in candidates if item.get("reviewTask") == "audio_score_exact_match"]
     exact_score_candidates = [item for item in score_candidates if item.get("scoreAgreement") is True]
     long_candidates = [item for item in candidates if item.get("reviewKind") == "long_audio_phrase_candidate"]
-    candidates.sort(
-        key=lambda item: (
-            0 if item.get("reviewKind") == "score_phrase_candidate" else 1 if item.get("reviewKind") == "long_audio_phrase_candidate" else 2,
-            0 if item.get("scoreAgreement") is True else 1,
-            0 if item.get("reviewLearningStatus") == "accepted_pattern" else 1,
-            -int(item.get("detectedNoteCount") or 0),
-            str(item.get("practiceDay") or ""),
-            str(item.get("sampleId") or ""),
-        )
-    )
+    candidates.sort(key=_review_candidate_rank)
     truth_progress = build_truth_progress(state)
     training_set = build_gold_training_set(items)
     hidden_rejected_keys = {
@@ -742,6 +843,8 @@ def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any],
         "rawQueueCount": len(raw_candidates),
         "adaptiveMode": adaptive_mode,
         "adaptiveCandidateCount": len(adaptive_candidates),
+        "adaptiveCandidatePoolCount": adaptive_candidate_pool_count,
+        "adaptiveQueueLimit": MAX_ADAPTIVE_REVIEW_QUEUE,
         "adaptiveSuppressedByLearningCount": len(adaptive_suppressed_candidates),
         "suppressedByLearningCount": len(suppressed_candidates),
         "reviewedIds": len(reviewed_ids),

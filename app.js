@@ -3178,6 +3178,8 @@ function renderGoldReview() {
   const scoreQueued = Number(review.scoreQueueCount) || 0;
   const scoreExactQueued = Number(review.scoreExactAgreementQueueCount) || 0;
   const adaptiveCount = Number(review.adaptiveCandidateCount) || 0;
+  const adaptivePool = Number(review.adaptiveCandidatePoolCount) || adaptiveCount;
+  const adaptiveLabel = adaptivePool && adaptivePool !== adaptiveCount ? `${adaptiveCount}/${adaptivePool}` : String(adaptiveCount);
   const rejectionDigest = review.rejectionDigest && typeof review.rejectionDigest === "object" ? review.rejectionDigest : {};
   const emptyQueueText = review.queueStatus === "current_batch_exhausted_by_rejections"
     ? `Batch complete. ${Number(review.suppressedByLearningCount) || 0} repeats hidden.`
@@ -3196,7 +3198,7 @@ function renderGoldReview() {
         <article><span>Training</span><strong>${escapeHtml(String(trainingExamples))}</strong></article>
         <article><span>Score</span><strong>${escapeHtml(String(scoreTraining))}</strong></article>
         <article><span>Long</span><strong>${escapeHtml(String(longTraining))}</strong></article>
-        <article><span>Adaptive</span><strong>${escapeHtml(String(adaptiveCount))}</strong></article>
+        <article><span>Adaptive</span><strong>${escapeHtml(adaptiveLabel)}</strong></article>
       </div>
       <p class="empty">${escapeHtml(rejectionDigest.message || emptyQueueText)}</p>
     `;
@@ -3212,7 +3214,7 @@ function renderGoldReview() {
       <article><span>Score</span><strong>${escapeHtml(String(scoreTraining))}</strong></article>
       <article><span>Long</span><strong>${escapeHtml(String(longTraining))}</strong></article>
       <article><span>Score queue</span><strong>${escapeHtml(scoreExactQueued ? `${scoreExactQueued}/${scoreQueued}` : String(scoreQueued))}</strong></article>
-      <article><span>Adaptive</span><strong>${escapeHtml(String(adaptiveCount))}</strong></article>
+      <article><span>Adaptive</span><strong>${escapeHtml(adaptiveLabel)}</strong></article>
     </div>
     <div class="gold-review-list">
       ${items.map((item, index) => renderGoldReviewItem(item, index)).join("")}

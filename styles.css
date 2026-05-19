@@ -4923,6 +4923,7 @@ h2 {
 
 body > .paper-global-strip {
   width: 100%;
+  box-sizing: border-box;
   margin: 0;
   border-width: 0 0 1px;
   border-radius: 0;
@@ -4947,6 +4948,19 @@ body > .paper-global-strip .paper-button {
     grid-template-columns: 1fr;
     max-width: 100vw;
     overflow: hidden;
+  }
+
+  body > .paper-global-strip .paper-copy,
+  body > .paper-global-strip .paper-copy strong {
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  body > .paper-global-strip .paper-copy strong {
+    font-size: 20px;
+    line-height: 1.08;
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 
   body > .paper-global-strip .paper-actions {
