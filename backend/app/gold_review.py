@@ -109,6 +109,10 @@ def _training_example_from_item(item: dict[str, Any]) -> dict[str, Any]:
         "trainingExampleId": item.get("reviewItemId"),
         "task": item.get("reviewTask") or "audio_exact_notes",
         "label": label,
+        "labelSource": "human_review",
+        "labelNoiseModel": "noisy_human_visual_audio_review",
+        "humanSignalWeight": 0.82 if label == "positive" else 0.74 if label == "negative" else 0.0,
+        "hardEvidence": bool(item.get("type") in {"score_phrase", "audio_score_match"} and item.get("status") == "accepted_truth" and item.get("scoreNotes")),
         "type": item.get("type"),
         "practiceDay": item.get("practiceDay"),
         "sampleId": item.get("sampleId"),
@@ -740,22 +744,32 @@ def record_gold_review_item(state: dict[str, Any], raw: dict[str, Any]) -> dict[
 def build_review_learning_profile(items: list[dict[str, Any]]) -> dict[str, Any]:
     accepted_keys: set[str] = set()
     rejected_keys: set[str] = set()
+    accepted_counts: Counter[str] = Counter()
+    rejected_counts: Counter[str] = Counter()
     for item in items:
         key = _item_learning_key(item)
         if not key:
             continue
         if item.get("status") == "accepted_truth":
             accepted_keys.add(key)
+            accepted_counts[key] += 1
         elif item.get("status") == "rejected_mismatch":
             rejected_keys.add(key)
-    rejected_only = rejected_keys - accepted_keys
+            rejected_counts[key] += 1
+    rejected_only: set[str] = set()
+    soft_rejected = rejected_keys - accepted_keys
     return {
         "acceptedKeys": accepted_keys,
         "rejectedKeys": rejected_keys,
         "rejectedOnlyKeys": rejected_only,
+        "softRejectedKeys": soft_rejected,
+        "acceptedCounts": dict(accepted_counts),
+        "rejectedCounts": dict(rejected_counts),
         "acceptedPatternCount": len(accepted_keys),
         "rejectedPatternCount": len(rejected_keys),
-        "suppressionRule": "Candidates with the same normalized MIDI pattern as a rejected review are hidden unless that pattern was later accepted.",
+        "softRejectedPatternCount": len(soft_rejected),
+        "suppressionThreshold": None,
+        "suppressionRule": "Human review labels are useful but noisy. Human labels do not hard-hide candidates by themselves; accepted patterns are prioritized, rejected-only patterns are deprioritized, and independent evidence gates decide whether a phrase is blocked from accepted display.",
     }
 
 
@@ -765,14 +779,23 @@ def apply_review_learning_to_candidates(
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     accepted_keys = profile.get("acceptedKeys") if isinstance(profile.get("acceptedKeys"), set) else set()
     rejected_only_keys = profile.get("rejectedOnlyKeys") if isinstance(profile.get("rejectedOnlyKeys"), set) else set()
+    soft_rejected_keys = profile.get("softRejectedKeys") if isinstance(profile.get("softRejectedKeys"), set) else set()
     active: list[dict[str, Any]] = []
     suppressed: list[dict[str, Any]] = []
     for candidate in candidates:
         key = _candidate_sequence_key(candidate)
+        status = (
+            "accepted_pattern"
+            if key in accepted_keys
+            else "soft_rejected_pattern"
+            if key in soft_rejected_keys
+            else "new_pattern"
+        )
         enriched = {
             **candidate,
             "reviewLearningKey": key,
-            "reviewLearningStatus": "accepted_pattern" if key in accepted_keys else "rejected_pattern" if key in rejected_only_keys else "new_pattern",
+            "reviewLearningStatus": status,
+            "reviewLearningReliability": "noisy_human_signal",
         }
         if key and key in rejected_only_keys:
             suppressed.append(enriched)
@@ -782,10 +805,15 @@ def apply_review_learning_to_candidates(
 
 
 def _review_candidate_rank(item: dict[str, Any]) -> tuple[Any, ...]:
+    learning_rank = {
+        "accepted_pattern": 0,
+        "new_pattern": 1,
+        "soft_rejected_pattern": 2,
+    }.get(str(item.get("reviewLearningStatus") or ""), 1)
     return (
         0 if item.get("reviewKind") == "score_phrase_candidate" else 1 if item.get("reviewKind") == "long_audio_phrase_candidate" else 2,
         0 if item.get("scoreAgreement") is True else 1,
-        0 if item.get("reviewLearningStatus") == "accepted_pattern" else 1,
+        learning_rank,
         -float(item.get("adaptiveQualityScore") or 0.0),
         float(item.get("repetitionPenalty") or 0.0),
         -int(item.get("detectedMidiDistinctCount") or 0),
@@ -876,6 +904,8 @@ def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any],
         "reviewedIds": len(reviewed_ids),
         "acceptedPatternCount": int(learning_profile.get("acceptedPatternCount") or 0),
         "rejectedPatternCount": int(learning_profile.get("rejectedPatternCount") or 0),
+        "softRejectedPatternCount": int(learning_profile.get("softRejectedPatternCount") or 0),
+        "suppressionThreshold": learning_profile.get("suppressionThreshold"),
         "trainingSet": training_set,
         "trainingExampleCount": int(training_set.get("exampleCount") or 0),
         "trainingPositiveCount": int(training_set.get("positiveCount") or 0),
@@ -891,6 +921,7 @@ def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any],
             "hiddenRejectedPatternCount": len(hidden_rejected_keys),
             "hiddenRejectedCandidateCount": len(suppressed_candidates) + len(adaptive_suppressed_candidates),
             "rejectedPatternCount": int(learning_profile.get("rejectedPatternCount") or 0),
+            "softRejectedPatternCount": int(learning_profile.get("softRejectedPatternCount") or 0),
             "message": (
                 "Adaptive review is mining fresh windows from analyzed audio while skipping exact rejected patterns."
                 if queue_status == "adaptive_review_ready"
