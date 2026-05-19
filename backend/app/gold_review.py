@@ -811,9 +811,9 @@ def _review_candidate_rank(item: dict[str, Any]) -> tuple[Any, ...]:
         "soft_rejected_pattern": 2,
     }.get(str(item.get("reviewLearningStatus") or ""), 1)
     return (
+        learning_rank,
         0 if item.get("reviewKind") == "score_phrase_candidate" else 1 if item.get("reviewKind") == "long_audio_phrase_candidate" else 2,
         0 if item.get("scoreAgreement") is True else 1,
-        learning_rank,
         -float(item.get("adaptiveQualityScore") or 0.0),
         float(item.get("repetitionPenalty") or 0.0),
         -int(item.get("detectedMidiDistinctCount") or 0),
