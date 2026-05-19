@@ -4736,34 +4736,20 @@ h2 {
 
 .gold-review-form {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 7px;
+  gap: 8px;
 }
 
-.gold-review-form label {
-  display: grid;
-  gap: 4px;
-  margin: 0;
-}
-
-.gold-review-form input,
-.gold-review-form select {
-  width: 100%;
-  min-height: 32px;
-  padding: 6px 8px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: #fff;
-  color: var(--ink);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 620;
-}
-
-.gold-review-reason,
 .gold-review-actions,
 .gold-review-form > small {
   grid-column: 1 / -1;
+}
+
+.gold-review-rule {
+  margin: 0;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 720;
+  line-height: 1.25;
 }
 
 .gold-review-actions {

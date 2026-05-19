@@ -14,6 +14,8 @@ GOLD_REVIEW_VERSION = "gold_review_v1"
 GOLD_REVIEW_STATUSES = {"pending_review", "accepted_truth", "rejected_mismatch"}
 GOLD_REVIEW_TYPES = {"audio_phrase", "score_phrase", "audio_score_match", "practice_window"}
 MAX_REVIEW_CLIP_SECONDS = 14.75
+MIN_LONG_REVIEW_NOTES = 6
+MAX_LONG_REVIEW_NOTES = 16
 
 
 def _clean(value: Any) -> str:
@@ -160,6 +162,32 @@ def best_review_note_slice(
     return clean_notes[start : start + length]
 
 
+def long_review_note_slice(notes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    clean_notes = [note for note in notes if _clean(note.get("note")) and note_midi_value(note) is not None]
+    if not clean_notes:
+        return []
+    best: tuple[float, int, int] | None = None
+    search_limit = min(len(clean_notes), 128)
+    for start in range(0, search_limit):
+        for length in range(MIN_LONG_REVIEW_NOTES, min(MAX_LONG_REVIEW_NOTES, search_limit - start) + 1):
+            window = clean_notes[start : start + length]
+            span = _note_span_seconds(window)
+            if span > MAX_REVIEW_CLIP_SECONDS - 0.25:
+                continue
+            distinct = _pitch_class_count(window)
+            audio_agreed = sum(1 for note in window if note.get("audioAgreement") is True)
+            confidence = sum(float(note.get("confidence") or 0.0) for note in window) / max(1, len(window))
+            score = (length * 5) + (distinct * 4) + (audio_agreed * 2) + confidence
+            if start > 0 and note_midi_value(clean_notes[start - 1]) == note_midi_value(window[0]):
+                score -= 5
+            if best is None or score > best[0]:
+                best = (score, start, length)
+    if best is None:
+        return best_review_note_slice(clean_notes, min_notes=3, max_notes=MAX_LONG_REVIEW_NOTES)
+    _, start, length = best
+    return clean_notes[start : start + length]
+
+
 def _clip_from_series(series: dict[str, Any], notes: list[dict[str, Any]]) -> dict[str, Any]:
     sample_id = _clean(series.get("sampleId"))
     source_url = _clean(series.get("sourceUrl"))
@@ -221,7 +249,7 @@ def _candidate_id(payload: dict[str, Any]) -> str:
 
 
 def _candidate_from_series(record: dict[str, Any], series: dict[str, Any]) -> dict[str, Any]:
-    notes = best_review_note_slice(_note_dicts(series.get("notes")))
+    notes = long_review_note_slice(_note_dicts(series.get("notes")))
     note_names = _clean_note_names(notes)
     if len(note_names) < 3:
         return {}
@@ -229,8 +257,9 @@ def _candidate_from_series(record: dict[str, Any], series: dict[str, Any]) -> di
     if not _clip_is_playable(clip):
         return {}
     payload = {
-        "reviewKind": "audio_phrase_candidate",
+        "reviewKind": "long_audio_phrase_candidate" if len(note_names) >= MIN_LONG_REVIEW_NOTES else "audio_phrase_candidate",
         "reviewType": "audio_phrase",
+        "acceptanceMode": "binary_exact_claim",
         "practiceDay": _clean(record.get("practiceDay")),
         "pieceTitle": _clean((record.get("pieces") or [{}])[0].get("title") if isinstance(record.get("pieces"), list) and record.get("pieces") else ""),
         "sourceTitle": _clean(series.get("sourceTitle")),
@@ -252,7 +281,11 @@ def _candidate_from_series(record: dict[str, Any], series: dict[str, Any]) -> di
         "scoreLocation": "",
         "clip": clip,
         "defaultStatus": "pending_review",
-        "acceptanceRule": "Audio phrase labels become gold audio truth. They do not become score evidence unless exact score notes and score location are added.",
+        "binaryReview": True,
+        "binaryOnly": True,
+        "reviewQuestion": "Do the displayed notes match the paired audio? Reject if one note is wrong.",
+        "acceptanceRule": "Accept only if every displayed note matches the paired audio after adjacent duplicate detections are collapsed.",
+        "rejectionRule": "Reject if any displayed note is wrong, missing, extra, out of order, or not audible in the paired clip.",
     }
     payload["reviewItemId"] = _candidate_id(payload)
     return payload
@@ -276,7 +309,8 @@ def _candidate_from_group(record: dict[str, Any], group: dict[str, Any]) -> dict
     )
     payload = {
         "reviewKind": "score_phrase_candidate" if score_notes else "reference_phrase_candidate",
-        "reviewType": "score_phrase" if score_notes else "audio_phrase",
+        "reviewType": "audio_score_match" if score_notes else "audio_phrase",
+        "acceptanceMode": "binary_exact_claim",
         "practiceDay": _clean(record.get("practiceDay")),
         "pieceTitle": _clean(group.get("pieceTitle") or ((record.get("pieces") or [{}])[0].get("title") if isinstance(record.get("pieces"), list) and record.get("pieces") else "")),
         "sourceTitle": _clean(transcription.get("sourceTitle") or clip.get("sourceTitle")),
@@ -299,7 +333,15 @@ def _candidate_from_group(record: dict[str, Any], group: dict[str, Any]) -> dict
         "scoreStatus": _clean(group.get("sourceScoreCheckStatus") or group.get("scoreSnippetStatus") or score.get("status")),
         "clip": clip,
         "defaultStatus": "pending_review",
-        "acceptanceRule": "Score phrase acceptance requires exact audio-note and score-note MIDI agreement after collapsing consecutive duplicate detections, plus score location.",
+        "binaryReview": True,
+        "binaryOnly": True,
+        "reviewQuestion": (
+            "Do the audio, displayed transcription, and score notes all match? Reject if one note is wrong."
+            if score_notes
+            else "Do the displayed notes match the paired audio? Reject if one note is wrong."
+        ),
+        "acceptanceRule": "Accept only if every displayed audio/transcription note and every score note agree after adjacent duplicate detections are collapsed.",
+        "rejectionRule": "Reject if any note is wrong, missing, extra, out of order, or the score location is not the same phrase.",
     }
     payload["reviewItemId"] = _candidate_id(payload)
     return payload
@@ -484,7 +526,7 @@ def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any],
     candidates, suppressed_candidates = apply_review_learning_to_candidates(raw_candidates, learning_profile)
     candidates.sort(
         key=lambda item: (
-            0 if item.get("reviewKind") == "score_phrase_candidate" else 1,
+            0 if item.get("reviewKind") == "score_phrase_candidate" else 1 if item.get("reviewKind") == "long_audio_phrase_candidate" else 2,
             0 if item.get("reviewLearningStatus") == "accepted_pattern" else 1,
             -int(item.get("detectedNoteCount") or 0),
             str(item.get("practiceDay") or ""),
@@ -517,11 +559,11 @@ def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any],
         "suppressedQueuePreview": suppressed_candidates[:5],
         "recentItems": items[:8],
         "nextAction": (
-            "Review one queued clip: confirm exact notes, mark mismatch, or add score notes and location before accepting score evidence."
+            "Review one queued clip: accept only if the displayed claim is exact; reject if one note is wrong."
             if candidates
             else "Gold review learned from prior rejections; no new unsuppressed candidates are queued."
             if suppressed_candidates
             else "Gold review queue is empty for current analyzed evidence."
         ),
-        "acceptanceRule": "Accepted score labels require exact audio-note and score-note MIDI agreement after consecutive duplicate detections are collapsed. Audio-only labels improve transcription truth but stay out of score evidence.",
+        "acceptanceRule": "Gold review is binary. Accept only exact displayed notes; reject any note, order, octave, audio, or score mismatch. Accepted score labels require exact audio-note and score-note MIDI agreement after consecutive duplicate detections are collapsed.",
     }

@@ -521,19 +521,20 @@ async function submitGoldReview(form, status) {
     button.textContent = status === "rejected_mismatch" ? "Rejecting" : "Accepting";
   }
   if (state) state.textContent = "Saving.";
-  const acceptedNotes = noteInputSequence(form.elements.acceptedNotes?.value || noteInputText(candidate.detectedNotes));
-  const scoreNotes = noteInputSequence(form.elements.scoreNotes?.value || "");
+  const acceptedNotes = noteInputSequence(noteInputText(candidate.detectedNotes || candidate.acceptedNotes));
+  const scoreNotes = noteInputSequence(noteInputText(candidate.scoreNotes || candidate.sourceScoreNotes));
+  const reviewType = candidate.reviewType || candidate.type || (scoreNotes.length ? "audio_score_match" : "audio_phrase");
   try {
     const ops = await apiFetch("/api/curtis/gold-review/items", {
       method: "POST",
       body: JSON.stringify({
         ...candidate,
-        type: form.elements.type?.value || candidate.reviewType || candidate.type || "audio_phrase",
+        type: reviewType,
         status,
         acceptedNotes,
         scoreNotes,
-        scoreLocation: form.elements.scoreLocation?.value || candidate.scoreLocation || "",
-        reason: form.elements.reason?.value || "",
+        scoreLocation: candidate.scoreLocation || "",
+        reason: status === "rejected_mismatch" ? "one_or_more_notes_wrong" : "",
       })
     });
     backend = { online: true, ops, lastError: "" };
@@ -3112,21 +3113,15 @@ function renderGoldReviewItem(item, index) {
   const detectedNotes = noteInputText(item.detectedNotes);
   const scoreNotes = noteInputText(item.scoreNotes);
   const clip = item.clip && typeof item.clip === "object" ? item.clip : item;
-  const itemType = item.reviewType || item.type || "audio_phrase";
-  const typeOptions = [
-    ["audio_phrase", "audio"],
-    ["score_phrase", "score"],
-    ["audio_score_match", "audio+score"],
-    ["practice_window", "window"],
-  ];
   const status = item.status || item.defaultStatus || "pending_review";
   const isRecent = status !== "pending_review";
+  const claimLabel = scoreNotes ? "Audio + score" : "Audio";
   return `
     <article class="gold-review-item" data-status="${escapeHtml(status)}">
       <div class="gold-review-head">
         <span>${escapeHtml(isRecent ? "Label" : `Queue ${index + 1}`)}</span>
         <strong>${escapeHtml(shortText(detectedNotes || item.pieceTitle || "notes pending", 72))}</strong>
-        <em>${escapeHtml([item.practiceDay, item.detectedNoteCount ? `${item.detectedNoteCount} notes` : "", item.audioAgreed ? "audio agreed" : ""].filter(Boolean).join(" / "))}</em>
+        <em>${escapeHtml([item.practiceDay, claimLabel, item.detectedNoteCount ? `${item.detectedNoteCount} notes` : ""].filter(Boolean).join(" / "))}</em>
       </div>
       <div class="gold-review-grid">
         ${renderEmbeddedMedia({}, clip)}
@@ -3142,28 +3137,7 @@ function renderGoldReviewItem(item, index) {
           ${scoreNotes ? `<small>Score: ${escapeHtml(shortText(scoreNotes, 80))}</small>` : ""}
         </section>
         <form class="gold-review-form" data-gold-review-form data-review-item-id="${escapeHtml(item.reviewItemId || "")}">
-          <label>
-            <span>Accepted</span>
-            <input name="acceptedNotes" type="text" autocomplete="off" value="${escapeHtml(detectedNotes)}">
-          </label>
-          <label>
-            <span>Score</span>
-            <input name="scoreNotes" type="text" autocomplete="off" value="${escapeHtml(scoreNotes)}" placeholder="optional">
-          </label>
-          <label>
-            <span>Location</span>
-            <input name="scoreLocation" type="text" autocomplete="off" value="${escapeHtml(item.scoreLocation || "")}" placeholder="optional">
-          </label>
-          <label>
-            <span>Type</span>
-            <select name="type">
-              ${typeOptions.map(([value, label]) => `<option value="${escapeHtml(value)}"${value === itemType ? " selected" : ""}>${escapeHtml(label)}</option>`).join("")}
-            </select>
-          </label>
-          <label class="gold-review-reason">
-            <span>Reason</span>
-            <input name="reason" type="text" autocomplete="off" value="${escapeHtml(item.reason || "")}" placeholder="optional">
-          </label>
+          <p class="gold-review-rule">One note off = reject.</p>
           <div class="gold-review-actions">
             <button type="submit" name="status" value="accepted_truth">Accept</button>
             <button type="submit" name="status" value="rejected_mismatch">Reject</button>

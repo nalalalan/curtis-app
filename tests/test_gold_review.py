@@ -75,9 +75,44 @@ class GoldReviewTests(unittest.TestCase):
         self.assertEqual(review["queueCount"], 1)
         candidate = review["queue"][0]
         self.assertEqual(candidate["reviewType"], "audio_phrase")
+        self.assertEqual(candidate["acceptanceMode"], "binary_exact_claim")
+        self.assertTrue(candidate["binaryOnly"])
         self.assertEqual(candidate["detectedNotes"], ["G5", "F5", "A5", "G#5", "F5"])
         self.assertEqual(candidate["detectedMidiSequence"], [79, 77, 81, 80, 77])
         self.assertEqual(candidate["clip"]["audioUrl"], "/api/curtis/media/sample/sample-a/clip?start=0.000&end=1.150")
+
+    def test_review_queue_can_surface_long_binary_phrase_candidates(self):
+        names = ["Eb5", "D5", "C5", "Bb4", "D5", "Eb5", "F5", "G5", "F5", "Eb5", "D5", "C5"]
+        midis = [75, 74, 72, 70, 74, 75, 77, 79, 77, 75, 74, 72]
+        daily_records = {
+            "records": [
+                {
+                    "practiceDay": "2026-05-03",
+                    "pieces": [{"title": "Wieniawski Scherzo-Tarantelle, Op. 16"}],
+                    "transcription": {
+                        "detectedSeries": [
+                            {
+                                "id": "series-long",
+                                "sourceTitle": "5-3-26",
+                                "sourceUrl": "https://www.youtube.com/watch?v=abc",
+                                "sampleId": "sample-long",
+                                "startSeconds": 180.0,
+                                "localStartSeconds": 0.0,
+                                "notes": [note(name, midi, index * 0.18) for index, (name, midi) in enumerate(zip(names, midis))],
+                            }
+                        ]
+                    },
+                }
+            ]
+        }
+
+        candidate = build_gold_review_loop({}, daily_records)["queue"][0]
+
+        self.assertEqual(candidate["reviewKind"], "long_audio_phrase_candidate")
+        self.assertEqual(candidate["acceptanceMode"], "binary_exact_claim")
+        self.assertTrue(candidate["binaryOnly"])
+        self.assertGreaterEqual(candidate["detectedNoteCount"], 10)
+        self.assertIn("Reject if one note is wrong", candidate["reviewQuestion"])
 
     def test_review_queue_only_publishes_playable_clip_windows(self):
         daily_records = {
