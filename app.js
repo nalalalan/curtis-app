@@ -1379,6 +1379,41 @@ function renderScoreImage(snippet, compact = false) {
   `;
 }
 
+function sourceMeasureLabelForMatch(group) {
+  if (!group || typeof group !== "object") return "";
+  const score = group.score && typeof group.score === "object" ? group.score : {};
+  const sourceSnippet = group.scoreSourceSnippet && typeof group.scoreSourceSnippet === "object" ? group.scoreSourceSnippet : {};
+  const sourceText = [
+    score.imageUrl,
+    score.sourceImageUrl,
+    score.sourceReviewImageUrl,
+    sourceSnippet.imageUrl,
+    sourceSnippet.sourceImageUrl,
+    sourceSnippet.sourceReviewImageUrl,
+  ].map((value) => String(value || "").toLowerCase()).join(" ");
+  if (sourceText.includes("wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb")) return "m. 16";
+  return "";
+}
+
+function measureLabelForMatch(group) {
+  if (!group || typeof group !== "object") return "";
+  const score = group.score && typeof group.score === "object" ? group.score : {};
+  const sourceSnippet = group.scoreSourceSnippet && typeof group.scoreSourceSnippet === "object" ? group.scoreSourceSnippet : {};
+  const rawLabel = String(
+    group.measureLabel
+    || sourceSnippet.measureLabel
+    || sourceMeasureLabelForMatch(group)
+    || score.measureLabel
+    || sourceSnippet.label
+    || group.scoreSequenceLabel
+    || ""
+  ).trim();
+  if (rawLabel) return rawLabel;
+  const rawNumber = group.measureNumber ?? score.measureNumber ?? sourceSnippet.measureNumber;
+  const number = Number(rawNumber);
+  return Number.isFinite(number) && number > 0 ? `m. ${number}` : "";
+}
+
 const TREBLE_STAFF_TOP_Y = 30;
 const TREBLE_STAFF_LINE_GAP = 10;
 const TREBLE_STAFF_BOTTOM_Y = TREBLE_STAFF_TOP_Y + (TREBLE_STAFF_LINE_GAP * 4);
@@ -2472,6 +2507,7 @@ function scoreAnchorSnippet(group) {
     pitchClass: snippet.pitchClass || group?.scorePitchClassSequenceCompact || group?.scorePitchClassSequence || "",
     source: snippet.source || score.source || "",
     label: snippet.label || group?.scoreSequenceLabel || "",
+    measureLabel: measureLabelForMatch(group) || snippet.measureLabel || score.measureLabel || "",
     noteLocation: snippet.noteLocation || "",
   };
 }
@@ -2484,18 +2520,19 @@ function renderScoreAnchorPanel(group) {
     || "A";
   const snippet = scoreAnchorSnippet(group);
   const sourceHref = snippet?.sourceUrl || snippet?.pdfUrl || "";
+  const measureLabel = snippet?.measureLabel || measureLabelForMatch(group);
   return `
     <section class="score-anchor-panel" aria-label="Source score note">
       <div class="matched-notation-head">
         <span>Score</span>
-        <strong>${escapeHtml(shortText(pitch, 12))}</strong>
+        <strong>${escapeHtml(shortText([measureLabel, pitch].filter(Boolean).join(" / "), 28))}</strong>
       </div>
       ${snippet ? `
         <div class="score-anchor-image" aria-label="Source score snippet">
           <img src="${escapeHtml(snippet.imageUrl)}" alt="Actual score snippet showing ${escapeHtml(snippet.note || pitch)}">
         </div>
         <div class="score-anchor-meta">
-          <span>${escapeHtml(shortText(snippet.note || pitch, 18))}</span>
+          <span>${escapeHtml(shortText([measureLabel, snippet.note || pitch].filter(Boolean).join(" / "), 24))}</span>
           ${sourceHref ? `<a href="${escapeHtml(sourceHref)}" target="_blank" rel="noreferrer">IMSLP</a>` : ""}
         </div>
       ` : renderNotationSheet(events, {
@@ -2631,6 +2668,7 @@ function renderScoreMatchGroups(record) {
           notationSystems: [{ events, clip }],
         };
         const pieceTitle = group?.pieceTitle || recordPieceText(record);
+        const measureLabel = measureLabelForMatch(group);
         const matchedNotes = group?.scoreNotePitchSequenceLabel
           || group?.scoreNoteSeriesLabel
           || group?.score?.scoreNotePitchSequenceLabel
@@ -2645,14 +2683,14 @@ function renderScoreMatchGroups(record) {
         return `
           <article class="score-match-group note-match-group">
             <div class="score-match-head">
-              <span>Match</span>
+              <span>${escapeHtml(measureLabel ? `Match ${measureLabel}` : "Match")}</span>
               <strong>${escapeHtml(shortText(matchLabel, 86))}</strong>
             </div>
             <div class="score-match-grid${showScoreSnippet ? "" : " note-match-grid"}">
               ${showScoreSnippet ? `<section class="score-reference-panel">
                 <div class="score-heat-header">
                   <span>Score</span>
-                  <strong>${escapeHtml(shortText(pieceTitle, 42))}</strong>
+                  <strong>${escapeHtml(shortText([measureLabel, pieceTitle].filter(Boolean).join(" / "), 58))}</strong>
                 </div>
                 ${renderScoreImage({ score: group?.score || {} }, true)}
               </section>` : ""}

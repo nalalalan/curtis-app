@@ -1428,6 +1428,8 @@ def symbolic_score_sequence_matches_for_run(
             score_exact_sequence,
         )
         source_snippet_exact = bool(source_snippet)
+        measure_label = str(source_snippet.get("measureLabel") or source_snippet.get("label") or label).strip()
+        measure_number = source_snippet.get("measureNumber")
         score_image_url = str(source_snippet.get("imageUrl") or "").strip() if source_snippet_exact else ""
         visual_agreement_basis = "exact_actual_source_snippet_range" if source_snippet_exact else "actual_source_snippet_required"
         score_location_status = "exact_score_location_verified" if source_snippet_exact else "actual_source_snippet_pending"
@@ -1472,6 +1474,8 @@ def symbolic_score_sequence_matches_for_run(
             "displayDetectedNotes": display_notes if not query_info["collapsed"] else compact_notes_by_pitch_class(display_notes),
             "scoreMatchedNotes": score_slice,
             "scoreSequenceLabel": label,
+            "measureLabel": measure_label,
+            "measureNumber": measure_number,
             "scoreSnippetStatus": score_location_status,
             "scoreLocationStatus": score_location_status,
             "scoreSourceSnippet": source_snippet,
@@ -1505,7 +1509,8 @@ def symbolic_score_sequence_matches_for_run(
                 "scoreExactNoteSequenceLabel": " ".join(score_exact_sequence),
                 "snippetKind": "symbolic_score_phrase",
                 "sourceSnippetStatus": source_snippet.get("status") if source_snippet else "",
-                "measureLabel": label,
+                "measureLabel": measure_label,
+                "measureNumber": measure_number,
                 "scoreMatchedNotes": score_slice,
             },
         }

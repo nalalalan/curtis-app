@@ -140,6 +140,62 @@ class SymbolicScoreTests(unittest.TestCase):
         self.assertTrue(matches[0]["score"]["generatedNotationImageUrl"].startswith("data:image/svg+xml;base64,"))
         self.assertEqual([item["note"] for item in matches[0]["scoreMatchedNotes"]], ["D4", "G4", "B4", "A4", "E5"])
 
+    def test_verified_source_snippet_measure_label_controls_visible_match_metadata(self):
+        target = {
+            "symbolicScore": {
+                "sourceId": "test-score",
+                "musicXml": TEST_MUSICXML,
+                "source": "test MusicXML",
+                "sourceSnippets": [
+                    {
+                        "referenceStart": 0,
+                        "referenceEnd": 5,
+                        "label": "m. 16",
+                        "measureLabel": "m. 16",
+                        "measureNumber": 16,
+                        "imageUrl": "/assets/score/test-measure-16.png",
+                        "status": "source_score_exact_midi_sequence_verified",
+                        "visualRangeAgreement": True,
+                        "visibleScoreNoteSequenceVerified": True,
+                        "visibleScoreExactNoteSequenceVerified": True,
+                        "scoreBoxCenterAgreement": True,
+                        "audioTranscriptionAgreement": True,
+                        "transcriptionScoreAgreement": True,
+                        "truthEvidenceAccepted": True,
+                        "pitchClassSequence": ["D", "G", "B", "A", "E"],
+                        "visibleScoreNoteSequence": ["D", "G", "B", "A", "E"],
+                        "visibleScoreExactNoteSequence": ["D4", "G4", "B4", "A4", "E5"],
+                    }
+                ],
+            }
+        }
+        series = detected_note_series(
+            [
+                {
+                    "transcriptionId": "phrase",
+                    "sampleId": "sample-phrase",
+                    "sourceWindow": "*0-10",
+                    "notes": [
+                        note("D4", 0.0, 0.2),
+                        note("G4", 0.2, 0.4),
+                        note("B4", 0.4, 0.6),
+                        note("A4", 0.6, 0.8),
+                        note("E5", 0.8, 1.0),
+                    ],
+                }
+            ],
+            max_series=None,
+        )
+
+        matches = score_sequence_matches_for_series(series, [{"title": "Test", "score": target}])
+
+        self.assertEqual(matches[0]["scoreSequenceLabel"], "m. 1")
+        self.assertEqual(matches[0]["measureLabel"], "m. 16")
+        self.assertEqual(matches[0]["measureNumber"], 16)
+        self.assertEqual(matches[0]["score"]["measureLabel"], "m. 16")
+        self.assertEqual(matches[0]["score"]["measureNumber"], 16)
+        self.assertEqual(matches[0]["score"]["imageUrl"], "/assets/score/test-measure-16.png")
+
     def test_symbolic_phrase_match_rejects_repeated_single_pitch_and_wrong_order(self):
         target = {"symbolicScore": {"musicXml": TEST_MUSICXML}}
         repeated = detected_note_series(
@@ -348,6 +404,10 @@ class SymbolicScoreTests(unittest.TestCase):
         self.assertEqual(matches[0]["minimumDistinctPitchClasses"], 2)
         self.assertEqual(matches[0]["referenceStart"], 9)
         self.assertEqual(matches[0]["scoreSequenceLabel"], "m. 16")
+        self.assertEqual(matches[0]["measureLabel"], "m. 16")
+        self.assertEqual(matches[0]["measureNumber"], 16)
+        self.assertEqual(matches[0]["score"]["measureLabel"], "m. 16")
+        self.assertEqual(matches[0]["score"]["measureNumber"], 16)
         self.assertTrue(matches[0]["scoreVisualAgreement"])
         self.assertTrue(matches[0]["truthEvidenceAccepted"])
         self.assertEqual(

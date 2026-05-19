@@ -439,9 +439,17 @@ def pdf_lines_for_detected_series(series: list[dict[str, Any]]) -> list[str]:
 def pdf_lines_for_score_matches(matches: list[dict[str, Any]], status: str) -> list[str]:
     lines = [f"Note/reference sequence matches: {len(matches)}", f"Reference sequence status: {status}", ""]
     for index, match in enumerate(matches, start=1):
+        score = match.get("score") if isinstance(match.get("score"), dict) else {}
+        measure_label = (
+            match.get("measureLabel")
+            or score.get("measureLabel")
+            or match.get("scoreSequenceLabel")
+            or "pending"
+        )
         lines.extend(
             [
                 f"Match {index}: {match.get('pieceTitle') or 'piece'} / {match.get('matchedNoteRun') or 0} notes",
+                f"Measure: {measure_label}",
                 f"Detected: {match.get('detectedPitchClassSequence') or ''}",
                 f"Reference: {match.get('referencePitchClassSequence') or match.get('scorePitchClassSequence') or ''}",
                 f"Score alignment: {match.get('scoreSnippetStatus') or 'pending'}",
@@ -496,6 +504,7 @@ def ensure_transcription_pdf(practice_day: str) -> Path:
             lines.extend(
                 [
                     f"Group {index}: {group.get('status') or 'matched'}",
+                    f"Measure: {group.get('measureLabel') or (group.get('score') or {}).get('measureLabel') or group.get('scoreSequenceLabel') or 'pending'}",
                     f"Notes: {' '.join(event_notes[:24]) or 'none rendered'}",
                     f"Matched note run: {group.get('matchedNoteRun') or group.get('minimumMatchedNoteRun') or 0}",
                     f"Audio/video sample: {clip.get('sampleId') or 'sample pending'}",
