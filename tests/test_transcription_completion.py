@@ -2420,10 +2420,10 @@ class TranscriptionCompletionTests(unittest.TestCase):
                     [{"transcriptionId": "t1"}],
                 )
 
-        self.assertNotEqual(completion["staff4SourceAudioRescanStatus"], "no_staff4_anchor")
-        self.assertGreaterEqual(completion["phraseExpansionHarness"]["anchorCount"], 1)
-        self.assertGreaterEqual(completion["phraseExpansionHarness"]["acceptedAnchorNoteCount"], 5)
-        self.assertGreaterEqual(completion["staff4AdjacentMining"]["anchorCount"], 1)
+        self.assertEqual(completion["staff4SourceAudioRescanStatus"], "no_staff4_anchor")
+        self.assertEqual(completion["phraseExpansionHarness"]["anchorCount"], 0)
+        self.assertEqual(completion["phraseExpansionHarness"]["acceptedAnchorNoteCount"], 0)
+        self.assertEqual(completion["staff4AdjacentMining"]["anchorCount"], 0)
 
     def test_local_source_score_pdf_advances_score_truth_without_accepting_phrase(self):
         completion = build_transcription_completion(

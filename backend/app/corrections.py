@@ -603,9 +603,14 @@ def wieniawski_reference_target() -> dict[str, Any]:
                 {
                     "referenceStart": 9,
                     "referenceEnd": 14,
-                    "status": "superseded_by_staff4_context_crop_reverified_2026_05_18",
-                    "reason": "The old tight crop remains blocked, but the exact 9-14 source range can now display only through the full-context actual-PDF reverification crop.",
+                    "status": "blocked_user_rejected_wrong_measure_and_transcription_2026_05_19",
+                    "reason": "Alan reviewed the live May 3 display and identified that the audio is measure 16, the transcription should begin Eb-D-C rather than Eb-Eb-C, and the displayed source crop is not the correct measure-16 score snippet. No source image for this range may display as accepted evidence until measure, score crop, transcription, and paired audio agree together.",
                     "blockedImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-verified.png",
+                    "blockedImageUrls": [
+                        "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-verified.png",
+                        "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-user-bracket-confirmed.png",
+                        "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-context-review.png",
+                    ],
                     "sourceReviewImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-context-review.png",
                 },
                 {
@@ -733,6 +738,9 @@ def wieniawski_reference_target() -> dict[str, Any]:
         snippet["audioTranscriptionAgreement"] = False
         snippet["transcriptionScoreAgreement"] = False
         snippet["truthEvidenceAccepted"] = False
+        snippet["sourceCropDisplayAllowed"] = False
+        snippet["sourceCropReady"] = False
+        snippet["sourceCropRejected"] = True
         snippet["rejectionReason"] = (
             "Alan reviewed the live displayed Staff 4 score/transcription pair and reported that the notes do not match."
         )

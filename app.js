@@ -1381,17 +1381,6 @@ function renderScoreImage(snippet, compact = false) {
 
 function sourceMeasureLabelForMatch(group) {
   if (!group || typeof group !== "object") return "";
-  const score = group.score && typeof group.score === "object" ? group.score : {};
-  const sourceSnippet = group.scoreSourceSnippet && typeof group.scoreSourceSnippet === "object" ? group.scoreSourceSnippet : {};
-  const sourceText = [
-    score.imageUrl,
-    score.sourceImageUrl,
-    score.sourceReviewImageUrl,
-    sourceSnippet.imageUrl,
-    sourceSnippet.sourceImageUrl,
-    sourceSnippet.sourceReviewImageUrl,
-  ].map((value) => String(value || "").toLowerCase()).join(" ");
-  if (sourceText.includes("wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb")) return "m. 16";
   return "";
 }
 
@@ -3262,7 +3251,7 @@ function renderStaff4Audit(audit) {
   const sourceCrop = isCropReview && !rejectedCrop && displayAllowed ? assetUrl(scoreBlock.sourceImageUrl || "") : "";
   const reviewCrop = isCropReview && rejectedCrop ? assetUrl(scoreBlock.sourceReviewImageUrl || decision.reviewImageUrl || "") : "";
   return `
-    <section class="staff4-audit-card" aria-label="Staff 4 audit packet">
+    <section class="staff4-audit-card" aria-label="Source phrase audit packet">
       <div class="staff4-audit-head">
         <strong>${escapeHtml(decisionLabel)}</strong>
         <span>${escapeHtml(headerDetail)}</span>
@@ -3281,8 +3270,8 @@ function renderStaff4Audit(audit) {
         ` : ""}
         ${sourceCrop ? `<img class="staff4-audit-plot" src="${escapeHtml(sourceCrop)}" alt="Accepted source score crop">` : ""}
         ${reviewCrop ? `<img class="staff4-audit-plot staff4-audit-review-plot" src="${escapeHtml(reviewCrop)}" alt="Source review context">` : ""}
-        ${pitchTrace ? `<img class="staff4-audit-plot" src="${escapeHtml(pitchTrace)}" alt="Staff 4 pitch trace">` : ""}
-        ${spectrogram ? `<img class="staff4-audit-plot" src="${escapeHtml(spectrogram)}" alt="Staff 4 spectrogram">` : ""}
+        ${pitchTrace ? `<img class="staff4-audit-plot" src="${escapeHtml(pitchTrace)}" alt="Pitch trace">` : ""}
+        ${spectrogram ? `<img class="staff4-audit-plot" src="${escapeHtml(spectrogram)}" alt="Spectrogram">` : ""}
       </div>
     </section>
   `;
@@ -3312,7 +3301,7 @@ function renderStaff4Mining(mining, sourceRescan) {
   const failedHeard = failure.bestAttemptObservedConsensusNote || "";
   const failedOffset = failure.bestAttemptOffsetSeconds ?? "";
   return `
-    <section class="staff4-mining-card" aria-label="Staff 4 adjacent mining">
+    <section class="staff4-mining-card" aria-label="Adjacent phrase search">
       <div class="staff4-mining-head">
         <strong>${escapeHtml(status)}</strong>
         <span>${escapeHtml(exact)} exact / ${escapeHtml(searched)} checked</span>
@@ -3360,7 +3349,7 @@ function renderTranscriptionCompletion() {
     ["Queue", `${Number(completion.goldReviewQueueCount) || 0} clips`],
     ["Source truth", `${Number(completion.truthManifestPositiveSourcePhraseVerifiedCount) || 0}/${Number(completion.truthManifestPositiveSourcePhraseCount) || 0}`],
     ["Blocked errors", `${Number(completion.truthManifestRejectedRegressionBlockedCount) || 0}/${Number(completion.truthManifestRejectedRegressionPhraseCount) || 0}`],
-    ["Staff 4 audit", completion.staff4PhraseAuditStatus ? String(completion.staff4PhraseAuditStatus).replace(/_/g, " ") : "not generated"],
+    ["Source audit", completion.staff4PhraseAuditStatus ? String(completion.staff4PhraseAuditStatus).replace(/_/g, " ") : "not generated"],
     ["Crop review", completion.sourceCropReverificationStatus ? String(completion.sourceCropReverificationStatus).replace(/_/g, " ") : "empty"],
   ];
   const staff4Audit = completion.staff4PhraseAudit && typeof completion.staff4PhraseAudit === "object" ? completion.staff4PhraseAudit : {};

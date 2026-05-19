@@ -705,9 +705,9 @@ def attach_staff4_source_crop_reverification_decision(packet: dict[str, Any]) ->
             "Source crop, boxed noteheads, rendered transcription, and paired audio now agree by exact MIDI."
             if accepted
             else (
-                "Source crop is visually verified, but the paired audio must pass per-note detector agreement before Staff 4 can become accepted evidence again."
+                "Source crop is visually verified, but the paired audio must pass per-note detector agreement before it can become accepted evidence again."
                 if source_visual_ready and not exact_audio_ready
-                else "Visible source crop, boxed noteheads, rendered transcription, and paired audio must agree before Staff 4 can become accepted evidence again. Rejected tight crops stay hidden from accepted match display."
+                else "Visible source crop, boxed noteheads, rendered transcription, and paired audio must agree before this lane can become accepted evidence again. Rejected tight crops stay hidden from accepted match display."
             )
         ),
     }

@@ -20,8 +20,8 @@
       "id": "wieniawski-staff4-eb-eb-c-eb-eb-symbolic-v1",
       "pieceTitle": "Wieniawski Scherzo-Tarantelle, Op. 16",
       "target": "wieniawski_reference_target",
-      "status": "verified_source_excerpt",
-      "basis": "Queued Staff 4 score review packet converted into MusicXML from the local IMSLP solo-violin page. The 2026-05-18 source-crop reverification reaccepted this exact five-note source range only through an actual-PDF crop whose boxed notehead centers, score note sequence, transcription spelling, and paired audio agree by exact MIDI. Alan's 2026-05-19 red-bracket annotation independently confirmed this exact score location for the May 3 clip.",
+      "status": "rejected_visible_evidence",
+      "basis": "Alan reviewed the live May 3 display on 2026-05-19 and identified the accepted evidence as wrong: the audio is from measure 16, the transcription should begin Eb-D-C rather than Eb-Eb-C, and the displayed crop is not the correct measure-16 score snippet. This source range is retained only as a rejected regression fixture until a new score crop, measure label, transcription, and paired audio pass together.",
       "referenceStart": 9,
       "referenceEnd": 14,
       "measureLabel": "m. 16",
@@ -30,12 +30,12 @@
       "midiSequence": [75, 75, 72, 75, 75],
       "sourceCropImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-user-bracket-confirmed.png",
       "sourceReviewImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-user-bracket-confirmed.png",
-      "sourceCropDisplayAllowed": true,
-      "sourceCropReady": true,
+      "sourceCropDisplayAllowed": false,
+      "sourceCropReady": false,
       "sourceCropContextReady": true,
       "humanBracketConfirmed": true,
       "humanBracketConfirmedAt": "2026-05-19",
-      "liveAccepted": true
+      "liveAccepted": false
     },
     {
       "id": "wieniawski-staff4-eb-eb-c-eb-eb-eb-c-symbolic-v1",
@@ -101,8 +101,8 @@
     {
       "id": "wieniawski-staff4-live-audio-exact-midi-positive",
       "sourceId": "wieniawski-staff4-eb-eb-c-eb-eb-symbolic-v1",
-      "status": "accepted_truth",
-      "basis": "May 3 detected phrase from sample Njh8_zq9_DM-8835 has audio-agreed D#5-D#5-C5-D#5-D#5 against the symbolic MIDI sequence. The old tight crop remains rejected, but the actual-PDF crop is accepted after source-note centers, score sequence, transcription spelling, paired audio, and Alan's 2026-05-19 red-bracket source annotation all agree on the same score location.",
+      "status": "rejected_visible_evidence",
+      "basis": "This phrase was removed from live accepted evidence after Alan's 2026-05-19 review: the paired audio is measure 16, but the displayed transcription should begin Eb-D-C rather than Eb-Eb-C and the displayed score crop is not the correct measure-16 snippet. It remains only as a regression case.",
       "practiceDay": "2026-05-03",
       "sampleId": "Njh8_zq9_DM-8835",
       "sourceWindow": "*8835-8925",
@@ -123,12 +123,12 @@
       ],
       "scoreImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-user-bracket-confirmed.png",
       "sourceReviewImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-user-bracket-confirmed.png",
-      "sourceCropDisplayAllowed": true,
-      "sourceCropReady": true,
+      "sourceCropDisplayAllowed": false,
+      "sourceCropReady": false,
       "sourceCropReverifiedAt": "2026-05-19",
       "humanBracketConfirmed": true,
       "humanBracketConfirmedAt": "2026-05-19",
-      "liveAccepted": true
+      "liveAccepted": false
     },
     {
       "id": "wieniawski-staff4-source-extension-positive",
@@ -191,6 +191,32 @@
     }
   ],
   "rejectedRegressionPhrases": [
+    {
+      "id": "rejected-user-flagged-may3-wrong-measure16-score-crop-eb-eb-c",
+      "sourceId": "wieniawski-staff4-eb-eb-c-eb-eb-symbolic-v1",
+      "status": "rejected",
+      "rejectionKind": "visible_score_measure_transcription_mismatch",
+      "basis": "Alan reviewed the live 2026-05-03 Curtis match and reported that the audio is measure 16, the transcription should begin Eb-D-C, and the displayed score crop is not the actual measure-16 snippet. This exact Eb-Eb-C-Eb-Eb display must not be accepted again from a measure-label-only or staff-index-only gate.",
+      "practiceDay": "2026-05-03",
+      "sampleId": "Njh8_zq9_DM-8835",
+      "sourceWindow": "*8835-8925",
+      "measureLabel": "m. 16",
+      "measureNumber": 16,
+      "targetReferenceStart": 9,
+      "targetReferenceEnd": 14,
+      "expectedSourceSequence": ["Eb5", "D5", "C5"],
+      "expectedSourceMidiSequence": [75, 74, 72],
+      "rejectedDisplayedSourceSequence": ["Eb5", "Eb5", "C5", "Eb5", "Eb5"],
+      "sequence": ["D#5", "D#5", "C5", "D#5", "D#5"],
+      "acceptedScoreSpellingSequence": ["Eb5", "Eb5", "C5", "Eb5", "Eb5"],
+      "midiSequence": [75, 75, 72, 75, 75],
+      "minimumExactNotes": 5,
+      "audioAgreed": false,
+      "scoreImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-user-bracket-confirmed.png",
+      "sourceReviewImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-context-review.png",
+      "sourceCropDisplayAllowed": false,
+      "reviewOutcome": "user_rejected_wrong_measure16_crop_and_wrong_transcription_2026_05_19"
+    },
     {
       "id": "rejected-old-false-opening-d-c-bb",
       "sourceId": "wieniawski-scherzo-tarantelle-opening-symbolic-v7",

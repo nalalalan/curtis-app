@@ -661,15 +661,15 @@ class Staff4AuditTests(unittest.TestCase):
 
         self.assertEqual(packet["sourceCropAudioAgreement"]["status"], "audio_agreed")
         self.assertEqual(packet["sourceCropAudioAgreement"]["agreedNoteCount"], 5)
-        self.assertEqual(packet["sourceCropScoreReview"]["status"], "verified_actual_pdf_context")
-        self.assertEqual(packet["decision"]["status"], "accepted_truth_candidate")
-        self.assertEqual(packet["truthDecision"], "accepted")
-        self.assertTrue(packet["canExtendStaff4Lane"])
-        self.assertTrue(packet["score"]["sourceCropDisplayAllowed"])
-        self.assertFalse(packet["score"]["sourceCropRejected"])
+        self.assertEqual(packet["sourceCropScoreReview"]["status"], "source_crop_context_review_required")
+        self.assertEqual(packet["decision"]["status"], "pending_source_crop_reverification")
+        self.assertEqual(packet["truthDecision"], "pending_review")
+        self.assertFalse(packet["canExtendStaff4Lane"])
+        self.assertFalse(packet["score"]["sourceCropDisplayAllowed"])
+        self.assertTrue(packet["score"]["sourceCropRejected"])
         self.assertEqual(
             packet["score"]["sourceImageUrl"],
-            "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-user-bracket-confirmed.png",
+            "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-verified.png",
         )
         self.assertTrue(all(note["audioAgreement"] for note in packet["storedAudioNotes"]))
 

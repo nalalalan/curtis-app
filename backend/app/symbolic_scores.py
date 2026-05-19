@@ -341,8 +341,19 @@ def source_image_url_rejected(
             continue
         if rejected_start != start or rejected_end != end:
             continue
+        blocked_images = [
+            str(value or "").strip()
+            for value in (
+                item.get("blockedImageUrls")
+                if isinstance(item.get("blockedImageUrls"), list)
+                else []
+            )
+            if str(value or "").strip()
+        ]
         blocked_image = str(item.get("blockedImageUrl") or "").strip()
-        if blocked_image and blocked_image == image:
+        if blocked_image:
+            blocked_images.append(blocked_image)
+        if image in blocked_images:
             return True
     return False
 

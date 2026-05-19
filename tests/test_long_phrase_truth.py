@@ -27,18 +27,19 @@ class LongPhraseTruthTests(unittest.TestCase):
         self.assertEqual(result["status"], "verified")
         self.assertEqual(result["sourceVerifiedCount"], 5)
         self.assertEqual(result["positiveSourcePhraseVerifiedCount"], 4)
-        self.assertEqual(result["rejectedRegressionPhraseCount"], 7)
-        self.assertEqual(result["rejectedRegressionBlockedCount"], 7)
-        self.assertEqual(result["liveAcceptedPhraseCount"], 1)
+        self.assertEqual(result["rejectedRegressionPhraseCount"], 8)
+        self.assertEqual(result["rejectedRegressionBlockedCount"], 8)
+        self.assertEqual(result["liveAcceptedPhraseCount"], 0)
         source_ids = {item["id"] for item in result["sourceResults"]}
         self.assertIn("wieniawski-staff4-eb-eb-c-eb-eb-eb-c-a-symbolic-v1", source_ids)
         accepted_source_ids = {item["sourceId"] for item in result["positiveSourcePhraseResults"] if item["liveAccepted"]}
-        self.assertIn("wieniawski-staff4-eb-eb-c-eb-eb-symbolic-v1", accepted_source_ids)
+        self.assertNotIn("wieniawski-staff4-eb-eb-c-eb-eb-symbolic-v1", accepted_source_ids)
         self.assertNotIn("wieniawski-staff4-eb-eb-c-eb-eb-eb-c-a-symbolic-v1", accepted_source_ids)
         self.assertIn("rejected-staff4-right2-audit-eb-vs-d", result["blockedRegressionIds"])
         self.assertIn("rejected-staff4-sixth-note-audio-review-required", result["blockedRegressionIds"])
         self.assertIn("rejected-staff4-stitched-a4-continuation", result["blockedRegressionIds"])
         self.assertIn("rejected-user-flagged-staff4-visible-score-transcription-mismatch", result["blockedRegressionIds"])
+        self.assertIn("rejected-user-flagged-may3-wrong-measure16-score-crop-eb-eb-c", result["blockedRegressionIds"])
 
     def test_current_wieniawski_source_map_has_the_reviewed_exact_midi_sequence(self):
         score = symbolic_score_from_target(wieniawski_reference_target())

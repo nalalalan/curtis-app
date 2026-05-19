@@ -6186,12 +6186,12 @@ def build_transcription_completion(
             ),
         },
         {
-            "label": "Staff 4 mining",
+            "label": "Phrase search",
             "value": staff4_mining_status.replace("_", " ") if staff4_mining_status else "pending",
             "detail": staff4_mining_detail,
         },
         {
-            "label": "Staff 4 audit",
+            "label": "Source audit",
             "value": staff4_audit_status.replace("_", " ") if staff4_audit_status else "not generated",
             "detail": (
                 f"{staff4_audit.get('expectedNextScoreNote') or 'score'} vs {staff4_audit.get('observedNextAudioNote') or 'audio'}"
@@ -6285,15 +6285,15 @@ def build_transcription_completion(
         "A truth workbench now separates queued, accepted, and rejected audio-score-transcription evidence before anything can become visible score evidence.",
         "Accepted source/audio anchors now feed an outward expansion gate before Curtis tries a new random match.",
         "Expansion search now includes raw detected note series, not only already-ranked score candidate cards.",
-        "Staff 4 source-audio rescanning now extracts a fresh window around the accepted source/audio anchor and adds its events to the exact-MIDI search pool.",
-        "Staff 4 adjacent mining now searches stored May 3 audio-note windows for the exact right-1 and right-2 MIDI sequences before accepting another expansion.",
-        "A Staff 4 audit packet generator now ignores stale failed-note metadata when the current expansion already has full exact-MIDI audio, so the truth packet covers the whole seven-note phrase instead of only one clipped note.",
-        "Staff 4 continuation search now scans beyond a failed inferred adjacent window with a harmonic expected-pitch prefilter, then requires exact pYIN/YIN/spectral agreement before any longer candidate enters review.",
+        "Source-audio rescanning now extracts a fresh window around the accepted source/audio anchor and adds its events to the exact-MIDI search pool.",
+        "Adjacent phrase search now scans stored May 3 audio-note windows for exact right-side MIDI sequences before accepting another expansion.",
+        "A source audit packet generator now ignores stale failed-note metadata when the current expansion already has full exact-MIDI audio, so the truth packet covers the whole phrase instead of only one clipped note.",
+        "Continuation search now scans beyond a failed inferred adjacent window with a harmonic expected-pitch prefilter, then requires exact pYIN/YIN/spectral agreement before any longer candidate enters review.",
     ]
     if staff4_source_rescan_continuity_probe_count:
-        done_summary.append("Staff 4 continuity probing now rescans the late-note neighborhood without truth-anchor or guided-note stitching before any longer phrase can enter review.")
+        done_summary.append("Continuity probing now rescans the late-note neighborhood without truth-anchor or guided-note stitching before any longer phrase can enter review.")
     if staff4_source_rescan_failed_probe_count:
-        done_summary.append("Staff 4 failed-note probing now rescans the rejected adjacent-note neighborhood as raw audio before Curtis retries a longer phrase.")
+        done_summary.append("Failed-note probing now rescans the rejected adjacent-note neighborhood as raw audio before Curtis retries a longer phrase.")
     if source_crop_failed_note_probe_count:
         done_summary.append("The source-crop six-note gate now runs the same failed-note raw-audio probe before repeating the current window.")
     if source_crop_alternate_attempt_record_count:
@@ -6303,15 +6303,15 @@ def build_transcription_completion(
     if source_crop_adjacent_source_attempt_record_count:
         done_summary.append("The source-crop six-note gate now searches adjacent May 3 source chunks after the current chunk still has no continuous exact-MIDI phrase.")
     if truth_manifest_live_phrase_count == 0 and staff4_source_rescan_status == "no_staff4_anchor":
-        done_summary.append("The May 3 Staff 4 visible score/transcription mismatch is now a rejected regression, so the old accepted Staff 4 lanes are blocked from display.")
+        done_summary.append("The May 3 visible score/transcription mismatch is now a rejected regression, so the old accepted source lanes are blocked from display.")
     if source_crop_reverification_count:
-        done_summary.append("Rejected Staff 4 visible mismatches now produce an explicit source-crop reverification queue instead of falling back to a random match.")
+        done_summary.append("Rejected visible mismatches now produce an explicit source-crop reverification queue instead of falling back to a random match.")
     if source_crop_audit_accepted:
-        done_summary.append("The May 3 Staff 4 five-note source crop is reaccepted only from full-context score review plus per-note paired-audio agreement.")
+        done_summary.append("The May 3 five-note source crop can return only from full-context score review plus per-note paired-audio agreement.")
     if phrase_expansion_rejected_count:
-        done_summary.append(f"{phrase_expansion_rejected_count} Staff 4 audited expansion is now locked as a rejected regression case.")
+        done_summary.append(f"{phrase_expansion_rejected_count} audited expansion is now locked as a rejected regression case.")
     if staff4_audit_ready and truth_manifest_live_phrase_count:
-        done_summary.append(f"Latest Staff 4 audit status: {staff4_audit_status.replace('_', ' ')}.")
+        done_summary.append(f"Latest source audit status: {staff4_audit_status.replace('_', ' ')}.")
     remaining_summary = [
         "Finish chronological active-practice coverage across the full archive.",
         "Build benchmark clips for known notes, fast runs, arpeggios, rhythm, and score boxes.",
