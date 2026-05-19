@@ -516,7 +516,7 @@ def staff4_audit_decision(packet: dict[str, Any], analysis: dict[str, Any], fail
             "expectedMidi": expected_midi,
             "observedNote": observed_note,
             "observedMidi": observed_midi,
-            "basis": "First-failure audit heard a different MIDI value than the verified Staff 4 source note.",
+            "basis": "First-failure audit heard a different MIDI value than the verified source note.",
         }
     elif (
         failure_kind in {"outside_scan", "no_detector_votes"}
@@ -864,7 +864,7 @@ def source_crop_reverification_current(completion: dict[str, Any]) -> dict[str, 
         "bestAudioNotes": best_notes,
         "rejectedRegressionId": target.get("rejectedRegressionId") or "",
         "acceptanceRule": target.get("acceptanceRule") or "",
-        "limit": target.get("limit") or "Visible source crop must be reverified before Staff 4 can be accepted.",
+        "limit": target.get("limit") or "Visible source crop must be reverified before this lane can be accepted.",
     }
 
 
@@ -1121,7 +1121,7 @@ def source_crop_score_review_for_packet(packet: dict[str, Any]) -> dict[str, Any
         "referenceStart": reference_start,
         "referenceEnd": reference_end,
         "targetMidiSequence": target_midis,
-        "limit": "No verified source-snippet record exists for this Staff 4 source range.",
+        "limit": "No verified source-snippet record exists for this source range.",
     }
 
 
@@ -1648,7 +1648,7 @@ def write_pitch_trace_svg(target: Path, packet: dict[str, Any], analysis: dict[s
             [
                 '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 310" role="img">',
                 '<rect width="820" height="310" fill="#fffdf8"/>',
-                '<text x="52" y="28" font-size="18" font-weight="700">Staff 4 phrase audit pitch trace</text>',
+                '<text x="52" y="28" font-size="18" font-weight="700">Phrase audit pitch trace</text>',
                 '<text x="52" y="48" font-size="13" fill="#555">black pYIN / blue YIN / rust spectral peak</text>',
                 f'<rect x="{mx1:.1f}" y="56" width="{max(2.0, mx2 - mx1):.1f}" height="214" fill="#F2D9D4" opacity="0.5"/>',
                 *grid,
@@ -1705,7 +1705,7 @@ def write_spectrogram_svg(target: Path, audio_path: Path) -> bool:
             [
                 '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 310" role="img">',
                 '<rect width="820" height="310" fill="#fffdf8"/>',
-                '<text x="30" y="28" font-size="18" font-weight="700">Staff 4 phrase audit spectrogram</text>',
+                '<text x="30" y="28" font-size="18" font-weight="700">Phrase audit spectrogram</text>',
                 *rects,
                 '<text x="30" y="292" font-size="12" fill="#555">Mel spectrogram from the generated audit audio clip.</text>',
                 "</svg>",
@@ -1737,9 +1737,9 @@ def ensure_staff4_phrase_audit_packet(
             "createdAt": utc_now(),
             "acceptedAnchorNoteCount": accepted_anchor_note_count,
             "limit": (
-                f"The accepted Staff 4 lane reaches the current {accepted_anchor_note_count}-note symbolic source extent; verify more MusicXML/source notes before another audit packet can be generated."
+                f"The accepted source lane reaches the current {accepted_anchor_note_count}-note symbolic source extent; verify more MusicXML/source notes before another audit packet can be generated."
                 if extent_exhausted
-                else "No current Staff 4 phrase expansion target is available."
+                else "No current phrase expansion target is available."
             ),
         }
         state["staff4PhraseAuditLatest"] = packet
@@ -1872,7 +1872,7 @@ def ensure_staff4_phrase_audit_packet(
 
     if not source_path:
         packet["status"] = "blocked_media_missing"
-        packet["limit"] = "The current Staff 4 sample is not present in runtime media storage, so audio/video artifacts cannot be generated."
+        packet["limit"] = "The current source sample is not present in runtime media storage, so audio/video artifacts cannot be generated."
         if source_crop_reverification:
             attach_staff4_source_crop_reverification_decision(packet)
         elif first_failure:
@@ -1931,12 +1931,12 @@ def ensure_staff4_phrase_audit_packet(
     else:
         attach_staff4_full_phrase_decision(packet)
     packet["nextAction"] = (
-        "Reverify the visible Staff 4 source crop against the transcription and paired audio before reopening this lane."
+        "Reverify the visible source crop against the transcription and paired audio before reopening this lane."
         if source_crop_reverification
         else
-        "Lock this Staff 4 failure as rejected; do not extend the lane from this window."
+        "Lock this source-audio failure as rejected; do not extend the lane from this window."
         if packet.get("decision", {}).get("rejected")
-        else "Do not extend the Staff 4 lane until this packet is accepted from exact audio and source-score evidence."
+        else "Do not extend the source lane until this packet is accepted from exact audio and source-score evidence."
     )
     existing_path.write_text(json.dumps(packet, indent=2, sort_keys=True), encoding="utf-8")
     state["staff4PhraseAuditLatest"] = packet
@@ -1950,7 +1950,7 @@ def latest_staff4_phrase_audit_packet(state: dict[str, Any]) -> dict[str, Any]:
     return {
         "version": STAFF4_AUDIT_VERSION,
         "status": "not_generated",
-        "limit": "Run the Staff 4 phrase audit packet generator.",
+        "limit": "Run the phrase audit packet generator.",
     }
 
 
@@ -1986,8 +1986,8 @@ def latest_staff4_phrase_audit_packet_for_completion(state: dict[str, Any], comp
         "currentPacketId": current_packet_id,
         "stalePacketId": str(packet.get("packetId") or "") if packet else "",
         "limit": (
-            "Run the Staff 4 source-crop reverification packet before restoring any accepted Staff 4 anchor."
+            "Run the source-crop reverification packet before restoring any accepted source/audio anchor."
             if is_source_crop_reverification_current(current)
-            else "Run the Staff 4 phrase audit packet generator for the current adjacent phrase window."
+            else "Run the phrase audit packet generator for the current adjacent phrase window."
         ),
     }

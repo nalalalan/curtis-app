@@ -547,7 +547,7 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertEqual(mining["exactCandidateCount"], 0)
         self.assertEqual(mining["bestCandidate"], {})
         self.assertEqual(completion["staff4AdjacentMiningStatus"], "no_staff4_anchor")
-        self.assertIn("No continuous Staff 4 six-note", completion["nextAction"])
+        self.assertIn("No continuous six-note", completion["nextAction"])
         self.assertEqual(completion["sourceCropFailedNoteProbeStatus"], "no_continuous_exact_midi_in_probe")
         self.assertEqual(completion["sourceCropAlternateAttemptStatus"], "no_alternate_exact_midi_in_source_window")
         self.assertEqual(completion["sourceCropWideAttemptStatus"], "no_wide_exact_midi_in_source_window")
@@ -2143,7 +2143,7 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertEqual(completion["sourceCropAdjacentSourceAttemptStatus"], "no_adjacent_source_exact_midi_in_source_window")
         self.assertEqual(completion["sourceCropAdjacentSourceAttemptRecordCount"], 32)
         self.assertEqual(completion["sourceCropAdjacentSourceAttemptContinuousCandidateCount"], 0)
-        self.assertIn("No continuous Staff 4 six-note", completion["nextAction"])
+        self.assertIn("No continuous six-note", completion["nextAction"])
         self.assertIn("measure-16", completion["nextAction"])
 
     def test_completion_surfaces_staff4_adjacent_failure_without_losing_detector_detail(self):
@@ -2327,7 +2327,7 @@ class TranscriptionCompletionTests(unittest.TestCase):
 
         self.assertEqual(completion["staff4SourceAudioRescanFailedAdjacentProbeStatus"], "no_continuous_exact_midi_in_probe")
         self.assertEqual(completion["staff4SourceAudioRescanFailedAdjacentProbeCount"], 1)
-        self.assertIn("Reject the current Staff 4 adjacent window", completion["nextAction"])
+        self.assertIn("Reject the current adjacent window", completion["nextAction"])
         self.assertIn("measure 16", completion["nextAction"])
 
     def test_staff4_truth_manifest_anchor_reopens_after_source_crop_reverification(self):

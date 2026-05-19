@@ -5289,7 +5289,7 @@
       "targetNote": "Eb5"
     },
     "goldReviewRequired": true,
-    "limit": "Source crop is visually verified, but the paired audio must pass per-note detector agreement before Staff 4 can become accepted evidence again.",
+    "limit": "Source crop is visually verified, but the paired audio must pass per-note detector agreement before this lane can become accepted evidence again.",
     "outcome": "source_crop_audio_review_required",
     "rejected": false,
     "scoreReviewStatus": "source_crop_visual_verified_audio_pending",
@@ -5354,10 +5354,10 @@
     ],
     "targetSequence": "Eb5 Eb5 C5 Eb5 Eb5 Eb5"
   },
-  "limit": "The six-note Staff 4 source crop now has a full-context actual-PDF review image, but the paired audio is not accepted. The source-crop audit agrees on five of six note windows; for note 6 the expected Eb5/D#5 MIDI 75 is heard as D5 by pYIN and YIN, while only spectralPeak returns D#5. This remains queued for audio/source-crop review and cannot appear as an accepted match.",
+  "limit": "The six-note source crop now has a full-context actual-PDF review image, but the paired audio is not accepted. The source-crop audit agrees on five of six note windows; for note 6 the expected Eb5/D#5 MIDI 75 is heard as D5 by pYIN and YIN, while only spectralPeak returns D#5. This remains queued for audio/source-crop review and cannot appear as an accepted match.",
   "measureLabel": "m. 16",
   "measureNumber": 16,
-  "nextAction": "Reverify the visible Staff 4 source crop against the transcription and paired audio before reopening this lane.",
+  "nextAction": "Reverify the visible source crop against the transcription and paired audio before reopening this lane.",
   "observedFailureAudioMidi": null,
   "observedFailureAudioNote": "",
   "observedNextAudioMidi": null,
@@ -5630,7 +5630,7 @@
     ]
   },
   "sourceCropReverification": {
-    "acceptanceRule": "Source crop is visually verified, but the paired audio must pass per-note detector agreement before Staff 4 can become accepted evidence again.",
+    "acceptanceRule": "Source crop is visually verified, but the paired audio must pass per-note detector agreement before this lane can become accepted evidence again.",
     "audioMidiSequence": [
       75,
       75,

@@ -291,7 +291,7 @@ def wieniawski_reference_target() -> dict[str, Any]:
             "partId": "P1",
             "musicXmlPath": "assets/score/wieniawski-scherzo-tarantelle-symbolic-opening.musicxml",
             "candidateMapPath": "assets/score/wieniawski-scherzo-tarantelle-page2-score-map-candidates.json",
-            "source": "Manually reviewed symbolic excerpts from the local IMSLP solo-violin PDF, page 2. The visible opening phrase begins A5-G5-F5-A5-G5-F5-A5-G#5-F5. The 2026-05-18 Staff 4 source-crop reverification accepted only the actual-PDF crop for Eb5-Eb5-C5-Eb5-Eb5 after boxed source-note centers, rendered transcription, and paired audio all agreed by exact MIDI; Alan's 2026-05-19 red-bracket annotation independently confirmed this exact score location for the May 3 clip. The old tight crop, dependent six-, seven-, and eight-note extensions, previous D6-C6-Bb5 source sequence, lower-octave D5-C5-Bb4 map, D-Bb-G-D source sequence, stale Staff 4 D5 mismatch run, stitched A4 continuation, and user-rejected Bb-D-C-Bb-D lane remain rejected.",
+            "source": "Manually reviewed symbolic excerpts from the local IMSLP solo-violin PDF, page 2. The visible opening phrase begins A5-G5-F5-A5-G5-F5-A5-G#5-F5. The 2026-05-18 source-crop reverification accepted only the actual-PDF crop for Eb5-Eb5-C5-Eb5-Eb5 after boxed source-note centers, rendered transcription, and paired audio all agreed by exact MIDI; Alan's 2026-05-19 red-bracket annotation later showed that this lane still must not display as accepted May 3 evidence because the live transcription and score crop were wrong. The old tight crop, dependent six-, seven-, and eight-note extensions, previous D6-C6-Bb5 source sequence, lower-octave D5-C5-Bb4 map, D-Bb-G-D source sequence, stale D5 mismatch run, stitched A4 continuation, and user-rejected Bb-D-C-Bb-D lane remain rejected.",
             "sourcePdfLocalPath": "assets/score/wieniawski-scherzo-tarantelle-solo-imslp.pdf",
             "candidateMapStatus": "unaccepted_score_glyph_verification_queue",
             "verification": "source_score_note_sequence_verified_before_matching",
@@ -617,7 +617,7 @@ def wieniawski_reference_target() -> dict[str, Any]:
                     "referenceStart": 9,
                     "referenceEnd": 15,
                     "status": "blocked_visual_source_reverified_audio_review_required_2026_05_18",
-                    "reason": "This six-note Staff 4 range has a full-context actual-PDF source crop for review, but it cannot display as accepted evidence until the sixth stored audio note passes exact per-note detector agreement.",
+                    "reason": "This six-note range has a full-context actual-PDF source crop for review, but it cannot display as accepted evidence until the sixth stored audio note passes exact per-note detector agreement.",
                     "blockedImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-eb-verified.png",
                     "sourceReviewImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-eb-context-review.png",
                 },
@@ -625,14 +625,14 @@ def wieniawski_reference_target() -> dict[str, Any]:
                     "referenceStart": 9,
                     "referenceEnd": 16,
                     "status": "blocked_dependent_on_rejected_staff4_visible_anchor_2026_05_18",
-                    "reason": "This seven-note Staff 4 range extends the rejected five-note visible anchor and cannot be accepted until the source crop and transcription are reverified.",
+                    "reason": "This seven-note range extends the rejected five-note visible anchor and cannot be accepted until the source crop and transcription are reverified.",
                     "blockedImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-eb-c-source.png",
                 },
                 {
                     "referenceStart": 9,
                     "referenceEnd": 17,
                     "status": "blocked_dependent_on_rejected_staff4_visible_anchor_2026_05_18",
-                    "reason": "This eight-note Staff 4 source-only range extends the rejected visible anchor and the current audio search is discontinuous.",
+                    "reason": "This eight-note source-only range extends the rejected visible anchor and the current audio search is discontinuous.",
                     "blockedImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-eb-c-a-source.png",
                 },
             ],
@@ -742,7 +742,7 @@ def wieniawski_reference_target() -> dict[str, Any]:
         snippet["sourceCropReady"] = False
         snippet["sourceCropRejected"] = True
         snippet["rejectionReason"] = (
-            "Alan reviewed the live displayed Staff 4 score/transcription pair and reported that the notes do not match."
+            "Alan reviewed the live displayed score/transcription pair and reported that the notes do not match."
         )
     return target
 

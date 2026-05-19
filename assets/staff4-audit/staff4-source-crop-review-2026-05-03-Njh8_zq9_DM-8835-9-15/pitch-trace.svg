@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 310" role="img">
 <rect width="820" height="310" fill="#fffdf8"/>
-<text x="52" y="28" font-size="18" font-weight="700">Staff 4 phrase audit pitch trace</text>
+<text x="52" y="28" font-size="18" font-weight="700">Phrase audit pitch trace</text>
 <text x="52" y="48" font-size="13" fill="#555">black pYIN / blue YIN / rust spectral peak</text>
 <rect x="52.0" y="56" width="36.3" height="214" fill="#F2D9D4" opacity="0.5"/>
 <line x1="52" x2="772" y1="260.0" y2="260.0" stroke="#ddd" stroke-width="1"/><text x="16" y="264.0" font-size="12">E3</text>

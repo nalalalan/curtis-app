@@ -3580,7 +3580,7 @@ def staff4_source_audio_rescan(daily_records: dict[str, Any], media_samples: lis
             "continuityProbeContinuousCandidateCount": 0,
             "records": [],
             "runs": [],
-            "nextAction": "Create one accepted Staff 4 source/audio anchor before source-audio rescanning.",
+            "nextAction": "Create one accepted source/audio anchor before source-audio rescanning.",
         }
     records: list[dict[str, Any]] = []
     runs: list[dict[str, Any]] = []
@@ -3600,7 +3600,7 @@ def staff4_source_audio_rescan(daily_records: dict[str, Any], media_samples: lis
                     "practiceDay": anchor.get("practiceDay") or "",
                     "sampleId": sample_id,
                     "anchorSequence": anchor.get("anchorSequence") or "",
-                    "limit": "The Staff 4 source sample is not present locally, so Curtis cannot rescan beyond stored note windows.",
+                    "limit": "The source sample is not present locally, so Curtis cannot rescan beyond stored note windows.",
                     "runs": [],
                 }
             )
@@ -3743,13 +3743,13 @@ def staff4_source_audio_rescan(daily_records: dict[str, Any], media_samples: lis
         next((probe for probe in failed_adjacent_probes if isinstance(probe, dict)), {}),
     )
     adjacent_failure_action = (
-        "The current Staff 4 adjacent window is rejected at "
+        "The current adjacent window is rejected at "
         f"{adjacent_failure_label or 'the next source note'}; the failed-note neighborhood probe found no continuous exact-MIDI phrase. "
         "Search a different continuous attempt from the same measure-16 source lane."
         if failed_adjacent_probe_status == "no_continuous_exact_midi_in_probe"
-        else "Audit the failed-note Staff 4 probe candidate before accepting the next phrase."
+        else "Audit the failed-note raw-audio probe candidate before accepting the next phrase."
         if failed_adjacent_probe_continuous_count
-        else "Improve note-window segmentation for the next Staff 4 source note "
+        else "Improve note-window segmentation for the next source note "
         f"{adjacent_failure_label or 'unknown'}; the best swept offset "
         f"{adjacent_failure_offset}s heard "
         f"{adjacent_first_failure.get('bestAttemptObservedConsensusNote') or 'no stable MIDI'}."
@@ -3823,28 +3823,28 @@ def staff4_source_audio_rescan(daily_records: dict[str, Any], media_samples: lis
         "records": records,
         "runs": runs,
         "nextAction": (
-            "Fix current-detector anchor reproduction before expanding the Staff 4 phrase."
+            "Fix current-detector anchor reproduction before expanding the phrase."
             if anchor_reproduction_targets and not anchor_reproduced_count
-            else "Audit the continuous Staff 4 continuity-probe candidate before accepting the next phrase."
+            else "Audit the continuous source-lane probe candidate before accepting the next phrase."
             if continuity_probe_continuous_count
-            else "Continuity probe checked the late Staff 4 note neighborhood; no continuous exact MIDI phrase was found there."
+            else "Continuity probe checked the late source-note neighborhood; no continuous exact MIDI phrase was found there."
             if continuity_probe_status == "no_continuous_exact_midi_in_probe"
-            else "Audit the failed-note Staff 4 probe candidate before accepting the next phrase."
+            else "Audit the failed-note raw-audio probe candidate before accepting the next phrase."
             if failed_adjacent_probe_continuous_count
             else (
-                "The current Staff 4 adjacent window is rejected; the failed-note neighborhood probe found no continuous exact-MIDI phrase. "
+                "The current adjacent window is rejected; the failed-note neighborhood probe found no continuous exact-MIDI phrase. "
                 "Search a different continuous attempt from the same measure-16 source lane."
             )
             if failed_adjacent_probe_status == "no_continuous_exact_midi_in_probe"
-            else "Audit the adjacent-guided Staff 4 phrase reproduced by current audio detectors."
+            else "Audit the adjacent-guided phrase reproduced by current audio detectors."
             if adjacent_reproduced_count
             else adjacent_failure_action
             if adjacent_first_failure
-            else "Improve note-window segmentation for the next Staff 4 source notes; adjacent-guided current detectors did not reproduce the exact source phrase."
+            else "Improve note-window segmentation for the next source notes; adjacent-guided current detectors did not reproduce the exact source phrase."
             if adjacent_targets
-            else "Search exact Staff 4 MIDI phrase windows inside the rescanned source-audio runs."
+            else "Search exact MIDI phrase windows inside the rescanned source-audio runs."
             if runs
-            else "Make the Staff 4 source media available, then rescan the source audio around the accepted anchor."
+            else "Make the source media available, then rescan the source audio around the accepted anchor."
         ),
     }
 
@@ -4230,15 +4230,15 @@ def staff4_adjacent_phrase_mining(
         else "no_staff4_anchor"
     )
     if status == "exact_audio_candidate":
-        next_action = "Audit the exact Staff 4 adjacent audio candidate before accepting it into the visible phrase lane."
+        next_action = "Audit the exact adjacent audio candidate before accepting it into the visible phrase lane."
     elif status == "exact_midi_discontinuous":
         continuity = best_candidate.get("phraseContinuity") if isinstance(best_candidate.get("phraseContinuity"), dict) else {}
         next_action = (
-            "Reject the discontinuous Staff 4 exact-MIDI candidate as a stitched phrase; "
+            "Reject the discontinuous exact-MIDI candidate as a stitched phrase; "
             f"largest internal gap is {continuity.get('maxInterNoteGapSeconds')}s. Search a continuous audio window for the next source note."
         )
     elif status == "exact_midi_audio_unconfirmed":
-        next_action = "Run second-pass audio agreement on the exact Staff 4 MIDI candidate before review."
+        next_action = "Run second-pass audio agreement on the exact MIDI candidate before review."
     elif anchor_count:
         adjacent_failure = (
             source_audio_rescan.get("guidedAdjacentFirstFailure")
@@ -4254,23 +4254,23 @@ def staff4_adjacent_phrase_mining(
             failed_probe_status = str(source_audio_rescan.get("failedAdjacentProbeStatus") or "")
             failed_probe_count = int(source_audio_rescan.get("failedAdjacentProbeCount") or 0)
             if int(source_audio_rescan.get("failedAdjacentProbeContinuousCandidateCount") or 0):
-                next_action = "Audit the failed-note Staff 4 raw-audio probe candidate before accepting the next phrase."
+                next_action = "Audit the failed-note raw-audio probe candidate before accepting the next phrase."
             elif failed_probe_status == "no_continuous_exact_midi_in_probe":
                 next_action = (
-                    f"Reject the current Staff 4 {expected_note} adjacent window; "
+                    f"Reject the current {expected_note} adjacent window; "
                     f"the failed-note probe found no continuous exact-MIDI phrase after {failed_probe_count} probe."
                 )
             else:
                 next_action = (
-                    "Adjacent-guided Staff 4 source-note windows were tested, but current detectors did not reproduce exact MIDI; "
+                    "Adjacent-guided source-note windows were tested, but current detectors did not reproduce exact MIDI; "
                     f"calibrate the failed {expected_note} window at best offset {best_offset}s."
                 )
         elif int(source_audio_rescan.get("runCount") or 0):
-            next_action = "No exact adjacent Staff 4 MIDI window was found after source-audio rescanning; widen the source window or improve note segmentation."
+            next_action = "No exact adjacent MIDI window was found after source-audio rescanning; widen the source window or improve note segmentation."
         else:
-            next_action = "No exact adjacent Staff 4 MIDI window is in the stored May 3 detected runs yet; rescan the source audio around the accepted anchor."
+            next_action = "No exact adjacent MIDI window is in the stored May 3 detected runs yet; rescan the source audio around the accepted anchor."
     else:
-        next_action = "Create one accepted Staff 4 source/audio anchor before adjacent mining."
+        next_action = "Create one accepted source/audio anchor before adjacent mining."
     return {
         "status": status,
         "anchorCount": anchor_count,
@@ -4472,7 +4472,7 @@ def source_crop_reverification_targets(limit: int = 3) -> list[dict[str, Any]]:
                 "audioLocalEndSeconds": local_end,
                 "bestAudioNotes": review_notes,
                 "acceptanceRule": (
-                    "Restore this Staff 4 lane only after the visible source crop, boxed noteheads, "
+                    "Restore this source lane only after the visible source crop, boxed noteheads, "
                     "rendered transcription, and paired audio all agree."
                 ),
                 "limit": str(
@@ -4930,11 +4930,11 @@ def source_crop_attempt_search_for_windows(
             if isinstance(record, dict)
         ],
         "nextAction": (
-            f"Audit the {search_label} continuous Staff 4 six-note source/audio candidate before accepting it."
+            f"Audit the {search_label} continuous six-note source/audio candidate before accepting it."
             if alternate_continuous
-            else f"Reject the same failed Staff 4 timing and widen {search_label}."
+            else f"Reject the same failed timing and widen {search_label}."
             if status == "same_failed_window_only"
-            else f"No continuous exact-MIDI Staff 4 six-note attempt was found in the {search_label} windows."
+            else f"No continuous exact-MIDI six-note attempt was found in the {search_label} windows."
         ),
     }
 
@@ -5003,7 +5003,7 @@ def source_crop_adjacent_source_attempt_search_for_target(
         return {
             "status": "blocked_no_adjacent_source_samples",
             "sampleId": base_sample_id,
-            "limit": "No adjacent local owner-media source chunks are available for larger-span Staff 4 search.",
+            "limit": "No adjacent local owner-media source chunks are available for larger-span source search.",
         }
     try:
         failed_local_start = float(target.get("audioLocalStartSeconds"))
@@ -5070,11 +5070,11 @@ def source_crop_adjacent_source_attempt_search_for_target(
             if isinstance(window, dict)
         ],
         "nextAction": (
-            "Audit the adjacent source-chunk continuous Staff 4 six-note source/audio candidate before accepting it."
+            "Audit the adjacent source-chunk continuous six-note source/audio candidate before accepting it."
             if continuous_count
-            else "Reject the adjacent source-chunk exact-MIDI Staff 4 candidate as discontinuous; find one continuous attempt before accepting it."
+            else "Reject the adjacent source-chunk exact-MIDI candidate as discontinuous; find one continuous attempt before accepting it."
             if status == "exact_midi_discontinuous"
-            else "No continuous exact-MIDI Staff 4 six-note attempt was found in adjacent source chunks."
+            else "No continuous exact-MIDI six-note attempt was found in adjacent source chunks."
         ),
     }
 
@@ -5183,7 +5183,7 @@ def source_phrase_expansion_harness(
                 status = "rejected_regression"
                 limit_text = str(
                     rejected_case.get("basis")
-                    or "Rejected by the Staff 4 audit packet; this exact source/audio expansion must not be retried as accepted evidence."
+                    or "Rejected by the source-audit packet; this exact source/audio expansion must not be retried as accepted evidence."
                 )
             mismatch_index = int(best_window.get("mismatchIndex") if best_window else -1)
             expected_note = ""
@@ -5309,18 +5309,18 @@ def source_phrase_expansion_harness(
         "currentBest": current,
         "items": items[: max(0, int(limit))],
         "nextAction": (
-            f"Extend the verified Staff 4 MusicXML/source map beyond the current {max_anchor_note_count}-note accepted phrase before searching a longer audio phrase."
+            f"Extend the verified MusicXML/source map beyond the current {max_anchor_note_count}-note accepted phrase before searching a longer audio phrase."
             if source_extent_exhausted
             else (
-                "Search the Staff 4 source audio for a continuous exact-MIDI window; the current exact notes are split by "
+                "Search the source audio for a continuous exact-MIDI window; the current exact notes are split by "
                 f"{current.get('maxInterNoteGapSeconds')}s and cannot be accepted as one phrase."
             )
             if current.get("status") == "blocked_discontinuous_audio_phrase"
-            else f"Audit the next Staff 4 {current.get('sourceNoteCount')}-note expansion from the accepted lane."
+            else f"Audit the next {current.get('sourceNoteCount')}-note expansion from the accepted lane."
             if accepted_count and current in open_extension_items
             else "Promote the accepted expansion into the visible score/audio lane."
             if accepted_count
-            else "Keep the accepted Staff 4 anchor fixed and search adjacent audio candidates until the next source note agrees."
+            else "Keep the accepted source/audio anchor fixed and search adjacent audio candidates until the next source note agrees."
             if items
             else "Create one accepted source/audio anchor before running expansion."
         ),
@@ -6057,7 +6057,7 @@ def build_transcription_completion(
             + (1 if measure_match_count else 0)
             + min(2, long_phrase_count * 2),
             f"{score_sequence_count} pitch-sequence groups / {phrase_candidate_count} phrase candidates / {source_target_count} source targets / {phrase_expansion_target_count} anchored expansions / {phrase_expansion_audio_run_count} audio runs searched / {phrase_expansion_source_rescan_run_count} source-rescan runs / {score_verified_count} exact score locations",
-            "Pitch-sequence groups are separated from exact score evidence, accepted anchors now search raw detected note runs, a Staff 4 source-audio rescan, and a dedicated adjacent-mining pass before any outward source-lane expansion is accepted; Staff 4 blockers can generate audit packets.",
+            "Pitch-sequence groups are separated from exact score evidence, accepted anchors now search raw detected note runs, source-audio rescans, and a dedicated adjacent-mining pass before any outward source-lane expansion is accepted; unresolved source blockers can generate audit packets.",
             "Promote phrase candidates only after source-score or score-free exercise verification.",
         ),
         roadmap_gate(
@@ -6319,13 +6319,13 @@ def build_transcription_completion(
         "Use review packets to convert queued score-note hypotheses into verified MusicXML notes before promoting source targets from reference-audio candidates to accepted score evidence.",
         "Replace short fragments with accurate phrase-level note and rhythm extraction.",
         "Build longer phrase candidates that survive the second-pass audio gate instead of relying on loose transition traces or reference-audio coincidences.",
-        "Keep extending the accepted Staff 4 anchor only when each adjacent source note agrees with paired audio.",
-        "Lock the eight-note Staff 4 continuation candidate only if the full source crop, local media, transcription, and truth review agree.",
-        "Continue using source-audio rescan, failed-note probes, and continuation search to find real adjacent Staff 4 audio runs without accepting wrong-window matches.",
+        "Keep extending the accepted source/audio anchor only when each adjacent source note agrees with paired audio.",
+        "Lock the eight-note continuation candidate only if the full source crop, local media, transcription, and truth review agree.",
+        "Continue using source-audio rescan, failed-note probes, and continuation search to find real adjacent audio runs without accepting wrong-window matches.",
         (
-            "Extend outward from the reverified May 3 Staff 4 source/audio anchor; dependent old six-, seven-, and eight-note ranges stay blocked until they pass a fresh exact source/audio audit."
+            "Extend outward from the reverified May 3 source/audio anchor; dependent old six-, seven-, and eight-note ranges stay blocked until they pass a fresh exact source/audio audit."
             if source_crop_audit_accepted
-            else "Reverify the queued May 3 Staff 4 source crop before using that lane as an accepted long-phrase anchor again."
+            else "Reverify the queued May 3 source crop before using that lane as an accepted long-phrase anchor again."
         ),
         "Align accepted phrases to score locations or score-free repeated exercise patterns.",
         "Generate heat maps and Curtis-level observations only from accepted evidence.",
@@ -6398,71 +6398,71 @@ def build_transcription_completion(
     phrase_expansion_current_status = str(phrase_expansion_current.get("status") or "") if phrase_expansion_current else ""
     if phrase_expansion_current and phrase_expansion_current_status == "ready_for_truth_review":
         next_action = (
-            f"Audit the next Staff 4 {phrase_expansion_current.get('sourceNoteCount') or ''}-note expansion; "
+            f"Audit the next {phrase_expansion_current.get('sourceNoteCount') or ''}-note expansion; "
             "exact MIDI and audio agree, but accepted truth evidence is still required before display."
         )
     elif phrase_expansion_current and phrase_expansion_current_status == "blocked_discontinuous_audio_phrase":
         if staff4_source_rescan_continuity_probe_status == "no_continuous_exact_midi_in_probe":
             next_action = (
-                "Do not accept the current Staff 4 exact-MIDI run as a phrase; "
+                "Do not accept the current exact-MIDI run as a phrase; "
                 f"its largest internal note gap is {phrase_expansion_current.get('maxInterNoteGapSeconds')}s. "
                 "A raw continuity probe checked the late-note neighborhood and found no continuous exact MIDI phrase there."
             )
         elif staff4_source_rescan_continuity_probe_status == "continuous_exact_audio_candidate":
-            next_action = "Audit the continuous Staff 4 continuity-probe candidate before accepting any longer phrase."
+            next_action = "Audit the continuous source-lane probe candidate before accepting any longer phrase."
         else:
             next_action = (
-                "Do not accept the current Staff 4 exact-MIDI run as a phrase; "
+                "Do not accept the current exact-MIDI run as a phrase; "
                 f"its largest internal note gap is {phrase_expansion_current.get('maxInterNoteGapSeconds')}s. "
                 "Search for a continuous audio window that matches the next source notes."
             )
     elif phrase_expansion_current and phrase_expansion_current_status == "accepted_source_audio_expansion":
         next_action = (
-            f"Promote the accepted Staff 4 {phrase_expansion_current.get('direction') or 'adjacent'} "
+            f"Promote the accepted {phrase_expansion_current.get('direction') or 'adjacent'} "
             f"{phrase_expansion_current.get('sourceNoteCount') or ''}-note expansion, then audit the next adjacent source window."
         )
     elif phrase_expansion_current and phrase_expansion_accepted_count == 0 and phrase_expansion_ready_count:
         next_action = (
-            "Review the ready Staff 4 expansion from the raw detected-series search; exact MIDI and audio agree, "
+            "Review the ready expansion from the raw detected-series search; exact MIDI and audio agree, "
             "but accepted truth evidence is still required before display."
         )
     elif phrase_expansion_status == "source_extent_exhausted":
         next_action = str(phrase_expansion.get("nextAction") or "") or (
-            "Extend the verified Staff 4 MusicXML/source map beyond the accepted phrase before searching a longer audio phrase."
+            "Extend the verified MusicXML/source map beyond the accepted phrase before searching a longer audio phrase."
         )
     elif staff4_mining_status == "exact_audio_candidate":
         candidate = staff4_mining.get("bestCandidate") if isinstance(staff4_mining.get("bestCandidate"), dict) else {}
         next_action = (
-            f"Audit the exact Staff 4 {candidate.get('targetDirection') or 'adjacent'} mining candidate "
+            f"Audit the exact {candidate.get('targetDirection') or 'adjacent'} mining candidate "
             f"{candidate.get('targetSequence') or ''} before accepting it."
         )
     elif staff4_mining_status == "exact_midi_discontinuous":
         candidate = staff4_mining.get("bestCandidate") if isinstance(staff4_mining.get("bestCandidate"), dict) else {}
         continuity = candidate.get("phraseContinuity") if isinstance(candidate.get("phraseContinuity"), dict) else {}
         next_action = (
-            "Reject the exact Staff 4 MIDI candidate as discontinuous; "
+            "Reject the exact MIDI candidate as discontinuous; "
             f"largest internal gap is {continuity.get('maxInterNoteGapSeconds')}s. "
             "Rescan for the same source notes inside one continuous audio window."
         )
     elif source_crop_audit_accepted and not phrase_expansion_current:
         next_action = (
-            "Restart Staff 4 phrase growth from the reverified five-note source/audio anchor; "
+            "Restart phrase growth from the reverified five-note source/audio anchor; "
             "audit the next adjacent notes under exact MIDI, full-context score crop, local media, transcription, continuity, and truth gates."
         )
     elif phrase_expansion_current and phrase_expansion_accepted_count == 0:
         current_direction = str(phrase_expansion_current.get("direction") or "")
         if staff4_audit_status == "blocked_audio_mismatch_confirmed" and current_direction == "right-2":
-            next_action = "Record the Staff 4 right-2 expansion as rejected from the audit packet, then test the next adjacent phrase window."
+            next_action = "Record the right-2 expansion as rejected from the audit packet, then test the next adjacent phrase window."
         elif phrase_expansion_rejected_count:
             next_action = (
-                f"Audit the current Staff 4 {current_direction or 'adjacent'} window; it is blocked at "
+                f"Audit the current {current_direction or 'adjacent'} window; it is blocked at "
                 f"{phrase_expansion_current.get('expectedNextScoreNote') or 'the next source note'} vs "
                 f"{phrase_expansion_current.get('observedNextAudioNote') or 'current audio'} after the previous right-2 audit was locked as rejected."
             )
             if staff4_mining_status == "not_found":
                 if staff4_source_rescan_anchor_status == "not_reproduced":
                     next_action = (
-                        "Fix current-detector reproduction of the accepted Staff 4 anchor before widening again; "
+                        "Fix current-detector reproduction of the accepted source/audio anchor before widening again; "
                         "the fresh source-audio rescan did not recover the accepted "
                         f"{phrase_expansion_current.get('anchorSequence') or 'anchor'} window, and adjacent mining found no exact "
                         f"{phrase_expansion_current.get('targetSequence') or 'adjacent'} window after "
@@ -6470,35 +6470,35 @@ def build_transcription_completion(
                     )
                 elif staff4_source_rescan_adjacent_target_count and staff4_source_rescan_adjacent_status == "not_reproduced":
                     if staff4_source_rescan_failed_probe_continuous_count:
-                        next_action = "Audit the failed-note Staff 4 raw-audio probe candidate before accepting the next phrase."
+                        next_action = "Audit the failed-note raw-audio probe candidate before accepting the next phrase."
                     elif staff4_source_rescan_failed_probe_status == "no_continuous_exact_midi_in_probe":
                         next_action = (
-                            "Reject the current Staff 4 adjacent window and search a different continuous attempt from measure 16; "
+                            "Reject the current adjacent window and search a different continuous attempt from measure 16; "
                             f"the failed-note probe found no exact MIDI phrase after {staff4_source_rescan_failed_probe_count} probe."
                         )
                     else:
                         next_action = (
-                            "Calibrate the Staff 4 adjacent note-window segmentation; source-audio rescan reproduces the anchor, "
+                            "Calibrate the adjacent note-window segmentation; source-audio rescan reproduces the anchor, "
                             f"but the first failed adjacent note is {staff4_source_rescan_adjacent_failure_note or 'unknown'} "
                             f"at best swept offset {staff4_source_rescan_adjacent_failure_offset}s; detectors heard "
                             f"{staff4_source_rescan_adjacent_first_failure.get('bestAttemptObservedConsensusNote') or 'no stable MIDI'}."
                         )
                 elif staff4_source_rescan_run_count:
                     next_action = (
-                        "Widen the Staff 4 source-audio rescan or improve note segmentation; exact MIDI search found no "
+                        "Widen the source-audio rescan or improve note segmentation; exact MIDI search found no "
                         f"{phrase_expansion_current.get('targetSequence') or 'adjacent'} window after "
                         f"{staff4_mining_searched_count} stored/rescanned windows."
                     )
                 else:
                     next_action = (
-                        "Rescan the Staff 4 source audio around the accepted anchor; stored mining found no exact "
+                        "Rescan the source audio around the accepted anchor; stored mining found no exact "
                         f"{phrase_expansion_current.get('targetSequence') or 'adjacent'} MIDI window yet."
                     )
         else:
             if staff4_mining_status == "not_found" and staff4_source_rescan_run_count:
                 if staff4_source_rescan_anchor_status == "not_reproduced":
                     next_action = (
-                        "Fix current-detector reproduction of the accepted Staff 4 anchor before widening again; "
+                        "Fix current-detector reproduction of the accepted source/audio anchor before widening again; "
                         "the fresh source-audio rescan did not recover the accepted "
                         f"{phrase_expansion_current.get('anchorSequence') or 'anchor'} window, and adjacent mining found no exact "
                         f"{phrase_expansion_current.get('targetSequence') or 'adjacent'} window after "
@@ -6506,28 +6506,28 @@ def build_transcription_completion(
                     )
                 elif staff4_source_rescan_adjacent_target_count and staff4_source_rescan_adjacent_status == "not_reproduced":
                     if staff4_source_rescan_failed_probe_continuous_count:
-                        next_action = "Audit the failed-note Staff 4 raw-audio probe candidate before accepting the next phrase."
+                        next_action = "Audit the failed-note raw-audio probe candidate before accepting the next phrase."
                     elif staff4_source_rescan_failed_probe_status == "no_continuous_exact_midi_in_probe":
                         next_action = (
-                            "Reject the current Staff 4 adjacent window and search a different continuous attempt from measure 16; "
+                            "Reject the current adjacent window and search a different continuous attempt from measure 16; "
                             f"the failed-note probe found no exact MIDI phrase after {staff4_source_rescan_failed_probe_count} probe."
                         )
                     else:
                         next_action = (
-                            "Calibrate the Staff 4 adjacent note-window segmentation; source-audio rescan reproduces the anchor, "
+                            "Calibrate the adjacent note-window segmentation; source-audio rescan reproduces the anchor, "
                             f"but the first failed adjacent note is {staff4_source_rescan_adjacent_failure_note or 'unknown'} "
                             f"at best swept offset {staff4_source_rescan_adjacent_failure_offset}s; detectors heard "
                             f"{staff4_source_rescan_adjacent_first_failure.get('bestAttemptObservedConsensusNote') or 'no stable MIDI'}."
                         )
                 else:
                     next_action = (
-                        "Widen the Staff 4 source-audio rescan or improve note segmentation; exact MIDI search found no "
+                        "Widen the source-audio rescan or improve note segmentation; exact MIDI search found no "
                         f"{phrase_expansion_current.get('targetSequence') or 'adjacent'} window after "
                         f"{staff4_mining_searched_count} stored/rescanned windows."
                     )
             else:
                 next_action = (
-                    "Keep the accepted Staff 4 source lane fixed; expansion is blocked at "
+                    "Keep the accepted source lane fixed; expansion is blocked at "
                     f"{phrase_expansion_current.get('expectedNextScoreNote') or 'the next source note'} vs "
                     f"{phrase_expansion_current.get('observedNextAudioNote') or 'current audio'} after searching "
                     f"{phrase_expansion_audio_run_count} audio-note runs."
@@ -6538,53 +6538,53 @@ def build_transcription_completion(
             if review_kind == "staff4_source_crop_audio_review_required":
                 if source_crop_failed_note_probe_continuous_count:
                     next_action = (
-                        "Audit the source-crop failed-note raw-audio probe candidate before accepting the six-note Staff 4 phrase."
+                        "Audit the source-crop failed-note raw-audio probe candidate before accepting the six-note phrase."
                     )
                 elif source_crop_failed_note_probe_status == "no_continuous_exact_midi_in_probe":
                     if source_crop_alternate_attempt_continuous_count:
-                        next_action = "Audit the alternate continuous Staff 4 six-note measure-16 candidate before accepting it."
+                        next_action = "Audit the alternate continuous six-note measure-16 candidate before accepting it."
                     elif source_crop_wide_attempt_continuous_count:
-                        next_action = "Audit the wide-search continuous Staff 4 six-note measure-16 candidate before accepting it."
+                        next_action = "Audit the wide-search continuous six-note measure-16 candidate before accepting it."
                     elif source_crop_adjacent_source_attempt_continuous_count:
-                        next_action = "Audit the adjacent-source continuous Staff 4 six-note measure-16 candidate before accepting it."
+                        next_action = "Audit the adjacent-source continuous six-note measure-16 candidate before accepting it."
                     elif source_crop_adjacent_source_attempt_status == "exact_midi_discontinuous":
                         next_action = (
-                            "Reject the adjacent-source exact-MIDI Staff 4 six-note candidate as discontinuous; "
+                            "Reject the adjacent-source exact-MIDI six-note candidate as discontinuous; "
                             "find one continuous measure-16 attempt before accepting the phrase."
                         )
                     elif source_crop_adjacent_source_attempt_status == "no_adjacent_source_exact_midi_in_source_window":
                         next_action = (
-                            f"No continuous Staff 4 six-note measure-16 attempt was found after {source_crop_wide_attempt_record_count} "
+                            f"No continuous six-note measure-16 attempt was found after {source_crop_wide_attempt_record_count} "
                             f"wide scans plus {source_crop_adjacent_source_attempt_record_count} adjacent-source scans; improve the note segmentation "
-                            "or move to a full-day Staff 4 attempt index."
+                            "or move to a full-day measure-16 attempt index."
                         )
                     elif source_crop_adjacent_source_attempt_status == "blocked_no_adjacent_source_samples":
                         next_action = (
-                            "Make adjacent May 3 source chunks available locally or move to full-day Staff 4 attempt indexing; "
+                            "Make adjacent May 3 source chunks available locally or move to full-day measure-16 attempt indexing; "
                             "the current chunk has no continuous exact-MIDI six-note phrase."
                         )
                     elif source_crop_wide_attempt_status == "exact_midi_discontinuous":
                         next_action = (
-                            "Reject the wide-search exact-MIDI Staff 4 six-note candidate as discontinuous; "
+                            "Reject the wide-search exact-MIDI six-note candidate as discontinuous; "
                             "find one continuous measure-16 attempt before accepting the phrase."
                         )
                     elif source_crop_wide_attempt_status == "same_failed_window_only":
                         next_action = (
-                            "Reject the same Staff 4 six-note timing; the wide overlapping scan only reproduced the known failed window."
+                            "Reject the same six-note timing; the wide overlapping scan only reproduced the known failed window."
                         )
                     elif source_crop_wide_attempt_status == "no_wide_exact_midi_in_source_window":
                         next_action = (
-                            f"No continuous Staff 4 six-note measure-16 attempt was found after {source_crop_wide_attempt_record_count} "
+                            f"No continuous six-note measure-16 attempt was found after {source_crop_wide_attempt_record_count} "
                             "wide overlapping source-window scans; improve segmentation or scan a larger source span."
                         )
                     elif source_crop_alternate_attempt_status == "same_failed_window_only":
                         next_action = (
-                            "Reject the same Staff 4 six-note timing and widen alternate-attempt search; "
+                            "Reject the same six-note timing and widen alternate-attempt search; "
                             "only the known failed window matched."
                         )
                     elif source_crop_alternate_attempt_status == "no_alternate_exact_midi_in_source_window":
                         next_action = (
-                            "No alternate continuous Staff 4 six-note measure-16 attempt was found in the searched raw windows; "
+                            "No alternate continuous six-note measure-16 attempt was found in the searched raw windows; "
                             "widen the scan or improve segmentation."
                         )
                     elif source_crop_alternate_attempt_status == "blocked_media_missing":
@@ -6593,7 +6593,7 @@ def build_transcription_completion(
                         )
                     else:
                         next_action = (
-                            "Reject the current Staff 4 six-note audio window and search another continuous measure-16 attempt; "
+                            "Reject the current six-note audio window and search another continuous measure-16 attempt; "
                             "the failed-note raw probe found no exact source MIDI phrase."
                         )
                 elif source_crop_failed_note_probe_status == "blocked_media_missing":
@@ -6606,7 +6606,7 @@ def build_transcription_completion(
                     )
                 else:
                     next_action = (
-                        "Run the failed-note raw-audio probe for the Staff 4 six-note gate; keep the source crop hidden until "
+                        "Run the failed-note raw-audio probe for the six-note gate; keep the source crop hidden until "
                         f"{source_crop_reverification_target.get('targetSequence') or 'the source phrase'} has exact per-note audio agreement."
                     )
             else:
@@ -6623,53 +6623,53 @@ def build_transcription_completion(
         if review_kind == "staff4_source_crop_audio_review_required":
             if source_crop_failed_note_probe_continuous_count:
                 next_action = (
-                    "Audit the source-crop failed-note raw-audio probe candidate before accepting the six-note Staff 4 phrase."
+                    "Audit the source-crop failed-note raw-audio probe candidate before accepting the six-note phrase."
                 )
             elif source_crop_failed_note_probe_status == "no_continuous_exact_midi_in_probe":
                 if source_crop_alternate_attempt_continuous_count:
-                    next_action = "Audit the alternate continuous Staff 4 six-note measure-16 candidate before accepting it."
+                    next_action = "Audit the alternate continuous six-note measure-16 candidate before accepting it."
                 elif source_crop_wide_attempt_continuous_count:
-                    next_action = "Audit the wide-search continuous Staff 4 six-note measure-16 candidate before accepting it."
+                    next_action = "Audit the wide-search continuous six-note measure-16 candidate before accepting it."
                 elif source_crop_adjacent_source_attempt_continuous_count:
-                    next_action = "Audit the adjacent-source continuous Staff 4 six-note measure-16 candidate before accepting it."
+                    next_action = "Audit the adjacent-source continuous six-note measure-16 candidate before accepting it."
                 elif source_crop_adjacent_source_attempt_status == "exact_midi_discontinuous":
                     next_action = (
-                        "Reject the adjacent-source exact-MIDI Staff 4 six-note candidate as discontinuous; "
+                        "Reject the adjacent-source exact-MIDI six-note candidate as discontinuous; "
                         "find one continuous measure-16 attempt before accepting the phrase."
                     )
                 elif source_crop_adjacent_source_attempt_status == "no_adjacent_source_exact_midi_in_source_window":
                     next_action = (
-                        f"No continuous Staff 4 six-note measure-16 attempt was found after {source_crop_wide_attempt_record_count} "
+                        f"No continuous six-note measure-16 attempt was found after {source_crop_wide_attempt_record_count} "
                         f"wide scans plus {source_crop_adjacent_source_attempt_record_count} adjacent-source scans; improve the note segmentation "
-                        "or move to a full-day Staff 4 attempt index."
+                        "or move to a full-day measure-16 attempt index."
                     )
                 elif source_crop_adjacent_source_attempt_status == "blocked_no_adjacent_source_samples":
                     next_action = (
-                        "Make adjacent May 3 source chunks available locally or move to full-day Staff 4 attempt indexing; "
+                        "Make adjacent May 3 source chunks available locally or move to full-day measure-16 attempt indexing; "
                         "the current chunk has no continuous exact-MIDI six-note phrase."
                     )
                 elif source_crop_wide_attempt_status == "exact_midi_discontinuous":
                     next_action = (
-                        "Reject the wide-search exact-MIDI Staff 4 six-note candidate as discontinuous; "
+                        "Reject the wide-search exact-MIDI six-note candidate as discontinuous; "
                         "find one continuous measure-16 attempt before accepting the phrase."
                     )
                 elif source_crop_wide_attempt_status == "same_failed_window_only":
                     next_action = (
-                        "Reject the same Staff 4 six-note timing; the wide overlapping scan only reproduced the known failed window."
+                        "Reject the same six-note timing; the wide overlapping scan only reproduced the known failed window."
                     )
                 elif source_crop_wide_attempt_status == "no_wide_exact_midi_in_source_window":
                     next_action = (
-                        f"No continuous Staff 4 six-note measure-16 attempt was found after {source_crop_wide_attempt_record_count} "
+                        f"No continuous six-note measure-16 attempt was found after {source_crop_wide_attempt_record_count} "
                         "wide overlapping source-window scans; improve segmentation or scan a larger source span."
                     )
                 elif source_crop_alternate_attempt_status == "same_failed_window_only":
                     next_action = (
-                        "Reject the same Staff 4 six-note timing and widen alternate-attempt search; "
+                        "Reject the same six-note timing and widen alternate-attempt search; "
                         "only the known failed window matched."
                     )
                 elif source_crop_alternate_attempt_status == "no_alternate_exact_midi_in_source_window":
                     next_action = (
-                        "No alternate continuous Staff 4 six-note measure-16 attempt was found in the searched raw windows; "
+                        "No alternate continuous six-note measure-16 attempt was found in the searched raw windows; "
                         "widen the scan or improve segmentation."
                     )
                 elif source_crop_alternate_attempt_status == "blocked_media_missing":
@@ -6678,7 +6678,7 @@ def build_transcription_completion(
                     )
                 else:
                     next_action = (
-                        "Reject the current Staff 4 six-note audio window and search another continuous measure-16 attempt; "
+                        "Reject the current six-note audio window and search another continuous measure-16 attempt; "
                         "the failed-note raw probe found no exact source MIDI phrase."
                     )
             elif source_crop_failed_note_probe_status == "blocked_media_missing":
@@ -6687,7 +6687,7 @@ def build_transcription_completion(
                 )
             else:
                 next_action = (
-                    "Run the failed-note raw-audio probe for the Staff 4 six-note gate; keep the source crop hidden until "
+                    "Run the failed-note raw-audio probe for the six-note gate; keep the source crop hidden until "
                     f"{source_crop_reverification_target.get('targetSequence') or 'the source phrase'} has exact per-note audio agreement."
                 )
         else:
