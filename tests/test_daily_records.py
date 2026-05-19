@@ -1253,12 +1253,16 @@ class DailyRecordTests(unittest.TestCase):
             for item in target["symbolicScore"]["sourceSnippets"]
             if item.get("referenceStart") == 9 and item.get("referenceEnd") == 15
         )
-        self.assertEqual(six_note_source["status"], "source_score_phrase_review_rejected")
+        self.assertEqual(six_note_source["status"], "source_score_visual_reverified_audio_blocked")
         self.assertEqual(
             six_note_source["visibleScoreExactNoteSequence"],
             ["Eb5", "Eb5", "C5", "Eb5", "Eb5", "Eb5"],
         )
         self.assertTrue(source_range_rejected(target, 9, 15))
+        self.assertTrue(six_note_source["visibleScoreExactNoteSequenceVerified"])
+        self.assertTrue(six_note_source["scoreBoxCenterAgreement"])
+        self.assertFalse(six_note_source["truthEvidenceAccepted"])
+        self.assertFalse(six_note_source["sourceCropDisplayAllowed"])
         self.assertEqual(six_note_source["acceptedAudioPhrase"]["midiSequence"], [75, 75, 72, 75, 75, 75])
         extension_source = next(
             item

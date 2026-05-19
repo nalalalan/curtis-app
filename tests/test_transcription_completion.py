@@ -361,8 +361,14 @@ class TranscriptionCompletionTests(unittest.TestCase):
         self.assertEqual(mining.get("nearestWindow") or {}, {})
         self.assertEqual(completion["staff4AdjacentMiningStatus"], "no_staff4_anchor")
         self.assertIn("Reverify the queued May 3 source-score crop", completion["nextAction"])
-        self.assertEqual(completion["sourceCropReverificationStatus"], "empty")
-        self.assertEqual(completion["sourceCropReverificationTarget"], {})
+        self.assertEqual(completion["sourceCropReverificationStatus"], "queued_source_crop_reverification")
+        self.assertEqual(
+            completion["sourceCropReverificationTarget"]["rejectedRegressionId"],
+            "rejected-staff4-sixth-note-audio-review-required",
+        )
+        self.assertEqual(completion["sourceCropReverificationTarget"]["targetReferenceEnd"], 15)
+        self.assertEqual(completion["sourceCropReverificationTarget"]["targetSequence"], "Eb5 Eb5 C5 Eb5 Eb5 Eb5")
+        self.assertFalse(completion["sourceCropReverificationTarget"]["truthEvidenceAccepted"])
 
     def test_staff4_rejected_anchor_blocks_raw_detected_series_promotion(self):
         daily_records = {

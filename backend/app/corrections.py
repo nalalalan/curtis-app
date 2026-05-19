@@ -348,18 +348,23 @@ def wieniawski_reference_target() -> dict[str, Any]:
                     "referenceEnd": 15,
                     "label": "Staff 4 verified source window Eb-Eb-C-Eb-Eb-Eb",
                     "pitchClassSequence": ["D#", "D#", "C", "D#", "D#", "D#"],
-                    "imageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-eb-verified.png",
+                    "imageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-eb-context-review.png",
+                    "sourceReviewImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-eb-context-review.png",
+                    "sourceCropDisplayAllowed": False,
+                    "sourceCropReady": False,
+                    "sourceCropRejected": True,
+                    "sourceCropContextReady": True,
                     "sourcePdfPage": 2,
-                    "status": "source_score_exact_midi_sequence_verified",
-                    "verification": "verified_from_staff4_right1_source_crop_and_audio_agreed_2026_05_17",
+                    "status": "source_score_visual_reverified_audio_blocked",
+                    "verification": "source_crop_visual_reverified_audio_blocked_sixth_note",
                     "visualRangeAgreement": True,
                     "visibleScoreNoteSequenceVerified": True,
                     "visibleScoreExactNoteSequenceVerified": True,
                     "scoreBoxCenterAgreement": True,
-                    "audioTranscriptionAgreement": True,
-                    "transcriptionScoreAgreement": True,
-                    "truthEvidenceAccepted": True,
-                    "sourceCropKind": "actual_source_score_exact_note_range",
+                    "audioTranscriptionAgreement": False,
+                    "transcriptionScoreAgreement": False,
+                    "truthEvidenceAccepted": False,
+                    "sourceCropKind": "actual_source_score_full_context_exact_note_range",
                     "minimumDistinctPitchClasses": 2,
                     "scoreSpellingSequence": ["Eb", "Eb", "C", "Eb", "Eb", "Eb"],
                     "visibleScoreNoteSequence": ["Eb", "Eb", "C", "Eb", "Eb", "Eb"],
@@ -386,7 +391,8 @@ def wieniawski_reference_target() -> dict[str, Any]:
                             {"note": "Eb5", "x": 2250.5, "y": 1435.0},
                             {"note": "Eb5", "x": 2322.5, "y": 1435.0}
                         ]
-                    }
+                    },
+                    "rejectionReason": "The source crop has a full-context actual-PDF six-note visual review image, but the sixth stored audio note is not accepted by the current pYIN/YIN/spectral agreement gate.",
                 },
                 {
                     "referenceStart": 9,
@@ -594,9 +600,10 @@ def wieniawski_reference_target() -> dict[str, Any]:
                 {
                     "referenceStart": 9,
                     "referenceEnd": 15,
-                    "status": "blocked_dependent_on_rejected_staff4_visible_anchor_2026_05_18",
-                    "reason": "This six-note Staff 4 range extends the rejected five-note visible anchor and cannot be accepted until the source crop and transcription are reverified.",
+                    "status": "blocked_visual_source_reverified_audio_review_required_2026_05_18",
+                    "reason": "This six-note Staff 4 range has a full-context actual-PDF source crop for review, but it cannot display as accepted evidence until the sixth stored audio note passes exact per-note detector agreement.",
                     "blockedImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-eb-verified.png",
+                    "sourceReviewImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-eb-context-review.png",
                 },
                 {
                     "referenceStart": 9,
@@ -675,11 +682,11 @@ def wieniawski_reference_target() -> dict[str, Any]:
             "returning refrain and coda",
         ],
     }
-    rejected_ranges = {
+    rejected_range_items = {
         (
             int(item.get("referenceStart") or -1),
             int(item.get("referenceEnd") or -1),
-        )
+        ): item
         for item in target["symbolicScore"].get("rejectedSourceSnippetRanges", [])
         if isinstance(item, dict)
         and any(token in str(item.get("status") or "").lower() for token in ("rejected", "mismatch", "blocked"))
@@ -688,7 +695,23 @@ def wieniawski_reference_target() -> dict[str, Any]:
         if not isinstance(snippet, dict):
             continue
         identity = (int(snippet.get("referenceStart") or -1), int(snippet.get("referenceEnd") or -1))
-        if identity not in rejected_ranges:
+        if identity not in rejected_range_items:
+            continue
+        rejected_item = rejected_range_items.get(identity) or {}
+        status = str(rejected_item.get("status") or "").lower()
+        if "visual_source_reverified_audio_review_required" in status:
+            snippet["status"] = "source_score_visual_reverified_audio_blocked"
+            snippet["verification"] = "visual_source_reverified_audio_review_required"
+            snippet["audioTranscriptionAgreement"] = False
+            snippet["transcriptionScoreAgreement"] = False
+            snippet["truthEvidenceAccepted"] = False
+            snippet["sourceCropDisplayAllowed"] = False
+            snippet["sourceCropReady"] = False
+            snippet["sourceCropRejected"] = True
+            snippet["sourceCropContextReady"] = True
+            snippet["rejectionReason"] = (
+                "The source crop is visually reverified, but the paired audio is not accepted for the full range."
+            )
             continue
         snippet["status"] = "source_score_phrase_review_rejected"
         snippet["verification"] = "alan_rejected_visible_score_transcription_mismatch_2026_05_18"

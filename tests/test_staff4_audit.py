@@ -673,6 +673,74 @@ class Staff4AuditTests(unittest.TestCase):
         )
         self.assertTrue(all(note["audioAgreement"] for note in packet["storedAudioNotes"]))
 
+    def test_six_note_source_crop_stays_blocked_when_sixth_audio_note_disagrees(self):
+        clip_start = 19.875
+        notes = [
+            {"note": "D#5", "midi": 75, "startSeconds": 20.225, "endSeconds": 20.422},
+            {"note": "D#5", "midi": 75, "startSeconds": 20.550, "endSeconds": 20.689},
+            {"note": "C5", "midi": 72, "startSeconds": 20.817, "endSeconds": 20.898},
+            {"note": "D#5", "midi": 75, "startSeconds": 21.629, "endSeconds": 21.792},
+            {"note": "D#5", "midi": 75, "startSeconds": 22.361, "endSeconds": 22.535},
+            {"note": "D#5", "midi": 75, "startSeconds": 22.829, "endSeconds": 22.992},
+        ]
+        stored_notes = [
+            staff4_audit.compact_note_event(note, index)
+            for index, note in enumerate(notes)
+        ]
+        packet = {
+            "status": "queued_source_crop_reverification",
+            "targetReferenceStart": 9,
+            "targetReferenceEnd": 15,
+            "targetSequence": "Eb5 Eb5 C5 Eb5 Eb5 Eb5",
+            "targetMidiSequence": [75, 75, 72, 75, 75, 75],
+            "bestAudioSequence": "D#5 D#5 C5 D#5 D#5 D#5",
+            "bestAudioMidiSequence": [75, 75, 72, 75, 75, 75],
+            "storedAudioNotes": stored_notes,
+            "score": {
+                "sourceImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-eb-context-review.png",
+                "sourceReviewImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-eb-context-review.png",
+                "sourceCropReady": False,
+                "sourceCropRejected": True,
+                "sourceCropDisplayAllowed": False,
+                "sourceCropContextReady": True,
+                "truthEvidenceAccepted": False,
+            },
+            "clip": {"localStartSeconds": clip_start, "localEndSeconds": 23.342},
+        }
+        frames = {"pyin": [], "yin": [], "spectralPeak": []}
+        for index, note in enumerate(stored_notes):
+            midpoint = round(((note["startSeconds"] + note["endSeconds"]) / 2.0) - clip_start, 3)
+            expected_midi = packet["targetMidiSequence"][index]
+            for detector_name in frames:
+                midi = expected_midi
+                if index == 5 and detector_name in {"pyin", "yin"}:
+                    midi = 74
+                frames[detector_name].append(
+                    {
+                        "timeSeconds": midpoint,
+                        "midi": midi,
+                        "note": staff4_audit.note_label_for_midi(midi),
+                    }
+                )
+        analysis = {"frames": frames}
+
+        packet["sourceCropAudioAgreement"] = staff4_audit.source_crop_note_audio_agreement(packet, analysis, clip_start)
+        packet["sourceCropScoreReview"] = staff4_audit.source_crop_score_review_for_packet(packet)
+        staff4_audit.attach_staff4_source_crop_reverification_decision(packet)
+
+        self.assertEqual(packet["sourceCropScoreReview"]["status"], "source_crop_visual_verified_audio_pending")
+        self.assertTrue(packet["sourceCropScoreReview"]["visualAccepted"])
+        self.assertFalse(packet["sourceCropScoreReview"]["accepted"])
+        self.assertEqual(packet["sourceCropAudioAgreement"]["status"], "audio_review_required")
+        self.assertEqual(packet["sourceCropAudioAgreement"]["agreedNoteCount"], 5)
+        self.assertEqual(packet["sourceCropAudioAgreement"]["noteWindows"][5]["targetNote"], "Eb5")
+        self.assertEqual(packet["sourceCropAudioAgreement"]["noteWindows"][5]["detectors"]["pyin"]["roundedMidi"], 74)
+        self.assertEqual(packet["sourceCropAudioAgreement"]["noteWindows"][5]["detectors"]["yin"]["roundedMidi"], 74)
+        self.assertEqual(packet["sourceCropAudioAgreement"]["noteWindows"][5]["detectors"]["spectralPeak"]["roundedMidi"], 75)
+        self.assertEqual(packet["decision"]["outcome"], "source_crop_audio_review_required")
+        self.assertFalse(packet["canExtendStaff4Lane"])
+        self.assertFalse(packet["score"].get("sourceCropDisplayAllowed", False))
+
     def test_latest_completion_packet_targets_source_crop_reverification_queue(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             state = {}

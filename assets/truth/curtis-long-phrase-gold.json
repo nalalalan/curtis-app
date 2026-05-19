@@ -1,6 +1,6 @@
 {
   "schema": "curtis_long_phrase_truth_v1",
-  "updatedAt": "2026-05-18",
+  "updatedAt": "2026-05-19",
   "status": "active",
   "minimumAcceptedEvidenceRule": "A displayed score/transcription/video/audio phrase needs exact MIDI agreement between a temporally continuous audio-agreed detected note window and verified MusicXML source notes, plus a non-rejected visible score crop whose boxed noteheads match the transcription. Pitch letters, OCR/OMR candidates, source crops alone, stitched notes from separate attempts, and user-rejected visible score crops are not accepted evidence.",
   "sources": [
@@ -64,12 +64,16 @@
       "pieceTitle": "Wieniawski Scherzo-Tarantelle, Op. 16",
       "target": "wieniawski_reference_target",
       "status": "verified_source_excerpt",
-      "basis": "This six-note Staff 4 range extends the May 3 Staff 4 source lane. Alan's 2026-05-18 visible review rejected the displayed source/transcription pair, so the range is retained as source-review material and cannot be live accepted until a new visible crop review proves the boxed score notes match the transcription.",
+      "basis": "This six-note Staff 4 range extends the May 3 Staff 4 source lane. A full-context actual-PDF source crop now shows the boxed source notes, but the sixth stored audio note is blocked by the current pYIN/YIN/spectral agreement gate, so this range is retained as source-review material and cannot display as accepted evidence.",
       "referenceStart": 9,
       "referenceEnd": 15,
       "sequence": ["Eb5", "Eb5", "C5", "Eb5", "Eb5", "Eb5"],
       "midiSequence": [75, 75, 72, 75, 75, 75],
-      "sourceCropImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-eb-verified.png",
+      "sourceCropImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-eb-context-review.png",
+      "sourceReviewImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-eb-context-review.png",
+      "sourceCropDisplayAllowed": false,
+      "sourceCropReady": false,
+      "sourceCropContextReady": true,
       "liveAccepted": false
     }
   ],
@@ -142,8 +146,8 @@
     {
       "id": "wieniawski-staff4-live-audio-six-note-exact-midi-positive",
       "sourceId": "wieniawski-staff4-eb-eb-c-eb-eb-eb-symbolic-v1",
-      "status": "superseded_by_user_visible_mismatch_review",
-      "basis": "May 3 current-detector Staff 4 right-1 phrase from sample Njh8_zq9_DM-8835 has audio-agreed D#5-D#5-C5-D#5-D#5-D#5 against the symbolic MIDI sequence, but Alan's 2026-05-18 visible review rejected the displayed source score/transcription pair. This remains a regression fixture, not live accepted evidence.",
+      "status": "blocked_audio_review_required",
+      "basis": "May 3 stored Staff 4 right-1 phrase from sample Njh8_zq9_DM-8835 has the exact stored MIDI sequence 75 75 72 75 75 75, and the source crop now uses a full-context actual-PDF review image. It is still not live accepted because the source-crop audio audit agrees on only the first five notes; the sixth expected Eb5/D#5 has pYIN/YIN rounded to D5 while only spectralPeak rounds to D#5.",
       "practiceDay": "2026-05-03",
       "sampleId": "Njh8_zq9_DM-8835",
       "sourceWindow": "*8835-8925",
@@ -161,7 +165,10 @@
         {"note": "D#5", "startSeconds": 22.361, "endSeconds": 22.535},
         {"note": "D#5", "startSeconds": 22.829, "endSeconds": 22.992}
       ],
-      "scoreImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-eb-verified.png",
+      "scoreImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-eb-context-review.png",
+      "sourceReviewImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-eb-context-review.png",
+      "sourceCropDisplayAllowed": false,
+      "sourceCropReady": false,
       "liveAccepted": false
     }
   ],
@@ -242,6 +249,37 @@
         {"note": "C5", "startSeconds": 20.817, "endSeconds": 20.898},
         {"note": "D#5", "startSeconds": 21.629, "endSeconds": 21.792},
         {"note": "D#5", "startSeconds": 22.361, "endSeconds": 22.535}
+      ]
+    },
+    {
+      "id": "rejected-staff4-sixth-note-audio-review-required",
+      "sourceId": "wieniawski-staff4-eb-eb-c-eb-eb-eb-symbolic-v1",
+      "status": "blocked",
+      "rejectionKind": "staff4_source_crop_audio_review_required",
+      "basis": "The six-note Staff 4 source crop now has a full-context actual-PDF review image, but the paired audio is not accepted. The source-crop audit agrees on five of six note windows; for note 6 the expected Eb5/D#5 MIDI 75 is heard as D5 by pYIN and YIN, while only spectralPeak returns D#5. This remains queued for audio/source-crop review and cannot appear as an accepted match.",
+      "practiceDay": "2026-05-03",
+      "sampleId": "Njh8_zq9_DM-8835",
+      "sourceWindow": "*8835-8925",
+      "targetReferenceStart": 9,
+      "targetReferenceEnd": 15,
+      "expectedSourceSequence": ["Eb5", "Eb5", "C5", "Eb5", "Eb5", "Eb5"],
+      "expectedSourceMidiSequence": [75, 75, 72, 75, 75, 75],
+      "sequence": ["D#5", "D#5", "C5", "D#5", "D#5", "D#5"],
+      "acceptedScoreSpellingSequence": ["Eb5", "Eb5", "C5", "Eb5", "Eb5", "Eb5"],
+      "midiSequence": [75, 75, 72, 75, 75, 75],
+      "minimumExactNotes": 6,
+      "audioAgreed": false,
+      "sourceReviewImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-eb-context-review.png",
+      "scoreImageUrl": "/assets/score/wieniawski-scherzo-tarantelle-staff4-eb-eb-c-eb-eb-eb-context-review.png",
+      "sourceCropDisplayAllowed": false,
+      "reviewOutcome": "visual_source_crop_reverified_audio_gate_failed_at_note_6",
+      "noteWindows": [
+        {"note": "D#5", "startSeconds": 20.225, "endSeconds": 20.422},
+        {"note": "D#5", "startSeconds": 20.55, "endSeconds": 20.689},
+        {"note": "C5", "startSeconds": 20.817, "endSeconds": 20.898},
+        {"note": "D#5", "startSeconds": 21.629, "endSeconds": 21.792},
+        {"note": "D#5", "startSeconds": 22.361, "endSeconds": 22.535},
+        {"note": "D#5", "startSeconds": 22.829, "endSeconds": 22.992}
       ]
     },
     {

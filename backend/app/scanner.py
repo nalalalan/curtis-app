@@ -4174,7 +4174,8 @@ def source_crop_reverification_targets(limit: int = 3) -> list[dict[str, Any]]:
     for item in rejected:
         if not isinstance(item, dict):
             continue
-        if str(item.get("rejectionKind") or "") != "visible_score_transcription_mismatch":
+        rejection_kind = str(item.get("rejectionKind") or "")
+        if rejection_kind not in {"visible_score_transcription_mismatch", "staff4_source_crop_audio_review_required"}:
             continue
         source = source_by_id.get(str(item.get("sourceId") or "")) or {}
         target_midi = int_sequence(item.get("expectedSourceMidiSequence")) or int_sequence(source.get("midiSequence"))
@@ -4220,7 +4221,11 @@ def source_crop_reverification_targets(limit: int = 3) -> list[dict[str, Any]]:
         targets.append(
             {
                 "status": "queued_source_crop_reverification",
-                "reviewKind": "staff4_visible_score_transcription_mismatch",
+                "reviewKind": (
+                    "staff4_source_crop_audio_review_required"
+                    if rejection_kind == "staff4_source_crop_audio_review_required"
+                    else "staff4_visible_score_transcription_mismatch"
+                ),
                 "rejectedRegressionId": str(item.get("id") or ""),
                 "sourceId": str(item.get("sourceId") or ""),
                 "practiceDay": str(item.get("practiceDay") or ""),
@@ -5617,6 +5622,20 @@ def build_transcription_completion(
             )
         else:
             next_action = "Reverify the queued May 3 source-score crop against the transcription and paired audio, then allow phrase matching to restart from that accepted anchor."
+    elif source_crop_reverification_target:
+        review_kind = str(source_crop_reverification_target.get("reviewKind") or "")
+        if review_kind == "staff4_source_crop_audio_review_required":
+            next_action = (
+                "Resolve the Staff 4 six-note audio gate: keep the visually reverified source crop hidden from accepted display "
+                f"until {source_crop_reverification_target.get('targetSequence') or 'the source phrase'} has per-note detector agreement "
+                "for the sixth Eb5/D#5 window."
+            )
+        else:
+            next_action = (
+                "Reverify the queued May 3 source-score crop "
+                f"{source_crop_reverification_target.get('targetSequence') or 'score'} against "
+                f"{source_crop_reverification_target.get('bestAudioSequence') or 'audio'} and the paired clip."
+            )
     elif not measure_match_count:
         next_action = (
             "Convert one local source-score measure into verified symbolic notes, then run the existing phrase matcher over hidden detected series."

@@ -641,11 +641,23 @@ def attach_staff4_source_crop_reverification_decision(packet: dict[str, Any]) ->
         and target_midis == audio_midis
         and audio_review.get("targetMidiSequence") == target_midis
     )
+    audio_blocked_note = {}
+    note_windows = audio_review.get("noteWindows") if isinstance(audio_review.get("noteWindows"), list) else []
+    for note_window in note_windows:
+        if isinstance(note_window, dict) and not note_window.get("audioAgreement"):
+            audio_blocked_note = note_window
+            break
     score_ready = bool(source_review.get("accepted"))
+    source_visual_ready = bool(source_review.get("visualAccepted") or score_ready)
     accepted = bool(score_ready and exact_audio_ready)
     source_image_url = str(source_review.get("sourceImageUrl") or source_review_image or score.get("sourceImageUrl") or "")
     status = "accepted_truth_candidate" if accepted else "pending_source_crop_reverification"
-    outcome = "accept_source_crop_audio_agreed_phrase" if accepted else "source_crop_reverification_required"
+    if accepted:
+        outcome = "accept_source_crop_audio_agreed_phrase"
+    elif source_visual_ready and not exact_audio_ready:
+        outcome = "source_crop_audio_review_required"
+    else:
+        outcome = "source_crop_reverification_required"
     truth_decision = "accepted" if accepted else "pending_review"
     decision = {
         "status": status,
@@ -661,15 +673,23 @@ def attach_staff4_source_crop_reverification_decision(packet: dict[str, Any]) ->
         "sourceCropRejected": not accepted,
         "sourceCropDisplayAllowed": accepted,
         "sourceCropReady": accepted,
+        "sourceCropVisualAccepted": source_visual_ready,
         "sourceCropContextReady": bool(source_review_image or source_review.get("sourceReviewImageUrl")),
         "sourceCropContextRequirement": str(score.get("sourceCropContextRequirement") or ""),
         "scoreReviewStatus": source_review.get("status") or "",
         "audioReviewStatus": audio_review.get("status") or "",
+        "audioAgreedNoteCount": int(audio_review.get("agreedNoteCount") or 0),
+        "audioRequiredNoteCount": int(audio_review.get("noteCount") or len(target_midis) or 0),
+        "firstAudioBlockedNote": audio_blocked_note,
         "goldReviewRequired": not accepted,
         "limit": (
             "Source crop, boxed noteheads, rendered transcription, and paired audio now agree by exact MIDI."
             if accepted
-            else "Visible source crop, boxed noteheads, rendered transcription, and paired audio must agree before Staff 4 can become accepted evidence again. Rejected tight crops stay hidden from accepted match display."
+            else (
+                "Source crop is visually verified, but the paired audio must pass per-note detector agreement before Staff 4 can become accepted evidence again."
+                if source_visual_ready and not exact_audio_ready
+                else "Visible source crop, boxed noteheads, rendered transcription, and paired audio must agree before Staff 4 can become accepted evidence again. Rejected tight crops stay hidden from accepted match display."
+            )
         ),
     }
     if accepted:
@@ -694,6 +714,7 @@ def attach_staff4_source_crop_reverification_decision(packet: dict[str, Any]) ->
         "reviewImageUrl": source_review.get("sourceReviewImageUrl") or source_review_image,
         "sourceCropDisplayAllowed": accepted,
         "sourceCropReady": accepted,
+        "sourceCropVisualAccepted": source_visual_ready,
         "sourceCropContextReady": bool(source_review_image or source_review.get("sourceReviewImageUrl")),
         "sourceCropScoreReview": source_review,
         "sourceCropAudioAgreement": audio_review,
@@ -1032,20 +1053,33 @@ def source_crop_score_review_for_packet(packet: dict[str, Any]) -> dict[str, Any
         centers = coordinates.get("matchedNoteheadCenters") if isinstance(coordinates.get("matchedNoteheadCenters"), list) else []
         review_image = str(snippet.get("sourceReviewImageUrl") or snippet.get("imageUrl") or "").strip()
         context_ready = bool(requested_review_image and requested_review_image == review_image) or bool(review_image)
-        accepted = bool(
+        visual_accepted = bool(
             context_ready
             and len(centers) == len(target_midis)
             and snippet.get("visualRangeAgreement") is True
             and snippet.get("visibleScoreNoteSequenceVerified") is True
             and snippet.get("visibleScoreExactNoteSequenceVerified") is True
             and snippet.get("scoreBoxCenterAgreement") is True
+        )
+        accepted = bool(
+            visual_accepted
             and snippet.get("audioTranscriptionAgreement") is True
             and snippet.get("transcriptionScoreAgreement") is True
             and snippet.get("truthEvidenceAccepted") is True
         )
+        if accepted:
+            status = "verified_actual_pdf_context"
+            limit = ""
+        elif visual_accepted:
+            status = "source_crop_visual_verified_audio_pending"
+            limit = "The actual-PDF source crop and boxed noteheads are verified, but paired audio/transcription truth is still blocked."
+        else:
+            status = "source_crop_context_review_required"
+            limit = "The source crop stays hidden until the full-context crop, notehead centers, and exact score-note sequence are verified."
         return {
-            "status": "verified_actual_pdf_context" if accepted else "source_crop_context_review_required",
+            "status": status,
             "accepted": accepted,
+            "visualAccepted": visual_accepted,
             "referenceStart": reference_start,
             "referenceEnd": reference_end,
             "targetMidiSequence": target_midis,
@@ -1058,9 +1092,7 @@ def source_crop_score_review_for_packet(packet: dict[str, Any]) -> dict[str, Any
             "matchedNoteheadCenters": centers,
             "scoreBoxCenterAgreement": bool(snippet.get("scoreBoxCenterAgreement")),
             "truthEvidenceAccepted": bool(snippet.get("truthEvidenceAccepted")),
-            "limit": ""
-            if accepted
-            else "The source crop stays hidden until the full-context crop, notehead centers, and exact score-note sequence are verified.",
+            "limit": limit,
         }
     return {
         "status": "blocked_source_snippet_missing",

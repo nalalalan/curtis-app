@@ -3319,11 +3319,17 @@ function renderTranscriptionCompletion() {
     ["Queue", `${Number(completion.goldReviewQueueCount) || 0} clips`],
     ["Source truth", `${Number(completion.truthManifestPositiveSourcePhraseVerifiedCount) || 0}/${Number(completion.truthManifestPositiveSourcePhraseCount) || 0}`],
     ["Blocked errors", `${Number(completion.truthManifestRejectedRegressionBlockedCount) || 0}/${Number(completion.truthManifestRejectedRegressionPhraseCount) || 0}`],
-    ["Rescan", completion.staff4SourceAudioRescanStatus ? String(completion.staff4SourceAudioRescanStatus).replace(/_/g, " ") : "pending"],
-    ["Mining", completion.staff4AdjacentMiningStatus ? String(completion.staff4AdjacentMiningStatus).replace(/_/g, " ") : "pending"],
     ["Staff 4 audit", completion.staff4PhraseAuditStatus ? String(completion.staff4PhraseAuditStatus).replace(/_/g, " ") : "not generated"],
     ["Crop review", completion.sourceCropReverificationStatus ? String(completion.sourceCropReverificationStatus).replace(/_/g, " ") : "empty"],
   ];
+  const rescanStatus = String(completion.staff4SourceAudioRescanStatus || "");
+  const miningStatus = String(completion.staff4AdjacentMiningStatus || "");
+  if (rescanStatus && rescanStatus !== "no_staff4_anchor") {
+    rows.splice(8, 0, ["Rescan", rescanStatus.replace(/_/g, " ")]);
+  }
+  if (miningStatus && miningStatus !== "no_staff4_anchor") {
+    rows.splice(rescanStatus && rescanStatus !== "no_staff4_anchor" ? 9 : 8, 0, ["Mining", miningStatus.replace(/_/g, " ")]);
+  }
   elements.transcriptionCompletion.innerHTML = `
     <div class="roadmap-score">
       <div>
