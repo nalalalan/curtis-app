@@ -2379,6 +2379,11 @@ h2 {
   min-width: 0;
 }
 
+.notation-sheet.notation-fit .notation-abc-target {
+  min-width: 0;
+  padding: 8px 10px 12px;
+}
+
 .notation-sheet.notation-draft {
   border-color: rgba(166, 111, 86, .18);
   background: rgba(255, 252, 246, .9);
@@ -2420,6 +2425,7 @@ h2 {
 }
 
 .notation-sheet.notation-abc-ready {
+  overflow-x: hidden;
   background: #fff;
 }
 
@@ -4365,7 +4371,7 @@ h2 {
 }
 
 .notation-sheet.notation-abc-ready .notation-abc-target {
-  min-width: 520px;
+  min-width: 0;
 }
 
 .notation-sheet .treble-clef {
@@ -4706,6 +4712,37 @@ h2 {
   gap: 8px;
 }
 
+.gold-review-lane {
+  display: grid;
+  gap: 8px;
+}
+
+.gold-review-lane-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 2px 1px;
+}
+
+.gold-review-lane-head strong {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 780;
+  line-height: 1.1;
+}
+
+.gold-review-lane-head span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 720;
+  line-height: 1.1;
+}
+
+.gold-review-lane-empty {
+  margin: 0;
+}
+
 .gold-review-item {
   display: grid;
   gap: 8px;
@@ -4770,6 +4807,33 @@ h2 {
   background: #fff;
 }
 
+.gold-review-source-notation {
+  max-width: none;
+}
+
+.gold-review-source .matched-notation-head {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2px;
+  align-items: start;
+}
+
+.gold-review-source .matched-notation-head strong {
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.gold-review-source-notation .notation-sheet {
+  min-height: 94px;
+}
+
+.gold-review-source-notation .notation-abc-target svg,
+.gold-review-notation .notation-abc-target svg {
+  width: 100%;
+  max-width: 100%;
+}
+
 .gold-review-source-pending {
   min-height: 94px;
   align-content: center;
@@ -4812,19 +4876,19 @@ h2 {
 }
 
 .gold-review-notation .notation-svg-fallback svg {
-  height: 124px;
+  height: 138px;
 }
 
 .gold-review-notation .notation-sheet .notehead {
-  font-size: 40px;
+  font-size: 46px;
 }
 
 .gold-review-notation .notation-sheet .note-accidental {
-  font-size: 30px;
+  font-size: 34px;
 }
 
 .gold-review-notation .notation-sheet .treble-clef {
-  font-size: 66px;
+  font-size: 72px;
 }
 
 .gold-review-notation small {

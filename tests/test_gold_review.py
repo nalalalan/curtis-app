@@ -478,12 +478,15 @@ class GoldReviewTests(unittest.TestCase):
         candidate = review["queue"][0]
 
         self.assertEqual(candidate["reviewType"], "score_copy")
-        self.assertEqual(candidate["reviewTask"], "score_copy_exact_notes")
+        self.assertEqual(candidate["reviewTask"], "score_copy_exact_notation")
         self.assertEqual(candidate["reviewTrainingLane"], "score_copy")
         self.assertEqual(candidate["scoreNotes"], ["Eb5", "D5", "C5"])
         self.assertEqual(candidate["detectedNotes"], ["Eb5", "D5", "C5"])
         self.assertEqual(candidate["sourceReviewImageUrl"], "/assets/score/m16-review.png")
+        self.assertTrue(candidate["originalScoreSnippet"])
+        self.assertFalse(candidate["sourceImageRequiredForOriginalScore"])
         self.assertEqual(candidate["scoreLocation"], "m. 16")
+        self.assertIn("tuplets", candidate["notationCopyAspects"])
         self.assertEqual(review["scoreCopyQueueCount"], 1)
         self.assertEqual(review["scoreQueueCount"], 0)
 
@@ -544,8 +547,30 @@ class GoldReviewTests(unittest.TestCase):
         self.assertEqual(review["scoreReadyTruthCount"], 0)
         self.assertEqual(review["acceptedEvidenceReadyCount"], 0)
         self.assertEqual(review["trainingScoreCopyExampleCount"], 1)
-        self.assertEqual(review["trainingSet"]["recentExamples"][0]["task"], "score_copy_exact_notes")
+        self.assertEqual(review["trainingSet"]["recentExamples"][0]["task"], "score_copy_exact_notation")
         self.assertFalse(truth["gateState"]["acceptedEvidenceReady"])
+
+    def test_requested_repertoire_score_copy_catalog_is_training_only(self):
+        review = build_gold_review_loop({}, {"records": []}, limit=20, include_source_copy_catalog=True)
+
+        titles = {item["pieceTitle"] for item in review["scoreCopyQueue"]}
+
+        self.assertEqual(review["audioQueueCount"], 0)
+        self.assertGreaterEqual(review["sourceCopyTrainingQueueCount"], 13)
+        self.assertIn("Haydn Symphony No. 94, IV, Violin I", titles)
+        self.assertIn("Paganini Moto Perpetuo, Op. 11, Solo violin", titles)
+        self.assertIn("Mozart Le nozze di Figaro Overture, Violin I", titles)
+        first = review["scoreCopyQueue"][0]
+        self.assertEqual(first["reviewTask"], "score_copy_exact_notation")
+        self.assertEqual(first["reviewTrainingLane"], "score_copy")
+        self.assertTrue(first["sourcePieceTrainingOnly"])
+        self.assertTrue(first["notationCopyOnly"])
+        self.assertFalse(first["originalScoreSnippet"])
+        self.assertTrue(first["sourceImageRequiredForOriginalScore"])
+        self.assertTrue(first["sourceNotationAbc"])
+        self.assertTrue(first["copyNotationAbc"])
+        self.assertIn("durations", first["notationCopyAspects"])
+        self.assertIn("stem_directions", first["notationCopyAspects"])
 
     def test_score_copy_review_does_not_suppress_audio_review_for_same_notes(self):
         state = {}

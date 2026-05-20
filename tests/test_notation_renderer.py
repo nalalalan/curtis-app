@@ -224,6 +224,20 @@ def test_notation_renderer_draws_exact_accidentals():
         assert(rhythmVerified.includes('data-abc='), "verified-rhythm snippets may use ABC engraving");
         assert(rhythmVerified.includes('^A'), "verified-rhythm ABC must preserve accidentals");
         assert(rhythmVerified.includes('class="note-stem"'), "verified-rhythm fallback may draw stems");
+
+        const sourceCopy = vm.runInContext(
+          `renderNotationSheet([{kind:'note',note:'G5',durationKind:'eighth'}], {
+            keySignature:{accidentalType:'flat',accidentals:['Bb','Eb']},
+            maxNotes:1,
+            fitToWidth:true,
+            rhythmVerified:true,
+            abcSource:'X:1\\nM:2/4\\nL:1/8\\nK:Gm clef=treble\\n(3G^FG B2 |'
+          })`,
+          context
+        );
+        assert(sourceCopy.includes('notation-fit'), "source-copy notation should fit inside the review card");
+        assert(sourceCopy.includes('(3G^FG B2'), "source-copy notation must preserve tuplets and durations from the source ABC");
+        assert(sourceCopy.includes('data-abc-staffwidth') === false, "default source-copy notation should not invent a fixed staff width unless requested");
         """
     )
     completed = subprocess.run(["node", "-e", script], cwd=".", text=True, capture_output=True)
@@ -235,6 +249,8 @@ def test_notation_styles_use_local_music_font_and_professional_glyph_sizes():
     assert 'url("/assets/fonts/Bravura.woff2") format("woff2")' in css
     assert ".notation-abc-target" in css
     assert "min-width: 520px;" in css
+    assert ".notation-sheet.notation-fit .notation-abc-target" in css
+    assert "min-width: 0;" in css
     assert "scrollbar-width: thin;" in css
     assert ".notation-sheet.notation-abc-ready .notation-svg-fallback" in css
     assert ".notation-svg-fallback svg" in css

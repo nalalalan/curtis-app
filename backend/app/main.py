@@ -156,6 +156,15 @@ class TruthWorkbenchItem(BaseModel):
     score_image_url: str = Field(default="", alias="scoreImageUrl")
     source_review_image_url: str = Field(default="", alias="sourceReviewImageUrl")
     source_image_url: str = Field(default="", alias="sourceImageUrl")
+    original_score_snippet: bool = Field(default=False, alias="originalScoreSnippet")
+    source_image_required_for_original_score: bool = Field(default=False, alias="sourceImageRequiredForOriginalScore")
+    source_notation_abc: str = Field(default="", alias="sourceNotationAbc")
+    copy_notation_abc: str = Field(default="", alias="copyNotationAbc")
+    source_notation_events: list[dict[str, Any]] = Field(default_factory=list, alias="sourceNotationEvents")
+    copy_notation_events: list[dict[str, Any]] = Field(default_factory=list, alias="copyNotationEvents")
+    notation_copy_aspects: list[str] = Field(default_factory=list, alias="notationCopyAspects")
+    source_piece_training_only: bool = Field(default=False, alias="sourcePieceTrainingOnly")
+    notation_copy_only: bool = Field(default=False, alias="notationCopyOnly")
     detected_notes: list[str] | str = Field(default_factory=list, alias="detectedNotes")
     transcribed_notes: list[str] | str = Field(default_factory=list, alias="transcribedNotes")
     accepted_notes: list[str] | str = Field(default_factory=list, alias="acceptedNotes")
@@ -183,6 +192,15 @@ class TruthWorkbenchItem(BaseModel):
             "scoreImageUrl": self.score_image_url,
             "sourceReviewImageUrl": self.source_review_image_url,
             "sourceImageUrl": self.source_image_url,
+            "originalScoreSnippet": self.original_score_snippet,
+            "sourceImageRequiredForOriginalScore": self.source_image_required_for_original_score,
+            "sourceNotationAbc": self.source_notation_abc,
+            "copyNotationAbc": self.copy_notation_abc,
+            "sourceNotationEvents": self.source_notation_events,
+            "copyNotationEvents": self.copy_notation_events,
+            "notationCopyAspects": self.notation_copy_aspects,
+            "sourcePieceTrainingOnly": self.source_piece_training_only,
+            "notationCopyOnly": self.notation_copy_only,
             "detectedNotes": self.detected_notes,
             "transcribedNotes": self.transcribed_notes,
             "acceptedNotes": self.accepted_notes,
@@ -215,6 +233,15 @@ class GoldReviewItem(BaseModel):
     score_image_url: str = Field(default="", alias="scoreImageUrl")
     source_review_image_url: str = Field(default="", alias="sourceReviewImageUrl")
     source_image_url: str = Field(default="", alias="sourceImageUrl")
+    original_score_snippet: bool = Field(default=False, alias="originalScoreSnippet")
+    source_image_required_for_original_score: bool = Field(default=False, alias="sourceImageRequiredForOriginalScore")
+    source_notation_abc: str = Field(default="", alias="sourceNotationAbc")
+    copy_notation_abc: str = Field(default="", alias="copyNotationAbc")
+    source_notation_events: list[dict[str, Any]] = Field(default_factory=list, alias="sourceNotationEvents")
+    copy_notation_events: list[dict[str, Any]] = Field(default_factory=list, alias="copyNotationEvents")
+    notation_copy_aspects: list[str] = Field(default_factory=list, alias="notationCopyAspects")
+    source_piece_training_only: bool = Field(default=False, alias="sourcePieceTrainingOnly")
+    notation_copy_only: bool = Field(default=False, alias="notationCopyOnly")
     detected_notes: list[str] | str = Field(default_factory=list, alias="detectedNotes")
     accepted_notes: list[str] | str = Field(default_factory=list, alias="acceptedNotes")
     corrected_notes: list[str] | str = Field(default_factory=list, alias="correctedNotes")
@@ -242,6 +269,15 @@ class GoldReviewItem(BaseModel):
             "scoreImageUrl": self.score_image_url,
             "sourceReviewImageUrl": self.source_review_image_url,
             "sourceImageUrl": self.source_image_url,
+            "originalScoreSnippet": self.original_score_snippet,
+            "sourceImageRequiredForOriginalScore": self.source_image_required_for_original_score,
+            "sourceNotationAbc": self.source_notation_abc,
+            "copyNotationAbc": self.copy_notation_abc,
+            "sourceNotationEvents": self.source_notation_events,
+            "copyNotationEvents": self.copy_notation_events,
+            "notationCopyAspects": self.notation_copy_aspects,
+            "sourcePieceTrainingOnly": self.source_piece_training_only,
+            "notationCopyOnly": self.notation_copy_only,
             "detectedNotes": self.detected_notes,
             "acceptedNotes": self.accepted_notes,
             "correctedNotes": self.corrected_notes,

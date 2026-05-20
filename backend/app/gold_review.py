@@ -7,6 +7,7 @@ from typing import Any
 
 from .evidence_ledger import build_truth_progress, record_truth_item
 from .long_phrase_truth import collapse_consecutive_duplicate_midi, note_midi_sequence, note_midi_value
+from .source_copy_catalog import NOTATION_COPY_ASPECTS, requested_score_copy_records
 from .state import utc_now
 
 
@@ -18,6 +19,7 @@ MIN_LONG_REVIEW_NOTES = 6
 MAX_LONG_REVIEW_NOTES = 16
 MAX_ADAPTIVE_REVIEW_WINDOWS_PER_SERIES = 10
 MAX_ADAPTIVE_REVIEW_QUEUE = 80
+SCORE_COPY_TASKS = {"score_copy_exact_notes", "score_copy_exact_notation"}
 
 
 def _clean(value: Any) -> str:
@@ -58,6 +60,18 @@ def _score_note_names(*values: Any) -> list[str]:
     return []
 
 
+def _is_score_copy_task(value: Any) -> bool:
+    return _clean(value).lower() in SCORE_COPY_TASKS
+
+
+def _is_score_copy_item(item: dict[str, Any]) -> bool:
+    return (
+        _is_score_copy_task(item.get("reviewTask") or item.get("trainingTask"))
+        or _clean(item.get("type")).lower() == "score_copy"
+        or _clean(item.get("reviewType")).lower() == "score_copy"
+    )
+
+
 def _notes_from_names(names: list[str]) -> list[dict[str, Any]]:
     return [{"note": name} for name in names]
 
@@ -78,7 +92,7 @@ def _review_sequence_key(names: list[str]) -> str:
 
 
 def _candidate_sequence_key(candidate: dict[str, Any]) -> str:
-    score_copy = _clean(candidate.get("reviewTask") or candidate.get("trainingTask")).lower() == "score_copy_exact_notes"
+    score_copy = _is_score_copy_item(candidate)
     if isinstance(candidate.get("normalizedDetectedMidiSequence"), list):
         values = [int(value) for value in candidate["normalizedDetectedMidiSequence"] if isinstance(value, int)]
         if values:
@@ -114,7 +128,7 @@ def _review_identity_keys(item: dict[str, Any]) -> set[str]:
     score_notes = _review_sequence_key(_clean_note_names(item.get("scoreNotes")))
     score_location = _clean(item.get("scoreLocation"))
     if image:
-        score_copy = _clean(item.get("reviewTask") or item.get("trainingTask")).lower() == "score_copy_exact_notes" or _clean(item.get("type")).lower() == "score_copy"
+        score_copy = _is_score_copy_item(item)
         prefix = "score_copy_image" if score_copy else "score_image"
         keys.add(f"{prefix}:{image}")
         if score_notes or score_location:
@@ -173,7 +187,7 @@ def _review_task(raw: dict[str, Any], item_type: str, score_notes: list[str]) ->
     if explicit:
         return explicit
     if item_type == "score_copy":
-        return "score_copy_exact_notes"
+        return "score_copy_exact_notation"
     if item_type in {"score_phrase", "audio_score_match"} or score_notes:
         return "audio_score_exact_match"
     detected_count = len(_clean_note_names(raw.get("detectedNotes")))
@@ -199,6 +213,9 @@ def _training_example_from_item(item: dict[str, Any]) -> dict[str, Any]:
         "humanSignalWeight": 0.82 if label == "positive" else 0.74 if label == "negative" else 0.0,
         "hardEvidence": bool(item.get("type") in {"score_phrase", "audio_score_match"} and item.get("status") == "accepted_truth" and item.get("scoreNotes")),
         "scoreCopyOnly": bool(item.get("type") == "score_copy"),
+        "notationCopyOnly": bool(item.get("notationCopyOnly")),
+        "sourcePieceTrainingOnly": bool(item.get("sourcePieceTrainingOnly")),
+        "notationCopyAspects": item.get("notationCopyAspects") if isinstance(item.get("notationCopyAspects"), list) else [],
         "type": item.get("type"),
         "practiceDay": item.get("practiceDay"),
         "sampleId": item.get("sampleId"),
@@ -227,7 +244,7 @@ def build_gold_training_set(items: list[dict[str, Any]]) -> dict[str, Any]:
     negatives = [item for item in examples if item.get("label") == "negative"]
     audio_examples = [item for item in examples if item.get("task") in {"audio_exact_notes", "audio_long_phrase_exact_notes"}]
     score_examples = [item for item in examples if item.get("task") == "audio_score_exact_match"]
-    score_copy_examples = [item for item in examples if item.get("task") == "score_copy_exact_notes"]
+    score_copy_examples = [item for item in examples if _is_score_copy_task(item.get("task"))]
     positive_score_examples = [item for item in score_examples if item.get("label") == "positive"]
     negative_score_examples = [item for item in score_examples if item.get("label") == "negative"]
     positive_score_copy_examples = [item for item in score_copy_examples if item.get("label") == "positive"]
@@ -288,7 +305,7 @@ def build_rejection_insights(items: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def _item_learning_key(item: dict[str, Any]) -> str:
-    score_copy = _clean(item.get("reviewTask") or item.get("trainingTask")).lower() == "score_copy_exact_notes" or _clean(item.get("type")).lower() == "score_copy"
+    score_copy = _is_score_copy_item(item)
     for field in ("normalizedAcceptedMidiSequence", "normalizedDetectedMidiSequence", "normalizedScoreMidiSequence"):
         values = item.get(field)
         if isinstance(values, list):
@@ -738,13 +755,17 @@ def _score_copy_candidate_from_snippet(
     snippet: dict[str, Any],
 ) -> dict[str, Any]:
     source_image = _clean(snippet.get("sourceReviewImageUrl") or snippet.get("imageUrl") or snippet.get("scoreImageUrl"))
+    source_abc = _clean(snippet.get("sourceNotationAbc") or snippet.get("scoreNotationAbc"))
+    copy_abc = _clean(snippet.get("copyNotationAbc") or source_abc)
+    source_events = snippet.get("sourceNotationEvents") if isinstance(snippet.get("sourceNotationEvents"), list) else []
+    copy_events = snippet.get("copyNotationEvents") if isinstance(snippet.get("copyNotationEvents"), list) else source_events
     score_notes = _score_note_names(
         snippet.get("visibleScoreExactNoteSequence"),
         snippet.get("acceptedScoreSpellingSequence"),
         snippet.get("scoreExactNoteSequenceLabel"),
         snippet.get("scoreNotes"),
     )
-    if not source_image or not score_notes:
+    if not (source_image or source_abc or source_events) or not score_notes:
         return {}
     score_midi = _normalized_review_midi_sequence(score_notes)
     if not score_midi:
@@ -758,11 +779,25 @@ def _score_copy_candidate_from_snippet(
         or "source score"
     )
     location = _clean(snippet.get("measureLabel") or snippet.get("label") or snippet.get("scoreLocation"))
+    notation_aspects = snippet.get("notationCopyAspects") if isinstance(snippet.get("notationCopyAspects"), list) else NOTATION_COPY_ASPECTS
+    source_status = _clean(snippet.get("sourceStatus") or snippet.get("status") or snippet.get("verification"))
+    source_review_kind = _clean(snippet.get("sourceReviewKind"))
+    training_only = bool(record.get("trainingOnly") or snippet.get("sourcePieceTrainingOnly"))
+    source_text = f"{source_image} {score_source} {source_status} {source_review_kind}".lower()
+    original_score_snippet = bool(
+        source_image
+        and not source_image.lower().startswith("data:")
+        and not training_only
+        and "training" not in source_text
+        and "generated" not in source_text
+        and "symbolic" not in source_text
+    )
     payload = {
         "reviewKind": "score_copy_candidate",
         "reviewType": "score_copy",
         "acceptanceMode": "binary_exact_claim",
         "practiceDay": _clean(record.get("practiceDay")),
+        "trainingOnly": training_only,
         "pieceTitle": _clean(piece.get("title") or target.get("work") or score_config.get("title")),
         "sourceTitle": _clean(piece.get("sourceTitle") or score_config.get("title")),
         "sourceUrl": _clean(piece.get("sourceUrl") or target.get("scoreUrl") or target.get("scorePdfUrl")),
@@ -784,20 +819,31 @@ def _score_copy_candidate_from_snippet(
         "scoreAssetId": _clean(target.get("scoreAssetId") or score_config.get("sourceId")),
         "scoreLocation": location,
         "scoreStatus": _clean(snippet.get("status") or snippet.get("verification")),
+        "sourceStatus": source_status,
+        "sourceReviewKind": source_review_kind,
         "scoreImageUrl": source_image,
         "sourceReviewImageUrl": source_image,
         "sourceImageUrl": _clean(snippet.get("imageUrl")) or source_image,
+        "originalScoreSnippet": original_score_snippet,
+        "sourceImageRequiredForOriginalScore": not original_score_snippet,
+        "sourceNotationAbc": source_abc,
+        "copyNotationAbc": copy_abc,
+        "sourceNotationEvents": source_events,
+        "copyNotationEvents": copy_events,
+        "notationCopyAspects": notation_aspects,
         "keySignature": target.get("keySignature") if isinstance(target.get("keySignature"), dict) else {},
         "clip": {},
         "defaultStatus": "pending_review",
-        "reviewTask": "score_copy_exact_notes",
-        "trainingTask": "score_copy_exact_notes",
+        "reviewTask": "score_copy_exact_notation",
+        "trainingTask": "score_copy_exact_notation",
         "binaryReview": True,
         "binaryOnly": True,
         "sourceCopyOnly": True,
-        "reviewQuestion": "Does the copied notation match the source score snippet? Reject if one note is wrong.",
-        "acceptanceRule": "Accept only if Curtis copied the visible source-score notes exactly.",
-        "rejectionRule": "Reject if any copied note, accidental, octave, order, or source range is wrong.",
+        "notationCopyOnly": True,
+        "sourcePieceTrainingOnly": bool(snippet.get("sourcePieceTrainingOnly")),
+        "reviewQuestion": "Does the copied notation match the source notation? Reject if one visible detail is wrong.",
+        "acceptanceRule": "Accept only if Curtis copied the source notation exactly: pitch, octave, accidental, rhythm value, rest, beam, tuplet, stem direction, notehead, spacing, slur/tie, and source range.",
+        "rejectionRule": "Reject if any copied note, accidental, octave, duration, rest, beam, tuplet, stem direction, notehead, spacing, slur/tie, order, or source range is wrong.",
     }
     payload["reviewItemId"] = _candidate_id(payload)
     return payload
@@ -821,8 +867,16 @@ def _score_copy_candidates(record: dict[str, Any]) -> list[dict[str, Any]]:
     return candidates
 
 
-def _queue_candidates(daily_records: dict[str, Any], *, adaptive: bool = False) -> list[dict[str, Any]]:
+def _queue_candidates(
+    daily_records: dict[str, Any],
+    *,
+    adaptive: bool = False,
+    include_source_copy_catalog: bool = False,
+) -> list[dict[str, Any]]:
     candidates: list[dict[str, Any]] = []
+    source_records = requested_score_copy_records() if include_source_copy_catalog and not adaptive else []
+    for record in source_records:
+        candidates.extend(_score_copy_candidates(record))
     for record in daily_records.get("records", []) if isinstance(daily_records.get("records"), list) else []:
         if not isinstance(record, dict):
             continue
@@ -898,6 +952,15 @@ def normalize_gold_review_item(raw: dict[str, Any]) -> dict[str, Any]:
         "scoreImageUrl": _clean(raw.get("scoreImageUrl")),
         "sourceReviewImageUrl": _clean(raw.get("sourceReviewImageUrl")),
         "sourceImageUrl": _clean(raw.get("sourceImageUrl")),
+        "originalScoreSnippet": bool(raw.get("originalScoreSnippet")),
+        "sourceImageRequiredForOriginalScore": bool(raw.get("sourceImageRequiredForOriginalScore")),
+        "sourceNotationAbc": _clean(raw.get("sourceNotationAbc")),
+        "copyNotationAbc": _clean(raw.get("copyNotationAbc")),
+        "sourceNotationEvents": raw.get("sourceNotationEvents") if isinstance(raw.get("sourceNotationEvents"), list) else [],
+        "copyNotationEvents": raw.get("copyNotationEvents") if isinstance(raw.get("copyNotationEvents"), list) else [],
+        "notationCopyAspects": raw.get("notationCopyAspects") if isinstance(raw.get("notationCopyAspects"), list) else [],
+        "sourcePieceTrainingOnly": bool(raw.get("sourcePieceTrainingOnly")),
+        "notationCopyOnly": bool(raw.get("notationCopyOnly")),
         "detectedNotes": detected_notes,
         "acceptedNotes": accepted_notes,
         "scoreNotes": score_notes,
@@ -966,6 +1029,8 @@ def record_gold_review_item(state: dict[str, Any], raw: dict[str, Any]) -> dict[
                 "scoreImageUrl": item["scoreImageUrl"],
                 "sourceReviewImageUrl": item["sourceReviewImageUrl"],
                 "sourceImageUrl": item["sourceImageUrl"],
+                "originalScoreSnippet": item["originalScoreSnippet"],
+                "sourceImageRequiredForOriginalScore": item["sourceImageRequiredForOriginalScore"],
                 "detectedNotes": item["detectedNotes"],
                 "acceptedNotes": item["acceptedNotes"],
                 "scoreNotes": item["scoreNotes"],
@@ -1127,7 +1192,13 @@ def _review_candidate_rank(item: dict[str, Any]) -> tuple[Any, ...]:
     )
 
 
-def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any], *, limit: int = 10) -> dict[str, Any]:
+def build_gold_review_loop(
+    state: dict[str, Any],
+    daily_records: dict[str, Any],
+    *,
+    limit: int = 10,
+    include_source_copy_catalog: bool = False,
+) -> dict[str, Any]:
     review = state.get("goldReview") if isinstance(state.get("goldReview"), dict) else {}
     items = [entry for entry in review.get("items", []) if isinstance(entry, dict)]
     by_status = Counter(_clean(item.get("status") or "unknown") for item in items)
@@ -1143,20 +1214,26 @@ def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any],
     ]
     reviewed_ids = {_clean(item.get("reviewItemId")) for item in items if _clean(item.get("reviewItemId"))}
     learning_profile = build_review_learning_profile(items)
-    raw_candidates = [candidate for candidate in _queue_candidates(daily_records) if _clean(candidate.get("reviewItemId")) not in reviewed_ids]
+    raw_candidates = [
+        candidate
+        for candidate in _queue_candidates(daily_records, include_source_copy_catalog=include_source_copy_catalog)
+        if _clean(candidate.get("reviewItemId")) not in reviewed_ids
+    ]
     candidates, suppressed_candidates = apply_review_learning_to_candidates(raw_candidates, learning_profile)
     adaptive_candidates: list[dict[str, Any]] = []
     adaptive_suppressed_candidates: list[dict[str, Any]] = []
     adaptive_candidate_pool_count = 0
     adaptive_mode = False
-    primary_queue_is_only_soft_rejected = len(candidates) >= 2 and all(
-        item.get("reviewLearningStatus") == "soft_rejected_pattern" for item in candidates
+    primary_audio_candidates = [item for item in candidates if not _is_score_copy_item(item)]
+    suppressed_audio_candidates = [item for item in suppressed_candidates if not _is_score_copy_item(item)]
+    primary_queue_is_only_soft_rejected = len(primary_audio_candidates) >= 2 and all(
+        item.get("reviewLearningStatus") == "soft_rejected_pattern" for item in primary_audio_candidates
     )
-    primary_queue_suppressed_by_learning = not candidates and bool(suppressed_candidates)
-    if not candidates or primary_queue_is_only_soft_rejected:
+    primary_queue_suppressed_by_learning = not primary_audio_candidates and bool(suppressed_audio_candidates)
+    if not primary_audio_candidates or primary_queue_is_only_soft_rejected:
         raw_adaptive_candidates = [
             candidate
-            for candidate in _queue_candidates(daily_records, adaptive=True)
+            for candidate in _queue_candidates(daily_records, adaptive=True, include_source_copy_catalog=False)
             if _clean(candidate.get("reviewItemId")) not in reviewed_ids
         ]
         adaptive_candidates, adaptive_suppressed_candidates = apply_review_learning_to_candidates(raw_adaptive_candidates, learning_profile)
@@ -1167,7 +1244,11 @@ def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any],
             candidates = [*adaptive_candidates, *candidates]
             adaptive_mode = True
     score_candidates = [item for item in candidates if item.get("reviewTask") == "audio_score_exact_match"]
-    score_copy_candidates = [item for item in candidates if item.get("reviewTask") == "score_copy_exact_notes"]
+    score_copy_candidates = [item for item in candidates if _is_score_copy_task(item.get("reviewTask"))]
+    audio_candidates = [item for item in candidates if not _is_score_copy_item(item)]
+    source_copy_training_candidates = [
+        item for item in score_copy_candidates if item.get("sourcePieceTrainingOnly") or item.get("trainingOnly")
+    ]
     exact_score_candidates = [item for item in score_candidates if item.get("scoreAgreement") is True]
     long_candidates = [item for item in candidates if item.get("reviewKind") == "long_audio_phrase_candidate"]
     candidates.sort(key=_review_candidate_rank)
@@ -1254,6 +1335,8 @@ def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any],
         "queueStatus": queue_status,
         "scoreQueueCount": len(score_candidates),
         "scoreCopyQueueCount": len(score_copy_candidates),
+        "audioQueueCount": len(audio_candidates),
+        "sourceCopyTrainingQueueCount": len(source_copy_training_candidates),
         "scoreExactAgreementQueueCount": len(exact_score_candidates),
         "longPhraseQueueCount": len(long_candidates),
         "rawQueueCount": len(raw_candidates),
@@ -1321,6 +1404,8 @@ def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any],
         "itemsByType": dict(by_type),
         "itemsByStatus": dict(by_status),
         "queue": candidates[: max(0, int(limit))],
+        "audioQueue": audio_candidates[: max(4, min(12, int(limit)))],
+        "scoreCopyQueue": score_copy_candidates[: max(4, min(12, int(limit)))],
         "suppressedQueuePreview": (suppressed_candidates + adaptive_suppressed_candidates)[:5],
         "recentItems": items[:8],
         "nextAction": (

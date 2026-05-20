@@ -7063,7 +7063,7 @@ def derive_review(
     repertoire_evidence = build_repertoire_evidence(daily_records)
     evidence_progress = build_evidence_progress(state)
     truth_workbench = build_truth_workbench(state, daily_records, evidence_progress)
-    gold_review = build_gold_review_loop(state, daily_records)
+    gold_review = build_gold_review_loop(state, daily_records, include_source_copy_catalog=True)
     staff4_phrase_audit = (
         state.get("staff4PhraseAuditLatest")
         if isinstance(state.get("staff4PhraseAuditLatest"), dict)

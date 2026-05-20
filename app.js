@@ -500,6 +500,8 @@ function goldReviewCandidates() {
   const review = goldReviewState(backend.ops);
   return [
     ...(Array.isArray(review?.queue) ? review.queue : []),
+    ...(Array.isArray(review?.audioQueue) ? review.audioQueue : []),
+    ...(Array.isArray(review?.scoreCopyQueue) ? review.scoreCopyQueue : []),
     ...(Array.isArray(review?.recentItems) ? review.recentItems : []),
   ].filter((item) => item && typeof item === "object");
 }
@@ -1621,6 +1623,10 @@ function hydrateNotationSheet(sheet) {
   const abc = sheet.dataset.abc || "";
   if (!target || !abc) return;
   try {
+    const targetWidth = Math.max(360, Math.floor(sheet.clientWidth || 520) - 24);
+    const requestedStaffWidth = Number(sheet.dataset.abcStaffwidth) || targetWidth;
+    const staffwidth = Math.max(300, Math.min(920, requestedStaffWidth, targetWidth));
+    const requestedScale = Number(sheet.dataset.abcScale) || 1.05;
     target.innerHTML = "";
     ABCJS.renderAbc(target, abc, {
       add_classes: true,
@@ -1629,8 +1635,8 @@ function hydrateNotationSheet(sheet) {
       paddingright: 8,
       paddingtop: 0,
       responsive: "resize",
-      scale: 1.05,
-      staffwidth: 420,
+      scale: Math.max(0.9, Math.min(1.35, requestedScale)),
+      staffwidth,
     });
     sheet.dataset.abcRendered = "true";
     sheet.classList.add("notation-abc-ready");
@@ -1894,6 +1900,14 @@ function renderNotationSheet(events, options = {}) {
   const fitClass = fitToWidth ? " notation-fit" : "";
   const pitchOnly = !notationRhythmVerified(options);
   const rhythmClass = pitchOnly ? " notation-pitch-events" : "";
+  const abc = options?.abcSource || notationAbcForEvents(items, normalizedSignature);
+  const abcStaffWidth = Math.max(0, Number(options?.abcStaffWidth) || 0);
+  const abcScale = Math.max(0, Number(options?.abcScale) || 0);
+  const abcAttrs = [
+    pitchOnly ? "" : `data-abc="${escapeHtml(abc)}"`,
+    !pitchOnly && abcStaffWidth ? `data-abc-staffwidth="${escapeHtml(String(abcStaffWidth))}"` : "",
+    !pitchOnly && abcScale ? `data-abc-scale="${escapeHtml(String(abcScale))}"` : "",
+  ].filter(Boolean).join(" ");
   const repeatMarks = repeatLabel ? `
     <g class="notation-repeat-mark" aria-label="${escapeHtml(shortText(repeatLabel, 72))}">
       <line x1="46" x2="46" y1="25" y2="75"></line>
@@ -1909,14 +1923,13 @@ function renderNotationSheet(events, options = {}) {
     </g>
   ` : "";
   const sheetId = `notationSheet${++notationSheetIdCounter}`;
-  const abc = notationAbcForEvents(items, normalizedSignature);
   const abcTarget = pitchOnly ? "" : `
     <div class="notation-abc-target" aria-hidden="true"></div>
   `;
   if (!pitchOnly) queueNotationHydration(sheetId);
   if (!items.length) {
     return `
-      <div id="${sheetId}" class="notation-sheet notation-empty notation-engraved${repeatClass}${draftClass}${fitClass}${rhythmClass}" ${pitchOnly ? "" : `data-abc="${escapeHtml(abc)}"`} aria-label="Sheet-music-style transcription pending">
+      <div id="${sheetId}" class="notation-sheet notation-empty notation-engraved${repeatClass}${draftClass}${fitClass}${rhythmClass}" ${abcAttrs} aria-label="Sheet-music-style transcription pending">
         ${abcTarget}
         <div class="notation-svg-fallback">
           ${notationSvgOpen(svgWidth)}
@@ -1968,7 +1981,7 @@ function renderNotationSheet(events, options = {}) {
     `;
   }).join("");
   return `
-    <div id="${sheetId}" class="notation-sheet notation-engraved${repeatClass}${draftClass}${fitClass}${rhythmClass}" ${pitchOnly ? "" : `data-abc="${escapeHtml(abc)}"`} aria-label="Sheet-music-style machine transcription">
+    <div id="${sheetId}" class="notation-sheet notation-engraved${repeatClass}${draftClass}${fitClass}${rhythmClass}" ${abcAttrs} aria-label="Sheet-music-style machine transcription">
       ${abcTarget}
       <div class="notation-svg-fallback">
         ${notationSvgOpen(svgWidth)}
@@ -3198,6 +3211,24 @@ function goldReviewNotationEvents(notes) {
   }));
 }
 
+function notationEventsFromReviewField(value, fallbackNotes = []) {
+  if (Array.isArray(value) && value.length) {
+    return value.slice(0, 24).map((event, index) => ({
+      kind: event?.kind || "note",
+      note: event?.note || event?.pitch || "",
+      durationKind: event?.durationKind || event?.duration || "quarter",
+      startSeconds: Number(event?.startSeconds) || index * 0.25,
+      endSeconds: Number(event?.endSeconds) || (index + 1) * 0.25,
+      localStartSeconds: Number(event?.localStartSeconds) || index * 0.25,
+      localEndSeconds: Number(event?.localEndSeconds) || (index + 1) * 0.25,
+      durationSeconds: Number(event?.durationSeconds) || 0.25,
+      uncertain: Boolean(event?.uncertain),
+      rawNote: event?.rawNote || "",
+    })).filter((event) => event.kind === "rest" || event.note);
+  }
+  return goldReviewNotationEvents(fallbackNotes);
+}
+
 function readableGoldReviewNotes(item) {
   const keySignature = inferredReadableKeySignature(item.detectedNotes, {
     keySignature: item.keySignature || item.scoreKeySignature || item.transcriptionKeySignature,
@@ -3209,31 +3240,71 @@ function readableGoldReviewNotes(item) {
   return { keySignature: signature, displayNotes };
 }
 
+function isScoreCopyTask(value) {
+  return value === "score_copy_exact_notes" || value === "score_copy_exact_notation";
+}
+
 function goldReviewIsScoreCopy(item) {
-  return item?.reviewTask === "score_copy_exact_notes"
-    || item?.trainingTask === "score_copy_exact_notes"
+  return isScoreCopyTask(item?.reviewTask)
+    || isScoreCopyTask(item?.trainingTask)
     || item?.reviewType === "score_copy"
     || item?.type === "score_copy";
 }
 
+function renderGoldReviewSourceNotation(item) {
+  const sourceNotes = item.sourceScoreNotes || item.scoreNotes || item.detectedNotes || [];
+  const sourceEvents = notationEventsFromReviewField(item.sourceNotationEvents, sourceNotes);
+  const keySignature = item.keySignature || item.scoreKeySignature || {};
+  const sourceAbc = item.sourceNotationAbc || item.scoreNotationAbc || "";
+  return renderNotationSheet(sourceEvents, {
+    keySignature,
+    maxNotes: 24,
+    fitToWidth: true,
+    rhythmVerified: Boolean(sourceAbc || item.sourceNotationEvents?.length),
+    abcSource: sourceAbc,
+    abcStaffWidth: 640,
+    abcScale: 1.18,
+  });
+}
+
 function renderGoldReviewScoreSource(item) {
   const imageUrl = assetUrl(item.sourceReviewImageUrl || item.sourceImageUrl || item.scoreImageUrl || "");
-  const label = [item.scoreLocation, item.pieceTitle].filter(Boolean).join(" / ");
+  const isTrainingSource = Boolean(item.sourcePieceTrainingOnly || item.notationCopyOnly || item.sourceImageRequiredForOriginalScore);
+  const isOriginalScore = Boolean(imageUrl && item.originalScoreSnippet === true && !isTrainingSource);
+  const sourceLabel = isOriginalScore ? "Original score" : "Copy source";
+  const label = isOriginalScore
+    ? [item.scoreLocation, item.pieceTitle].filter(Boolean).join(" / ")
+    : item.pieceTitle || item.scoreLocation || "notation source";
   if (!imageUrl) {
     return `
-      <section class="gold-review-source gold-review-source-pending">
-        <span>Source</span>
-        <strong>${escapeHtml(label || "score pending")}</strong>
+      <section class="gold-review-source gold-review-source-notation${isTrainingSource ? " gold-review-source-training" : ""}" aria-label="Notation copy source">
+        <div class="matched-notation-head">
+          <span>${escapeHtml(sourceLabel)}</span>
+          <strong>${escapeHtml(shortText(label || "source", 72))}</strong>
+        </div>
+        ${renderGoldReviewSourceNotation(item)}
+      </section>
+    `;
+  }
+  if (item.sourceNotationAbc || item.sourceNotationEvents?.length) {
+    return `
+      <section class="gold-review-source gold-review-source-notation${isOriginalScore ? " gold-review-source-original" : " gold-review-source-training"}" aria-label="${escapeHtml(isOriginalScore ? "Original score source" : "Notation copy source")}">
+        <div class="matched-notation-head">
+          <span>${escapeHtml(sourceLabel)}</span>
+          <strong>${escapeHtml(shortText(label || "score", 72))}</strong>
+        </div>
+        <img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(isOriginalScore ? "Original score snippet" : "Notation copy source")}">
+        ${renderGoldReviewSourceNotation(item)}
       </section>
     `;
   }
   return `
-    <section class="gold-review-source" aria-label="Original score source">
+    <section class="gold-review-source${isOriginalScore ? " gold-review-source-original" : " gold-review-source-training"}" aria-label="${escapeHtml(isOriginalScore ? "Original score source" : "Notation copy source")}">
       <div class="matched-notation-head">
-        <span>Source</span>
-        <strong>${escapeHtml(shortText(label || "score", 72))}</strong>
+        <span>${escapeHtml(sourceLabel)}</span>
+        <strong>${escapeHtml(label || "score pending")}</strong>
       </div>
-      <img src="${escapeHtml(imageUrl)}" alt="Original score snippet">
+      <img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(isOriginalScore ? "Original score snippet" : "Notation copy source")}">
     </section>
   `;
 }
@@ -3245,10 +3316,14 @@ function renderGoldReviewItem(item, index) {
   const detectedNotes = noteInputText(notationNotes);
   const readableNotes = readableGoldReviewNotes({ ...item, detectedNotes: notationNotes });
   const displayDetectedNotes = displayNoteTextWithMeasureAccidentals(readableNotes.displayNotes, readableNotes.keySignature);
+  const copyNotationAbc = isScoreCopy ? item.copyNotationAbc || item.sourceNotationAbc || "" : "";
+  const copyNotationEvents = isScoreCopy
+    ? notationEventsFromReviewField(item.copyNotationEvents, notationNotes)
+    : goldReviewNotationEvents(notationNotes);
   const clip = item.clip && typeof item.clip === "object" ? item.clip : item;
   const status = item.status || item.defaultStatus || "pending_review";
   const isRecent = status !== "pending_review";
-  const lane = isScoreCopy ? "Score copy" : item.reviewTrainingLane === "score_alignment" || scoreNotes ? "Score" : item.adaptiveReview ? "Adaptive" : item.reviewTask === "audio_long_phrase_exact_notes" ? "Phrase" : "Audio";
+  const lane = isScoreCopy ? "Notation copy" : item.reviewTrainingLane === "score_alignment" || scoreNotes ? "Score" : item.adaptiveReview ? "Adaptive" : item.reviewTask === "audio_long_phrase_exact_notes" ? "Phrase" : "Audio";
   const agreement = item.scoreAgreementStatus === "exact_midi_agreement"
     ? "same MIDI"
     : item.scoreAgreementStatus === "score_midi_mismatch"
@@ -3257,7 +3332,7 @@ function renderGoldReviewItem(item, index) {
         ? "copy"
       : "";
   const notationLabel = isScoreCopy ? "Copy" : "Detected";
-  const rule = isScoreCopy ? "Accept if copy matches score." : "One note off = reject.";
+  const rule = isScoreCopy ? "Accept if copy matches source." : "One note off = reject.";
   return `
     <article class="gold-review-item" data-status="${escapeHtml(status)}">
       <div class="gold-review-head">
@@ -3272,10 +3347,14 @@ function renderGoldReviewItem(item, index) {
             <span>${escapeHtml(notationLabel)}</span>
             <strong>${escapeHtml(shortText(displayDetectedNotes || detectedNotes || "pending", 64))}</strong>
           </div>
-          ${renderNotationSheet(goldReviewNotationEvents(notationNotes), {
+          ${renderNotationSheet(copyNotationEvents, {
             keySignature: readableNotes.keySignature,
             maxNotes: 16,
-            fitToWidth: true
+            fitToWidth: true,
+            rhythmVerified: Boolean(copyNotationAbc || item.copyNotationEvents?.length),
+            abcSource: copyNotationAbc,
+            abcStaffWidth: 720,
+            abcScale: 1.18,
           })}
           ${scoreNotes && !isScoreCopy ? `<small>${escapeHtml([item.scoreLocation || "score", shortText(scoreNotes, 80)].filter(Boolean).join(" / "))}</small>` : ""}
         </section>
@@ -3314,6 +3393,7 @@ function renderGoldReview() {
   const longTraining = Number(review.trainingLongPhraseExampleCount ?? training.longPhraseExampleCount) || 0;
   const scoreTraining = Number(review.trainingScoreExampleCount ?? training.scoreExampleCount) || 0;
   const scoreCopyTraining = Number(review.trainingScoreCopyExampleCount ?? training.scoreCopyExampleCount) || 0;
+  const audioQueued = Number(review.audioQueueCount) || 0;
   const scoreQueued = Number(review.scoreQueueCount) || 0;
   const scoreCopyQueued = Number(review.scoreCopyQueueCount) || 0;
   const scoreExactQueued = Number(review.scoreExactAgreementQueueCount) || 0;
@@ -3328,8 +3408,18 @@ function renderGoldReview() {
   const emptyQueueText = review.queueStatus === "current_batch_exhausted_by_rejections"
     ? `Batch complete. ${Number(review.suppressedByLearningCount) || 0} repeats hidden.`
     : "No review clips queued.";
-  setText(elements.goldReviewCount, scoreCopyQueued ? `${scoreCopyQueued} copy / ${queued} queued` : scoreQueued ? `${scoreQueued} score / ${queued} queued` : `${accepted} accepted / ${queued} queued`);
-  const items = Array.isArray(review.queue) ? review.queue.slice(0, 4) : [];
+  setText(
+    elements.goldReviewCount,
+    scoreCopyQueued ? `${audioQueued} audio / ${scoreCopyQueued} copy` : scoreQueued ? `${scoreQueued} score / ${queued} queued` : `${accepted} accepted / ${queued} queued`
+  );
+  const generalItems = Array.isArray(review.queue) ? review.queue : [];
+  const audioItems = Array.isArray(review.audioQueue)
+    ? review.audioQueue.slice(0, 3)
+    : generalItems.filter((item) => !goldReviewIsScoreCopy(item)).slice(0, 3);
+  const copyItems = Array.isArray(review.scoreCopyQueue)
+    ? review.scoreCopyQueue.slice(0, 3)
+    : generalItems.filter((item) => goldReviewIsScoreCopy(item)).slice(0, 3);
+  const items = [...audioItems, ...copyItems];
   if (!items.length) {
     elements.goldReviewPanel.innerHTML = `
       <div class="gold-review-stats">
@@ -3358,6 +3448,7 @@ function renderGoldReview() {
       <article><span>Score</span><strong>${escapeHtml(String(scoreTraining))}</strong></article>
       <article><span>Copy</span><strong>${escapeHtml(String(scoreCopyTraining))}</strong></article>
       <article><span>Long</span><strong>${escapeHtml(String(longTraining))}</strong></article>
+      <article><span>Audio queue</span><strong>${escapeHtml(String(audioQueued))}</strong></article>
       ${fastRejected ? `<article><span>Fast rejects</span><strong>${escapeHtml(String(fastRejected))}</strong></article>` : ""}
       ${unstableRejected ? `<article><span>Wide rejects</span><strong>${escapeHtml(String(unstableRejected))}</strong></article>` : ""}
       <article><span>Score queue</span><strong>${escapeHtml(scoreExactQueued ? `${scoreExactQueued}/${scoreQueued}` : String(scoreQueued))}</strong></article>
@@ -3366,7 +3457,26 @@ function renderGoldReview() {
       <article><span>Adaptive</span><strong>${escapeHtml(adaptiveLabel)}</strong></article>
     </div>
     <div class="gold-review-list">
-      ${items.map((item, index) => renderGoldReviewItem(item, index)).join("")}
+      ${audioItems.length || copyItems.length ? `
+        <section class="gold-review-lane" aria-label="Video audio transcription training">
+          <div class="gold-review-lane-head">
+            <strong>Audio transcription</strong>
+            <span>${escapeHtml(String(audioQueued))} queued</span>
+          </div>
+          ${audioItems.length
+            ? audioItems.map((item, index) => renderGoldReviewItem(item, index)).join("")
+            : `<p class="empty gold-review-lane-empty">No audio clips queued.</p>`}
+        </section>
+      ` : ""}
+      ${copyItems.length ? `
+        <section class="gold-review-lane" aria-label="Score notation copy training">
+          <div class="gold-review-lane-head">
+            <strong>Notation copy</strong>
+            <span>${escapeHtml(String(scoreCopyQueued))} queued</span>
+          </div>
+          ${copyItems.map((item, index) => renderGoldReviewItem(item, index)).join("")}
+        </section>
+      ` : ""}
     </div>
   `;
 }
