@@ -179,7 +179,7 @@ def requested_score_copy_records() -> list[dict[str, Any]]:
         notes = list(piece["notes"])
         abc = str(piece["abc"])
         source_entry = source_by_title.get(title, {})
-        source_image = str(source_entry.get("imageUrl") or "").strip()
+        source_image = str(source_entry.get("reviewImageUrl") or source_entry.get("imageUrl") or "").strip()
         source_ready = bool(source_entry.get("originalScoreSnippet") is True and source_image)
         source_label = str(source_entry.get("label") or source_entry.get("sourceFileLabel") or "source PDF crop").strip()
         records.append(
@@ -217,6 +217,9 @@ def requested_score_copy_records() -> list[dict[str, Any]]:
                                         "sourcePdfPage": source_entry.get("sourcePdfPage"),
                                         "sourceFileLabel": str(source_entry.get("sourceFileLabel") or ""),
                                         "sourceKind": str(source_entry.get("sourceKind") or ""),
+                                        "reviewCropKind": str(source_entry.get("reviewCropKind") or ""),
+                                        "reviewCropSourceImageUrl": str(source_entry.get("reviewCropSourceImageUrl") or ""),
+                                        "reviewCropBox": source_entry.get("reviewCropBox") or [],
                                         "sourceNotationAbc": abc,
                                         "copyNotationAbc": abc,
                                         "notationCopyAspects": NOTATION_COPY_ASPECTS,

@@ -569,6 +569,7 @@ class GoldReviewTests(unittest.TestCase):
         self.assertTrue(first["originalScoreSnippet"])
         self.assertFalse(first["sourceImageRequiredForOriginalScore"])
         self.assertTrue(first["sourceReviewImageUrl"].startswith("/assets/score/original/source-library/"))
+        self.assertTrue(first["sourceReviewImageUrl"].endswith("-review.png"))
         self.assertTrue(first["sourceNotationAbc"])
         self.assertTrue(first["copyNotationAbc"])
         self.assertIn("durations", first["notationCopyAspects"])

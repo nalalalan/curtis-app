@@ -20,7 +20,16 @@
     "sourceFileLabel": "Violins I",
     "imslpFileId": "52184",
     "selectionScore": 300,
-    "staffLineScore": 1035
+    "staffLineScore": 1035,
+    "reviewImageUrl": "/assets/score/original/source-library/haydn94-iv-vln1-imslp-score-review.png",
+    "reviewCropKind": "detected_first_music_system",
+    "reviewCropSourceImageUrl": "/assets/score/original/source-library/haydn94-iv-vln1-imslp-score.png",
+    "reviewCropBox": [
+      0,
+      127,
+      878,
+      329
+    ]
   },
   {
     "id": "schubert4-iv-vln1",
@@ -43,7 +52,16 @@
     "sourceFileLabel": "Violins I",
     "imslpFileId": "20652",
     "selectionScore": 300,
-    "staffLineScore": 900
+    "staffLineScore": 900,
+    "reviewImageUrl": "/assets/score/original/source-library/schubert4-iv-vln1-imslp-score-review.png",
+    "reviewCropKind": "detected_first_music_system",
+    "reviewCropSourceImageUrl": "/assets/score/original/source-library/schubert4-iv-vln1-imslp-score.png",
+    "reviewCropBox": [
+      1,
+      10,
+      779,
+      189
+    ]
   },
   {
     "id": "schubert3-i-vln1",
@@ -67,7 +85,16 @@
     "imslpFileId": "20630",
     "selectionScore": 300,
     "staffLineScore": 916,
-    "manualPageOverrideReason": "movement I source preview uses first page of the Violin I part"
+    "manualPageOverrideReason": "movement I source preview uses first page of the Violin I part",
+    "reviewImageUrl": "/assets/score/original/source-library/schubert3-i-vln1-imslp-score-review.png",
+    "reviewCropKind": "detected_first_music_system",
+    "reviewCropSourceImageUrl": "/assets/score/original/source-library/schubert3-i-vln1-imslp-score.png",
+    "reviewCropBox": [
+      0,
+      306,
+      1361,
+      619
+    ]
   },
   {
     "id": "schubert3-iv-vln1",
@@ -90,7 +117,16 @@
     "sourceFileLabel": "Violins I",
     "imslpFileId": "20630",
     "selectionScore": 300,
-    "staffLineScore": 916
+    "staffLineScore": 916,
+    "reviewImageUrl": "/assets/score/original/source-library/schubert3-iv-vln1-imslp-score-review.png",
+    "reviewCropKind": "detected_first_music_system",
+    "reviewCropSourceImageUrl": "/assets/score/original/source-library/schubert3-iv-vln1-imslp-score.png",
+    "reviewCropBox": [
+      6,
+      0,
+      889,
+      203
+    ]
   },
   {
     "id": "schubert5-i-vln1",
@@ -114,7 +150,16 @@
     "imslpFileId": "20658",
     "selectionScore": 300,
     "staffLineScore": 1108,
-    "manualPageOverrideReason": "movement I source preview uses first page of the Violin I part"
+    "manualPageOverrideReason": "movement I source preview uses first page of the Violin I part",
+    "reviewImageUrl": "/assets/score/original/source-library/schubert5-i-vln1-imslp-score-review.png",
+    "reviewCropKind": "detected_first_music_system",
+    "reviewCropSourceImageUrl": "/assets/score/original/source-library/schubert5-i-vln1-imslp-score.png",
+    "reviewCropBox": [
+      0,
+      331,
+      1361,
+      644
+    ]
   },
   {
     "id": "schubert5-iv-vln1",
@@ -137,7 +182,16 @@
     "sourceFileLabel": "Violins I",
     "imslpFileId": "20658",
     "selectionScore": 300,
-    "staffLineScore": 1108
+    "staffLineScore": 1108,
+    "reviewImageUrl": "/assets/score/original/source-library/schubert5-iv-vln1-imslp-score-review.png",
+    "reviewCropKind": "detected_first_music_system",
+    "reviewCropSourceImageUrl": "/assets/score/original/source-library/schubert5-iv-vln1-imslp-score.png",
+    "reviewCropBox": [
+      0,
+      56,
+      1361,
+      369
+    ]
   },
   {
     "id": "paganini-concerto1-i-solo",
@@ -160,7 +214,16 @@
     "sourceFileLabel": "Solo Violin (with cadenza)",
     "imslpFileId": "900350",
     "selectionScore": 320,
-    "staffLineScore": 915
+    "staffLineScore": 915,
+    "reviewImageUrl": "/assets/score/original/source-library/paganini-concerto1-i-solo-imslp-score-review.png",
+    "reviewCropKind": "detected_first_music_system",
+    "reviewCropSourceImageUrl": "/assets/score/original/source-library/paganini-concerto1-i-solo-imslp-score.png",
+    "reviewCropBox": [
+      1,
+      87,
+      1362,
+      400
+    ]
   },
   {
     "id": "paganini-concerto2-i-solo",
@@ -184,7 +247,16 @@
     "imslpFileId": "774280",
     "selectionScore": 250,
     "staffLineScore": 1561,
-    "manualPageOverrideReason": "first two rendered pages were cover/notice; page 3 is the first clear score page"
+    "manualPageOverrideReason": "first two rendered pages were cover/notice; page 3 is the first clear score page",
+    "reviewImageUrl": "/assets/score/original/source-library/paganini-concerto2-i-solo-imslp-score-review.png",
+    "reviewCropKind": "detected_first_music_system",
+    "reviewCropSourceImageUrl": "/assets/score/original/source-library/paganini-concerto2-i-solo-imslp-score.png",
+    "reviewCropBox": [
+      0,
+      0,
+      1213,
+      279
+    ]
   },
   {
     "id": "paganini-moto-perpetuo-solo",
@@ -207,7 +279,16 @@
     "sourceFileLabel": "Complete Score and Violin Part",
     "imslpFileId": "29711",
     "selectionScore": 555,
-    "staffLineScore": 964
+    "staffLineScore": 964,
+    "reviewImageUrl": "/assets/score/original/source-library/paganini-moto-perpetuo-solo-imslp-score-review.png",
+    "reviewCropKind": "detected_first_music_system",
+    "reviewCropSourceImageUrl": "/assets/score/original/source-library/paganini-moto-perpetuo-solo-imslp-score.png",
+    "reviewCropBox": [
+      0,
+      9,
+      1230,
+      310
+    ]
   },
   {
     "id": "wieniawski-etude-caprice-4",
@@ -230,7 +311,16 @@
     "sourceFileLabel": "Book 1 (Etudes 1-4)",
     "imslpFileId": "236741",
     "selectionScore": 300,
-    "staffLineScore": 990
+    "staffLineScore": 990,
+    "reviewImageUrl": "/assets/score/original/source-library/wieniawski-etude-caprice-4-imslp-score-review.png",
+    "reviewCropKind": "detected_first_music_system",
+    "reviewCropSourceImageUrl": "/assets/score/original/source-library/wieniawski-etude-caprice-4-imslp-score.png",
+    "reviewCropBox": [
+      0,
+      10,
+      1361,
+      323
+    ]
   },
   {
     "id": "wieniawski-etude-caprice-3",
@@ -253,7 +343,16 @@
     "sourceFileLabel": "Book 1 (Etudes 1-4)",
     "imslpFileId": "236741",
     "selectionScore": 300,
-    "staffLineScore": 1112
+    "staffLineScore": 1112,
+    "reviewImageUrl": "/assets/score/original/source-library/wieniawski-etude-caprice-3-imslp-score-review.png",
+    "reviewCropKind": "detected_first_music_system",
+    "reviewCropSourceImageUrl": "/assets/score/original/source-library/wieniawski-etude-caprice-3-imslp-score.png",
+    "reviewCropBox": [
+      2,
+      11,
+      1363,
+      324
+    ]
   },
   {
     "id": "mozart-figaro-overture-vln1",
@@ -276,7 +375,16 @@
     "sourceFileLabel": "Violins I",
     "imslpFileId": "683006",
     "selectionScore": 300,
-    "staffLineScore": 1137
+    "staffLineScore": 1137,
+    "reviewImageUrl": "/assets/score/original/source-library/mozart-figaro-overture-vln1-imslp-score-review.png",
+    "reviewCropKind": "detected_first_music_system",
+    "reviewCropSourceImageUrl": "/assets/score/original/source-library/mozart-figaro-overture-vln1-imslp-score.png",
+    "reviewCropBox": [
+      0,
+      11,
+      1361,
+      324
+    ]
   },
   {
     "id": "schumann1-iv-vln1",
@@ -299,6 +407,15 @@
     "sourceFileLabel": "Violins I",
     "imslpFileId": "39190",
     "selectionScore": 300,
-    "staffLineScore": 1049
+    "staffLineScore": 1049,
+    "reviewImageUrl": "/assets/score/original/source-library/schumann1-iv-vln1-imslp-score-review.png",
+    "reviewCropKind": "detected_first_music_system",
+    "reviewCropSourceImageUrl": "/assets/score/original/source-library/schumann1-iv-vln1-imslp-score.png",
+    "reviewCropBox": [
+      0,
+      7,
+      809,
+      193
+    ]
   }
 ]
