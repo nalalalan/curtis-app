@@ -2365,6 +2365,20 @@ h2 {
   background: rgba(31, 41, 39, .32);
 }
 
+.notation-sheet.notation-fit {
+  overflow-x: hidden;
+  scrollbar-width: none;
+}
+
+.notation-sheet.notation-fit::-webkit-scrollbar {
+  display: none;
+}
+
+.notation-sheet.notation-fit .notation-svg-fallback svg {
+  width: 100%;
+  min-width: 0;
+}
+
 .notation-sheet.notation-draft {
   border-color: rgba(166, 111, 86, .18);
   background: rgba(255, 252, 246, .9);
@@ -4727,7 +4741,7 @@ h2 {
 
 .gold-review-grid {
   display: grid;
-  grid-template-columns: minmax(160px, 220px) minmax(0, 1fr) minmax(240px, .65fr);
+  grid-template-columns: minmax(160px, 220px) minmax(0, 1fr);
   gap: 10px;
   align-items: start;
 }
@@ -4755,7 +4769,19 @@ h2 {
 }
 
 .gold-review-notation .notation-svg-fallback svg {
-  height: 92px;
+  height: 124px;
+}
+
+.gold-review-notation .notation-sheet .notehead {
+  font-size: 40px;
+}
+
+.gold-review-notation .notation-sheet .note-accidental {
+  font-size: 30px;
+}
+
+.gold-review-notation .notation-sheet .treble-clef {
+  font-size: 66px;
 }
 
 .gold-review-notation small {
@@ -4764,8 +4790,12 @@ h2 {
 }
 
 .gold-review-form {
-  display: grid;
+  grid-column: 2;
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
+  align-items: center;
+  justify-content: flex-start;
 }
 
 .gold-review-actions,
@@ -4850,6 +4880,10 @@ h2 {
 
   .gold-review-grid .embedded-media {
     max-width: 240px;
+  }
+
+  .gold-review-form {
+    grid-column: auto;
   }
 }
 

@@ -1874,7 +1874,13 @@ function renderNotationSheet(events, options = {}) {
   const normalizedSignature = normalizedKeySignature(options?.keySignature || {});
   const keySignature = renderKeySignatureMarks(normalizedSignature);
   const noteStartX = NOTATION_NOTE_START_X + keySignature.width;
-  const svgWidth = notationWidthForItemCount(items.length, noteStartX);
+  const fitToWidth = options?.fitToWidth === true;
+  const fitWidth = Math.max(NOTATION_VIEWBOX_BASE_WIDTH, Number(options?.fitWidth) || NOTATION_VIEWBOX_BASE_WIDTH);
+  const fitStep = items.length > 1
+    ? Math.max(30, (fitWidth - noteStartX - NOTATION_NOTE_TRAILING_PAD_X) / Math.max(1, items.length - 1))
+    : 0;
+  const step = items.length > 1 ? (fitToWidth ? Math.min(NOTATION_NOTE_MIN_STEP_X, fitStep) : NOTATION_NOTE_MIN_STEP_X) : 0;
+  const svgWidth = fitToWidth ? fitWidth : notationWidthForItemCount(items.length, noteStartX);
   const staffLines = renderStaffLines(svgWidth);
   const repeatLabel = repeatGroup?.notationLabel || options?.repeatLabel || "";
   const repeatPattern = repeatGroup?.practicePattern || options?.practicePattern || "";
@@ -1885,6 +1891,7 @@ function renderNotationSheet(events, options = {}) {
   const captionDetail = [repeatPattern || qualityLimit, keySignature.label && keySignature.label !== "key pending" ? keySignature.label : ""].filter(Boolean).join(" / ");
   const repeatClass = repeatLabel ? " notation-repeat" : "";
   const draftClass = options?.draft ? " notation-draft" : "";
+  const fitClass = fitToWidth ? " notation-fit" : "";
   const pitchOnly = !notationRhythmVerified(options);
   const rhythmClass = pitchOnly ? " notation-pitch-events" : "";
   const repeatMarks = repeatLabel ? `
@@ -1909,7 +1916,7 @@ function renderNotationSheet(events, options = {}) {
   if (!pitchOnly) queueNotationHydration(sheetId);
   if (!items.length) {
     return `
-      <div id="${sheetId}" class="notation-sheet notation-empty notation-engraved${repeatClass}${draftClass}${rhythmClass}" ${pitchOnly ? "" : `data-abc="${escapeHtml(abc)}"`} aria-label="Sheet-music-style transcription pending">
+      <div id="${sheetId}" class="notation-sheet notation-empty notation-engraved${repeatClass}${draftClass}${fitClass}${rhythmClass}" ${pitchOnly ? "" : `data-abc="${escapeHtml(abc)}"`} aria-label="Sheet-music-style transcription pending">
         ${abcTarget}
         <div class="notation-svg-fallback">
           ${notationSvgOpen(svgWidth)}
@@ -1929,7 +1936,6 @@ function renderNotationSheet(events, options = {}) {
       </div>
     `;
   }
-  const step = items.length > 1 ? NOTATION_NOTE_MIN_STEP_X : 0;
   let fallbackMeasureAccidentals = {};
   const marks = items.map((event, index) => {
     const x = noteStartX + (step * index);
@@ -1962,7 +1968,7 @@ function renderNotationSheet(events, options = {}) {
     `;
   }).join("");
   return `
-    <div id="${sheetId}" class="notation-sheet notation-engraved${repeatClass}${draftClass}${rhythmClass}" ${pitchOnly ? "" : `data-abc="${escapeHtml(abc)}"`} aria-label="Sheet-music-style machine transcription">
+    <div id="${sheetId}" class="notation-sheet notation-engraved${repeatClass}${draftClass}${fitClass}${rhythmClass}" ${pitchOnly ? "" : `data-abc="${escapeHtml(abc)}"`} aria-label="Sheet-music-style machine transcription">
       ${abcTarget}
       <div class="notation-svg-fallback">
         ${notationSvgOpen(svgWidth)}
@@ -3233,7 +3239,8 @@ function renderGoldReviewItem(item, index) {
           </div>
           ${renderNotationSheet(goldReviewNotationEvents(item.detectedNotes), {
             keySignature: readableNotes.keySignature,
-            maxNotes: 16
+            maxNotes: 16,
+            fitToWidth: true
           })}
           ${scoreNotes ? `<small>${escapeHtml([item.scoreLocation || "score", shortText(scoreNotes, 80)].filter(Boolean).join(" / "))}</small>` : ""}
         </section>

@@ -113,6 +113,33 @@ def test_notation_renderer_draws_exact_accidentals():
         assert(noteXs[0] - keyXs[keyXs.length - 1] >= 54, "first note must not collide with the key signature");
         assert(noteXs[1] - noteXs[0] >= 48, "fast detected notes need fixed horizontal clearance instead of squeezed spacing");
 
+        const fittedReviewRow = vm.runInContext(
+          `renderNotationSheet([
+            {kind:'note',note:'A#4'},
+            {kind:'note',note:'A#4'},
+            {kind:'note',note:'G4'},
+            {kind:'note',note:'F#4'},
+            {kind:'note',note:'F#4'},
+            {kind:'note',note:'G#4'},
+            {kind:'note',note:'G#4'},
+            {kind:'note',note:'G4'},
+            {kind:'note',note:'G4'},
+            {kind:'note',note:'D#4'},
+            {kind:'note',note:'D#4'},
+            {kind:'note',note:'D4'},
+            {kind:'note',note:'C4'},
+            {kind:'note',note:'D4'},
+            {kind:'note',note:'D#4'},
+            {kind:'note',note:'D4'}
+          ], {keySignature:{accidentalType:'flat',accidentals:['Bb','Eb'],label:'G minor / 2 flats'}, maxNotes:16, fitToWidth:true})`,
+          context
+        );
+        const fittedViewWidth = Number((fittedReviewRow.match(/viewBox="0 -18 ([0-9.]+) 150"/) || [])[1]);
+        const fittedNoteXs = [...fittedReviewRow.matchAll(/class="notehead" x="([0-9.]+)"/g)].map((match) => Number(match[1]));
+        assert(fittedReviewRow.includes("notation-fit"), "Gold Review notation should opt into fit-to-card rendering");
+        assert(fittedViewWidth === 720, "Gold Review fit rows should use the base staff width instead of creating a horizontal scrollbar");
+        assert(Math.max(...fittedNoteXs) <= 680, "Gold Review fit rows must keep every note inside the visible staff");
+
         const naturalInFlatKey = vm.runInContext(
           `renderNotationSheet([
             {kind:'note',note:'B4'},
@@ -215,6 +242,9 @@ def test_notation_styles_use_local_music_font_and_professional_glyph_sizes():
     assert ".notation-sheet .treble-clef" in css
     assert "width: max(100%, var(--notation-svg-width, 720px));" in css
     assert "min-width: var(--notation-svg-width, 720px);" in css
+    assert ".notation-sheet.notation-fit" in css
+    assert ".notation-sheet.notation-fit .notation-svg-fallback svg" in css
+    assert ".gold-review-notation .notation-svg-fallback svg" in css
     assert "font-size: 62px;" in css
     assert ".notation-sheet .accidental-flat" in css
     assert "font-size: 33px;" in css
