@@ -771,6 +771,35 @@ def _score_copy_candidate_from_snippet(
     score_midi = _normalized_review_midi_sequence(score_notes)
     if not score_midi:
         return {}
+    verified_source_notes = _score_note_names(
+        snippet.get("verifiedSourceNoteSequence"),
+        snippet.get("sourceVerifiedNoteSequence"),
+        snippet.get("sourceCropVerifiedNoteSequence"),
+    )
+    verified_source_midi = _normalized_review_midi_sequence(verified_source_notes)
+    blocked_tokens = ("rejected", "blocked", "mismatch", "failed", "wrong")
+    source_status_text = " ".join(
+        str(snippet.get(key) or "")
+        for key in (
+            "status",
+            "verification",
+            "sourceStatus",
+            "sourceReviewKind",
+            "rejectionReason",
+            "verificationLimit",
+        )
+    ).lower()
+    source_copy_review_ready = bool(
+        snippet.get("sourceCopyReviewReady") is True
+        and source_image
+        and verified_source_midi
+        and verified_source_midi == score_midi
+        and not bool(snippet.get("sourceCropRejected"))
+        and not bool(snippet.get("sourceImageRequiredForOriginalScore"))
+        and not any(token in source_status_text for token in blocked_tokens)
+    )
+    if not source_copy_review_ready:
+        return {}
     score_config = target.get("symbolicScore") if isinstance(target.get("symbolicScore"), dict) else {}
     score_source = _clean(
         target.get("scoreSource")

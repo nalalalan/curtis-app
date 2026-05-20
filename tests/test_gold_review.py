@@ -464,6 +464,8 @@ class GoldReviewTests(unittest.TestCase):
                                             "imageUrl": "/assets/score/m16-source.png",
                                             "sourceReviewImageUrl": "/assets/score/m16-review.png",
                                             "visibleScoreExactNoteSequence": ["Eb5", "D5", "C5"],
+                                            "verifiedSourceNoteSequence": ["Eb5", "D5", "C5"],
+                                            "sourceCopyReviewReady": True,
                                             "status": "source_score_copy_candidate",
                                         }
                                     ],
@@ -506,6 +508,8 @@ class GoldReviewTests(unittest.TestCase):
                                             "measureLabel": "m. 16",
                                             "sourceReviewImageUrl": "/assets/score/m16-a4.png",
                                             "visibleScoreExactNoteSequence": ["A4"],
+                                            "verifiedSourceNoteSequence": ["A4"],
+                                            "sourceCopyReviewReady": True,
                                         }
                                     ],
                                 },
@@ -521,6 +525,47 @@ class GoldReviewTests(unittest.TestCase):
         self.assertEqual(review["scoreCopyQueueCount"], 1)
         self.assertEqual(review["queue"][0]["reviewType"], "score_copy")
         self.assertEqual(review["queue"][0]["scoreNotes"], ["A4"])
+
+    def test_score_copy_review_queue_requires_verified_source_copy_gate(self):
+        daily_records = {
+            "records": [
+                {
+                    "practiceDay": "2026-05-03",
+                    "pieces": [
+                        {
+                            "title": "Wieniawski Scherzo-Tarantelle, Op. 16",
+                            "score": {
+                                "symbolicScore": {
+                                    "sourceSnippets": [
+                                        {
+                                            "measureLabel": "m. 16",
+                                            "sourceReviewImageUrl": "/assets/score/m16-rejected.png",
+                                            "visibleScoreExactNoteSequence": ["Eb5", "Eb5", "C5"],
+                                            "verifiedSourceNoteSequence": ["Eb5", "Eb5", "C5"],
+                                            "sourceCropRejected": True,
+                                            "sourceCopyReviewReady": True,
+                                            "status": "source_score_phrase_review_rejected",
+                                        },
+                                        {
+                                            "measureLabel": "m. 16",
+                                            "sourceReviewImageUrl": "/assets/score/m16-ungated.png",
+                                            "visibleScoreExactNoteSequence": ["Bb4", "D5", "C5"],
+                                            "verifiedSourceNoteSequence": ["Bb4", "D5", "C5"],
+                                            "status": "source_score_exact_midi_sequence_verified",
+                                        },
+                                    ],
+                                },
+                            },
+                        }
+                    ],
+                }
+            ]
+        }
+
+        review = build_gold_review_loop({}, daily_records)
+
+        self.assertEqual(review["scoreCopyQueueCount"], 0)
+        self.assertEqual(review["scoreCopyQueue"], [])
 
     def test_score_copy_acceptance_trains_source_copy_without_score_evidence(self):
         state = {}
