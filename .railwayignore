@@ -1,0 +1,21 @@
+# Railway deploy payload only. Keep local analysis caches, previews, and
+# screenshots out of CLI uploads.
+.runtime/
+verification/
+.pytest_cache/
+.venv/
+**/__pycache__/
+
+/*.png
+/*.log
+/*.err.log
+
+paper/*.aux
+paper/*.bbl
+paper/*.bcf
+paper/*.blg
+paper/*.log
+paper/*.out
+paper/*.run.xml
+
+assets/score/wieniawski-example-5-bars-1-9.jpg
