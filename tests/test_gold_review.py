@@ -548,7 +548,7 @@ class GoldReviewTests(unittest.TestCase):
         self.assertEqual(review["queue"][0]["reviewTask"], "audio_score_exact_match")
         self.assertEqual(review["queue"][0]["sampleId"], "score-sample")
 
-    def test_single_rejected_pattern_stays_reviewable_as_noisy_human_signal(self):
+    def test_single_rejected_pattern_is_hidden_from_active_queue(self):
         state = {}
         record_gold_review_item(
             state,
@@ -588,15 +588,17 @@ class GoldReviewTests(unittest.TestCase):
         review = build_gold_review_loop(state, daily_records)
 
         self.assertEqual(review["rawQueueCount"], 1)
-        self.assertEqual(review["queueCount"], 1)
-        self.assertEqual(review["queueStatus"], "review_queue_ready")
-        self.assertEqual(review["suppressedByLearningCount"], 0)
-        self.assertEqual(review["softRejectedPatternCount"], 1)
-        self.assertEqual(review["rejectionDigest"]["hiddenRejectedPatternCount"], 0)
-        self.assertEqual(review["queue"][0]["reviewLearningStatus"], "soft_rejected_pattern")
-        self.assertEqual(review["queue"][0]["reviewLearningReliability"], "noisy_human_signal")
+        self.assertEqual(review["queueCount"], 0)
+        self.assertEqual(review["queueStatus"], "current_batch_exhausted_by_rejections")
+        self.assertEqual(review["suppressedByLearningCount"], 1)
+        self.assertEqual(review["softRejectedPatternCount"], 0)
+        self.assertEqual(review["rejectedPatternCount"], 1)
+        self.assertEqual(review["rejectionDigest"]["hiddenRejectedPatternCount"], 1)
+        self.assertEqual(review["reviewLearningStatus"], "reducing_review_load")
+        self.assertEqual(review["suppressionThreshold"], 1)
+        self.assertEqual(review["suppressedQueuePreview"][0]["reviewLearningStatus"], "rejected_pattern_hidden")
 
-    def test_repeated_rejected_pattern_stays_reviewable_but_deprioritized(self):
+    def test_repeated_rejected_pattern_is_suppressed_instead_of_requeued(self):
         state = {}
         for index, sample_id in enumerate(["old-sample-a", "old-sample-b"]):
             record_gold_review_item(
@@ -637,13 +639,13 @@ class GoldReviewTests(unittest.TestCase):
         review = build_gold_review_loop(state, daily_records)
 
         self.assertEqual(review["rawQueueCount"], 1)
-        self.assertEqual(review["queueCount"], 1)
-        self.assertEqual(review["queueStatus"], "review_queue_ready")
-        self.assertEqual(review["suppressedByLearningCount"], 0)
-        self.assertEqual(review["reviewLearningStatus"], "learning_no_suppression_yet")
-        self.assertEqual(review["rejectionDigest"]["hiddenRejectedPatternCount"], 0)
-        self.assertIsNone(review["suppressionThreshold"])
-        self.assertEqual(review["queue"][0]["reviewLearningStatus"], "soft_rejected_pattern")
+        self.assertEqual(review["queueCount"], 0)
+        self.assertEqual(review["queueStatus"], "current_batch_exhausted_by_rejections")
+        self.assertEqual(review["suppressedByLearningCount"], 1)
+        self.assertEqual(review["reviewLearningStatus"], "reducing_review_load")
+        self.assertEqual(review["rejectionDigest"]["hiddenRejectedPatternCount"], 1)
+        self.assertEqual(review["suppressionThreshold"], 1)
+        self.assertEqual(review["suppressedQueuePreview"][0]["reviewLearningKey"], "75 72")
 
     def test_later_acceptance_releases_previously_rejected_pattern(self):
         state = {}
@@ -783,10 +785,9 @@ class GoldReviewTests(unittest.TestCase):
         review = build_gold_review_loop(state, daily_records)
 
         self.assertEqual(review["queueStatus"], "adaptive_review_ready")
-        self.assertEqual(review["adaptiveReason"], "primary_queue_only_soft_rejected")
+        self.assertEqual(review["adaptiveReason"], "primary_queue_suppressed_by_rejections")
         self.assertGreater(review["adaptiveCandidateCount"], 0)
         self.assertTrue(review["queue"][0]["adaptiveReview"])
-        self.assertGreater(review["queueCount"], review["adaptiveCandidateCount"])
         self.assertNotIn("soft_rejected_pattern", [item["reviewLearningStatus"] for item in review["queue"][:3]])
 
     def test_adaptive_review_prefers_phrase_shaped_windows_over_repeated_notes(self):

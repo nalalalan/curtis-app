@@ -3292,9 +3292,7 @@ function renderGoldReview() {
     ? `Batch complete. ${Number(review.suppressedByLearningCount) || 0} repeats hidden.`
     : "No review clips queued.";
   setText(elements.goldReviewCount, scoreQueued ? `${scoreQueued} score / ${queued} queued` : `${accepted} accepted / ${queued} queued`);
-  const queue = Array.isArray(review.queue) ? review.queue.slice(0, 4) : [];
-  const recent = Array.isArray(review.recentItems) ? review.recentItems.slice(0, 3) : [];
-  const items = queue.length ? queue : recent;
+  const items = Array.isArray(review.queue) ? review.queue.slice(0, 4) : [];
   if (!items.length) {
     elements.goldReviewPanel.innerHTML = `
       <div class="gold-review-stats">

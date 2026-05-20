@@ -807,8 +807,8 @@ def build_review_learning_profile(items: list[dict[str, Any]]) -> dict[str, Any]
         elif item.get("status") == "rejected_mismatch":
             rejected_keys.add(key)
             rejected_counts[key] += 1
-    rejected_only: set[str] = set()
-    soft_rejected = rejected_keys - accepted_keys
+    rejected_only = rejected_keys - accepted_keys
+    soft_rejected: set[str] = set()
     return {
         "acceptedKeys": accepted_keys,
         "rejectedKeys": rejected_keys,
@@ -819,8 +819,8 @@ def build_review_learning_profile(items: list[dict[str, Any]]) -> dict[str, Any]
         "acceptedPatternCount": len(accepted_keys),
         "rejectedPatternCount": len(rejected_keys),
         "softRejectedPatternCount": len(soft_rejected),
-        "suppressionThreshold": None,
-        "suppressionRule": "Human review labels are useful but noisy. Human labels do not hard-hide candidates by themselves; accepted patterns are prioritized, rejected-only patterns are deprioritized, and independent evidence gates decide whether a phrase is blocked from accepted display.",
+        "suppressionThreshold": 1,
+        "suppressionRule": "A rejected exact MIDI pattern is removed from the active review queue unless a later accepted label for the same normalized pattern overrides it.",
     }
 
 
@@ -838,6 +838,8 @@ def apply_review_learning_to_candidates(
         status = (
             "accepted_pattern"
             if key in accepted_keys
+            else "rejected_pattern_hidden"
+            if key in rejected_only_keys
             else "soft_rejected_pattern"
             if key in soft_rejected_keys
             else "new_pattern"
@@ -898,6 +900,7 @@ def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any],
     primary_queue_is_only_soft_rejected = len(candidates) >= 2 and all(
         item.get("reviewLearningStatus") == "soft_rejected_pattern" for item in candidates
     )
+    primary_queue_suppressed_by_rejections = not candidates and bool(suppressed_candidates)
     if not candidates or primary_queue_is_only_soft_rejected:
         raw_adaptive_candidates = [
             candidate
@@ -952,7 +955,15 @@ def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any],
         "longPhraseQueueCount": len(long_candidates),
         "rawQueueCount": len(raw_candidates),
         "adaptiveMode": adaptive_mode,
-        "adaptiveReason": "primary_queue_only_soft_rejected" if primary_queue_is_only_soft_rejected and adaptive_mode else "primary_queue_empty" if adaptive_mode else "",
+        "adaptiveReason": (
+            "primary_queue_suppressed_by_rejections"
+            if primary_queue_suppressed_by_rejections and adaptive_mode
+            else "primary_queue_only_soft_rejected"
+            if primary_queue_is_only_soft_rejected and adaptive_mode
+            else "primary_queue_empty"
+            if adaptive_mode
+            else ""
+        ),
         "adaptiveCandidateCount": len(adaptive_candidates),
         "adaptiveCandidatePoolCount": adaptive_candidate_pool_count,
         "adaptiveQueueLimit": MAX_ADAPTIVE_REVIEW_QUEUE,
