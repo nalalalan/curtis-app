@@ -12,6 +12,8 @@ node_modules/
 !assets/score/*.png
 !assets/score/original/
 !assets/score/original/*.png
+!assets/score/original/source-library/
+!assets/score/original/source-library/*.png
 !assets/score/review/
 !assets/score/review/*.png
 .runtime/

@@ -1250,6 +1250,9 @@ def build_gold_review_loop(
         item for item in score_copy_candidates if item.get("sourcePieceTrainingOnly") or item.get("trainingOnly")
     ]
     source_score_snippets = requested_original_score_snippets() if include_source_copy_catalog else []
+    source_score_ready_snippets = [
+        item for item in source_score_snippets if item.get("originalScoreSnippet") is True and item.get("imageUrl")
+    ]
     exact_score_candidates = [item for item in score_candidates if item.get("scoreAgreement") is True]
     long_candidates = [item for item in candidates if item.get("reviewKind") == "long_audio_phrase_candidate"]
     candidates.sort(key=_review_candidate_rank)
@@ -1339,6 +1342,7 @@ def build_gold_review_loop(
         "audioQueueCount": len(audio_candidates),
         "sourceCopyTrainingQueueCount": len(source_copy_training_candidates),
         "sourceScoreSnippetCount": len(source_score_snippets),
+        "sourceScoreReadySnippetCount": len(source_score_ready_snippets),
         "scoreExactAgreementQueueCount": len(exact_score_candidates),
         "longPhraseQueueCount": len(long_candidates),
         "rawQueueCount": len(raw_candidates),
@@ -1408,7 +1412,7 @@ def build_gold_review_loop(
         "queue": candidates[: max(0, int(limit))],
         "audioQueue": audio_candidates[: max(4, min(12, int(limit)))],
         "scoreCopyQueue": score_copy_candidates[: max(4, min(12, int(limit)))],
-        "sourceScoreSnippets": source_score_snippets[:6],
+        "sourceScoreSnippets": source_score_snippets,
         "suppressedQueuePreview": (suppressed_candidates + adaptive_suppressed_candidates)[:5],
         "recentItems": items[:8],
         "nextAction": (

@@ -577,15 +577,34 @@ class GoldReviewTests(unittest.TestCase):
         review = build_gold_review_loop({}, {"records": []}, limit=20, include_source_copy_catalog=True)
 
         snippets = review["sourceScoreSnippets"]
+        requested_titles = {
+            "Haydn Symphony No. 94, IV, Violin I",
+            'Schubert Symphony No. 4 "Tragic", IV, Violin I',
+            "Schubert Symphony No. 3, I, Violin I",
+            "Schubert Symphony No. 3, IV, Violin I",
+            "Schubert Symphony No. 5, I, Violin I",
+            "Schubert Symphony No. 5, IV, Violin I",
+            "Paganini Violin Concerto No. 1, I, Solo violin",
+            "Paganini Violin Concerto No. 2, I, Solo violin",
+            "Paganini Moto Perpetuo, Op. 11, Solo violin",
+            "Wieniawski Etude-Caprice, Op. 18 No. 4",
+            "Wieniawski Etude-Caprice, Op. 18 No. 3",
+            "Mozart Le nozze di Figaro Overture, Violin I",
+            "Schumann Symphony No. 1, IV, Violin I",
+        }
+        snippet_titles = {item["pieceTitle"] for item in snippets}
 
-        self.assertGreaterEqual(review["sourceScoreSnippetCount"], 6)
+        self.assertGreaterEqual(review["sourceScoreSnippetCount"], 19)
+        self.assertGreaterEqual(review["sourceScoreReadySnippetCount"], 19)
+        self.assertTrue(requested_titles <= snippet_titles)
         self.assertTrue(snippets)
         self.assertTrue(all(item["originalScoreSnippet"] for item in snippets))
         self.assertTrue(all(not item["sourceImageRequiredForOriginalScore"] for item in snippets))
         self.assertTrue(all("imslp" in item["source"].lower() for item in snippets))
-        first_path = Path(__file__).resolve().parents[1] / snippets[0]["imageUrl"].lstrip("/")
-        self.assertTrue(first_path.exists(), str(first_path))
-        self.assertGreater(first_path.stat().st_size, 1024)
+        for item in snippets:
+            image_path = Path(__file__).resolve().parents[1] / item["imageUrl"].lstrip("/")
+            self.assertTrue(image_path.exists(), str(image_path))
+            self.assertGreater(image_path.stat().st_size, 1024)
 
     def test_score_copy_review_does_not_suppress_audio_review_for_same_notes(self):
         state = {}

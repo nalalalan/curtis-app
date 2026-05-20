@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any
 
 
@@ -21,6 +23,7 @@ NOTATION_COPY_ASPECTS = [
 
 WIENIAWSKI_SOURCE_URL = "https://imslp.org/wiki/Scherzo_tarantelle%2C_Op.16_%28Wieniawski%2C_Henri%29"
 WIENIAWSKI_SOURCE_PDF = "assets/score/wieniawski-scherzo-tarantelle-solo-imslp.pdf"
+SOURCE_SCORE_LIBRARY_PATH = Path(__file__).resolve().parents[2] / "assets" / "score" / "original" / "source-score-library.json"
 
 ORIGINAL_SCORE_SOURCE_SNIPPETS = [
     {
@@ -125,14 +128,25 @@ REQUESTED_SCORE_COPY_REPERTOIRE = [
 
 
 def requested_original_score_snippets() -> list[dict[str, Any]]:
-    """Real scanned source-score crops, not generated notation.
+    """Real scanned source-score images, not generated notation.
 
     These are source material only. They are allowed to display as original
-    score snippets because they are cropped from the vendored IMSLP PDF, but
-    they are not accepted practice evidence and do not imply audio alignment.
+    score sources because they are either cropped from the vendored IMSLP PDF
+    or stored as rendered crops from selected IMSLP PDFs. They are not
+    accepted practice evidence and do not imply audio alignment.
     """
 
-    return [dict(item) for item in ORIGINAL_SCORE_SOURCE_SNIPPETS]
+    snippets = [dict(item) for item in ORIGINAL_SCORE_SOURCE_SNIPPETS]
+    if SOURCE_SCORE_LIBRARY_PATH.exists():
+        try:
+            library = json.loads(SOURCE_SCORE_LIBRARY_PATH.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            library = []
+        if isinstance(library, list):
+            for item in library:
+                if isinstance(item, dict):
+                    snippets.append(dict(item))
+    return snippets
 
 
 def requested_score_copy_records() -> list[dict[str, Any]]:

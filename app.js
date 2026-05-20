@@ -3271,13 +3271,13 @@ function renderGoldReviewScoreSource(item) {
   const imageUrl = assetUrl(item.sourceReviewImageUrl || item.sourceImageUrl || item.scoreImageUrl || "");
   const isTrainingSource = Boolean(item.sourcePieceTrainingOnly || item.notationCopyOnly || item.sourceImageRequiredForOriginalScore);
   const isOriginalScore = Boolean(imageUrl && item.originalScoreSnippet === true && item.sourceImageRequiredForOriginalScore !== true);
-  const sourceLabel = isOriginalScore ? "Original score" : "Copy source";
+  const sourceLabel = isOriginalScore ? "Original score source" : "Copy target";
   const label = isOriginalScore
     ? [item.scoreLocation, item.pieceTitle].filter(Boolean).join(" / ")
     : item.pieceTitle || item.scoreLocation || "notation source";
   if (!imageUrl) {
     return `
-      <section class="gold-review-source gold-review-source-notation${isTrainingSource ? " gold-review-source-training" : ""}" aria-label="Notation copy source">
+      <section class="gold-review-source gold-review-source-notation${isTrainingSource ? " gold-review-source-training" : ""}" aria-label="Notation copy target">
         <div class="matched-notation-head">
           <span>${escapeHtml(sourceLabel)}</span>
           <strong>${escapeHtml(shortText(label || "source", 72))}</strong>
@@ -3288,50 +3288,76 @@ function renderGoldReviewScoreSource(item) {
   }
   if (item.sourceNotationAbc || item.sourceNotationEvents?.length) {
     return `
-      <section class="gold-review-source gold-review-source-notation${isOriginalScore ? " gold-review-source-original" : " gold-review-source-training"}" aria-label="${escapeHtml(isOriginalScore ? "Original score source" : "Notation copy source")}">
+      <section class="gold-review-source gold-review-source-notation${isOriginalScore ? " gold-review-source-original" : " gold-review-source-training"}" aria-label="${escapeHtml(isOriginalScore ? "Original score source" : "Notation copy target")}">
         <div class="matched-notation-head">
           <span>${escapeHtml(sourceLabel)}</span>
           <strong>${escapeHtml(shortText(label || "score", 72))}</strong>
         </div>
-        <img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(isOriginalScore ? "Original score snippet" : "Notation copy source")}">
+        <img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(isOriginalScore ? "Original score source" : "Notation copy target")}">
         ${renderGoldReviewSourceNotation(item)}
       </section>
     `;
   }
   return `
-    <section class="gold-review-source${isOriginalScore ? " gold-review-source-original" : " gold-review-source-training"}" aria-label="${escapeHtml(isOriginalScore ? "Original score source" : "Notation copy source")}">
+    <section class="gold-review-source${isOriginalScore ? " gold-review-source-original" : " gold-review-source-training"}" aria-label="${escapeHtml(isOriginalScore ? "Original score source" : "Notation copy target")}">
       <div class="matched-notation-head">
         <span>${escapeHtml(sourceLabel)}</span>
         <strong>${escapeHtml(label || "score pending")}</strong>
       </div>
-      <img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(isOriginalScore ? "Original score snippet" : "Notation copy source")}">
+      <img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(isOriginalScore ? "Original score source" : "Notation copy target")}">
     </section>
   `;
 }
 
 function renderOriginalScoreSources(snippets) {
-  const items = Array.isArray(snippets) ? snippets.filter((item) => item?.originalScoreSnippet === true && item?.imageUrl).slice(0, 6) : [];
+  const items = Array.isArray(snippets) ? snippets : [];
   if (!items.length) return "";
+  const readyCount = items.filter((item) => item?.originalScoreSnippet === true && item?.imageUrl).length;
+  const rows = [];
+  const seen = new Set();
+  items.forEach((item) => {
+    if (!item || typeof item !== "object") return;
+    const localPdfPath = String(item.sourcePdfLocalPath || "").trim();
+    const pdfUrl = item.sourcePdfUrl
+      || (localPdfPath ? assetUrl(localPdfPath.startsWith("/") ? localPdfPath : `/${localPdfPath}`) : "");
+    const sourceUrl = item.sourceUrl || "";
+    const title = item.pieceTitle || item.sourceTitle || "Source score";
+    const sourceFile = item.sourceFileLabel || item.requestedPart || item.sourceKind || "";
+    const page = item.sourcePdfPage ? `p. ${item.sourcePdfPage}` : "";
+    const key = item.requestedPart
+      ? [title, item.requestedPart, sourceFile, pdfUrl || sourceUrl].join("|")
+      : [title, pdfUrl || sourceUrl].join("|");
+    if (seen.has(key)) return;
+    seen.add(key);
+    rows.push({
+      title,
+      detail: [item.requestedPart, sourceFile, page].filter(Boolean).join(" / "),
+      pdfUrl,
+      sourceUrl,
+    });
+  });
   return `
-    <section class="source-score-strip" aria-label="Original score source snippets">
+    <section class="source-score-strip" aria-label="Source score PDF library">
       <div class="source-score-head">
-        <strong>Original score</strong>
-        <span>${escapeHtml(`${items.length} IMSLP snippets`)}</span>
+        <strong>Source score PDFs</strong>
+        <span>${escapeHtml(`${rows.length || items.length} sources / ${readyCount} images`)}</span>
       </div>
-      <div class="source-score-grid">
-        ${items.map((item) => {
-          const imageUrl = assetUrl(item.imageUrl);
-          const sourceUrl = item.sourceUrl || "";
-          const label = [item.pieceTitle, item.label].filter(Boolean).join(" / ");
-          const image = `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(label || "Original score snippet")}">`;
+      <ul class="source-score-list">
+        ${rows.map((row) => {
           return `
-            <article class="source-score-card">
-              ${sourceUrl ? `<a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noreferrer">${image}</a>` : image}
-              <small>${escapeHtml(shortText(label || "IMSLP source", 86))}</small>
-            </article>
+            <li class="source-score-row">
+              <span>
+                <strong>${escapeHtml(shortText(row.title, 92))}</strong>
+                ${row.detail ? `<small>${escapeHtml(shortText(row.detail, 112))}</small>` : ""}
+              </span>
+              <span class="source-score-actions">
+                ${row.pdfUrl ? `<a href="${escapeHtml(row.pdfUrl)}" target="_blank" rel="noreferrer">PDF</a>` : ""}
+                ${row.sourceUrl ? `<a href="${escapeHtml(row.sourceUrl)}" target="_blank" rel="noreferrer">IMSLP</a>` : ""}
+              </span>
+            </li>
           `;
         }).join("")}
-      </div>
+      </ul>
     </section>
   `;
 }
@@ -3485,7 +3511,6 @@ function renderGoldReview() {
       ${corrected ? `<article><span>Corrected</span><strong>${escapeHtml(String(corrected))}</strong></article>` : ""}
       <article><span>Adaptive</span><strong>${escapeHtml(adaptiveLabel)}</strong></article>
     </div>
-    ${renderOriginalScoreSources(sourceScoreSnippets)}
     <div class="gold-review-list">
       ${audioItems.length || copyItems.length ? `
         <section class="gold-review-lane" aria-label="Video audio transcription training">
@@ -3508,6 +3533,7 @@ function renderGoldReview() {
         </section>
       ` : ""}
     </div>
+    ${renderOriginalScoreSources(sourceScoreSnippets)}
   `;
 }
 
