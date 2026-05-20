@@ -117,6 +117,52 @@ def _review_identity_keys(item: dict[str, Any]) -> set[str]:
     return keys
 
 
+def _review_interval(item: dict[str, Any]) -> dict[str, Any]:
+    sample_id = _clean(item.get("sampleId"))
+    if not sample_id:
+        return {}
+    if item.get("startSeconds") is None and item.get("endSeconds") is None:
+        return {}
+    start = _safe_float(item.get("startSeconds"))
+    end = _safe_float(item.get("endSeconds"))
+    if end <= start:
+        end = start + 0.5
+    return {
+        "sampleId": sample_id,
+        "startSeconds": round(start, 3),
+        "endSeconds": round(end, 3),
+        "key": f"clip_overlap:{sample_id}:{_review_time_bucket(start)}:{_review_time_bucket(end)}",
+    }
+
+
+def _review_interval_matches(
+    candidate: dict[str, Any],
+    intervals: list[dict[str, Any]],
+    *,
+    padding_seconds: float = 0.75,
+    minimum_overlap_seconds: float = 0.25,
+    minimum_overlap_ratio: float = 0.34,
+) -> list[str]:
+    target = _review_interval(candidate)
+    if not target:
+        return []
+    target_start = float(target["startSeconds"])
+    target_end = float(target["endSeconds"])
+    target_duration = max(0.05, target_end - target_start)
+    matches: list[str] = []
+    for interval in intervals:
+        if _clean(interval.get("sampleId")) != target["sampleId"]:
+            continue
+        rejected_start = _safe_float(interval.get("startSeconds")) - padding_seconds
+        rejected_end = _safe_float(interval.get("endSeconds")) + padding_seconds
+        rejected_duration = max(0.05, rejected_end - rejected_start)
+        overlap = max(0.0, min(target_end, rejected_end) - max(target_start, rejected_start))
+        overlap_ratio = overlap / max(0.05, min(target_duration, rejected_duration))
+        if overlap >= minimum_overlap_seconds or overlap_ratio >= minimum_overlap_ratio:
+            matches.append(_clean(interval.get("key")) or f"clip_overlap:{target['sampleId']}:{target_start:.1f}:{target_end:.1f}")
+    return matches
+
+
 def _review_task(raw: dict[str, Any], item_type: str, score_notes: list[str]) -> str:
     explicit = _clean(raw.get("reviewTask") or raw.get("trainingTask")).lower()
     if explicit:
@@ -829,20 +875,27 @@ def build_review_learning_profile(items: list[dict[str, Any]]) -> dict[str, Any]
     rejected_keys: set[str] = set()
     accepted_identity_keys: set[str] = set()
     rejected_identity_keys: set[str] = set()
+    accepted_intervals: list[dict[str, Any]] = []
+    rejected_intervals: list[dict[str, Any]] = []
     accepted_counts: Counter[str] = Counter()
     rejected_counts: Counter[str] = Counter()
     for item in items:
         key = _item_learning_key(item)
+        interval = _review_interval(item)
         if item.get("status") == "accepted_truth":
             if key:
                 accepted_keys.add(key)
                 accepted_counts[key] += 1
             accepted_identity_keys.update(_review_identity_keys(item))
+            if interval:
+                accepted_intervals.append(interval)
         elif item.get("status") == "rejected_mismatch":
             if key:
                 rejected_keys.add(key)
                 rejected_counts[key] += 1
             rejected_identity_keys.update(_review_identity_keys(item))
+            if interval:
+                rejected_intervals.append(interval)
     rejected_only = rejected_keys - accepted_keys
     rejected_identity_only = rejected_identity_keys - accepted_identity_keys
     soft_rejected: set[str] = set()
@@ -854,6 +907,8 @@ def build_review_learning_profile(items: list[dict[str, Any]]) -> dict[str, Any]
         "acceptedIdentityKeys": accepted_identity_keys,
         "rejectedIdentityKeys": rejected_identity_keys,
         "rejectedOnlyIdentityKeys": rejected_identity_only,
+        "acceptedIntervals": accepted_intervals,
+        "rejectedIntervals": rejected_intervals,
         "acceptedCounts": dict(accepted_counts),
         "rejectedCounts": dict(rejected_counts),
         "acceptedPatternCount": len(accepted_keys),
@@ -861,7 +916,7 @@ def build_review_learning_profile(items: list[dict[str, Any]]) -> dict[str, Any]
         "rejectedCandidateFingerprintCount": len(rejected_identity_keys),
         "softRejectedPatternCount": len(soft_rejected),
         "suppressionThreshold": 1,
-        "suppressionRule": "A rejected exact MIDI pattern or rejected clip/score fingerprint is removed from the active review queue unless a later accepted label for the same fingerprint overrides it.",
+        "suppressionRule": "A rejected exact MIDI pattern, same clip/score fingerprint, or overlapping rejected clip window is removed from the active review queue unless a later accepted label for the same area overrides it.",
     }
 
 
@@ -876,6 +931,8 @@ def apply_review_learning_to_candidates(
     rejected_only_identity_keys = (
         profile.get("rejectedOnlyIdentityKeys") if isinstance(profile.get("rejectedOnlyIdentityKeys"), set) else set()
     )
+    accepted_intervals = profile.get("acceptedIntervals") if isinstance(profile.get("acceptedIntervals"), list) else []
+    rejected_intervals = profile.get("rejectedIntervals") if isinstance(profile.get("rejectedIntervals"), list) else []
     active: list[dict[str, Any]] = []
     suppressed: list[dict[str, Any]] = []
     for candidate in candidates:
@@ -883,13 +940,19 @@ def apply_review_learning_to_candidates(
         identity_keys = _review_identity_keys(candidate)
         rejected_identity_matches = sorted(identity_keys & rejected_only_identity_keys)
         accepted_identity_matches = sorted(identity_keys & accepted_identity_keys)
+        accepted_interval_matches = _review_interval_matches(candidate, accepted_intervals, padding_seconds=0.25)
+        rejected_interval_matches = (
+            []
+            if accepted_interval_matches
+            else _review_interval_matches(candidate, rejected_intervals, padding_seconds=0.75)
+        )
         status = (
             "rejected_candidate_hidden"
-            if rejected_identity_matches
+            if rejected_identity_matches or rejected_interval_matches
             else "accepted_pattern"
             if key in accepted_keys
             else "accepted_candidate_fingerprint"
-            if accepted_identity_matches
+            if accepted_identity_matches or accepted_interval_matches
             else "rejected_pattern_hidden"
             if key in rejected_only_keys
             else "soft_rejected_pattern"
@@ -901,10 +964,11 @@ def apply_review_learning_to_candidates(
             "reviewLearningKey": key,
             "reviewCandidateFingerprintKeys": sorted(identity_keys),
             "reviewCandidateRejectedFingerprintKeys": rejected_identity_matches,
+            "reviewCandidateRejectedOverlapKeys": rejected_interval_matches,
             "reviewLearningStatus": status,
             "reviewLearningReliability": "noisy_human_signal",
         }
-        if rejected_identity_matches or (key and key in rejected_only_keys):
+        if rejected_identity_matches or rejected_interval_matches or (key and key in rejected_only_keys):
             suppressed.append(enriched)
         else:
             active.append(enriched)
@@ -983,7 +1047,10 @@ def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any],
     hidden_rejected_fingerprint_keys = {
         str(key)
         for item in [*suppressed_candidates, *adaptive_suppressed_candidates]
-        for key in item.get("reviewCandidateRejectedFingerprintKeys", [])
+        for key in [
+            *(item.get("reviewCandidateRejectedFingerprintKeys", []) if isinstance(item.get("reviewCandidateRejectedFingerprintKeys"), list) else []),
+            *(item.get("reviewCandidateRejectedOverlapKeys", []) if isinstance(item.get("reviewCandidateRejectedOverlapKeys"), list) else []),
+        ]
         if str(key)
     }
     queue_status = (

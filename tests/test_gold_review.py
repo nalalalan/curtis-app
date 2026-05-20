@@ -746,6 +746,158 @@ class GoldReviewTests(unittest.TestCase):
         self.assertEqual(review["suppressedByLearningCount"], 0)
         self.assertEqual(review["queue"][0]["reviewLearningStatus"], "accepted_pattern")
 
+    def test_overlapping_rejected_clip_window_is_hidden_even_when_item_id_and_notes_shift(self):
+        state = {}
+        record_gold_review_item(
+            state,
+            {
+                "reviewItemId": "gold-reject-overlap",
+                "type": "audio_phrase",
+                "status": "rejected_mismatch",
+                "sampleId": "same-bad-area",
+                "startSeconds": 8843.047,
+                "endSeconds": 8846.737,
+                "detectedNotes": ["D6", "F5", "A#4", "A4"],
+            },
+        )
+        daily_records = {
+            "records": [
+                {
+                    "practiceDay": "2026-05-03",
+                    "transcription": {
+                        "detectedSeries": [
+                            {
+                                "sampleId": "same-bad-area",
+                                "sourceTitle": "5-3-26",
+                                "sourceUrl": "https://www.youtube.com/watch?v=abc",
+                                "startSeconds": 8835.0,
+                                "localStartSeconds": 0.0,
+                                "notes": [
+                                    note("F5", 77, 8.639),
+                                    note("A#4", 70, 8.9),
+                                    note("A4", 69, 9.1),
+                                    note("A6", 93, 10.3),
+                                    note("G6", 91, 11.0),
+                                    note("F#6", 90, 11.587),
+                                ],
+                            }
+                        ]
+                    },
+                }
+            ]
+        }
+
+        review = build_gold_review_loop(state, daily_records)
+
+        self.assertEqual(review["rawQueueCount"], 1)
+        self.assertEqual(review["queueCount"], 0)
+        self.assertEqual(review["suppressedByLearningCount"], 1)
+        self.assertEqual(review["suppressedQueuePreview"][0]["reviewLearningStatus"], "rejected_candidate_hidden")
+        self.assertTrue(review["suppressedQueuePreview"][0]["reviewCandidateRejectedOverlapKeys"])
+
+    def test_non_overlapping_window_from_same_sample_stays_reviewable(self):
+        state = {}
+        record_gold_review_item(
+            state,
+            {
+                "reviewItemId": "gold-reject-overlap",
+                "type": "audio_phrase",
+                "status": "rejected_mismatch",
+                "sampleId": "same-sample-new-area",
+                "startSeconds": 8843.047,
+                "endSeconds": 8846.737,
+                "detectedNotes": ["D6", "F5", "A#4", "A4"],
+            },
+        )
+        daily_records = {
+            "records": [
+                {
+                    "practiceDay": "2026-05-03",
+                    "transcription": {
+                        "detectedSeries": [
+                            {
+                                "sampleId": "same-sample-new-area",
+                                "sourceTitle": "5-3-26",
+                                "sourceUrl": "https://www.youtube.com/watch?v=abc",
+                                "startSeconds": 8855.0,
+                                "localStartSeconds": 0.0,
+                                "notes": [
+                                    note("D5", 74, 0.0),
+                                    note("E5", 76, 0.2),
+                                    note("F5", 77, 0.4),
+                                    note("G5", 79, 0.6),
+                                ],
+                            }
+                        ]
+                    },
+                }
+            ]
+        }
+
+        review = build_gold_review_loop(state, daily_records)
+
+        self.assertEqual(review["rawQueueCount"], 1)
+        self.assertEqual(review["queueCount"], 1)
+        self.assertEqual(review["suppressedByLearningCount"], 0)
+
+    def test_later_acceptance_releases_overlapping_rejected_clip_window(self):
+        state = {}
+        record_gold_review_item(
+            state,
+            {
+                "reviewItemId": "gold-reject-overlap",
+                "type": "audio_phrase",
+                "status": "rejected_mismatch",
+                "sampleId": "same-bad-area",
+                "startSeconds": 8843.047,
+                "endSeconds": 8846.737,
+                "detectedNotes": ["D6", "F5", "A#4", "A4"],
+            },
+        )
+        record_gold_review_item(
+            state,
+            {
+                "reviewItemId": "gold-accept-overlap",
+                "type": "audio_phrase",
+                "status": "accepted_truth",
+                "sampleId": "same-bad-area",
+                "startSeconds": 8843.6,
+                "endSeconds": 8846.6,
+                "acceptedNotes": ["F5", "A#4", "A4", "A6"],
+            },
+        )
+        daily_records = {
+            "records": [
+                {
+                    "practiceDay": "2026-05-03",
+                    "transcription": {
+                        "detectedSeries": [
+                            {
+                                "sampleId": "same-bad-area",
+                                "sourceTitle": "5-3-26",
+                                "sourceUrl": "https://www.youtube.com/watch?v=abc",
+                                "startSeconds": 8835.0,
+                                "localStartSeconds": 0.0,
+                                "notes": [
+                                    note("F5", 77, 8.639),
+                                    note("A#4", 70, 8.9),
+                                    note("A4", 69, 9.1),
+                                    note("A6", 93, 10.3),
+                                ],
+                            }
+                        ]
+                    },
+                }
+            ]
+        }
+
+        review = build_gold_review_loop(state, daily_records)
+
+        self.assertEqual(review["rawQueueCount"], 1)
+        self.assertEqual(review["queueCount"], 1)
+        self.assertEqual(review["suppressedByLearningCount"], 0)
+        self.assertIn(review["queue"][0]["reviewLearningStatus"], {"accepted_pattern", "accepted_candidate_fingerprint"})
+
     def test_later_acceptance_releases_previously_rejected_pattern(self):
         state = {}
         record_gold_review_item(
@@ -800,7 +952,7 @@ class GoldReviewTests(unittest.TestCase):
         self.assertEqual(review["suppressedByLearningCount"], 0)
         self.assertEqual(review["queue"][0]["reviewLearningStatus"], "accepted_pattern")
 
-    def test_adaptive_review_generates_more_windows_after_primary_candidate_is_rejected(self):
+    def test_rejected_primary_window_suppresses_overlapping_adaptive_windows(self):
         state = {}
         names = ["D5", "E5", "F5", "G5", "A5", "B5", "C6", "D6"]
         midis = [74, 76, 77, 79, 81, 83, 84, 86]
@@ -836,12 +988,11 @@ class GoldReviewTests(unittest.TestCase):
 
         review = build_gold_review_loop(state, daily_records)
 
-        self.assertEqual(review["queueStatus"], "adaptive_review_ready")
-        self.assertTrue(review["adaptiveMode"])
-        self.assertGreater(review["adaptiveCandidateCount"], 0)
-        self.assertGreater(review["queueCount"], 0)
-        self.assertTrue(review["queue"][0]["adaptiveReview"])
-        self.assertNotEqual(review["queue"][0]["reviewItemId"], first["reviewItemId"])
+        self.assertEqual(review["queueStatus"], "current_batch_exhausted_by_rejections")
+        self.assertFalse(review["adaptiveMode"])
+        self.assertEqual(review["queueCount"], 0)
+        self.assertGreater(review["adaptiveSuppressedByLearningCount"], 0)
+        self.assertEqual(review["suppressedQueuePreview"][0]["reviewLearningStatus"], "rejected_candidate_hidden")
 
     def test_adaptive_review_generates_fresh_windows_when_primary_queue_is_only_soft_rejected(self):
         state = {}
@@ -889,7 +1040,7 @@ class GoldReviewTests(unittest.TestCase):
         self.assertTrue(review["queue"][0]["adaptiveReview"])
         self.assertNotIn("soft_rejected_pattern", [item["reviewLearningStatus"] for item in review["queue"][:3]])
 
-    def test_adaptive_review_prefers_phrase_shaped_windows_over_repeated_notes(self):
+    def test_overlapping_adaptive_windows_do_not_requeue_rejected_repeated_note_area(self):
         state = {}
         names = ["C6", "C6", "C6", "C6", "C6", "C6", "D5", "E5", "F5", "G5", "A5", "B5"]
         midis = [84, 84, 84, 84, 84, 84, 74, 76, 77, 79, 81, 83]
@@ -924,13 +1075,10 @@ class GoldReviewTests(unittest.TestCase):
         )
 
         review = build_gold_review_loop(state, daily_records)
-        first_adaptive = review["queue"][0]
 
-        self.assertEqual(review["queueStatus"], "adaptive_review_ready")
-        self.assertTrue(first_adaptive["adaptiveReview"])
-        self.assertGreaterEqual(first_adaptive["detectedMidiDistinctCount"], 4)
-        self.assertLessEqual(first_adaptive["maxConsecutiveDuplicateMidi"], 2)
-        self.assertEqual(first_adaptive["adaptiveQualityTier"], "phrase_shaped")
+        self.assertEqual(review["queueStatus"], "current_batch_exhausted_by_rejections")
+        self.assertEqual(review["queueCount"], 0)
+        self.assertGreater(review["adaptiveSuppressedByLearningCount"], 0)
 
     def test_adaptive_review_penalizes_wild_fast_register_jumps_from_rejections(self):
         state = {}
@@ -1046,10 +1194,9 @@ class GoldReviewTests(unittest.TestCase):
 
         review = build_gold_review_loop(state, daily_records, limit=200)
 
-        self.assertEqual(review["queueStatus"], "adaptive_review_ready")
-        self.assertLessEqual(review["queueCount"], MAX_ADAPTIVE_REVIEW_QUEUE)
-        self.assertEqual(review["adaptiveCandidateCount"], MAX_ADAPTIVE_REVIEW_QUEUE)
-        self.assertGreater(review["adaptiveCandidatePoolCount"], review["adaptiveCandidateCount"])
+        self.assertEqual(review["queueStatus"], "current_batch_exhausted_by_rejections")
+        self.assertEqual(review["queueCount"], 0)
+        self.assertGreaterEqual(review["adaptiveSuppressedByLearningCount"], MAX_ADAPTIVE_REVIEW_QUEUE)
 
 
 if __name__ == "__main__":
