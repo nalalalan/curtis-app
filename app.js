@@ -3478,8 +3478,8 @@ function renderGoldReview() {
   );
   const generalItems = Array.isArray(review.queue) ? review.queue : [];
   const audioItems = Array.isArray(review.audioQueue)
-    ? review.audioQueue.slice(0, 8)
-    : generalItems.filter((item) => !goldReviewIsScoreCopy(item)).slice(0, 8);
+    ? review.audioQueue.slice(0, 10)
+    : generalItems.filter((item) => !goldReviewIsScoreCopy(item)).slice(0, 10);
   const copyItems = Array.isArray(review.scoreCopyQueue)
     ? review.scoreCopyQueue.slice(0, 3)
     : generalItems.filter((item) => goldReviewIsScoreCopy(item)).slice(0, 3);
