@@ -166,10 +166,12 @@ def _requested_source_by_title() -> dict[str, dict[str, Any]]:
 def requested_score_copy_records() -> list[dict[str, Any]]:
     """Training-only source-copy packets for notation-copy review.
 
-    These records are intentionally not practice evidence. They give Curtis a
-    controlled source/copy lane for exact visual notation copying. When a real
-    source-library crop exists, the review card shows that original score crop
-    on the left and the generated copy target on the right.
+    These records are intentionally not practice evidence. A source-copy packet
+    may enter review only after the visible source crop has a verified note
+    sequence from that same crop. The broad requested-repertoire catalog below
+    is still useful as a source library, but it is not a valid review queue
+    because its generated phrases are not proven to come from the displayed
+    IMSLP crop.
     """
 
     records: list[dict[str, Any]] = []
@@ -181,6 +183,13 @@ def requested_score_copy_records() -> list[dict[str, Any]]:
         source_entry = source_by_title.get(title, {})
         source_image = str(source_entry.get("reviewImageUrl") or source_entry.get("imageUrl") or "").strip()
         source_ready = bool(source_entry.get("originalScoreSnippet") is True and source_image)
+        verified_source_notes = source_entry.get("verifiedSourceNoteSequence")
+        if not (
+            source_ready
+            and isinstance(verified_source_notes, list)
+            and [str(note).strip() for note in verified_source_notes if str(note).strip()] == notes
+        ):
+            continue
         source_label = str(source_entry.get("label") or source_entry.get("sourceFileLabel") or "source PDF crop").strip()
         records.append(
             {

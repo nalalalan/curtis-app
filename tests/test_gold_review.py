@@ -551,29 +551,21 @@ class GoldReviewTests(unittest.TestCase):
         self.assertEqual(review["trainingSet"]["recentExamples"][0]["task"], "score_copy_exact_notation")
         self.assertFalse(truth["gateState"]["acceptedEvidenceReady"])
 
-    def test_requested_repertoire_score_copy_catalog_is_training_only(self):
+    def test_requested_repertoire_source_catalog_is_not_review_queue_without_verified_notes(self):
         review = build_gold_review_loop({}, {"records": []}, limit=20, include_source_copy_catalog=True)
 
-        titles = {item["pieceTitle"] for item in review["scoreCopyQueue"]}
-
         self.assertEqual(review["audioQueueCount"], 0)
-        self.assertGreaterEqual(review["sourceCopyTrainingQueueCount"], 13)
+        self.assertEqual(review["scoreCopyQueueCount"], 0)
+        self.assertEqual(review["sourceCopyTrainingQueueCount"], 0)
+        self.assertEqual(review["scoreCopyQueue"], [])
+        self.assertGreaterEqual(review["sourceScoreSnippetCount"], 13)
+        titles = {item["pieceTitle"] for item in review["sourceScoreSnippets"]}
         self.assertIn("Haydn Symphony No. 94, IV, Violin I", titles)
         self.assertIn("Paganini Moto Perpetuo, Op. 11, Solo violin", titles)
         self.assertIn("Mozart Le nozze di Figaro Overture, Violin I", titles)
-        first = review["scoreCopyQueue"][0]
-        self.assertEqual(first["reviewTask"], "score_copy_exact_notation")
-        self.assertEqual(first["reviewTrainingLane"], "score_copy")
-        self.assertTrue(first["sourcePieceTrainingOnly"])
-        self.assertTrue(first["notationCopyOnly"])
-        self.assertTrue(first["originalScoreSnippet"])
-        self.assertFalse(first["sourceImageRequiredForOriginalScore"])
-        self.assertTrue(first["sourceReviewImageUrl"].startswith("/assets/score/original/source-library/"))
-        self.assertTrue(first["sourceReviewImageUrl"].endswith("-review.png"))
-        self.assertTrue(first["sourceNotationAbc"])
-        self.assertTrue(first["copyNotationAbc"])
-        self.assertIn("durations", first["notationCopyAspects"])
-        self.assertIn("stem_directions", first["notationCopyAspects"])
+        first = next(item for item in review["sourceScoreSnippets"] if item["pieceTitle"] == "Haydn Symphony No. 94, IV, Violin I")
+        self.assertTrue(first["reviewImageUrl"].startswith("/assets/score/original/source-library/"))
+        self.assertTrue(first["reviewImageUrl"].endswith("-review.png"))
 
     def test_source_catalog_mode_tops_up_thin_audio_queue_with_adaptive_windows(self):
         daily_records = {
