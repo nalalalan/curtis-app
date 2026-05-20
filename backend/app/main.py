@@ -154,6 +154,8 @@ class TruthWorkbenchItem(BaseModel):
     score_asset_id: str = Field(default="", alias="scoreAssetId")
     score_location: str = Field(default="", alias="scoreLocation")
     score_image_url: str = Field(default="", alias="scoreImageUrl")
+    source_review_image_url: str = Field(default="", alias="sourceReviewImageUrl")
+    source_image_url: str = Field(default="", alias="sourceImageUrl")
     detected_notes: list[str] | str = Field(default_factory=list, alias="detectedNotes")
     transcribed_notes: list[str] | str = Field(default_factory=list, alias="transcribedNotes")
     accepted_notes: list[str] | str = Field(default_factory=list, alias="acceptedNotes")
@@ -179,6 +181,8 @@ class TruthWorkbenchItem(BaseModel):
             "scoreAssetId": self.score_asset_id,
             "scoreLocation": self.score_location,
             "scoreImageUrl": self.score_image_url,
+            "sourceReviewImageUrl": self.source_review_image_url,
+            "sourceImageUrl": self.source_image_url,
             "detectedNotes": self.detected_notes,
             "transcribedNotes": self.transcribed_notes,
             "acceptedNotes": self.accepted_notes,
@@ -209,6 +213,8 @@ class GoldReviewItem(BaseModel):
     score_asset_id: str = Field(default="", alias="scoreAssetId")
     score_location: str = Field(default="", alias="scoreLocation")
     score_image_url: str = Field(default="", alias="scoreImageUrl")
+    source_review_image_url: str = Field(default="", alias="sourceReviewImageUrl")
+    source_image_url: str = Field(default="", alias="sourceImageUrl")
     detected_notes: list[str] | str = Field(default_factory=list, alias="detectedNotes")
     accepted_notes: list[str] | str = Field(default_factory=list, alias="acceptedNotes")
     corrected_notes: list[str] | str = Field(default_factory=list, alias="correctedNotes")
@@ -234,6 +240,8 @@ class GoldReviewItem(BaseModel):
             "scoreAssetId": self.score_asset_id,
             "scoreLocation": self.score_location,
             "scoreImageUrl": self.score_image_url,
+            "sourceReviewImageUrl": self.source_review_image_url,
+            "sourceImageUrl": self.source_image_url,
             "detectedNotes": self.detected_notes,
             "acceptedNotes": self.accepted_notes,
             "correctedNotes": self.corrected_notes,

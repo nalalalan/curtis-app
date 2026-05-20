@@ -4746,6 +4746,49 @@ h2 {
   align-items: start;
 }
 
+.gold-review-copy-grid {
+  grid-template-columns: minmax(220px, 320px) minmax(0, 1fr);
+}
+
+.gold-review-source {
+  display: grid;
+  gap: 6px;
+  max-width: 320px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.gold-review-source img {
+  display: block;
+  width: 100%;
+  max-height: 122px;
+  object-fit: contain;
+  object-position: left center;
+  border-radius: 4px;
+  background: #fff;
+}
+
+.gold-review-source-pending {
+  min-height: 94px;
+  align-content: center;
+}
+
+.gold-review-source-pending span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 760;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.gold-review-source-pending strong {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 740;
+}
+
 .gold-review-grid .embedded-media {
   max-width: 220px;
   padding: 6px;

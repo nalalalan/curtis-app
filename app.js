@@ -3209,20 +3209,55 @@ function readableGoldReviewNotes(item) {
   return { keySignature: signature, displayNotes };
 }
 
+function goldReviewIsScoreCopy(item) {
+  return item?.reviewTask === "score_copy_exact_notes"
+    || item?.trainingTask === "score_copy_exact_notes"
+    || item?.reviewType === "score_copy"
+    || item?.type === "score_copy";
+}
+
+function renderGoldReviewScoreSource(item) {
+  const imageUrl = assetUrl(item.sourceReviewImageUrl || item.sourceImageUrl || item.scoreImageUrl || "");
+  const label = [item.scoreLocation, item.pieceTitle].filter(Boolean).join(" / ");
+  if (!imageUrl) {
+    return `
+      <section class="gold-review-source gold-review-source-pending">
+        <span>Source</span>
+        <strong>${escapeHtml(label || "score pending")}</strong>
+      </section>
+    `;
+  }
+  return `
+    <section class="gold-review-source" aria-label="Original score source">
+      <div class="matched-notation-head">
+        <span>Source</span>
+        <strong>${escapeHtml(shortText(label || "score", 72))}</strong>
+      </div>
+      <img src="${escapeHtml(imageUrl)}" alt="Original score snippet">
+    </section>
+  `;
+}
+
 function renderGoldReviewItem(item, index) {
-  const detectedNotes = noteInputText(item.detectedNotes);
-  const readableNotes = readableGoldReviewNotes(item);
-  const displayDetectedNotes = displayNoteTextWithMeasureAccidentals(readableNotes.displayNotes, readableNotes.keySignature);
+  const isScoreCopy = goldReviewIsScoreCopy(item);
   const scoreNotes = noteInputText(item.scoreNotes);
+  const notationNotes = isScoreCopy && scoreNotes ? scoreNotes : noteInputText(item.detectedNotes);
+  const detectedNotes = noteInputText(notationNotes);
+  const readableNotes = readableGoldReviewNotes({ ...item, detectedNotes: notationNotes });
+  const displayDetectedNotes = displayNoteTextWithMeasureAccidentals(readableNotes.displayNotes, readableNotes.keySignature);
   const clip = item.clip && typeof item.clip === "object" ? item.clip : item;
   const status = item.status || item.defaultStatus || "pending_review";
   const isRecent = status !== "pending_review";
-  const lane = item.reviewTrainingLane === "score_alignment" || scoreNotes ? "Score" : item.adaptiveReview ? "Adaptive" : item.reviewTask === "audio_long_phrase_exact_notes" ? "Phrase" : "Audio";
+  const lane = isScoreCopy ? "Score copy" : item.reviewTrainingLane === "score_alignment" || scoreNotes ? "Score" : item.adaptiveReview ? "Adaptive" : item.reviewTask === "audio_long_phrase_exact_notes" ? "Phrase" : "Audio";
   const agreement = item.scoreAgreementStatus === "exact_midi_agreement"
     ? "same MIDI"
     : item.scoreAgreementStatus === "score_midi_mismatch"
       ? "mismatch"
+      : isScoreCopy
+        ? "copy"
       : "";
+  const notationLabel = isScoreCopy ? "Copy" : "Detected";
+  const rule = isScoreCopy ? "Accept if copy matches score." : "One note off = reject.";
   return `
     <article class="gold-review-item" data-status="${escapeHtml(status)}">
       <div class="gold-review-head">
@@ -3230,22 +3265,22 @@ function renderGoldReviewItem(item, index) {
         <strong>${escapeHtml(shortText(detectedNotes || item.pieceTitle || "notes pending", 72))}</strong>
         <em>${escapeHtml([item.practiceDay, lane, agreement, item.detectedNoteCount ? `${item.detectedNoteCount} notes` : ""].filter(Boolean).join(" / "))}</em>
       </div>
-      <div class="gold-review-grid">
-        ${renderEmbeddedMedia({}, clip)}
+      <div class="gold-review-grid${isScoreCopy ? " gold-review-copy-grid" : ""}">
+        ${isScoreCopy ? renderGoldReviewScoreSource(item) : renderEmbeddedMedia({}, clip)}
         <section class="gold-review-notation">
           <div class="matched-notation-head">
-            <span>Detected</span>
+            <span>${escapeHtml(notationLabel)}</span>
             <strong>${escapeHtml(shortText(displayDetectedNotes || detectedNotes || "pending", 64))}</strong>
           </div>
-          ${renderNotationSheet(goldReviewNotationEvents(item.detectedNotes), {
+          ${renderNotationSheet(goldReviewNotationEvents(notationNotes), {
             keySignature: readableNotes.keySignature,
             maxNotes: 16,
             fitToWidth: true
           })}
-          ${scoreNotes ? `<small>${escapeHtml([item.scoreLocation || "score", shortText(scoreNotes, 80)].filter(Boolean).join(" / "))}</small>` : ""}
+          ${scoreNotes && !isScoreCopy ? `<small>${escapeHtml([item.scoreLocation || "score", shortText(scoreNotes, 80)].filter(Boolean).join(" / "))}</small>` : ""}
         </section>
         <form class="gold-review-form" data-gold-review-form data-review-item-id="${escapeHtml(item.reviewItemId || "")}">
-          <p class="gold-review-rule">One note off = reject.</p>
+          <p class="gold-review-rule">${escapeHtml(rule)}</p>
           <div class="gold-review-actions">
             <button type="submit" name="status" value="accepted_truth">Accept</button>
             <button type="submit" name="status" value="rejected_mismatch">Reject</button>
@@ -3278,7 +3313,9 @@ function renderGoldReview() {
   const trainingExamples = Number(review.trainingExampleCount ?? training.exampleCount) || 0;
   const longTraining = Number(review.trainingLongPhraseExampleCount ?? training.longPhraseExampleCount) || 0;
   const scoreTraining = Number(review.trainingScoreExampleCount ?? training.scoreExampleCount) || 0;
+  const scoreCopyTraining = Number(review.trainingScoreCopyExampleCount ?? training.scoreCopyExampleCount) || 0;
   const scoreQueued = Number(review.scoreQueueCount) || 0;
+  const scoreCopyQueued = Number(review.scoreCopyQueueCount) || 0;
   const scoreExactQueued = Number(review.scoreExactAgreementQueueCount) || 0;
   const corrected = Number(review.correctedLabelCount) || 0;
   const adaptiveCount = Number(review.adaptiveCandidateCount) || 0;
@@ -3291,7 +3328,7 @@ function renderGoldReview() {
   const emptyQueueText = review.queueStatus === "current_batch_exhausted_by_rejections"
     ? `Batch complete. ${Number(review.suppressedByLearningCount) || 0} repeats hidden.`
     : "No review clips queued.";
-  setText(elements.goldReviewCount, scoreQueued ? `${scoreQueued} score / ${queued} queued` : `${accepted} accepted / ${queued} queued`);
+  setText(elements.goldReviewCount, scoreCopyQueued ? `${scoreCopyQueued} copy / ${queued} queued` : scoreQueued ? `${scoreQueued} score / ${queued} queued` : `${accepted} accepted / ${queued} queued`);
   const items = Array.isArray(review.queue) ? review.queue.slice(0, 4) : [];
   if (!items.length) {
     elements.goldReviewPanel.innerHTML = `
@@ -3302,6 +3339,7 @@ function renderGoldReview() {
         <article><span>Hidden</span><strong>${escapeHtml(String(hidden))}</strong></article>
         <article><span>Training</span><strong>${escapeHtml(String(trainingExamples))}</strong></article>
         <article><span>Score</span><strong>${escapeHtml(String(scoreTraining))}</strong></article>
+        <article><span>Copy</span><strong>${escapeHtml(String(scoreCopyTraining))}</strong></article>
         <article><span>Long</span><strong>${escapeHtml(String(longTraining))}</strong></article>
         ${corrected ? `<article><span>Corrected</span><strong>${escapeHtml(String(corrected))}</strong></article>` : ""}
         <article><span>Adaptive</span><strong>${escapeHtml(adaptiveLabel)}</strong></article>
@@ -3318,10 +3356,12 @@ function renderGoldReview() {
       <article><span>Hidden</span><strong>${escapeHtml(String(hidden))}</strong></article>
       <article><span>Training</span><strong>${escapeHtml(String(trainingExamples))}</strong></article>
       <article><span>Score</span><strong>${escapeHtml(String(scoreTraining))}</strong></article>
+      <article><span>Copy</span><strong>${escapeHtml(String(scoreCopyTraining))}</strong></article>
       <article><span>Long</span><strong>${escapeHtml(String(longTraining))}</strong></article>
       ${fastRejected ? `<article><span>Fast rejects</span><strong>${escapeHtml(String(fastRejected))}</strong></article>` : ""}
       ${unstableRejected ? `<article><span>Wide rejects</span><strong>${escapeHtml(String(unstableRejected))}</strong></article>` : ""}
       <article><span>Score queue</span><strong>${escapeHtml(scoreExactQueued ? `${scoreExactQueued}/${scoreQueued}` : String(scoreQueued))}</strong></article>
+      ${scoreCopyQueued ? `<article><span>Copy queue</span><strong>${escapeHtml(String(scoreCopyQueued))}</strong></article>` : ""}
       ${corrected ? `<article><span>Corrected</span><strong>${escapeHtml(String(corrected))}</strong></article>` : ""}
       <article><span>Adaptive</span><strong>${escapeHtml(adaptiveLabel)}</strong></article>
     </div>

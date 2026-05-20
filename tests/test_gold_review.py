@@ -439,6 +439,161 @@ class GoldReviewTests(unittest.TestCase):
         self.assertEqual(review["trainingSet"]["recentExamples"][0]["task"], "audio_score_exact_match")
         self.assertEqual(review["trainingSet"]["recentExamples"][0]["label"], "negative")
 
+    def test_score_copy_review_queue_from_source_snippet(self):
+        daily_records = {
+            "records": [
+                {
+                    "practiceDay": "2026-05-03",
+                    "pieces": [
+                        {
+                            "title": "Wieniawski Scherzo-Tarantelle, Op. 16",
+                            "sourceTitle": "5-3-26",
+                            "score": {
+                                "scoreAssetId": "wieniawski-vln",
+                                "scoreSource": "local IMSLP solo part",
+                                "keySignature": {
+                                    "accidentalType": "flat",
+                                    "accidentals": ["Bb", "Eb"],
+                                },
+                                "symbolicScore": {
+                                    "title": "Wieniawski Scherzo-Tarantelle, Op. 16",
+                                    "sourceSnippets": [
+                                        {
+                                            "measureLabel": "m. 16",
+                                            "imageUrl": "/assets/score/m16-source.png",
+                                            "sourceReviewImageUrl": "/assets/score/m16-review.png",
+                                            "visibleScoreExactNoteSequence": ["Eb5", "D5", "C5"],
+                                            "status": "source_score_copy_candidate",
+                                        }
+                                    ],
+                                },
+                            },
+                        }
+                    ],
+                }
+            ]
+        }
+
+        review = build_gold_review_loop({}, daily_records)
+        candidate = review["queue"][0]
+
+        self.assertEqual(candidate["reviewType"], "score_copy")
+        self.assertEqual(candidate["reviewTask"], "score_copy_exact_notes")
+        self.assertEqual(candidate["reviewTrainingLane"], "score_copy")
+        self.assertEqual(candidate["scoreNotes"], ["Eb5", "D5", "C5"])
+        self.assertEqual(candidate["detectedNotes"], ["Eb5", "D5", "C5"])
+        self.assertEqual(candidate["sourceReviewImageUrl"], "/assets/score/m16-review.png")
+        self.assertEqual(candidate["scoreLocation"], "m. 16")
+        self.assertEqual(review["scoreCopyQueueCount"], 1)
+        self.assertEqual(review["scoreQueueCount"], 0)
+
+    def test_score_copy_review_queue_allows_single_source_note(self):
+        daily_records = {
+            "records": [
+                {
+                    "practiceDay": "2026-05-03",
+                    "pieces": [
+                        {
+                            "title": "Wieniawski Scherzo-Tarantelle, Op. 16",
+                            "score": {
+                                "symbolicScore": {
+                                    "sourceSnippets": [
+                                        {
+                                            "measureLabel": "m. 16",
+                                            "sourceReviewImageUrl": "/assets/score/m16-a4.png",
+                                            "visibleScoreExactNoteSequence": ["A4"],
+                                        }
+                                    ],
+                                },
+                            },
+                        }
+                    ],
+                }
+            ]
+        }
+
+        review = build_gold_review_loop({}, daily_records)
+
+        self.assertEqual(review["scoreCopyQueueCount"], 1)
+        self.assertEqual(review["queue"][0]["reviewType"], "score_copy")
+        self.assertEqual(review["queue"][0]["scoreNotes"], ["A4"])
+
+    def test_score_copy_acceptance_trains_source_copy_without_score_evidence(self):
+        state = {}
+        record_gold_review_item(
+            state,
+            {
+                "reviewItemId": "gold-score-copy-m16",
+                "type": "score_copy",
+                "status": "accepted_truth",
+                "pieceTitle": "Wieniawski Scherzo-Tarantelle, Op. 16",
+                "scoreLocation": "m. 16",
+                "scoreImageUrl": "/assets/score/m16-source.png",
+                "sourceReviewImageUrl": "/assets/score/m16-review.png",
+                "detectedNotes": ["Eb5", "D5", "C5"],
+                "acceptedNotes": ["Eb5", "D5", "C5"],
+                "scoreNotes": ["Eb5", "D5", "C5"],
+            },
+        )
+
+        review = build_gold_review_loop(state, {"records": []})
+        truth = state["truthWorkbench"]["items"][0]
+
+        self.assertEqual(review["acceptedScoreCopyCount"], 1)
+        self.assertEqual(review["acceptedScorePhraseCount"], 0)
+        self.assertEqual(review["scoreReadyTruthCount"], 0)
+        self.assertEqual(review["acceptedEvidenceReadyCount"], 0)
+        self.assertEqual(review["trainingScoreCopyExampleCount"], 1)
+        self.assertEqual(review["trainingSet"]["recentExamples"][0]["task"], "score_copy_exact_notes")
+        self.assertFalse(truth["gateState"]["acceptedEvidenceReady"])
+
+    def test_score_copy_review_does_not_suppress_audio_review_for_same_notes(self):
+        state = {}
+        record_gold_review_item(
+            state,
+            {
+                "reviewItemId": "gold-score-copy-source-only",
+                "type": "score_copy",
+                "status": "accepted_truth",
+                "scoreLocation": "m. 16",
+                "scoreImageUrl": "/assets/score/m16-source.png",
+                "detectedNotes": ["Eb5", "D5", "C5"],
+                "acceptedNotes": ["Eb5", "D5", "C5"],
+                "scoreNotes": ["Eb5", "D5", "C5"],
+            },
+        )
+        daily_records = {
+            "records": [
+                {
+                    "practiceDay": "2026-05-03",
+                    "transcription": {
+                        "detectedSeries": [
+                            {
+                                "sampleId": "audio-still-needs-review",
+                                "mediaUrl": "/api/curtis/media/sample/audio-still-needs-review",
+                                "audioUrl": "/api/curtis/media/sample/audio-still-needs-review/clip?start=0&end=1",
+                                "startSeconds": 10.0,
+                                "endSeconds": 11.0,
+                                "localStartSeconds": 0.0,
+                                "localEndSeconds": 1.0,
+                                "notes": [
+                                    note("Eb5", 75, 0.0),
+                                    note("D5", 74, 0.2),
+                                    note("C5", 72, 0.4),
+                                ],
+                            }
+                        ]
+                    },
+                }
+            ]
+        }
+
+        review = build_gold_review_loop(state, daily_records)
+
+        self.assertEqual(review["queueCount"], 1)
+        self.assertEqual(review["queue"][0]["reviewType"], "audio_phrase")
+        self.assertEqual(review["queue"][0]["reviewLearningStatus"], "new_pattern")
+
     def test_candidate_group_extracts_score_labels_into_score_review(self):
         daily_records = {
             "records": [

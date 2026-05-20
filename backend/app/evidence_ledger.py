@@ -39,6 +39,7 @@ TRUTH_ITEM_TYPES = {
     "score_note",
     "score_phrase",
     "audio_score_match",
+    "score_copy",
     "practice_window",
 }
 TRUTH_ITEM_STATUSES = {"pending_review", "accepted_truth", "rejected_mismatch"}
@@ -592,6 +593,8 @@ def normalize_truth_item(raw: dict[str, Any]) -> dict[str, Any]:
         "scoreAssetId": _clean(raw.get("scoreAssetId")),
         "scoreLocation": _clean(raw.get("scoreLocation")),
         "scoreImageUrl": _clean(raw.get("scoreImageUrl")),
+        "sourceReviewImageUrl": _clean(raw.get("sourceReviewImageUrl")),
+        "sourceImageUrl": _clean(raw.get("sourceImageUrl")),
         "detectedNotes": detected_notes,
         "acceptedNotes": accepted_notes,
         "scoreNotes": score_notes,

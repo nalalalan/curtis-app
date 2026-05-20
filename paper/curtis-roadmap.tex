@@ -344,7 +344,7 @@ Acceptance for this phase:
 
 Fully automatic transcription will not become reliable without corrections. Curtis needs a correction UI that allows Alan to say: this note is A, this staff note is wrong, this score box points to B, this clip is non-playing, this rhythm is wrong, this is Scherzo-Tarantelle, this is a made-up exercise, or this score match is false.
 
-\textbf{Status: partially implemented.} The gold review loop now covers audio-phrase acceptance/rejection and score-phrase acceptance/rejection from queued detected clips. It is intentionally narrow: it can create accepted audio truth and exact score-ready truth, but it does not yet provide detailed onset/rhythm editing, score-box coordinate editing, batch keyboard review, waveform overlays, or full measure-level correction.
+\textbf{Status: partially implemented.} The gold review loop now covers audio-phrase acceptance/rejection, score-phrase acceptance/rejection from queued detected clips, and source-score copy acceptance/rejection from visible source snippets. The score-copy lane is deliberately separate: it trains whether Curtis copied the original score notes correctly, but it does not create accepted playing evidence, score-linked phrase evidence, or solved transcription by itself. The loop remains intentionally narrow: it can create accepted audio truth, exact score-ready truth, and score-reading labels, but it does not yet provide detailed onset/rhythm editing, score-box coordinate editing, batch keyboard review, waveform overlays, or full measure-level correction.
 
 Every correction should become data:
 \begin{itemize}
