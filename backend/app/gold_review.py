@@ -17,6 +17,7 @@ GOLD_REVIEW_TYPES = {"audio_phrase", "score_phrase", "audio_score_match", "score
 MAX_REVIEW_CLIP_SECONDS = 14.75
 MIN_LONG_REVIEW_NOTES = 6
 MAX_LONG_REVIEW_NOTES = 16
+MIN_ACTIVE_AUDIO_REVIEW_QUEUE = 6
 MAX_ADAPTIVE_REVIEW_WINDOWS_PER_SERIES = 10
 MAX_ADAPTIVE_REVIEW_QUEUE = 80
 SCORE_COPY_TASKS = {"score_copy_exact_notes", "score_copy_exact_notation"}
@@ -783,12 +784,18 @@ def _score_copy_candidate_from_snippet(
     source_status = _clean(snippet.get("sourceStatus") or snippet.get("status") or snippet.get("verification"))
     source_review_kind = _clean(snippet.get("sourceReviewKind"))
     training_only = bool(record.get("trainingOnly") or snippet.get("sourcePieceTrainingOnly"))
+    explicit_original_score_snippet = bool(snippet.get("originalScoreSnippet") is True and source_image)
     source_text = f"{source_image} {score_source} {source_status} {source_review_kind}".lower()
     original_score_snippet = bool(
         source_image
         and not source_image.lower().startswith("data:")
-        and not training_only
-        and "training" not in source_text
+        and (
+            explicit_original_score_snippet
+            or (
+                not training_only
+                and "training" not in source_text
+            )
+        )
         and "generated" not in source_text
         and "symbolic" not in source_text
     )
@@ -800,7 +807,12 @@ def _score_copy_candidate_from_snippet(
         "trainingOnly": training_only,
         "pieceTitle": _clean(piece.get("title") or target.get("work") or score_config.get("title")),
         "sourceTitle": _clean(piece.get("sourceTitle") or score_config.get("title")),
-        "sourceUrl": _clean(piece.get("sourceUrl") or target.get("scoreUrl") or target.get("scorePdfUrl")),
+        "sourceUrl": _clean(
+            snippet.get("sourceUrl")
+            or piece.get("sourceUrl")
+            or target.get("scoreUrl")
+            or target.get("scorePdfUrl")
+        ),
         "sampleId": "",
         "startSeconds": 0.0,
         "endSeconds": 0.0,
@@ -1230,7 +1242,8 @@ def build_gold_review_loop(
         item.get("reviewLearningStatus") == "soft_rejected_pattern" for item in primary_audio_candidates
     )
     primary_queue_suppressed_by_learning = not primary_audio_candidates and bool(suppressed_audio_candidates)
-    if not primary_audio_candidates or primary_queue_is_only_soft_rejected:
+    primary_queue_low = 0 < len(primary_audio_candidates) < MIN_ACTIVE_AUDIO_REVIEW_QUEUE
+    if not primary_audio_candidates or primary_queue_is_only_soft_rejected or (include_source_copy_catalog and primary_queue_low):
         raw_adaptive_candidates = [
             candidate
             for candidate in _queue_candidates(daily_records, adaptive=True, include_source_copy_catalog=False)
@@ -1352,6 +1365,8 @@ def build_gold_review_loop(
             if primary_queue_suppressed_by_learning and adaptive_mode
             else "primary_queue_only_soft_rejected"
             if primary_queue_is_only_soft_rejected and adaptive_mode
+            else "primary_queue_low"
+            if primary_queue_low and adaptive_mode
             else "primary_queue_empty"
             if adaptive_mode
             else ""

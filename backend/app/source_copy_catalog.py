@@ -149,20 +149,39 @@ def requested_original_score_snippets() -> list[dict[str, Any]]:
     return snippets
 
 
+def _requested_source_library() -> list[dict[str, Any]]:
+    if not SOURCE_SCORE_LIBRARY_PATH.exists():
+        return []
+    try:
+        library = json.loads(SOURCE_SCORE_LIBRARY_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    return [dict(item) for item in library if isinstance(item, dict)]
+
+
+def _requested_source_by_title() -> dict[str, dict[str, Any]]:
+    return {str(item.get("pieceTitle") or "").strip(): item for item in _requested_source_library()}
+
+
 def requested_score_copy_records() -> list[dict[str, Any]]:
     """Training-only source-copy packets for notation-copy review.
 
     These records are intentionally not practice evidence. They give Curtis a
-    controlled source/copy lane for exact visual notation copying across varied
-    keys, accidentals, durations, and repertoire names while real source crops
-    are acquired separately.
+    controlled source/copy lane for exact visual notation copying. When a real
+    source-library crop exists, the review card shows that original score crop
+    on the left and the generated copy target on the right.
     """
 
     records: list[dict[str, Any]] = []
+    source_by_title = _requested_source_by_title()
     for index, piece in enumerate(REQUESTED_SCORE_COPY_REPERTOIRE, start=1):
         title = str(piece["title"])
         notes = list(piece["notes"])
         abc = str(piece["abc"])
+        source_entry = source_by_title.get(title, {})
+        source_image = str(source_entry.get("imageUrl") or "").strip()
+        source_ready = bool(source_entry.get("originalScoreSnippet") is True and source_image)
+        source_label = str(source_entry.get("label") or source_entry.get("sourceFileLabel") or "source PDF crop").strip()
         records.append(
             {
                 "practiceDay": "source-copy",
@@ -171,25 +190,40 @@ def requested_score_copy_records() -> list[dict[str, Any]]:
                     {
                         "title": title,
                         "sourceTitle": title,
+                        "sourceUrl": str(source_entry.get("sourceUrl") or "").strip(),
                         "score": {
                             "scoreAssetId": f"source-copy-{index:02d}",
-                            "scoreSource": "notation-copy training source",
+                            "scoreSource": str(source_entry.get("source") or "notation-copy training source"),
+                            "scoreUrl": str(source_entry.get("sourceUrl") or ""),
+                            "scorePdfUrl": str(source_entry.get("sourcePdfUrl") or ""),
                             "keySignature": piece["keySignature"],
                             "symbolicScore": {
                                 "title": title,
+                                "source": str(source_entry.get("source") or ""),
+                                "sourcePdfLocalPath": str(source_entry.get("sourcePdfLocalPath") or ""),
                                 "sourceSnippets": [
                                     {
-                                        "measureLabel": "source-copy packet",
-                                        "sourceStatus": "training_fixture_pending_original_crop",
-                                        "sourceReviewKind": "notation_copy_training_fixture",
+                                        "measureLabel": source_label if source_ready else "source-copy packet",
+                                        "label": source_label if source_ready else "source-copy packet",
+                                        "sourceStatus": "original_imslp_source_crop" if source_ready else "training_fixture_pending_original_crop",
+                                        "sourceReviewKind": "original_score_copy_training" if source_ready else "notation_copy_training_fixture",
                                         "visibleScoreExactNoteSequence": notes,
+                                        "imageUrl": source_image,
+                                        "scoreImageUrl": source_image,
+                                        "sourceReviewImageUrl": source_image,
+                                        "sourceUrl": str(source_entry.get("sourceUrl") or ""),
+                                        "sourcePdfUrl": str(source_entry.get("sourcePdfUrl") or ""),
+                                        "sourcePdfLocalPath": str(source_entry.get("sourcePdfLocalPath") or ""),
+                                        "sourcePdfPage": source_entry.get("sourcePdfPage"),
+                                        "sourceFileLabel": str(source_entry.get("sourceFileLabel") or ""),
+                                        "sourceKind": str(source_entry.get("sourceKind") or ""),
                                         "sourceNotationAbc": abc,
                                         "copyNotationAbc": abc,
                                         "notationCopyAspects": NOTATION_COPY_ASPECTS,
                                         "sourcePieceTrainingOnly": True,
-                                        "originalScoreSnippet": False,
-                                        "sourceImageRequiredForOriginalScore": True,
-                                        "status": "notation_copy_training_only",
+                                        "originalScoreSnippet": source_ready,
+                                        "sourceImageRequiredForOriginalScore": not source_ready,
+                                        "status": "original_score_copy_training" if source_ready else "notation_copy_training_only",
                                     }
                                 ],
                             },

@@ -566,12 +566,50 @@ class GoldReviewTests(unittest.TestCase):
         self.assertEqual(first["reviewTrainingLane"], "score_copy")
         self.assertTrue(first["sourcePieceTrainingOnly"])
         self.assertTrue(first["notationCopyOnly"])
-        self.assertFalse(first["originalScoreSnippet"])
-        self.assertTrue(first["sourceImageRequiredForOriginalScore"])
+        self.assertTrue(first["originalScoreSnippet"])
+        self.assertFalse(first["sourceImageRequiredForOriginalScore"])
+        self.assertTrue(first["sourceReviewImageUrl"].startswith("/assets/score/original/source-library/"))
         self.assertTrue(first["sourceNotationAbc"])
         self.assertTrue(first["copyNotationAbc"])
         self.assertIn("durations", first["notationCopyAspects"])
         self.assertIn("stem_directions", first["notationCopyAspects"])
+
+    def test_source_catalog_mode_tops_up_thin_audio_queue_with_adaptive_windows(self):
+        daily_records = {
+            "records": [
+                {
+                    "practiceDay": "2026-05-03",
+                    "transcription": {
+                        "detectedSeries": [
+                            {
+                                "sampleId": "thin-live-audio-queue",
+                                "sourceTitle": "5-3-26",
+                                "sourceUrl": "https://www.youtube.com/watch?v=abc",
+                                "startSeconds": 120.0,
+                                "localStartSeconds": 0.0,
+                                "notes": [
+                                    note("D5", 74, 0.0),
+                                    note("E5", 76, 0.2),
+                                    note("F5", 77, 0.4),
+                                    note("G5", 79, 0.6),
+                                    note("A5", 81, 0.8),
+                                    note("B5", 83, 1.0),
+                                    note("C6", 84, 1.2),
+                                    note("D6", 86, 1.4),
+                                ],
+                            }
+                        ]
+                    },
+                }
+            ]
+        }
+
+        review = build_gold_review_loop({}, daily_records, limit=20, include_source_copy_catalog=True)
+
+        self.assertTrue(review["adaptiveMode"])
+        self.assertEqual(review["adaptiveReason"], "primary_queue_low")
+        self.assertGreaterEqual(review["audioQueueCount"], 2)
+        self.assertTrue(any(item.get("adaptiveReview") for item in review["audioQueue"]))
 
     def test_original_score_snippets_are_real_imslp_image_assets(self):
         review = build_gold_review_loop({}, {"records": []}, limit=20, include_source_copy_catalog=True)

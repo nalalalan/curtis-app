@@ -3271,7 +3271,7 @@ function renderGoldReviewScoreSource(item) {
   const imageUrl = assetUrl(item.sourceReviewImageUrl || item.sourceImageUrl || item.scoreImageUrl || "");
   const isTrainingSource = Boolean(item.sourcePieceTrainingOnly || item.notationCopyOnly || item.sourceImageRequiredForOriginalScore);
   const isOriginalScore = Boolean(imageUrl && item.originalScoreSnippet === true && item.sourceImageRequiredForOriginalScore !== true);
-  const sourceLabel = isOriginalScore ? "Original score source" : "Copy target";
+  const sourceLabel = isOriginalScore ? "Original score" : "Copy target";
   const label = isOriginalScore
     ? [item.scoreLocation, item.pieceTitle].filter(Boolean).join(" / ")
     : item.pieceTitle || item.scoreLocation || "notation source";
@@ -3286,14 +3286,25 @@ function renderGoldReviewScoreSource(item) {
       </section>
     `;
   }
-  if (item.sourceNotationAbc || item.sourceNotationEvents?.length) {
+  if (isOriginalScore) {
     return `
-      <section class="gold-review-source gold-review-source-notation${isOriginalScore ? " gold-review-source-original" : " gold-review-source-training"}" aria-label="${escapeHtml(isOriginalScore ? "Original score source" : "Notation copy target")}">
+      <section class="gold-review-source gold-review-source-original" aria-label="Original score">
         <div class="matched-notation-head">
           <span>${escapeHtml(sourceLabel)}</span>
           <strong>${escapeHtml(shortText(label || "score", 72))}</strong>
         </div>
-        <img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(isOriginalScore ? "Original score source" : "Notation copy target")}">
+        <img src="${escapeHtml(imageUrl)}" alt="Original score">
+      </section>
+    `;
+  }
+  if (item.sourceNotationAbc || item.sourceNotationEvents?.length) {
+    return `
+      <section class="gold-review-source gold-review-source-notation gold-review-source-training" aria-label="Notation copy target">
+        <div class="matched-notation-head">
+          <span>${escapeHtml(sourceLabel)}</span>
+          <strong>${escapeHtml(shortText(label || "score", 72))}</strong>
+        </div>
+        <img src="${escapeHtml(imageUrl)}" alt="Notation copy target">
         ${renderGoldReviewSourceNotation(item)}
       </section>
     `;
@@ -3467,8 +3478,8 @@ function renderGoldReview() {
   );
   const generalItems = Array.isArray(review.queue) ? review.queue : [];
   const audioItems = Array.isArray(review.audioQueue)
-    ? review.audioQueue.slice(0, 3)
-    : generalItems.filter((item) => !goldReviewIsScoreCopy(item)).slice(0, 3);
+    ? review.audioQueue.slice(0, 8)
+    : generalItems.filter((item) => !goldReviewIsScoreCopy(item)).slice(0, 8);
   const copyItems = Array.isArray(review.scoreCopyQueue)
     ? review.scoreCopyQueue.slice(0, 3)
     : generalItems.filter((item) => goldReviewIsScoreCopy(item)).slice(0, 3);
