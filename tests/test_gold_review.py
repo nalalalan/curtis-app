@@ -203,8 +203,9 @@ class GoldReviewTests(unittest.TestCase):
         self.assertEqual(review["acceptedAudioPhraseCount"], 1)
         self.assertEqual(review["trainingExampleCount"], 1)
         self.assertEqual(review["trainingPositiveCount"], 1)
-        self.assertEqual(review["queueStatus"], "adaptive_review_ready")
-        self.assertGreater(review["queueCount"], 0)
+        self.assertEqual(review["queueStatus"], "current_batch_covered_by_review")
+        self.assertEqual(review["queueCount"], 0)
+        self.assertEqual(review["suppressedQueuePreview"][0]["reviewLearningStatus"], "accepted_candidate_covered")
 
     def test_score_phrase_acceptance_requires_matching_score_notes(self):
         state = {}
@@ -589,7 +590,7 @@ class GoldReviewTests(unittest.TestCase):
 
         self.assertEqual(review["rawQueueCount"], 1)
         self.assertEqual(review["queueCount"], 0)
-        self.assertEqual(review["queueStatus"], "current_batch_exhausted_by_rejections")
+        self.assertEqual(review["queueStatus"], "current_batch_exhausted_by_learning")
         self.assertEqual(review["suppressedByLearningCount"], 1)
         self.assertEqual(review["softRejectedPatternCount"], 0)
         self.assertEqual(review["rejectedPatternCount"], 1)
@@ -640,7 +641,7 @@ class GoldReviewTests(unittest.TestCase):
 
         self.assertEqual(review["rawQueueCount"], 1)
         self.assertEqual(review["queueCount"], 0)
-        self.assertEqual(review["queueStatus"], "current_batch_exhausted_by_rejections")
+        self.assertEqual(review["queueStatus"], "current_batch_exhausted_by_learning")
         self.assertEqual(review["suppressedByLearningCount"], 1)
         self.assertEqual(review["reviewLearningStatus"], "reducing_review_load")
         self.assertEqual(review["rejectionDigest"]["hiddenRejectedPatternCount"], 1)
@@ -694,7 +695,7 @@ class GoldReviewTests(unittest.TestCase):
         self.assertEqual(review["suppressedQueuePreview"][0]["reviewLearningStatus"], "rejected_candidate_hidden")
         self.assertGreater(review["rejectionDigest"]["hiddenRejectedCandidateFingerprintCount"], 0)
 
-    def test_later_acceptance_releases_previously_rejected_clip_fingerprint(self):
+    def test_later_acceptance_marks_previously_rejected_clip_fingerprint_as_covered(self):
         state = {}
         rejected = {
             "reviewItemId": "gold-reject-window",
@@ -742,9 +743,10 @@ class GoldReviewTests(unittest.TestCase):
         review = build_gold_review_loop(state, daily_records)
 
         self.assertEqual(review["rawQueueCount"], 1)
-        self.assertEqual(review["queueCount"], 1)
-        self.assertEqual(review["suppressedByLearningCount"], 0)
-        self.assertEqual(review["queue"][0]["reviewLearningStatus"], "accepted_pattern")
+        self.assertEqual(review["queueCount"], 0)
+        self.assertEqual(review["queueStatus"], "current_batch_covered_by_review")
+        self.assertEqual(review["suppressedByLearningCount"], 1)
+        self.assertEqual(review["suppressedQueuePreview"][0]["reviewLearningStatus"], "accepted_candidate_covered")
 
     def test_overlapping_rejected_clip_window_is_hidden_even_when_item_id_and_notes_shift(self):
         state = {}
@@ -840,7 +842,7 @@ class GoldReviewTests(unittest.TestCase):
         self.assertEqual(review["queueCount"], 1)
         self.assertEqual(review["suppressedByLearningCount"], 0)
 
-    def test_later_acceptance_releases_overlapping_rejected_clip_window(self):
+    def test_later_acceptance_marks_overlapping_clip_window_as_already_covered(self):
         state = {}
         record_gold_review_item(
             state,
@@ -894,9 +896,10 @@ class GoldReviewTests(unittest.TestCase):
         review = build_gold_review_loop(state, daily_records)
 
         self.assertEqual(review["rawQueueCount"], 1)
-        self.assertEqual(review["queueCount"], 1)
-        self.assertEqual(review["suppressedByLearningCount"], 0)
-        self.assertIn(review["queue"][0]["reviewLearningStatus"], {"accepted_pattern", "accepted_candidate_fingerprint"})
+        self.assertEqual(review["queueCount"], 0)
+        self.assertEqual(review["suppressedByLearningCount"], 1)
+        self.assertEqual(review["suppressedQueuePreview"][0]["reviewLearningStatus"], "accepted_candidate_covered")
+        self.assertTrue(review["suppressedQueuePreview"][0]["reviewCandidateAcceptedOverlapKeys"])
 
     def test_later_acceptance_releases_previously_rejected_pattern(self):
         state = {}
@@ -988,7 +991,7 @@ class GoldReviewTests(unittest.TestCase):
 
         review = build_gold_review_loop(state, daily_records)
 
-        self.assertEqual(review["queueStatus"], "current_batch_exhausted_by_rejections")
+        self.assertEqual(review["queueStatus"], "current_batch_exhausted_by_learning")
         self.assertFalse(review["adaptiveMode"])
         self.assertEqual(review["queueCount"], 0)
         self.assertGreater(review["adaptiveSuppressedByLearningCount"], 0)
@@ -1035,7 +1038,7 @@ class GoldReviewTests(unittest.TestCase):
         review = build_gold_review_loop(state, daily_records)
 
         self.assertEqual(review["queueStatus"], "adaptive_review_ready")
-        self.assertEqual(review["adaptiveReason"], "primary_queue_suppressed_by_rejections")
+        self.assertEqual(review["adaptiveReason"], "primary_queue_suppressed_by_learning")
         self.assertGreater(review["adaptiveCandidateCount"], 0)
         self.assertTrue(review["queue"][0]["adaptiveReview"])
         self.assertNotIn("soft_rejected_pattern", [item["reviewLearningStatus"] for item in review["queue"][:3]])
@@ -1076,7 +1079,7 @@ class GoldReviewTests(unittest.TestCase):
 
         review = build_gold_review_loop(state, daily_records)
 
-        self.assertEqual(review["queueStatus"], "current_batch_exhausted_by_rejections")
+        self.assertEqual(review["queueStatus"], "current_batch_exhausted_by_learning")
         self.assertEqual(review["queueCount"], 0)
         self.assertGreater(review["adaptiveSuppressedByLearningCount"], 0)
 
@@ -1194,7 +1197,7 @@ class GoldReviewTests(unittest.TestCase):
 
         review = build_gold_review_loop(state, daily_records, limit=200)
 
-        self.assertEqual(review["queueStatus"], "current_batch_exhausted_by_rejections")
+        self.assertEqual(review["queueStatus"], "current_batch_exhausted_by_learning")
         self.assertEqual(review["queueCount"], 0)
         self.assertGreaterEqual(review["adaptiveSuppressedByLearningCount"], MAX_ADAPTIVE_REVIEW_QUEUE)
 

@@ -916,7 +916,7 @@ def build_review_learning_profile(items: list[dict[str, Any]]) -> dict[str, Any]
         "rejectedCandidateFingerprintCount": len(rejected_identity_keys),
         "softRejectedPatternCount": len(soft_rejected),
         "suppressionThreshold": 1,
-        "suppressionRule": "A rejected exact MIDI pattern, same clip/score fingerprint, or overlapping rejected clip window is removed from the active review queue unless a later accepted label for the same area overrides it.",
+        "suppressionRule": "Already accepted source areas are treated as covered. A rejected exact MIDI pattern, same clip/score fingerprint, or overlapping rejected clip window is removed from the active review queue unless an accepted label covers the same area.",
     }
 
 
@@ -946,13 +946,15 @@ def apply_review_learning_to_candidates(
             if accepted_interval_matches
             else _review_interval_matches(candidate, rejected_intervals, padding_seconds=0.75)
         )
+        accepted_area_matches = bool(accepted_identity_matches or accepted_interval_matches)
+        rejected_area_matches = bool(rejected_identity_matches or rejected_interval_matches)
         status = (
-            "rejected_candidate_hidden"
-            if rejected_identity_matches or rejected_interval_matches
+            "accepted_candidate_covered"
+            if accepted_area_matches
+            else "rejected_candidate_hidden"
+            if rejected_area_matches
             else "accepted_pattern"
             if key in accepted_keys
-            else "accepted_candidate_fingerprint"
-            if accepted_identity_matches or accepted_interval_matches
             else "rejected_pattern_hidden"
             if key in rejected_only_keys
             else "soft_rejected_pattern"
@@ -963,12 +965,14 @@ def apply_review_learning_to_candidates(
             **candidate,
             "reviewLearningKey": key,
             "reviewCandidateFingerprintKeys": sorted(identity_keys),
+            "reviewCandidateAcceptedFingerprintKeys": accepted_identity_matches,
             "reviewCandidateRejectedFingerprintKeys": rejected_identity_matches,
+            "reviewCandidateAcceptedOverlapKeys": accepted_interval_matches,
             "reviewCandidateRejectedOverlapKeys": rejected_interval_matches,
             "reviewLearningStatus": status,
             "reviewLearningReliability": "noisy_human_signal",
         }
-        if rejected_identity_matches or rejected_interval_matches or (key and key in rejected_only_keys):
+        if accepted_area_matches or rejected_area_matches or (key and key in rejected_only_keys):
             suppressed.append(enriched)
         else:
             active.append(enriched)
@@ -1018,7 +1022,7 @@ def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any],
     primary_queue_is_only_soft_rejected = len(candidates) >= 2 and all(
         item.get("reviewLearningStatus") == "soft_rejected_pattern" for item in candidates
     )
-    primary_queue_suppressed_by_rejections = not candidates and bool(suppressed_candidates)
+    primary_queue_suppressed_by_learning = not candidates and bool(suppressed_candidates)
     if not candidates or primary_queue_is_only_soft_rejected:
         raw_adaptive_candidates = [
             candidate
@@ -1039,27 +1043,66 @@ def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any],
     truth_progress = build_truth_progress(state)
     training_set = build_gold_training_set(items)
     rejection_insights = build_rejection_insights(items)
+    suppressed_all = [*suppressed_candidates, *adaptive_suppressed_candidates]
+    hidden_reviewed_keys = {
+        str(item.get("reviewLearningKey") or "")
+        for item in suppressed_all
+        if str(item.get("reviewLearningKey") or "")
+    }
     hidden_rejected_keys = {
         str(item.get("reviewLearningKey") or "")
-        for item in [*suppressed_candidates, *adaptive_suppressed_candidates]
+        for item in suppressed_all
+        if str(item.get("reviewLearningStatus") or "").startswith("rejected")
         if str(item.get("reviewLearningKey") or "")
+    }
+    hidden_reviewed_fingerprint_keys = {
+        str(key)
+        for item in suppressed_all
+        for key in [
+            *(
+                item.get("reviewCandidateAcceptedFingerprintKeys", [])
+                if isinstance(item.get("reviewCandidateAcceptedFingerprintKeys"), list)
+                else []
+            ),
+            *(
+                item.get("reviewCandidateAcceptedOverlapKeys", [])
+                if isinstance(item.get("reviewCandidateAcceptedOverlapKeys"), list)
+                else []
+            ),
+            *(
+                item.get("reviewCandidateRejectedFingerprintKeys", [])
+                if isinstance(item.get("reviewCandidateRejectedFingerprintKeys"), list)
+                else []
+            ),
+            *(
+                item.get("reviewCandidateRejectedOverlapKeys", [])
+                if isinstance(item.get("reviewCandidateRejectedOverlapKeys"), list)
+                else []
+            ),
+        ]
+        if str(key)
     }
     hidden_rejected_fingerprint_keys = {
         str(key)
-        for item in [*suppressed_candidates, *adaptive_suppressed_candidates]
+        for item in suppressed_all
+        if str(item.get("reviewLearningStatus") or "").startswith("rejected")
         for key in [
             *(item.get("reviewCandidateRejectedFingerprintKeys", []) if isinstance(item.get("reviewCandidateRejectedFingerprintKeys"), list) else []),
             *(item.get("reviewCandidateRejectedOverlapKeys", []) if isinstance(item.get("reviewCandidateRejectedOverlapKeys"), list) else []),
         ]
         if str(key)
     }
+    suppressed_statuses = {str(item.get("reviewLearningStatus") or "") for item in suppressed_all}
+    current_batch_is_covered = bool(suppressed_all) and suppressed_statuses <= {"accepted_candidate_covered"}
     queue_status = (
         "adaptive_review_ready"
         if adaptive_mode
         else "review_queue_ready"
         if candidates
-        else "current_batch_exhausted_by_rejections"
-        if suppressed_candidates or adaptive_suppressed_candidates
+        else "current_batch_covered_by_review"
+        if current_batch_is_covered
+        else "current_batch_exhausted_by_learning"
+        if suppressed_all
         else "review_queue_empty"
     )
     return {
@@ -1083,8 +1126,8 @@ def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any],
         "rawQueueCount": len(raw_candidates),
         "adaptiveMode": adaptive_mode,
         "adaptiveReason": (
-            "primary_queue_suppressed_by_rejections"
-            if primary_queue_suppressed_by_rejections and adaptive_mode
+            "primary_queue_suppressed_by_learning"
+            if primary_queue_suppressed_by_learning and adaptive_mode
             else "primary_queue_only_soft_rejected"
             if primary_queue_is_only_soft_rejected and adaptive_mode
             else "primary_queue_empty"
@@ -1111,21 +1154,29 @@ def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any],
         "trainingPositiveScoreExampleCount": int(training_set.get("positiveScoreExampleCount") or 0),
         "trainingNegativeScoreExampleCount": int(training_set.get("negativeScoreExampleCount") or 0),
         "rejectionInsights": rejection_insights,
-        "reviewLearningStatus": "reducing_review_load" if suppressed_candidates else "learning_no_suppression_yet",
+        "reviewLearningStatus": "reducing_review_load" if suppressed_all else "learning_no_suppression_yet",
         "reviewLearningRule": learning_profile.get("suppressionRule") or "",
         "rejectionDigest": {
             "status": queue_status,
+            "hiddenReviewedPatternCount": len(hidden_reviewed_keys),
             "hiddenRejectedPatternCount": len(hidden_rejected_keys),
+            "hiddenReviewedCandidateFingerprintCount": len(hidden_reviewed_fingerprint_keys),
             "hiddenRejectedCandidateFingerprintCount": len(hidden_rejected_fingerprint_keys),
-            "hiddenRejectedCandidateCount": len(suppressed_candidates) + len(adaptive_suppressed_candidates),
+            "hiddenReviewedCandidateCount": len(suppressed_all),
+            "hiddenRejectedCandidateCount": len(
+                [item for item in suppressed_all if str(item.get("reviewLearningStatus") or "").startswith("rejected")]
+            ),
             "rejectedPatternCount": int(learning_profile.get("rejectedPatternCount") or 0),
             "softRejectedPatternCount": int(learning_profile.get("softRejectedPatternCount") or 0),
             "message": (
-                "Adaptive review is mining fresh windows from analyzed audio while skipping exact rejected patterns."
+                "Adaptive review is mining fresh windows from analyzed audio while skipping covered source areas and rejected patterns."
                 if queue_status == "adaptive_review_ready"
                 else
-                "Current review batch is exhausted; remaining candidates repeat rejected note patterns."
-                if queue_status == "current_batch_exhausted_by_rejections"
+                "Current review batch is already covered by accepted labels."
+                if queue_status == "current_batch_covered_by_review"
+                else
+                "Current review batch is exhausted; remaining candidates repeat covered source areas or rejected note patterns."
+                if queue_status == "current_batch_exhausted_by_learning"
                 else "Review the next queued clip."
                 if queue_status == "review_queue_ready"
                 else "No review candidates are available from current analyzed evidence."
@@ -1142,8 +1193,8 @@ def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any],
             else
             "Review one queued clip: accept only if the displayed claim is exact; reject if one note is wrong."
             if candidates
-            else "Current batch complete: remaining candidates repeat rejected patterns. Generate fresh candidates from unreviewed or rescanned audio."
-            if suppressed_candidates
+            else "Current batch complete: remaining candidates repeat covered source areas or rejected patterns. Generate fresh candidates from unreviewed or rescanned audio."
+            if suppressed_all
             else "Gold review queue is empty for current analyzed evidence."
         ),
         "acceptanceRule": "Gold review is binary. Accept only exact displayed notes; reject any note, order, octave, audio, or score mismatch. Accepted score labels require exact audio-note and score-note MIDI agreement after consecutive duplicate detections are collapsed.",
