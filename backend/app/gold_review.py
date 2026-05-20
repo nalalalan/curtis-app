@@ -85,6 +85,38 @@ def _candidate_sequence_key(candidate: dict[str, Any]) -> str:
     return _review_sequence_key(_clean_note_names(candidate.get("detectedNotes")))
 
 
+def _review_time_bucket(value: Any) -> str:
+    return f"{round(_safe_float(value) * 2) / 2:.1f}"
+
+
+def _review_identity_keys(item: dict[str, Any]) -> set[str]:
+    keys: set[str] = set()
+    sample_id = _clean(item.get("sampleId"))
+    start = item.get("startSeconds")
+    end = item.get("endSeconds")
+    if sample_id and (start is not None or end is not None):
+        keys.add(f"clip:{sample_id}:{_review_time_bucket(start)}:{_review_time_bucket(end)}")
+
+    local_start = item.get("localStartSeconds")
+    local_end = item.get("localEndSeconds")
+    if sample_id and (local_start is not None or local_end is not None):
+        keys.add(f"local_clip:{sample_id}:{_review_time_bucket(local_start)}:{_review_time_bucket(local_end)}")
+
+    image = _clean(
+        item.get("sourceReviewImageUrl")
+        or item.get("sourceImageUrl")
+        or item.get("scoreImageUrl")
+        or item.get("imageUrl")
+    )
+    score_notes = _review_sequence_key(_clean_note_names(item.get("scoreNotes")))
+    score_location = _clean(item.get("scoreLocation"))
+    if image:
+        keys.add(f"score_image:{image}")
+        if score_notes or score_location:
+            keys.add(f"score_image_claim:{image}:{score_location}:{score_notes}")
+    return keys
+
+
 def _review_task(raw: dict[str, Any], item_type: str, score_notes: list[str]) -> str:
     explicit = _clean(raw.get("reviewTask") or raw.get("trainingTask")).lower()
     if explicit:
@@ -795,32 +827,41 @@ def record_gold_review_item(state: dict[str, Any], raw: dict[str, Any]) -> dict[
 def build_review_learning_profile(items: list[dict[str, Any]]) -> dict[str, Any]:
     accepted_keys: set[str] = set()
     rejected_keys: set[str] = set()
+    accepted_identity_keys: set[str] = set()
+    rejected_identity_keys: set[str] = set()
     accepted_counts: Counter[str] = Counter()
     rejected_counts: Counter[str] = Counter()
     for item in items:
         key = _item_learning_key(item)
-        if not key:
-            continue
         if item.get("status") == "accepted_truth":
-            accepted_keys.add(key)
-            accepted_counts[key] += 1
+            if key:
+                accepted_keys.add(key)
+                accepted_counts[key] += 1
+            accepted_identity_keys.update(_review_identity_keys(item))
         elif item.get("status") == "rejected_mismatch":
-            rejected_keys.add(key)
-            rejected_counts[key] += 1
+            if key:
+                rejected_keys.add(key)
+                rejected_counts[key] += 1
+            rejected_identity_keys.update(_review_identity_keys(item))
     rejected_only = rejected_keys - accepted_keys
+    rejected_identity_only = rejected_identity_keys - accepted_identity_keys
     soft_rejected: set[str] = set()
     return {
         "acceptedKeys": accepted_keys,
         "rejectedKeys": rejected_keys,
         "rejectedOnlyKeys": rejected_only,
         "softRejectedKeys": soft_rejected,
+        "acceptedIdentityKeys": accepted_identity_keys,
+        "rejectedIdentityKeys": rejected_identity_keys,
+        "rejectedOnlyIdentityKeys": rejected_identity_only,
         "acceptedCounts": dict(accepted_counts),
         "rejectedCounts": dict(rejected_counts),
         "acceptedPatternCount": len(accepted_keys),
         "rejectedPatternCount": len(rejected_keys),
+        "rejectedCandidateFingerprintCount": len(rejected_identity_keys),
         "softRejectedPatternCount": len(soft_rejected),
         "suppressionThreshold": 1,
-        "suppressionRule": "A rejected exact MIDI pattern is removed from the active review queue unless a later accepted label for the same normalized pattern overrides it.",
+        "suppressionRule": "A rejected exact MIDI pattern or rejected clip/score fingerprint is removed from the active review queue unless a later accepted label for the same fingerprint overrides it.",
     }
 
 
@@ -831,13 +872,24 @@ def apply_review_learning_to_candidates(
     accepted_keys = profile.get("acceptedKeys") if isinstance(profile.get("acceptedKeys"), set) else set()
     rejected_only_keys = profile.get("rejectedOnlyKeys") if isinstance(profile.get("rejectedOnlyKeys"), set) else set()
     soft_rejected_keys = profile.get("softRejectedKeys") if isinstance(profile.get("softRejectedKeys"), set) else set()
+    accepted_identity_keys = profile.get("acceptedIdentityKeys") if isinstance(profile.get("acceptedIdentityKeys"), set) else set()
+    rejected_only_identity_keys = (
+        profile.get("rejectedOnlyIdentityKeys") if isinstance(profile.get("rejectedOnlyIdentityKeys"), set) else set()
+    )
     active: list[dict[str, Any]] = []
     suppressed: list[dict[str, Any]] = []
     for candidate in candidates:
         key = _candidate_sequence_key(candidate)
+        identity_keys = _review_identity_keys(candidate)
+        rejected_identity_matches = sorted(identity_keys & rejected_only_identity_keys)
+        accepted_identity_matches = sorted(identity_keys & accepted_identity_keys)
         status = (
-            "accepted_pattern"
+            "rejected_candidate_hidden"
+            if rejected_identity_matches
+            else "accepted_pattern"
             if key in accepted_keys
+            else "accepted_candidate_fingerprint"
+            if accepted_identity_matches
             else "rejected_pattern_hidden"
             if key in rejected_only_keys
             else "soft_rejected_pattern"
@@ -847,10 +899,12 @@ def apply_review_learning_to_candidates(
         enriched = {
             **candidate,
             "reviewLearningKey": key,
+            "reviewCandidateFingerprintKeys": sorted(identity_keys),
+            "reviewCandidateRejectedFingerprintKeys": rejected_identity_matches,
             "reviewLearningStatus": status,
             "reviewLearningReliability": "noisy_human_signal",
         }
-        if key and key in rejected_only_keys:
+        if rejected_identity_matches or (key and key in rejected_only_keys):
             suppressed.append(enriched)
         else:
             active.append(enriched)
@@ -926,6 +980,12 @@ def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any],
         for item in [*suppressed_candidates, *adaptive_suppressed_candidates]
         if str(item.get("reviewLearningKey") or "")
     }
+    hidden_rejected_fingerprint_keys = {
+        str(key)
+        for item in [*suppressed_candidates, *adaptive_suppressed_candidates]
+        for key in item.get("reviewCandidateRejectedFingerprintKeys", [])
+        if str(key)
+    }
     queue_status = (
         "adaptive_review_ready"
         if adaptive_mode
@@ -972,6 +1032,7 @@ def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any],
         "reviewedIds": len(reviewed_ids),
         "acceptedPatternCount": int(learning_profile.get("acceptedPatternCount") or 0),
         "rejectedPatternCount": int(learning_profile.get("rejectedPatternCount") or 0),
+        "rejectedCandidateFingerprintCount": int(learning_profile.get("rejectedCandidateFingerprintCount") or 0),
         "softRejectedPatternCount": int(learning_profile.get("softRejectedPatternCount") or 0),
         "suppressionThreshold": learning_profile.get("suppressionThreshold"),
         "trainingSet": training_set,
@@ -988,6 +1049,7 @@ def build_gold_review_loop(state: dict[str, Any], daily_records: dict[str, Any],
         "rejectionDigest": {
             "status": queue_status,
             "hiddenRejectedPatternCount": len(hidden_rejected_keys),
+            "hiddenRejectedCandidateFingerprintCount": len(hidden_rejected_fingerprint_keys),
             "hiddenRejectedCandidateCount": len(suppressed_candidates) + len(adaptive_suppressed_candidates),
             "rejectedPatternCount": int(learning_profile.get("rejectedPatternCount") or 0),
             "softRejectedPatternCount": int(learning_profile.get("softRejectedPatternCount") or 0),

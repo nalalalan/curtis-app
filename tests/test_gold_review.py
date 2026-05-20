@@ -647,6 +647,105 @@ class GoldReviewTests(unittest.TestCase):
         self.assertEqual(review["suppressionThreshold"], 1)
         self.assertEqual(review["suppressedQueuePreview"][0]["reviewLearningKey"], "75 72")
 
+    def test_rejected_clip_fingerprint_is_hidden_even_when_detected_notes_change(self):
+        state = {}
+        record_gold_review_item(
+            state,
+            {
+                "reviewItemId": "gold-reject-window",
+                "type": "audio_phrase",
+                "status": "rejected_mismatch",
+                "sampleId": "same-visible-clip",
+                "startSeconds": 120.0,
+                "endSeconds": 120.75,
+                "detectedNotes": ["A4", "B4", "C5"],
+                "reason": "same clip should not keep coming back with a different bad guess",
+            },
+        )
+        daily_records = {
+            "records": [
+                {
+                    "practiceDay": "2026-05-03",
+                    "transcription": {
+                        "detectedSeries": [
+                            {
+                                "sampleId": "same-visible-clip",
+                                "sourceTitle": "5-3-26",
+                                "sourceUrl": "https://www.youtube.com/watch?v=abc",
+                                "startSeconds": 120.0,
+                                "localStartSeconds": 0.0,
+                                "notes": [
+                                    note("D5", 74, 0.0),
+                                    note("E5", 76, 0.2),
+                                    note("F5", 77, 0.4),
+                                ],
+                            }
+                        ]
+                    },
+                }
+            ]
+        }
+
+        review = build_gold_review_loop(state, daily_records)
+
+        self.assertEqual(review["rawQueueCount"], 1)
+        self.assertEqual(review["queueCount"], 0)
+        self.assertEqual(review["suppressedByLearningCount"], 1)
+        self.assertEqual(review["suppressedQueuePreview"][0]["reviewLearningStatus"], "rejected_candidate_hidden")
+        self.assertGreater(review["rejectionDigest"]["hiddenRejectedCandidateFingerprintCount"], 0)
+
+    def test_later_acceptance_releases_previously_rejected_clip_fingerprint(self):
+        state = {}
+        rejected = {
+            "reviewItemId": "gold-reject-window",
+            "type": "audio_phrase",
+            "status": "rejected_mismatch",
+            "sampleId": "same-visible-clip",
+            "startSeconds": 120.0,
+            "endSeconds": 120.75,
+            "detectedNotes": ["A4", "B4", "C5"],
+        }
+        record_gold_review_item(state, rejected)
+        record_gold_review_item(
+            state,
+            {
+                **rejected,
+                "reviewItemId": "gold-accept-window",
+                "status": "accepted_truth",
+                "acceptedNotes": ["D5", "E5", "F5"],
+            },
+        )
+        daily_records = {
+            "records": [
+                {
+                    "practiceDay": "2026-05-03",
+                    "transcription": {
+                        "detectedSeries": [
+                            {
+                                "sampleId": "same-visible-clip",
+                                "sourceTitle": "5-3-26",
+                                "sourceUrl": "https://www.youtube.com/watch?v=abc",
+                                "startSeconds": 120.0,
+                                "localStartSeconds": 0.0,
+                                "notes": [
+                                    note("D5", 74, 0.0),
+                                    note("E5", 76, 0.2),
+                                    note("F5", 77, 0.4),
+                                ],
+                            }
+                        ]
+                    },
+                }
+            ]
+        }
+
+        review = build_gold_review_loop(state, daily_records)
+
+        self.assertEqual(review["rawQueueCount"], 1)
+        self.assertEqual(review["queueCount"], 1)
+        self.assertEqual(review["suppressedByLearningCount"], 0)
+        self.assertEqual(review["queue"][0]["reviewLearningStatus"], "accepted_pattern")
+
     def test_later_acceptance_releases_previously_rejected_pattern(self):
         state = {}
         record_gold_review_item(
