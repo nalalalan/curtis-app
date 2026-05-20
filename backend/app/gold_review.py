@@ -7,7 +7,7 @@ from typing import Any
 
 from .evidence_ledger import build_truth_progress, record_truth_item
 from .long_phrase_truth import collapse_consecutive_duplicate_midi, note_midi_sequence, note_midi_value
-from .source_copy_catalog import NOTATION_COPY_ASPECTS, requested_score_copy_records
+from .source_copy_catalog import NOTATION_COPY_ASPECTS, requested_original_score_snippets, requested_score_copy_records
 from .state import utc_now
 
 
@@ -1249,6 +1249,7 @@ def build_gold_review_loop(
     source_copy_training_candidates = [
         item for item in score_copy_candidates if item.get("sourcePieceTrainingOnly") or item.get("trainingOnly")
     ]
+    source_score_snippets = requested_original_score_snippets() if include_source_copy_catalog else []
     exact_score_candidates = [item for item in score_candidates if item.get("scoreAgreement") is True]
     long_candidates = [item for item in candidates if item.get("reviewKind") == "long_audio_phrase_candidate"]
     candidates.sort(key=_review_candidate_rank)
@@ -1337,6 +1338,7 @@ def build_gold_review_loop(
         "scoreCopyQueueCount": len(score_copy_candidates),
         "audioQueueCount": len(audio_candidates),
         "sourceCopyTrainingQueueCount": len(source_copy_training_candidates),
+        "sourceScoreSnippetCount": len(source_score_snippets),
         "scoreExactAgreementQueueCount": len(exact_score_candidates),
         "longPhraseQueueCount": len(long_candidates),
         "rawQueueCount": len(raw_candidates),
@@ -1406,6 +1408,7 @@ def build_gold_review_loop(
         "queue": candidates[: max(0, int(limit))],
         "audioQueue": audio_candidates[: max(4, min(12, int(limit)))],
         "scoreCopyQueue": score_copy_candidates[: max(4, min(12, int(limit)))],
+        "sourceScoreSnippets": source_score_snippets[:6],
         "suppressedQueuePreview": (suppressed_candidates + adaptive_suppressed_candidates)[:5],
         "recentItems": items[:8],
         "nextAction": (

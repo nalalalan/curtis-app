@@ -3270,7 +3270,7 @@ function renderGoldReviewSourceNotation(item) {
 function renderGoldReviewScoreSource(item) {
   const imageUrl = assetUrl(item.sourceReviewImageUrl || item.sourceImageUrl || item.scoreImageUrl || "");
   const isTrainingSource = Boolean(item.sourcePieceTrainingOnly || item.notationCopyOnly || item.sourceImageRequiredForOriginalScore);
-  const isOriginalScore = Boolean(imageUrl && item.originalScoreSnippet === true && !isTrainingSource);
+  const isOriginalScore = Boolean(imageUrl && item.originalScoreSnippet === true && item.sourceImageRequiredForOriginalScore !== true);
   const sourceLabel = isOriginalScore ? "Original score" : "Copy source";
   const label = isOriginalScore
     ? [item.scoreLocation, item.pieceTitle].filter(Boolean).join(" / ")
@@ -3305,6 +3305,33 @@ function renderGoldReviewScoreSource(item) {
         <strong>${escapeHtml(label || "score pending")}</strong>
       </div>
       <img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(isOriginalScore ? "Original score snippet" : "Notation copy source")}">
+    </section>
+  `;
+}
+
+function renderOriginalScoreSources(snippets) {
+  const items = Array.isArray(snippets) ? snippets.filter((item) => item?.originalScoreSnippet === true && item?.imageUrl).slice(0, 6) : [];
+  if (!items.length) return "";
+  return `
+    <section class="source-score-strip" aria-label="Original score source snippets">
+      <div class="source-score-head">
+        <strong>Original score</strong>
+        <span>${escapeHtml(`${items.length} IMSLP snippets`)}</span>
+      </div>
+      <div class="source-score-grid">
+        ${items.map((item) => {
+          const imageUrl = assetUrl(item.imageUrl);
+          const sourceUrl = item.sourceUrl || "";
+          const label = [item.pieceTitle, item.label].filter(Boolean).join(" / ");
+          const image = `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(label || "Original score snippet")}">`;
+          return `
+            <article class="source-score-card">
+              ${sourceUrl ? `<a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noreferrer">${image}</a>` : image}
+              <small>${escapeHtml(shortText(label || "IMSLP source", 86))}</small>
+            </article>
+          `;
+        }).join("")}
+      </div>
     </section>
   `;
 }
@@ -3419,6 +3446,7 @@ function renderGoldReview() {
   const copyItems = Array.isArray(review.scoreCopyQueue)
     ? review.scoreCopyQueue.slice(0, 3)
     : generalItems.filter((item) => goldReviewIsScoreCopy(item)).slice(0, 3);
+  const sourceScoreSnippets = Array.isArray(review.sourceScoreSnippets) ? review.sourceScoreSnippets : [];
   const items = [...audioItems, ...copyItems];
   if (!items.length) {
     elements.goldReviewPanel.innerHTML = `
@@ -3434,6 +3462,7 @@ function renderGoldReview() {
         ${corrected ? `<article><span>Corrected</span><strong>${escapeHtml(String(corrected))}</strong></article>` : ""}
         <article><span>Adaptive</span><strong>${escapeHtml(adaptiveLabel)}</strong></article>
       </div>
+      ${renderOriginalScoreSources(sourceScoreSnippets)}
       <p class="empty">${escapeHtml(rejectionDigest.message || emptyQueueText)}</p>
     `;
     return;
@@ -3456,6 +3485,7 @@ function renderGoldReview() {
       ${corrected ? `<article><span>Corrected</span><strong>${escapeHtml(String(corrected))}</strong></article>` : ""}
       <article><span>Adaptive</span><strong>${escapeHtml(adaptiveLabel)}</strong></article>
     </div>
+    ${renderOriginalScoreSources(sourceScoreSnippets)}
     <div class="gold-review-list">
       ${audioItems.length || copyItems.length ? `
         <section class="gold-review-lane" aria-label="Video audio transcription training">

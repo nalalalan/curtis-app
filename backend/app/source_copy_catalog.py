@@ -19,6 +19,28 @@ NOTATION_COPY_ASPECTS = [
     "source_range",
 ]
 
+WIENIAWSKI_SOURCE_URL = "https://imslp.org/wiki/Scherzo_tarantelle%2C_Op.16_%28Wieniawski%2C_Henri%29"
+WIENIAWSKI_SOURCE_PDF = "assets/score/wieniawski-scherzo-tarantelle-solo-imslp.pdf"
+
+ORIGINAL_SCORE_SOURCE_SNIPPETS = [
+    {
+        "id": f"wieniawski-imslp-p2-staff{staff_id}",
+        "pieceTitle": "Wieniawski Scherzo-Tarantelle, Op. 16",
+        "source": "IMSLP public-domain solo violin part",
+        "sourceUrl": WIENIAWSKI_SOURCE_URL,
+        "sourcePdfLocalPath": WIENIAWSKI_SOURCE_PDF,
+        "sourcePdfPage": 2,
+        "staffId": staff_id,
+        "label": f"page 2 / staff {staff_id}",
+        "imageUrl": f"/assets/score/original/wieniawski-scherzo-tarantelle-imslp-p2-staff{staff_id}.png",
+        "originalScoreSnippet": True,
+        "sourceImageRequiredForOriginalScore": False,
+        "trainingOnly": False,
+        "acceptedPracticeEvidence": False,
+    }
+    for staff_id in range(1, 7)
+]
+
 
 REQUESTED_SCORE_COPY_REPERTOIRE = [
     {
@@ -100,6 +122,17 @@ REQUESTED_SCORE_COPY_REPERTOIRE = [
         "abc": "X:1\nM:2/4\nL:1/8\nK:Bb clef=treble\nB, C D E | F G A B |",
     },
 ]
+
+
+def requested_original_score_snippets() -> list[dict[str, Any]]:
+    """Real scanned source-score crops, not generated notation.
+
+    These are source material only. They are allowed to display as original
+    score snippets because they are cropped from the vendored IMSLP PDF, but
+    they are not accepted practice evidence and do not imply audio alignment.
+    """
+
+    return [dict(item) for item in ORIGINAL_SCORE_SOURCE_SNIPPETS]
 
 
 def requested_score_copy_records() -> list[dict[str, Any]]:

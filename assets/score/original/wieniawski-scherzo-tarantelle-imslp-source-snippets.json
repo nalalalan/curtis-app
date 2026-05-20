@@ -1,0 +1,74 @@
+[
+  {
+    "id": "wieniawski-imslp-p2-staff1",
+    "imageUrl": "/assets/score/original/wieniawski-scherzo-tarantelle-imslp-p2-staff1.png",
+    "sourcePdfPage": 2,
+    "staffId": 1,
+    "pixelCrop": {
+      "x": 134,
+      "y": 357,
+      "width": 2712,
+      "height": 389
+    }
+  },
+  {
+    "id": "wieniawski-imslp-p2-staff2",
+    "imageUrl": "/assets/score/original/wieniawski-scherzo-tarantelle-imslp-p2-staff2.png",
+    "sourcePdfPage": 2,
+    "staffId": 2,
+    "pixelCrop": {
+      "x": 134,
+      "y": 660,
+      "width": 2712,
+      "height": 389
+    }
+  },
+  {
+    "id": "wieniawski-imslp-p2-staff3",
+    "imageUrl": "/assets/score/original/wieniawski-scherzo-tarantelle-imslp-p2-staff3.png",
+    "sourcePdfPage": 2,
+    "staffId": 3,
+    "pixelCrop": {
+      "x": 134,
+      "y": 994,
+      "width": 2712,
+      "height": 385
+    }
+  },
+  {
+    "id": "wieniawski-imslp-p2-staff4",
+    "imageUrl": "/assets/score/original/wieniawski-scherzo-tarantelle-imslp-p2-staff4.png",
+    "sourcePdfPage": 2,
+    "staffId": 4,
+    "pixelCrop": {
+      "x": 134,
+      "y": 1289,
+      "width": 2712,
+      "height": 388
+    }
+  },
+  {
+    "id": "wieniawski-imslp-p2-staff5",
+    "imageUrl": "/assets/score/original/wieniawski-scherzo-tarantelle-imslp-p2-staff5.png",
+    "sourcePdfPage": 2,
+    "staffId": 5,
+    "pixelCrop": {
+      "x": 134,
+      "y": 1594,
+      "width": 2712,
+      "height": 385
+    }
+  },
+  {
+    "id": "wieniawski-imslp-p2-staff6",
+    "imageUrl": "/assets/score/original/wieniawski-scherzo-tarantelle-imslp-p2-staff6.png",
+    "sourcePdfPage": 2,
+    "staffId": 6,
+    "pixelCrop": {
+      "x": 134,
+      "y": 1870,
+      "width": 2712,
+      "height": 389
+    }
+  }
+]

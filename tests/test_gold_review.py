@@ -1,3 +1,4 @@
+from pathlib import Path
 import unittest
 
 from backend.app.gold_review import (
@@ -571,6 +572,20 @@ class GoldReviewTests(unittest.TestCase):
         self.assertTrue(first["copyNotationAbc"])
         self.assertIn("durations", first["notationCopyAspects"])
         self.assertIn("stem_directions", first["notationCopyAspects"])
+
+    def test_original_score_snippets_are_real_imslp_image_assets(self):
+        review = build_gold_review_loop({}, {"records": []}, limit=20, include_source_copy_catalog=True)
+
+        snippets = review["sourceScoreSnippets"]
+
+        self.assertGreaterEqual(review["sourceScoreSnippetCount"], 6)
+        self.assertTrue(snippets)
+        self.assertTrue(all(item["originalScoreSnippet"] for item in snippets))
+        self.assertTrue(all(not item["sourceImageRequiredForOriginalScore"] for item in snippets))
+        self.assertTrue(all("imslp" in item["source"].lower() for item in snippets))
+        first_path = Path(__file__).resolve().parents[1] / snippets[0]["imageUrl"].lstrip("/")
+        self.assertTrue(first_path.exists(), str(first_path))
+        self.assertGreater(first_path.stat().st_size, 1024)
 
     def test_score_copy_review_does_not_suppress_audio_review_for_same_notes(self):
         state = {}
