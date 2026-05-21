@@ -605,23 +605,48 @@ class GoldReviewTests(unittest.TestCase):
         self.assertEqual(review["trainingSet"]["recentExamples"][0]["task"], "score_copy_exact_notation")
         self.assertFalse(truth["gateState"]["acceptedEvidenceReady"])
 
-    def test_requested_repertoire_source_catalog_enters_best_effort_score_transcription_queue(self):
+    def test_requested_repertoire_source_catalog_enters_verified_score_transcription_queue(self):
         review = build_gold_review_loop({}, {"records": []}, limit=20, include_source_copy_catalog=True)
 
         self.assertEqual(review["audioQueueCount"], 0)
         self.assertEqual(review["transcriptionAlanQueueCount"], 0)
-        self.assertGreaterEqual(review["scoreCopyQueueCount"], 10)
+        self.assertEqual(review["scoreCopyQueueCount"], 4)
+        self.assertEqual(review["noteReadingQueueCount"], 4)
         self.assertEqual(review["scoreTranscriptionQueueCount"], review["scoreCopyQueueCount"])
         self.assertEqual(review["sourceCopyTrainingQueueCount"], review["scoreCopyQueueCount"])
+        self.assertEqual(review["noteReadingTrainingQueueCount"], review["noteReadingQueueCount"])
         self.assertTrue(review["scoreCopyQueue"])
+        self.assertTrue(review["noteReadingQueue"])
         self.assertTrue(all(item["reviewTrainingLaneLabel"] == "score-transcription" for item in review["scoreCopyQueue"]))
+        self.assertTrue(all(item["reviewTrainingLaneLabel"] == "note-reading" for item in review["noteReadingQueue"]))
         self.assertTrue(all(item["trainingOnly"] for item in review["scoreCopyQueue"]))
-        self.assertTrue(any(item["bestEffortScoreTranscription"] for item in review["scoreCopyQueue"]))
-        self.assertTrue(all(item["evidenceLevel"] == "best_effort_review_only" for item in review["scoreCopyQueue"]))
+        self.assertTrue(all(not item["bestEffortScoreTranscription"] for item in review["scoreCopyQueue"]))
+        self.assertTrue(all(item["evidenceLevel"] == "verified_source_copy_review" for item in review["scoreCopyQueue"]))
+        self.assertTrue(all(item["sourceCopyReviewReady"] for item in review["scoreCopyQueue"]))
+        self.assertTrue(all(item["sourceCopyPitchSkeletonOnly"] for item in review["scoreCopyQueue"]))
+        self.assertTrue(
+            all(
+                item["detectedNotes"] == item["sourceScoreNotes"] == item["scoreNotes"]
+                for item in review["scoreCopyQueue"]
+            )
+        )
+        self.assertTrue(
+            all(
+                "/assets/score/original/source-library/verified-copy/" in item["sourceReviewImageUrl"]
+                for item in review["scoreCopyQueue"]
+            )
+        )
+        self.assertEqual(
+            next(item for item in review["noteReadingQueue"] if item["detectedNotes"] == ["D4", "E4", "F#4", "G4", "A4"])[
+                "expectedNoteLetters"
+            ],
+            ["D", "E", "F", "G", "A"],
+        )
         queue_titles = {item["pieceTitle"] for item in review["scoreCopyQueue"]}
         self.assertNotIn("Paganini Moto Perpetuo, Op. 11, Solo violin", queue_titles)
         self.assertNotIn("Wieniawski Etude-Caprice, Op. 18 No. 3", queue_titles)
         self.assertNotIn("Wieniawski Etude-Caprice, Op. 18 No. 4", queue_titles)
+        self.assertIn("Mozart Le nozze di Figaro Overture, Violin I", queue_titles)
         self.assertTrue(
             all(
                 "complete score" not in str(item.get("scoreLocation", "")).lower()
@@ -629,7 +654,7 @@ class GoldReviewTests(unittest.TestCase):
                 for item in review["scoreCopyQueue"]
             )
         )
-        self.assertEqual([lane["id"] for lane in review["trainingLanes"]], ["transcription-alan", "score-transcription"])
+        self.assertEqual([lane["id"] for lane in review["trainingLanes"]], ["transcription-alan", "score-transcription", "note-reading"])
         self.assertGreaterEqual(review["sourceScoreSnippetCount"], 10)
         titles = {item["pieceTitle"] for item in review["sourceScoreSnippets"]}
         self.assertIn("Haydn Symphony No. 94, IV, Violin I", titles)
@@ -651,6 +676,56 @@ class GoldReviewTests(unittest.TestCase):
         first = next(item for item in review["sourceScoreSnippets"] if item["pieceTitle"] == "Haydn Symphony No. 94, IV, Violin I")
         self.assertTrue(first["reviewImageUrl"].startswith("/assets/score/original/source-library/"))
         self.assertTrue(first["reviewImageUrl"].endswith("-review.png"))
+
+    def test_note_reading_queue_records_letter_only_training_without_evidence_mirror(self):
+        review = build_gold_review_loop({}, {"records": []}, limit=20, include_source_copy_catalog=True)
+        candidate = next(item for item in review["noteReadingQueue"] if item["expectedNoteLetters"] == ["D", "E", "F", "G", "A"])
+        state: dict[str, object] = {}
+
+        result = record_gold_review_item(
+            state,
+            {
+                **candidate,
+                "type": "note_reading",
+                "status": "accepted_truth",
+                "noteLetterAnswer": "d e f g a",
+                "userNoteLetters": ["D", "E", "F", "G", "A"],
+                "noteLetterCorrect": True,
+            },
+        )
+        followup = build_gold_review_loop(state, {"records": []}, limit=20, include_source_copy_catalog=True)
+
+        self.assertEqual(result["goldReviewItem"]["type"], "note_reading")
+        self.assertEqual(result["goldReviewItem"]["reviewTask"], "note_letter_reading")
+        self.assertEqual(result["goldReviewItem"]["expectedNoteLetters"], ["D", "E", "F", "G", "A"])
+        self.assertEqual(result["goldReviewItem"]["userNoteLetters"], ["D", "E", "F", "G", "A"])
+        self.assertTrue(result["goldReviewItem"]["noteLetterCorrect"])
+        self.assertEqual(result["truthMirror"], {})
+        self.assertEqual(followup["trainingNoteReadingExampleCount"], 1)
+        self.assertEqual(followup["trainingPositiveNoteReadingExampleCount"], 1)
+        self.assertEqual(followup["acceptedEvidenceReadyCount"], 0)
+
+    def test_note_reading_wrong_letters_store_negative_training(self):
+        review = build_gold_review_loop({}, {"records": []}, limit=20, include_source_copy_catalog=True)
+        candidate = review["noteReadingQueue"][0]
+        state: dict[str, object] = {}
+
+        result = record_gold_review_item(
+            state,
+            {
+                **candidate,
+                "type": "note_reading",
+                "status": "rejected_mismatch",
+                "noteLetterAnswer": "a b c",
+                "userNoteLetters": ["A", "B", "C"],
+            },
+        )
+        followup = build_gold_review_loop(state, {"records": []}, limit=20, include_source_copy_catalog=True)
+
+        self.assertEqual(result["goldReviewItem"]["trainingLabel"], "negative")
+        self.assertFalse(result["goldReviewItem"]["noteLetterCorrect"])
+        self.assertEqual(followup["trainingNoteReadingExampleCount"], 1)
+        self.assertEqual(followup["trainingNegativeNoteReadingExampleCount"], 1)
 
     def test_source_catalog_mode_tops_up_thin_audio_queue_with_adaptive_windows(self):
         daily_records = {

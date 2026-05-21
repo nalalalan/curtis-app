@@ -171,6 +171,11 @@ class TruthWorkbenchItem(BaseModel):
     corrected_notes: list[str] | str = Field(default_factory=list, alias="correctedNotes")
     score_notes: list[str] | str = Field(default_factory=list, alias="scoreNotes")
     source_score_notes: list[str] | str = Field(default_factory=list, alias="sourceScoreNotes")
+    expected_note_letters: list[str] | str = Field(default_factory=list, alias="expectedNoteLetters")
+    user_note_letters: list[str] | str = Field(default_factory=list, alias="userNoteLetters")
+    note_letter_answer: str = Field(default="", alias="noteLetterAnswer")
+    note_letter_correct: bool = Field(default=False, alias="noteLetterCorrect")
+    note_reading_answer_mode: str = Field(default="", alias="noteReadingAnswerMode")
     reason: str = ""
     note: str = ""
 
@@ -207,6 +212,11 @@ class TruthWorkbenchItem(BaseModel):
             "correctedNotes": self.corrected_notes,
             "scoreNotes": self.score_notes,
             "sourceScoreNotes": self.source_score_notes,
+            "expectedNoteLetters": self.expected_note_letters,
+            "userNoteLetters": self.user_note_letters,
+            "noteLetterAnswer": self.note_letter_answer,
+            "noteLetterCorrect": self.note_letter_correct,
+            "noteReadingAnswerMode": self.note_reading_answer_mode,
             "reason": self.reason,
             "note": self.note,
         }
@@ -247,6 +257,11 @@ class GoldReviewItem(BaseModel):
     corrected_notes: list[str] | str = Field(default_factory=list, alias="correctedNotes")
     score_notes: list[str] | str = Field(default_factory=list, alias="scoreNotes")
     source_score_notes: list[str] | str = Field(default_factory=list, alias="sourceScoreNotes")
+    expected_note_letters: list[str] | str = Field(default_factory=list, alias="expectedNoteLetters")
+    user_note_letters: list[str] | str = Field(default_factory=list, alias="userNoteLetters")
+    note_letter_answer: str = Field(default="", alias="noteLetterAnswer")
+    note_letter_correct: bool = Field(default=False, alias="noteLetterCorrect")
+    note_reading_answer_mode: str = Field(default="", alias="noteReadingAnswerMode")
     reason: str = ""
     note: str = ""
 
@@ -283,6 +298,11 @@ class GoldReviewItem(BaseModel):
             "correctedNotes": self.corrected_notes,
             "scoreNotes": self.score_notes,
             "sourceScoreNotes": self.source_score_notes,
+            "expectedNoteLetters": self.expected_note_letters,
+            "userNoteLetters": self.user_note_letters,
+            "noteLetterAnswer": self.note_letter_answer,
+            "noteLetterCorrect": self.note_letter_correct,
+            "noteReadingAnswerMode": self.note_reading_answer_mode,
             "reason": self.reason,
             "note": self.note,
         }

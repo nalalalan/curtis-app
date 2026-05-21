@@ -13,14 +13,15 @@ from .state import utc_now
 
 GOLD_REVIEW_VERSION = "gold_review_v1"
 GOLD_REVIEW_STATUSES = {"pending_review", "accepted_truth", "rejected_mismatch"}
-GOLD_REVIEW_TYPES = {"audio_phrase", "score_phrase", "audio_score_match", "score_copy", "practice_window"}
+GOLD_REVIEW_TYPES = {"audio_phrase", "score_phrase", "audio_score_match", "score_copy", "note_reading", "practice_window"}
 MAX_REVIEW_CLIP_SECONDS = 14.75
 MIN_LONG_REVIEW_NOTES = 6
 MAX_LONG_REVIEW_NOTES = 16
 MIN_ACTIVE_AUDIO_REVIEW_QUEUE = 6
 MAX_ADAPTIVE_REVIEW_WINDOWS_PER_SERIES = 10
 MAX_ADAPTIVE_REVIEW_QUEUE = 80
-SCORE_COPY_TASKS = {"score_copy_exact_notes", "score_copy_exact_notation"}
+SCORE_COPY_TASKS = {"score_copy_exact_notes", "score_copy_exact_notation", "score_copy_pitch_skeleton"}
+NOTE_READING_TASKS = {"note_letter_reading"}
 
 
 def _clean(value: Any) -> str:
@@ -53,6 +54,28 @@ def _clean_note_names(value: Any) -> list[str]:
     return [name for name in names if name]
 
 
+def _clean_note_letters(value: Any) -> list[str]:
+    if isinstance(value, list):
+        tokens = [str(item or "") for item in value]
+    else:
+        text = _clean(value).replace(",", " ")
+        if any(char.isspace() for char in text):
+            tokens = text.split()
+        else:
+            tokens = list(text)
+    letters: list[str] = []
+    for token in tokens:
+        for char in str(token).upper():
+            if char in "ABCDEFG":
+                letters.append(char)
+                break
+    return letters
+
+
+def _note_letters_from_notes(value: Any) -> list[str]:
+    return _clean_note_letters(_clean_note_names(value))
+
+
 def _score_note_names(*values: Any) -> list[str]:
     for value in values:
         names = _clean_note_names(value)
@@ -65,11 +88,23 @@ def _is_score_copy_task(value: Any) -> bool:
     return _clean(value).lower() in SCORE_COPY_TASKS
 
 
+def _is_note_reading_task(value: Any) -> bool:
+    return _clean(value).lower() in NOTE_READING_TASKS
+
+
 def _is_score_copy_item(item: dict[str, Any]) -> bool:
     return (
         _is_score_copy_task(item.get("reviewTask") or item.get("trainingTask"))
         or _clean(item.get("type")).lower() == "score_copy"
         or _clean(item.get("reviewType")).lower() == "score_copy"
+    )
+
+
+def _is_note_reading_item(item: dict[str, Any]) -> bool:
+    return (
+        _is_note_reading_task(item.get("reviewTask") or item.get("trainingTask"))
+        or _clean(item.get("type")).lower() == "note_reading"
+        or _clean(item.get("reviewType")).lower() == "note_reading"
     )
 
 
@@ -94,12 +129,17 @@ def _review_sequence_key(names: list[str]) -> str:
 
 def _candidate_sequence_key(candidate: dict[str, Any]) -> str:
     score_copy = _is_score_copy_item(candidate)
+    note_reading = _is_note_reading_item(candidate)
     if isinstance(candidate.get("normalizedDetectedMidiSequence"), list):
         values = [int(value) for value in candidate["normalizedDetectedMidiSequence"] if isinstance(value, int)]
         if values:
             key = " ".join(str(value) for value in values)
+            if note_reading:
+                return f"note_reading:{key}"
             return f"score_copy:{key}" if score_copy else key
     key = _review_sequence_key(_clean_note_names(candidate.get("detectedNotes")))
+    if note_reading and key:
+        return f"note_reading:{key}"
     return f"score_copy:{key}" if score_copy and key else key
 
 
@@ -130,7 +170,8 @@ def _review_identity_keys(item: dict[str, Any]) -> set[str]:
     score_location = _clean(item.get("scoreLocation"))
     if image:
         score_copy = _is_score_copy_item(item)
-        prefix = "score_copy_image" if score_copy else "score_image"
+        note_reading = _is_note_reading_item(item)
+        prefix = "note_reading_image" if note_reading else "score_copy_image" if score_copy else "score_image"
         keys.add(f"{prefix}:{image}")
         if score_notes or score_location:
             keys.add(f"{prefix}_claim:{image}:{score_location}:{score_notes}")
@@ -187,6 +228,8 @@ def _review_task(raw: dict[str, Any], item_type: str, score_notes: list[str]) ->
     explicit = _clean(raw.get("reviewTask") or raw.get("trainingTask")).lower()
     if explicit:
         return explicit
+    if item_type == "note_reading":
+        return "note_letter_reading"
     if item_type == "score_copy":
         return "score_copy_exact_notation"
     if item_type in {"score_phrase", "audio_score_match"} or score_notes:
@@ -214,6 +257,7 @@ def _training_example_from_item(item: dict[str, Any]) -> dict[str, Any]:
         "humanSignalWeight": 0.82 if label == "positive" else 0.74 if label == "negative" else 0.0,
         "hardEvidence": bool(item.get("type") in {"score_phrase", "audio_score_match"} and item.get("status") == "accepted_truth" and item.get("scoreNotes")),
         "scoreCopyOnly": bool(item.get("type") == "score_copy"),
+        "noteReadingOnly": bool(item.get("type") == "note_reading"),
         "notationCopyOnly": bool(item.get("notationCopyOnly")),
         "sourcePieceTrainingOnly": bool(item.get("sourcePieceTrainingOnly")),
         "notationCopyAspects": item.get("notationCopyAspects") if isinstance(item.get("notationCopyAspects"), list) else [],
@@ -226,6 +270,11 @@ def _training_example_from_item(item: dict[str, Any]) -> dict[str, Any]:
         "detectedNotes": item.get("detectedNotes") or [],
         "acceptedNotes": item.get("acceptedNotes") or [],
         "scoreNotes": item.get("scoreNotes") or [],
+        "expectedNoteLetters": item.get("expectedNoteLetters") or [],
+        "userNoteLetters": item.get("userNoteLetters") or [],
+        "noteLetterAnswer": item.get("noteLetterAnswer") or "",
+        "noteLetterCorrect": bool(item.get("noteLetterCorrect")),
+        "noteReadingAnswerMode": item.get("noteReadingAnswerMode") or "",
         "normalizedTargetMidiSequence": target_midi,
         "normalizedDetectedMidiSequence": detected_midi,
         "normalizedScoreMidiSequence": score_midi,
@@ -246,10 +295,13 @@ def build_gold_training_set(items: list[dict[str, Any]]) -> dict[str, Any]:
     audio_examples = [item for item in examples if item.get("task") in {"audio_exact_notes", "audio_long_phrase_exact_notes"}]
     score_examples = [item for item in examples if item.get("task") == "audio_score_exact_match"]
     score_copy_examples = [item for item in examples if _is_score_copy_task(item.get("task"))]
+    note_reading_examples = [item for item in examples if _is_note_reading_task(item.get("task"))]
     positive_score_examples = [item for item in score_examples if item.get("label") == "positive"]
     negative_score_examples = [item for item in score_examples if item.get("label") == "negative"]
     positive_score_copy_examples = [item for item in score_copy_examples if item.get("label") == "positive"]
     negative_score_copy_examples = [item for item in score_copy_examples if item.get("label") == "negative"]
+    positive_note_reading_examples = [item for item in note_reading_examples if item.get("label") == "positive"]
+    negative_note_reading_examples = [item for item in note_reading_examples if item.get("label") == "negative"]
     long_phrase_examples = [item for item in examples if int(item.get("noteCount") or 0) >= MIN_LONG_REVIEW_NOTES]
     return {
         "version": f"{GOLD_REVIEW_VERSION}_training_v1",
@@ -263,6 +315,9 @@ def build_gold_training_set(items: list[dict[str, Any]]) -> dict[str, Any]:
         "scoreCopyExampleCount": len(score_copy_examples),
         "positiveScoreCopyExampleCount": len(positive_score_copy_examples),
         "negativeScoreCopyExampleCount": len(negative_score_copy_examples),
+        "noteReadingExampleCount": len(note_reading_examples),
+        "positiveNoteReadingExampleCount": len(positive_note_reading_examples),
+        "negativeNoteReadingExampleCount": len(negative_note_reading_examples),
         "longPhraseExampleCount": len(long_phrase_examples),
         "positiveLongPhraseCount": len([item for item in long_phrase_examples if item.get("label") == "positive"]),
         "negativeLongPhraseCount": len([item for item in long_phrase_examples if item.get("label") == "negative"]),
@@ -307,16 +362,21 @@ def build_rejection_insights(items: list[dict[str, Any]]) -> dict[str, Any]:
 
 def _item_learning_key(item: dict[str, Any]) -> str:
     score_copy = _is_score_copy_item(item)
+    note_reading = _is_note_reading_item(item)
     for field in ("normalizedAcceptedMidiSequence", "normalizedDetectedMidiSequence", "normalizedScoreMidiSequence"):
         values = item.get(field)
         if isinstance(values, list):
             cleaned = [int(value) for value in values if isinstance(value, int)]
             if cleaned:
                 key = " ".join(str(value) for value in cleaned)
+                if note_reading:
+                    return f"note_reading:{key}"
                 return f"score_copy:{key}" if score_copy else key
     for field in ("acceptedNotes", "detectedNotes", "scoreNotes"):
         key = _review_sequence_key(_clean_note_names(item.get(field)))
         if key:
+            if note_reading:
+                return f"note_reading:{key}"
             return f"score_copy:{key}" if score_copy else key
     return ""
 
@@ -824,6 +884,7 @@ def _score_copy_candidate_from_snippet(
     source_status = _clean(snippet.get("sourceStatus") or snippet.get("status") or snippet.get("verification"))
     source_review_kind = _clean(snippet.get("sourceReviewKind"))
     training_only = bool(record.get("trainingOnly") or snippet.get("sourcePieceTrainingOnly"))
+    pitch_skeleton_only = bool(snippet.get("sourceCopyPitchSkeletonOnly"))
     explicit_original_score_snippet = bool(snippet.get("originalScoreSnippet") is True and source_image)
     source_text = f"{source_image} {score_source} {source_status} {source_review_kind}".lower()
     original_score_snippet = bool(
@@ -896,16 +957,29 @@ def _score_copy_candidate_from_snippet(
         "keySignature": target.get("keySignature") if isinstance(target.get("keySignature"), dict) else {},
         "clip": {},
         "defaultStatus": "pending_review",
-        "reviewTask": "score_copy_exact_notation",
-        "trainingTask": "score_copy_exact_notation",
+        "reviewTask": "score_copy_pitch_skeleton" if pitch_skeleton_only else "score_copy_exact_notation",
+        "trainingTask": "score_copy_pitch_skeleton" if pitch_skeleton_only else "score_copy_exact_notation",
         "binaryReview": True,
         "binaryOnly": True,
         "sourceCopyOnly": True,
         "notationCopyOnly": True,
+        "sourceCopyPitchSkeletonOnly": pitch_skeleton_only,
         "sourcePieceTrainingOnly": bool(snippet.get("sourcePieceTrainingOnly")),
-        "reviewQuestion": "Does score-transcription match the source notation? Reject if one visible detail is wrong.",
-        "acceptanceRule": "Accept score-transcription only if Curtis copied the source notation exactly: pitch, octave, accidental, rhythm value, rest, beam, tuplet, stem direction, notehead, spacing, slur/tie, and source range.",
-        "rejectionRule": "Reject score-transcription if any copied note, accidental, octave, duration, rest, beam, tuplet, stem direction, notehead, spacing, slur/tie, order, or source range is wrong.",
+        "reviewQuestion": (
+            "Do the score-transcription notes match the source crop? Reject if one note is wrong."
+            if pitch_skeleton_only
+            else "Does score-transcription match the source notation? Reject if one visible detail is wrong."
+        ),
+        "acceptanceRule": (
+            "Accept score-transcription if the displayed pitch, octave, accidental, and note order match the source crop; ignore engraving style in this lane."
+            if pitch_skeleton_only
+            else "Accept score-transcription only if Curtis copied the source notation exactly: pitch, octave, accidental, rhythm value, rest, beam, tuplet, stem direction, notehead, spacing, slur/tie, and source range."
+        ),
+        "rejectionRule": (
+            "Reject score-transcription if any copied pitch, accidental, octave, or note order is wrong."
+            if pitch_skeleton_only
+            else "Reject score-transcription if any copied note, accidental, octave, duration, rest, beam, tuplet, stem direction, notehead, spacing, slur/tie, order, or source range is wrong."
+        ),
     }
     payload["reviewItemId"] = _candidate_id(payload)
     return payload
@@ -929,6 +1003,56 @@ def _score_copy_candidates(record: dict[str, Any]) -> list[dict[str, Any]]:
     return candidates
 
 
+def _note_reading_candidate_from_score_copy(candidate: dict[str, Any]) -> dict[str, Any]:
+    notes = _clean_note_names(candidate.get("sourceScoreNotes") or candidate.get("scoreNotes") or candidate.get("detectedNotes"))
+    letters = _note_letters_from_notes(notes)
+    if not notes or not letters:
+        return {}
+    payload = {
+        **candidate,
+        "reviewKind": "note_reading_candidate",
+        "reviewType": "note_reading",
+        "acceptanceMode": "typed_note_letters",
+        "detectedNotes": notes,
+        "acceptedNotes": notes,
+        "scoreNotes": notes,
+        "sourceScoreNotes": notes,
+        "normalizedDetectedMidiSequence": _normalized_review_midi_sequence(notes),
+        "normalizedScoreMidiSequence": _normalized_review_midi_sequence(notes),
+        "detectedNoteCount": len(notes),
+        "expectedNoteLetters": letters,
+        "expectedNoteLetterText": " ".join(letter.lower() for letter in letters),
+        "userNoteLetters": [],
+        "noteLetterAnswer": "",
+        "noteLetterCorrect": False,
+        "noteReadingAnswerMode": "letters_only_ignore_accidentals_octaves",
+        "reviewTrainingLane": "note_reading",
+        "reviewTrainingLaneLabel": "note-reading",
+        "reviewTask": "note_letter_reading",
+        "trainingTask": "note_letter_reading",
+        "sourceCopyOnly": False,
+        "notationCopyOnly": False,
+        "noteReadingOnly": True,
+        "binaryReview": False,
+        "binaryOnly": False,
+        "reviewQuestion": "Write the note letters only.",
+        "acceptanceRule": "Type note letters only; ignore accidentals and octave numbers.",
+        "rejectionRule": "If the typed letter sequence differs from the source, Curtis stores a note-reading mismatch.",
+    }
+    payload.pop("reviewItemId", None)
+    payload["reviewItemId"] = _candidate_id(payload)
+    return payload
+
+
+def _note_reading_candidates(score_copy_candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    for candidate in score_copy_candidates:
+        note_reading = _note_reading_candidate_from_score_copy(candidate)
+        if note_reading:
+            candidates.append(note_reading)
+    return candidates
+
+
 def _queue_candidates(
     daily_records: dict[str, Any],
     *,
@@ -938,12 +1062,16 @@ def _queue_candidates(
     candidates: list[dict[str, Any]] = []
     source_records = requested_score_copy_records() if include_source_copy_catalog and not adaptive else []
     for record in source_records:
-        candidates.extend(_score_copy_candidates(record))
+        score_copy_candidates = _score_copy_candidates(record)
+        candidates.extend(score_copy_candidates)
+        candidates.extend(_note_reading_candidates(score_copy_candidates))
     for record in daily_records.get("records", []) if isinstance(daily_records.get("records"), list) else []:
         if not isinstance(record, dict):
             continue
         if not adaptive:
-            candidates.extend(_score_copy_candidates(record))
+            score_copy_candidates = _score_copy_candidates(record)
+            candidates.extend(score_copy_candidates)
+            candidates.extend(_note_reading_candidates(score_copy_candidates))
         for group in record.get("candidateMatchGroups", []) if isinstance(record.get("candidateMatchGroups"), list) else []:
             candidate = _candidate_from_group(record, group)
             if candidate:
@@ -982,6 +1110,9 @@ def normalize_gold_review_item(raw: dict[str, Any]) -> dict[str, Any]:
         raw.get("scoreMatchedNotes"),
     )
     review_task = _review_task(raw, item_type, score_notes)
+    expected_note_letters = _clean_note_letters(raw.get("expectedNoteLetters") or _note_letters_from_notes(score_notes or detected_notes))
+    user_note_letters = _clean_note_letters(raw.get("userNoteLetters") or raw.get("noteLetterAnswer"))
+    note_letter_correct = bool(expected_note_letters and user_note_letters and expected_note_letters == user_note_letters)
     if status == "accepted_truth" and not accepted_notes:
         accepted_notes = detected_notes
     if status == "accepted_truth" and not accepted_notes:
@@ -996,6 +1127,8 @@ def normalize_gold_review_item(raw: dict[str, Any]) -> dict[str, Any]:
             raise ValueError("Accepted score-transcription labels require source score notes.")
         if not _normalized_review_note_agreement(accepted_notes, score_notes):
             raise ValueError("Accepted score-transcription labels require copied notes and source notes to agree.")
+    if item_type == "note_reading" and status == "accepted_truth" and not note_letter_correct:
+        raise ValueError("Accepted note-reading labels require the typed note letters to match the source.")
     item = {
         "reviewItemId": _clean(raw.get("reviewItemId") or raw.get("itemId")),
         "type": item_type,
@@ -1023,9 +1156,15 @@ def normalize_gold_review_item(raw: dict[str, Any]) -> dict[str, Any]:
         "notationCopyAspects": raw.get("notationCopyAspects") if isinstance(raw.get("notationCopyAspects"), list) else [],
         "sourcePieceTrainingOnly": bool(raw.get("sourcePieceTrainingOnly")),
         "notationCopyOnly": bool(raw.get("notationCopyOnly")),
+        "noteReadingOnly": bool(raw.get("noteReadingOnly") or item_type == "note_reading"),
         "detectedNotes": detected_notes,
         "acceptedNotes": accepted_notes,
         "scoreNotes": score_notes,
+        "expectedNoteLetters": expected_note_letters,
+        "userNoteLetters": user_note_letters,
+        "noteLetterAnswer": _clean(raw.get("noteLetterAnswer")),
+        "noteLetterCorrect": note_letter_correct,
+        "noteReadingAnswerMode": _clean(raw.get("noteReadingAnswerMode")) or ("letters_only_ignore_accidentals_octaves" if item_type == "note_reading" else ""),
         "reviewTask": review_task,
         "trainingTask": review_task,
         "trainingLabel": "positive" if status == "accepted_truth" else "negative" if status == "rejected_mismatch" else "pending",
@@ -1058,6 +1197,8 @@ def record_gold_review_item(state: dict[str, Any], raw: dict[str, Any]) -> dict[
                 "trainingLabel": _clean(previous.get("trainingLabel")),
                 "acceptedNotes": previous.get("acceptedNotes") or [],
                 "scoreNotes": previous.get("scoreNotes") or [],
+                "expectedNoteLetters": previous.get("expectedNoteLetters") or [],
+                "userNoteLetters": previous.get("userNoteLetters") or [],
                 "createdAt": _clean(previous.get("createdAt")),
                 "labelRevision": int(previous.get("labelRevision") or 1),
             }
@@ -1070,7 +1211,7 @@ def record_gold_review_item(state: dict[str, Any], raw: dict[str, Any]) -> dict[
         item["labelHistory"] = []
     items = [entry for entry in items if entry.get("reviewItemId") != item["reviewItemId"]]
     mirror: dict[str, Any] = {}
-    if item["status"] in {"accepted_truth", "rejected_mismatch"}:
+    if item["status"] in {"accepted_truth", "rejected_mismatch"} and item["type"] != "note_reading":
         mirror = record_truth_item(
             state,
             {
@@ -1286,8 +1427,10 @@ def build_gold_review_loop(
     adaptive_suppressed_candidates: list[dict[str, Any]] = []
     adaptive_candidate_pool_count = 0
     adaptive_mode = False
-    primary_audio_candidates = [item for item in candidates if not _is_score_copy_item(item)]
-    suppressed_audio_candidates = [item for item in suppressed_candidates if not _is_score_copy_item(item)]
+    primary_audio_candidates = [item for item in candidates if not _is_score_copy_item(item) and not _is_note_reading_item(item)]
+    suppressed_audio_candidates = [
+        item for item in suppressed_candidates if not _is_score_copy_item(item) and not _is_note_reading_item(item)
+    ]
     primary_queue_is_only_soft_rejected = len(primary_audio_candidates) >= 2 and all(
         item.get("reviewLearningStatus") == "soft_rejected_pattern" for item in primary_audio_candidates
     )
@@ -1308,7 +1451,8 @@ def build_gold_review_loop(
             adaptive_mode = True
     score_candidates = [item for item in candidates if item.get("reviewTask") == "audio_score_exact_match"]
     score_copy_candidates = [item for item in candidates if _is_score_copy_task(item.get("reviewTask"))]
-    audio_candidates = [item for item in candidates if not _is_score_copy_item(item)]
+    note_reading_candidates = [item for item in candidates if _is_note_reading_task(item.get("reviewTask"))]
+    audio_candidates = [item for item in candidates if not _is_score_copy_item(item) and not _is_note_reading_item(item)]
     source_copy_training_candidates = [
         item for item in score_copy_candidates if item.get("sourcePieceTrainingOnly") or item.get("trainingOnly")
     ]
@@ -1402,9 +1546,11 @@ def build_gold_review_loop(
         "queueStatus": queue_status,
         "scoreQueueCount": len(score_candidates),
         "scoreCopyQueueCount": len(score_copy_candidates),
+        "noteReadingQueueCount": len(note_reading_candidates),
         "audioQueueCount": len(audio_candidates),
         "transcriptionAlanQueueCount": len(audio_candidates),
         "scoreTranscriptionQueueCount": len(score_copy_candidates),
+        "noteReadingTrainingQueueCount": len(note_reading_candidates),
         "sourceCopyTrainingQueueCount": len(source_copy_training_candidates),
         "sourceScoreSnippetCount": len(source_score_snippets),
         "sourceScoreReadySnippetCount": len(source_score_ready_snippets),
@@ -1445,6 +1591,9 @@ def build_gold_review_loop(
         "trainingScoreCopyExampleCount": int(training_set.get("scoreCopyExampleCount") or 0),
         "trainingPositiveScoreCopyExampleCount": int(training_set.get("positiveScoreCopyExampleCount") or 0),
         "trainingNegativeScoreCopyExampleCount": int(training_set.get("negativeScoreCopyExampleCount") or 0),
+        "trainingNoteReadingExampleCount": int(training_set.get("noteReadingExampleCount") or 0),
+        "trainingPositiveNoteReadingExampleCount": int(training_set.get("positiveNoteReadingExampleCount") or 0),
+        "trainingNegativeNoteReadingExampleCount": int(training_set.get("negativeNoteReadingExampleCount") or 0),
         "trainingLanes": [
             {
                 "id": "transcription-alan",
@@ -1460,6 +1609,14 @@ def build_gold_review_loop(
                 "queueCount": len(score_copy_candidates),
                 "trainingTask": "source_score_to_transcription_review",
                 "gate": "verified source crop notes must match copied notes",
+            },
+            {
+                "id": "note-reading",
+                "label": "note-reading",
+                "queueKey": "noteReadingQueue",
+                "queueCount": len(note_reading_candidates),
+                "trainingTask": "source_score_note_letter_entry",
+                "gate": "type note letters only",
             },
         ],
         "rejectionInsights": rejection_insights,
@@ -1496,6 +1653,7 @@ def build_gold_review_loop(
         "queue": candidates[: max(0, int(limit))],
         "audioQueue": audio_candidates[: max(4, min(12, int(limit)))],
         "scoreCopyQueue": score_copy_candidates[: max(4, min(12, int(limit)))],
+        "noteReadingQueue": note_reading_candidates[: max(4, min(12, int(limit)))],
         "sourceScoreSnippets": source_score_snippets,
         "suppressedQueuePreview": (suppressed_candidates + adaptive_suppressed_candidates)[:5],
         "recentItems": items[:8],

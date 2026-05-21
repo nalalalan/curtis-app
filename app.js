@@ -502,6 +502,7 @@ function goldReviewCandidates() {
     ...(Array.isArray(review?.queue) ? review.queue : []),
     ...(Array.isArray(review?.audioQueue) ? review.audioQueue : []),
     ...(Array.isArray(review?.scoreCopyQueue) ? review.scoreCopyQueue : []),
+    ...(Array.isArray(review?.noteReadingQueue) ? review.noteReadingQueue : []),
     ...(Array.isArray(review?.recentItems) ? review.recentItems : []),
   ].filter((item) => item && typeof item === "object");
 }
@@ -547,6 +548,70 @@ async function submitGoldReview(form, status) {
     if (button) {
       button.disabled = false;
       button.textContent = status === "rejected_mismatch" ? "Reject" : "Accept";
+    }
+  }
+}
+
+function noteLetterSequence(value) {
+  const text = String(value || "").trim().toUpperCase();
+  if (!text) return [];
+  const tokens = /[\s,;]+/.test(text) ? text.split(/[\s,;]+/) : text.split("");
+  return tokens
+    .map((token) => {
+      const match = String(token || "").toUpperCase().match(/[A-G]/);
+      return match ? match[0] : "";
+    })
+    .filter(Boolean);
+}
+
+async function submitNoteReading(form) {
+  const candidate = findGoldReviewCandidate(form.dataset.reviewItemId);
+  const state = form.querySelector("[data-note-reading-status]");
+  const input = form.querySelector("[name='noteLetterAnswer']");
+  if (!candidate || !input) {
+    if (state) state.textContent = "Missing item.";
+    return;
+  }
+  const button = form.querySelector("button");
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Checking";
+  }
+  const answer = String(input.value || "").trim();
+  const expectedLetters = Array.isArray(candidate.expectedNoteLetters)
+    ? candidate.expectedNoteLetters.map((letter) => String(letter || "").toUpperCase()).filter(Boolean)
+    : noteLetterSequence(candidate.expectedNoteLetterText || "");
+  const userLetters = noteLetterSequence(answer);
+  const correct = expectedLetters.length > 0
+    && userLetters.length === expectedLetters.length
+    && userLetters.every((letter, index) => letter === expectedLetters[index]);
+  if (state) state.textContent = "Saving.";
+  try {
+    const ops = await apiFetch("/api/curtis/gold-review/items", {
+      method: "POST",
+      body: {
+        ...candidate,
+        reviewType: "note_reading",
+        type: "note_reading",
+        status: correct ? "accepted_truth" : "rejected_mismatch",
+        acceptedNotes: correct ? noteInputSequence(noteInputText(candidate.detectedNotes || candidate.scoreNotes)) : [],
+        expectedNoteLetters: expectedLetters,
+        userNoteLetters: userLetters,
+        noteLetterAnswer: answer,
+        noteLetterCorrect: correct,
+        noteReadingAnswerMode: "letters_only_ignore_accidentals_octaves",
+        reason: correct ? "note_letters_match" : "note_letters_mismatch",
+      },
+    });
+    applyOps(ops);
+    if (state) state.textContent = correct ? "Saved correct." : "Saved mismatch.";
+  } catch (error) {
+    backend.lastError = String(error?.message || error || "review save failed");
+    if (state) state.textContent = "Failed.";
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.textContent = "Check";
     }
   }
 }
@@ -3241,7 +3306,11 @@ function readableGoldReviewNotes(item) {
 }
 
 function isScoreCopyTask(value) {
-  return value === "score_copy_exact_notes" || value === "score_copy_exact_notation";
+  return value === "score_copy_exact_notes" || value === "score_copy_exact_notation" || value === "score_copy_pitch_skeleton";
+}
+
+function isNoteReadingTask(value) {
+  return value === "note_letter_reading";
 }
 
 function goldReviewIsScoreCopy(item) {
@@ -3251,8 +3320,16 @@ function goldReviewIsScoreCopy(item) {
     || item?.type === "score_copy";
 }
 
+function goldReviewIsNoteReading(item) {
+  return isNoteReadingTask(item?.reviewTask)
+    || isNoteReadingTask(item?.trainingTask)
+    || item?.reviewType === "note_reading"
+    || item?.type === "note_reading";
+}
+
 const TRAINING_LANE_TRANSCRIPTION_ALAN = "transcription-alan";
 const TRAINING_LANE_SCORE_TRANSCRIPTION = "score-transcription";
+const TRAINING_LANE_NOTE_READING = "note-reading";
 
 function renderGoldReviewSourceNotation(item) {
   const sourceNotes = item.sourceScoreNotes || item.scoreNotes || item.detectedNotes || [];
@@ -3397,7 +3474,9 @@ function renderGoldReviewItem(item, index) {
       ? "mismatch"
       : "";
   const notationLabel = isScoreCopy ? TRAINING_LANE_SCORE_TRANSCRIPTION : TRAINING_LANE_TRANSCRIPTION_ALAN;
-  const rule = isScoreCopy ? "Accept only if score-transcription matches the source." : "One note off = reject.";
+  const rule = isScoreCopy
+    ? (item.sourceCopyPitchSkeletonOnly ? "Notes match source = accept." : "Accept only if score-transcription matches the source.")
+    : "One note off = reject.";
   return `
     <article class="gold-review-item" data-status="${escapeHtml(status)}">
       <div class="gold-review-head">
@@ -3436,7 +3515,53 @@ function renderGoldReviewItem(item, index) {
   `;
 }
 
-function renderGoldReviewLane({ label, count, items, emptyText, ariaLabel }) {
+function renderNoteReadingItem(item, index) {
+  const status = item.status || item.defaultStatus || "pending_review";
+  const isRecent = status !== "pending_review";
+  const label = [item.scoreLocation, item.pieceTitle].filter(Boolean).join(" / ") || "notation";
+  const imageUrl = assetUrl(item.sourceReviewImageUrl || item.sourceImageUrl || item.scoreImageUrl || "");
+  const source = imageUrl
+    ? `
+      <section class="gold-review-source gold-review-source-original note-reading-source" aria-label="note-reading source">
+        <div class="matched-notation-head">
+          <span>Source</span>
+          <strong>${escapeHtml(shortText(label, 72))}</strong>
+        </div>
+        <img src="${escapeHtml(imageUrl)}" alt="note-reading source">
+      </section>
+    `
+    : `
+      <section class="gold-review-source gold-review-source-notation" aria-label="note-reading source">
+        <div class="matched-notation-head">
+          <span>Source</span>
+          <strong>${escapeHtml(shortText(label, 72))}</strong>
+        </div>
+        ${renderGoldReviewSourceNotation(item)}
+      </section>
+    `;
+  return `
+    <article class="gold-review-item note-reading-item" data-status="${escapeHtml(status)}">
+      <div class="gold-review-head">
+        <span>${escapeHtml(isRecent ? "Label" : `Queue ${index + 1}`)}</span>
+        <strong>${escapeHtml(shortText(label, 96))}</strong>
+        <em>${escapeHtml([TRAINING_LANE_NOTE_READING, item.detectedNoteCount ? `${item.detectedNoteCount} notes` : ""].filter(Boolean).join(" / "))}</em>
+      </div>
+      <div class="gold-review-grid gold-review-note-reading-grid">
+        ${source}
+        <form class="note-reading-form" data-note-reading-form data-review-item-id="${escapeHtml(item.reviewItemId || "")}">
+          <label>
+            <span>Note letters</span>
+            <input name="noteLetterAnswer" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="a g b c d">
+          </label>
+          <button type="submit">Check</button>
+          <small data-note-reading-status>${escapeHtml(isRecent ? status.replace(/_/g, " ") : "letters only")}</small>
+        </form>
+      </div>
+    </article>
+  `;
+}
+
+function renderGoldReviewLane({ label, count, items, emptyText, ariaLabel, renderItem = renderGoldReviewItem }) {
   const queued = Number(count) || 0;
   const laneItems = Array.isArray(items) ? items : [];
   return `
@@ -3446,7 +3571,7 @@ function renderGoldReviewLane({ label, count, items, emptyText, ariaLabel }) {
         <span>${escapeHtml(String(queued))} queued</span>
       </div>
       ${laneItems.length
-        ? laneItems.map((item, index) => renderGoldReviewItem(item, index)).join("")
+        ? laneItems.map((item, index) => renderItem(item, index)).join("")
         : `<p class="empty gold-review-lane-empty">${escapeHtml(emptyText || "No verified samples.")}</p>`}
     </section>
   `;
@@ -3474,9 +3599,11 @@ function renderGoldReview() {
   const longTraining = Number(review.trainingLongPhraseExampleCount ?? training.longPhraseExampleCount) || 0;
   const scoreTraining = Number(review.trainingScoreExampleCount ?? training.scoreExampleCount) || 0;
   const scoreCopyTraining = Number(review.trainingScoreCopyExampleCount ?? training.scoreCopyExampleCount) || 0;
+  const noteReadingTraining = Number(review.trainingNoteReadingExampleCount ?? training.noteReadingExampleCount) || 0;
   const audioQueued = Number(review.audioQueueCount) || 0;
   const scoreQueued = Number(review.scoreQueueCount) || 0;
   const scoreCopyQueued = Number(review.scoreCopyQueueCount) || 0;
+  const noteReadingQueued = Number(review.noteReadingQueueCount) || 0;
   const scoreExactQueued = Number(review.scoreExactAgreementQueueCount) || 0;
   const corrected = Number(review.correctedLabelCount) || 0;
   const adaptiveCount = Number(review.adaptiveCandidateCount) || 0;
@@ -3491,17 +3618,22 @@ function renderGoldReview() {
     : "No review clips queued.";
   setText(
     elements.goldReviewCount,
-    scoreCopyQueued ? `${audioQueued} transcription-alan / ${scoreCopyQueued} score-transcription` : scoreQueued ? `${scoreQueued} score / ${queued} queued` : `${accepted} accepted / ${queued} queued`
+    scoreCopyQueued || noteReadingQueued
+      ? `${audioQueued} transcription-alan / ${scoreCopyQueued} score-transcription / ${noteReadingQueued} note-reading`
+      : scoreQueued ? `${scoreQueued} score / ${queued} queued` : `${accepted} accepted / ${queued} queued`
   );
   const generalItems = Array.isArray(review.queue) ? review.queue : [];
   const audioItems = Array.isArray(review.audioQueue)
     ? review.audioQueue.slice(0, 10)
-    : generalItems.filter((item) => !goldReviewIsScoreCopy(item)).slice(0, 10);
+    : generalItems.filter((item) => !goldReviewIsScoreCopy(item) && !goldReviewIsNoteReading(item)).slice(0, 10);
   const copyItems = Array.isArray(review.scoreCopyQueue)
     ? review.scoreCopyQueue.slice(0, 10)
     : generalItems.filter((item) => goldReviewIsScoreCopy(item)).slice(0, 10);
+  const noteReadingItems = Array.isArray(review.noteReadingQueue)
+    ? review.noteReadingQueue.slice(0, 10)
+    : generalItems.filter((item) => goldReviewIsNoteReading(item)).slice(0, 10);
   const sourceScoreSnippets = Array.isArray(review.sourceScoreSnippets) ? review.sourceScoreSnippets : [];
-  const items = [...audioItems, ...copyItems];
+  const items = [...audioItems, ...copyItems, ...noteReadingItems];
   if (!items.length) {
     elements.goldReviewPanel.innerHTML = `
       <div class="gold-review-stats">
@@ -3512,6 +3644,7 @@ function renderGoldReview() {
         <article><span>Training</span><strong>${escapeHtml(String(trainingExamples))}</strong></article>
         <article><span>Score</span><strong>${escapeHtml(String(scoreTraining))}</strong></article>
         <article><span>score-transcription</span><strong>${escapeHtml(String(scoreCopyTraining))}</strong></article>
+        <article><span>note-reading</span><strong>${escapeHtml(String(noteReadingTraining))}</strong></article>
         <article><span>Long</span><strong>${escapeHtml(String(longTraining))}</strong></article>
         ${corrected ? `<article><span>Corrected</span><strong>${escapeHtml(String(corrected))}</strong></article>` : ""}
         <article><span>Adaptive</span><strong>${escapeHtml(adaptiveLabel)}</strong></article>
@@ -3531,6 +3664,14 @@ function renderGoldReview() {
           emptyText: "No verified score-transcription samples.",
           ariaLabel: "score-transcription training",
         })}
+        ${renderGoldReviewLane({
+          label: TRAINING_LANE_NOTE_READING,
+          count: noteReadingQueued,
+          items: noteReadingItems,
+          emptyText: "No note-reading samples.",
+          ariaLabel: "note-reading training",
+          renderItem: renderNoteReadingItem,
+        })}
       </div>
       ${renderOriginalScoreSources(sourceScoreSnippets)}
       <p class="empty">${escapeHtml(rejectionDigest.message || emptyQueueText)}</p>
@@ -3546,12 +3687,14 @@ function renderGoldReview() {
       <article><span>Training</span><strong>${escapeHtml(String(trainingExamples))}</strong></article>
       <article><span>Score</span><strong>${escapeHtml(String(scoreTraining))}</strong></article>
       <article><span>score-transcription</span><strong>${escapeHtml(String(scoreCopyTraining))}</strong></article>
+      <article><span>note-reading</span><strong>${escapeHtml(String(noteReadingTraining))}</strong></article>
       <article><span>Long</span><strong>${escapeHtml(String(longTraining))}</strong></article>
       <article><span>transcription-alan</span><strong>${escapeHtml(String(audioQueued))}</strong></article>
       ${fastRejected ? `<article><span>Fast rejects</span><strong>${escapeHtml(String(fastRejected))}</strong></article>` : ""}
       ${unstableRejected ? `<article><span>Wide rejects</span><strong>${escapeHtml(String(unstableRejected))}</strong></article>` : ""}
       <article><span>Score queue</span><strong>${escapeHtml(scoreExactQueued ? `${scoreExactQueued}/${scoreQueued}` : String(scoreQueued))}</strong></article>
       <article><span>score-transcription</span><strong>${escapeHtml(String(scoreCopyQueued))}</strong></article>
+      <article><span>note-reading</span><strong>${escapeHtml(String(noteReadingQueued))}</strong></article>
       ${corrected ? `<article><span>Corrected</span><strong>${escapeHtml(String(corrected))}</strong></article>` : ""}
       <article><span>Adaptive</span><strong>${escapeHtml(adaptiveLabel)}</strong></article>
     </div>
@@ -3569,6 +3712,14 @@ function renderGoldReview() {
         items: copyItems,
         emptyText: "No verified score-transcription samples.",
         ariaLabel: "score-transcription training",
+      })}
+      ${renderGoldReviewLane({
+        label: TRAINING_LANE_NOTE_READING,
+        count: noteReadingQueued,
+        items: noteReadingItems,
+        emptyText: "No note-reading samples.",
+        ariaLabel: "note-reading training",
+        renderItem: renderNoteReadingItem,
       })}
     </div>
     ${renderOriginalScoreSources(sourceScoreSnippets)}
@@ -4002,6 +4153,12 @@ if (elements.runScanButton) elements.runScanButton.addEventListener("click", run
 if (elements.probeMediaButton) elements.probeMediaButton.addEventListener("click", runMediaProbe);
 if (elements.rejectPieceButton) elements.rejectPieceButton.addEventListener("click", rejectActiveTitle);
 document.addEventListener("submit", (event) => {
+  const noteReadingForm = event.target.closest("[data-note-reading-form]");
+  if (noteReadingForm) {
+    event.preventDefault();
+    submitNoteReading(noteReadingForm);
+    return;
+  }
   const goldForm = event.target.closest("[data-gold-review-form]");
   if (goldForm) {
     event.preventDefault();

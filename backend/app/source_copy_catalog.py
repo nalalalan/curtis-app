@@ -21,6 +21,14 @@ NOTATION_COPY_ASPECTS = [
     "source_range",
 ]
 
+PITCH_COPY_ASPECTS = [
+    "pitches",
+    "octaves",
+    "accidentals",
+    "key_signature",
+    "source_range",
+]
+
 WIENIAWSKI_SOURCE_URL = "https://imslp.org/wiki/Scherzo_tarantelle%2C_Op.16_%28Wieniawski%2C_Henri%29"
 WIENIAWSKI_SOURCE_PDF = "assets/score/wieniawski-scherzo-tarantelle-solo-imslp.pdf"
 SOURCE_SCORE_LIBRARY_PATH = Path(__file__).resolve().parents[2] / "assets" / "score" / "original" / "source-score-library.json"
@@ -126,6 +134,45 @@ REQUESTED_SCORE_COPY_REPERTOIRE = [
     },
 ]
 
+VERIFIED_SCORE_COPY_PACKETS = [
+    {
+        "title": "Mozart Le nozze di Figaro Overture, Violin I",
+        "label": "p. 2 / opening five-note figure",
+        "imageUrl": "/assets/score/original/source-library/verified-copy/mozart-figaro-opening-d4-e4-fsharp4-g4-a4-context.png",
+        "keySignature": {"accidentalType": "sharp", "accidentals": ["F#", "C#"], "label": "D major / 2 sharps"},
+        "notes": ["D4", "E4", "F#4", "G4", "A4"],
+        "abc": "X:1\nM:none\nL:1/8\nK:D clef=treble\nD E F G A z2 |",
+        "sourcePdfPage": 2,
+    },
+    {
+        "title": "Mozart Le nozze di Figaro Overture, Violin I",
+        "label": "p. 2 / opening D",
+        "imageUrl": "/assets/score/original/source-library/verified-copy/mozart-figaro-opening-d4-context.png",
+        "keySignature": {"accidentalType": "sharp", "accidentals": ["F#", "C#"], "label": "D major / 2 sharps"},
+        "notes": ["D4"],
+        "abc": "X:1\nM:none\nL:1/4\nK:D clef=treble\nD |",
+        "sourcePdfPage": 2,
+    },
+    {
+        "title": 'Schubert Symphony No. 4 "Tragic", IV, Violin I',
+        "label": "p. 11 / rehearsal D first two source notes",
+        "imageUrl": "/assets/score/original/source-library/verified-copy/schubert4-iv-293-c5-d5-context.png",
+        "keySignature": {"accidentalType": "natural", "accidentals": [], "label": "no key signature"},
+        "notes": ["C5", "D5"],
+        "abc": "X:1\nM:none\nL:1/4\nK:C clef=treble\nc2 d |",
+        "sourcePdfPage": 11,
+    },
+    {
+        "title": "Haydn Symphony No. 94, IV, Violin I",
+        "label": "p. 10 / m. 169 first source note",
+        "imageUrl": "/assets/score/original/source-library/verified-copy/haydn94-169-fsharp5-context.png",
+        "keySignature": {"accidentalType": "sharp", "accidentals": ["F#", "C#"], "label": "D major / 2 sharps"},
+        "notes": ["F#5"],
+        "abc": "X:1\nM:none\nL:1/4\nK:D clef=treble\nf |",
+        "sourcePdfPage": 10,
+    },
+]
+
 
 def requested_original_score_snippets() -> list[dict[str, Any]]:
     """Real scanned source-score images, not generated notation.
@@ -206,46 +253,42 @@ def _is_violin_only_review_source(source_entry: dict[str, Any]) -> bool:
 def requested_score_copy_records() -> list[dict[str, Any]]:
     """Training-only score-transcription packets for source-score review.
 
-    These records are intentionally not practice evidence. Strict
-    score-transcription packets still carry a verified note sequence from the
-    same visible source crop. When that is unavailable, Curtis may expose a
-    best-effort score-transcription packet so Alan can accept/reject it as
-    training data. Best-effort packets never become accepted score evidence by
-    themselves.
+    These records are intentionally not practice evidence. The approval lane
+    only exposes packets whose copied notes come from a verified visible source
+    crop. Broader score-library crops remain available as sources, but they do
+    not become accept/reject cards until the source-note sequence is known.
     """
 
     records: list[dict[str, Any]] = []
     source_by_title = _requested_source_by_title()
-    for index, piece in enumerate(REQUESTED_SCORE_COPY_REPERTOIRE, start=1):
+    for index, piece in enumerate(VERIFIED_SCORE_COPY_PACKETS, start=1):
         title = str(piece["title"])
-        notes = list(piece["notes"])
-        abc = str(piece["abc"])
+        notes = [str(note).strip() for note in piece.get("notes", []) if str(note).strip()]
+        abc = str(piece.get("abc") or "")
+        if not notes:
+            continue
         source_entry = source_by_title.get(title, {})
-        source_image = str(source_entry.get("reviewImageUrl") or source_entry.get("imageUrl") or "").strip()
+        source_image = str(piece.get("imageUrl") or "").strip()
         source_ready = bool(source_entry.get("originalScoreSnippet") is True and source_image)
         if not _is_violin_only_review_source(source_entry):
             continue
-        verified_source_notes = source_entry.get("verifiedSourceNoteSequence")
-        strict_source_match = bool(
-            source_ready
-            and isinstance(verified_source_notes, list)
-            and [str(note).strip() for note in verified_source_notes if str(note).strip()] == notes
-        )
-        best_effort_source_match = bool(source_ready and source_image)
-        if not (strict_source_match or best_effort_source_match):
+        if not source_ready:
             continue
-        source_label = str(source_entry.get("label") or source_entry.get("sourceFileLabel") or "source PDF crop").strip()
-        source_status = "original_score_transcription_training" if strict_source_match else "best_effort_score_transcription_review"
-        source_review_kind = (
-            "original_score_transcription_training"
-            if strict_source_match
-            else "best_effort_source_score_transcription_training"
+        source_label = str(piece.get("label") or source_entry.get("label") or source_entry.get("sourceFileLabel") or "source PDF crop").strip()
+        source_status = "verified_source_pitch_copy_training"
+        source_review_kind = "verified_source_crop_pitch_sequence"
+        key_signature = (
+            piece.get("keySignature")
+            if isinstance(piece.get("keySignature"), dict)
+            else source_entry.get("keySignature")
+            if isinstance(source_entry.get("keySignature"), dict)
+            else {}
         )
         records.append(
             {
                 "practiceDay": "score-transcription",
                 "trainingOnly": True,
-                "bestEffortScoreTranscription": not strict_source_match,
+                "bestEffortScoreTranscription": False,
                 "pieces": [
                     {
                         "title": title,
@@ -256,7 +299,7 @@ def requested_score_copy_records() -> list[dict[str, Any]]:
                             "scoreSource": str(source_entry.get("source") or "score-transcription training source"),
                             "scoreUrl": str(source_entry.get("sourceUrl") or ""),
                             "scorePdfUrl": str(source_entry.get("sourcePdfUrl") or ""),
-                            "keySignature": piece["keySignature"],
+                            "keySignature": key_signature,
                             "symbolicScore": {
                                 "title": title,
                                 "source": str(source_entry.get("source") or ""),
@@ -268,26 +311,27 @@ def requested_score_copy_records() -> list[dict[str, Any]]:
                                         "sourceStatus": source_status,
                                         "sourceReviewKind": source_review_kind,
                                         "visibleScoreExactNoteSequence": notes,
-                                        "verifiedSourceNoteSequence": notes if strict_source_match else [],
+                                        "verifiedSourceNoteSequence": notes,
                                         "imageUrl": source_image,
                                         "scoreImageUrl": source_image,
                                         "sourceReviewImageUrl": source_image,
                                         "sourceUrl": str(source_entry.get("sourceUrl") or ""),
                                         "sourcePdfUrl": str(source_entry.get("sourcePdfUrl") or ""),
                                         "sourcePdfLocalPath": str(source_entry.get("sourcePdfLocalPath") or ""),
-                                        "sourcePdfPage": source_entry.get("sourcePdfPage"),
+                                        "sourcePdfPage": piece.get("sourcePdfPage") or source_entry.get("sourcePdfPage"),
                                         "sourceFileLabel": str(source_entry.get("sourceFileLabel") or ""),
                                         "sourceKind": str(source_entry.get("sourceKind") or ""),
-                                        "reviewCropKind": str(source_entry.get("reviewCropKind") or ""),
+                                        "reviewCropKind": "curated_verified_source_note_crop",
                                         "reviewCropSourceImageUrl": str(source_entry.get("reviewCropSourceImageUrl") or ""),
                                         "reviewCropBox": source_entry.get("reviewCropBox") or [],
                                         "sourceNotationAbc": abc,
                                         "copyNotationAbc": abc,
-                                        "notationCopyAspects": NOTATION_COPY_ASPECTS,
+                                        "notationCopyAspects": PITCH_COPY_ASPECTS,
                                         "sourcePieceTrainingOnly": True,
-                                        "bestEffortScoreTranscription": not strict_source_match,
-                                        "sourceCopyReviewReady": strict_source_match,
-                                        "sourceCopyBestEffortReviewReady": not strict_source_match,
+                                        "bestEffortScoreTranscription": False,
+                                        "sourceCopyReviewReady": True,
+                                        "sourceCopyBestEffortReviewReady": False,
+                                        "sourceCopyPitchSkeletonOnly": True,
                                         "originalScoreSnippet": source_ready,
                                         "sourceImageRequiredForOriginalScore": not source_ready,
                                         "status": source_status,
