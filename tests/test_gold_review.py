@@ -605,15 +605,19 @@ class GoldReviewTests(unittest.TestCase):
         self.assertEqual(review["trainingSet"]["recentExamples"][0]["task"], "score_copy_exact_notation")
         self.assertFalse(truth["gateState"]["acceptedEvidenceReady"])
 
-    def test_requested_repertoire_source_catalog_is_not_review_queue_without_verified_notes(self):
+    def test_requested_repertoire_source_catalog_enters_best_effort_score_transcription_queue(self):
         review = build_gold_review_loop({}, {"records": []}, limit=20, include_source_copy_catalog=True)
 
         self.assertEqual(review["audioQueueCount"], 0)
         self.assertEqual(review["transcriptionAlanQueueCount"], 0)
-        self.assertEqual(review["scoreCopyQueueCount"], 0)
-        self.assertEqual(review["scoreTranscriptionQueueCount"], 0)
-        self.assertEqual(review["sourceCopyTrainingQueueCount"], 0)
-        self.assertEqual(review["scoreCopyQueue"], [])
+        self.assertGreaterEqual(review["scoreCopyQueueCount"], 10)
+        self.assertEqual(review["scoreTranscriptionQueueCount"], review["scoreCopyQueueCount"])
+        self.assertEqual(review["sourceCopyTrainingQueueCount"], review["scoreCopyQueueCount"])
+        self.assertTrue(review["scoreCopyQueue"])
+        self.assertTrue(all(item["reviewTrainingLaneLabel"] == "score-transcription" for item in review["scoreCopyQueue"]))
+        self.assertTrue(all(item["trainingOnly"] for item in review["scoreCopyQueue"]))
+        self.assertTrue(any(item["bestEffortScoreTranscription"] for item in review["scoreCopyQueue"]))
+        self.assertTrue(all(item["evidenceLevel"] == "best_effort_review_only" for item in review["scoreCopyQueue"]))
         self.assertEqual([lane["id"] for lane in review["trainingLanes"]], ["transcription-alan", "score-transcription"])
         self.assertGreaterEqual(review["sourceScoreSnippetCount"], 13)
         titles = {item["pieceTitle"] for item in review["sourceScoreSnippets"]}

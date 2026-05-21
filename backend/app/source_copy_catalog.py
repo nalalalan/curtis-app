@@ -166,12 +166,12 @@ def _requested_source_by_title() -> dict[str, dict[str, Any]]:
 def requested_score_copy_records() -> list[dict[str, Any]]:
     """Training-only score-transcription packets for source-score review.
 
-    These records are intentionally not practice evidence. A
-    score-transcription packet may enter review only after the visible source
-    crop has a verified note sequence from that same crop. The broad
-    requested-repertoire catalog below is still useful as a source library, but
-    it is not a valid review queue because its generated phrases are not proven
-    to come from the displayed IMSLP crop.
+    These records are intentionally not practice evidence. Strict
+    score-transcription packets still carry a verified note sequence from the
+    same visible source crop. When that is unavailable, Curtis may expose a
+    best-effort score-transcription packet so Alan can accept/reject it as
+    training data. Best-effort packets never become accepted score evidence by
+    themselves.
     """
 
     records: list[dict[str, Any]] = []
@@ -184,17 +184,26 @@ def requested_score_copy_records() -> list[dict[str, Any]]:
         source_image = str(source_entry.get("reviewImageUrl") or source_entry.get("imageUrl") or "").strip()
         source_ready = bool(source_entry.get("originalScoreSnippet") is True and source_image)
         verified_source_notes = source_entry.get("verifiedSourceNoteSequence")
-        if not (
+        strict_source_match = bool(
             source_ready
             and isinstance(verified_source_notes, list)
             and [str(note).strip() for note in verified_source_notes if str(note).strip()] == notes
-        ):
+        )
+        best_effort_source_match = bool(source_ready and source_image)
+        if not (strict_source_match or best_effort_source_match):
             continue
         source_label = str(source_entry.get("label") or source_entry.get("sourceFileLabel") or "source PDF crop").strip()
+        source_status = "original_score_transcription_training" if strict_source_match else "best_effort_score_transcription_review"
+        source_review_kind = (
+            "original_score_transcription_training"
+            if strict_source_match
+            else "best_effort_source_score_transcription_training"
+        )
         records.append(
             {
                 "practiceDay": "score-transcription",
                 "trainingOnly": True,
+                "bestEffortScoreTranscription": not strict_source_match,
                 "pieces": [
                     {
                         "title": title,
@@ -214,9 +223,10 @@ def requested_score_copy_records() -> list[dict[str, Any]]:
                                     {
                                         "measureLabel": source_label if source_ready else "score-transcription packet",
                                         "label": source_label if source_ready else "score-transcription packet",
-                                        "sourceStatus": "original_imslp_source_crop" if source_ready else "training_fixture_pending_original_crop",
-                                        "sourceReviewKind": "original_score_transcription_training" if source_ready else "score_transcription_training_fixture",
+                                        "sourceStatus": source_status,
+                                        "sourceReviewKind": source_review_kind,
                                         "visibleScoreExactNoteSequence": notes,
+                                        "verifiedSourceNoteSequence": notes if strict_source_match else [],
                                         "imageUrl": source_image,
                                         "scoreImageUrl": source_image,
                                         "sourceReviewImageUrl": source_image,
@@ -233,9 +243,12 @@ def requested_score_copy_records() -> list[dict[str, Any]]:
                                         "copyNotationAbc": abc,
                                         "notationCopyAspects": NOTATION_COPY_ASPECTS,
                                         "sourcePieceTrainingOnly": True,
+                                        "bestEffortScoreTranscription": not strict_source_match,
+                                        "sourceCopyReviewReady": strict_source_match,
+                                        "sourceCopyBestEffortReviewReady": not strict_source_match,
                                         "originalScoreSnippet": source_ready,
                                         "sourceImageRequiredForOriginalScore": not source_ready,
-                                        "status": "original_score_transcription_training" if source_ready else "score_transcription_training_only",
+                                        "status": source_status,
                                     }
                                 ],
                             },

@@ -3500,8 +3500,8 @@ function renderGoldReview() {
     ? review.audioQueue.slice(0, 10)
     : generalItems.filter((item) => !goldReviewIsScoreCopy(item)).slice(0, 10);
   const copyItems = Array.isArray(review.scoreCopyQueue)
-    ? review.scoreCopyQueue.slice(0, 3)
-    : generalItems.filter((item) => goldReviewIsScoreCopy(item)).slice(0, 3);
+    ? review.scoreCopyQueue.slice(0, 10)
+    : generalItems.filter((item) => goldReviewIsScoreCopy(item)).slice(0, 10);
   const sourceScoreSnippets = Array.isArray(review.sourceScoreSnippets) ? review.sourceScoreSnippets : [];
   const items = [...audioItems, ...copyItems];
   if (!items.length) {

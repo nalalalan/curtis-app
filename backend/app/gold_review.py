@@ -800,7 +800,16 @@ def _score_copy_candidate_from_snippet(
         and not bool(snippet.get("sourceImageRequiredForOriginalScore"))
         and not any(token in source_status_text for token in blocked_tokens)
     )
-    if not source_copy_review_ready:
+    source_copy_best_effort_ready = bool(
+        snippet.get("sourceCopyBestEffortReviewReady") is True
+        and source_image
+        and score_midi
+        and bool(record.get("trainingOnly") or snippet.get("sourcePieceTrainingOnly"))
+        and not bool(snippet.get("sourceCropRejected"))
+        and not bool(snippet.get("sourceImageRequiredForOriginalScore"))
+        and not any(token in source_status_text for token in blocked_tokens)
+    )
+    if not (source_copy_review_ready or source_copy_best_effort_ready):
         return {}
     score_config = target.get("symbolicScore") if isinstance(target.get("symbolicScore"), dict) else {}
     score_source = _clean(
@@ -865,6 +874,15 @@ def _score_copy_candidate_from_snippet(
         "scoreStatus": _clean(snippet.get("status") or snippet.get("verification")),
         "sourceStatus": source_status,
         "sourceReviewKind": source_review_kind,
+        "sourceCopyReviewReady": source_copy_review_ready,
+        "sourceCopyBestEffortReviewReady": source_copy_best_effort_ready,
+        "bestEffortScoreTranscription": bool(snippet.get("bestEffortScoreTranscription") or source_copy_best_effort_ready),
+        "evidenceLevel": "best_effort_review_only" if source_copy_best_effort_ready else "verified_source_copy_review",
+        "evidenceBoundary": (
+            "score-transcription training only; accept/reject feedback required before this can teach the source-copy model"
+            if source_copy_best_effort_ready
+            else "verified source-copy review candidate"
+        ),
         "scoreImageUrl": source_image,
         "sourceReviewImageUrl": source_image,
         "sourceImageUrl": _clean(snippet.get("imageUrl")) or source_image,
