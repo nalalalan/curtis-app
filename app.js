@@ -3395,8 +3395,6 @@ function renderGoldReviewItem(item, index) {
     ? "same MIDI"
     : item.scoreAgreementStatus === "score_midi_mismatch"
       ? "mismatch"
-      : isScoreCopy
-        ? TRAINING_LANE_SCORE_TRANSCRIPTION
       : "";
   const notationLabel = isScoreCopy ? TRAINING_LANE_SCORE_TRANSCRIPTION : TRAINING_LANE_TRANSCRIPTION_ALAN;
   const rule = isScoreCopy ? "Accept only if score-transcription matches the source." : "One note off = reject.";
@@ -3405,7 +3403,7 @@ function renderGoldReviewItem(item, index) {
       <div class="gold-review-head">
         <span>${escapeHtml(isRecent ? "Label" : `Queue ${index + 1}`)}</span>
         <strong>${escapeHtml(shortText(detectedNotes || item.pieceTitle || "notes pending", 72))}</strong>
-        <em>${escapeHtml([item.practiceDay, lane, agreement, item.detectedNoteCount ? `${item.detectedNoteCount} notes` : ""].filter(Boolean).join(" / "))}</em>
+        <em>${escapeHtml([(isScoreCopy ? "" : item.practiceDay), lane, agreement, item.detectedNoteCount ? `${item.detectedNoteCount} notes` : ""].filter(Boolean).join(" / "))}</em>
       </div>
       <div class="gold-review-grid${isScoreCopy ? " gold-review-copy-grid" : ""}">
         ${isScoreCopy ? renderGoldReviewScoreSource(item) : renderEmbeddedMedia({}, clip)}
