@@ -3624,6 +3624,9 @@ function renderGoldReview() {
   const adaptiveCount = Number(review.adaptiveCandidateCount) || 0;
   const adaptivePool = Number(review.adaptiveCandidatePoolCount) || adaptiveCount;
   const adaptiveLabel = adaptivePool && adaptivePool !== adaptiveCount ? `${adaptiveCount}/${adaptivePool}` : String(adaptiveCount);
+  const crossTrainerLabels = Number(review.crossTrainerSourceLabelCount) || 0;
+  const crossTrainerSupported = Number(review.crossTrainerSupportedCandidateCount) || 0;
+  const crossTrainerHidden = Number(review.crossTrainerSuppressedCandidateCount) || 0;
   const rejectionDigest = review.rejectionDigest && typeof review.rejectionDigest === "object" ? review.rejectionDigest : {};
   const rejectionInsights = review.rejectionInsights && typeof review.rejectionInsights === "object" ? review.rejectionInsights : {};
   const fastRejected = Number(rejectionInsights.rejectedFastDenseCount) || 0;
@@ -3660,6 +3663,8 @@ function renderGoldReview() {
         <article><span>Score</span><strong>${escapeHtml(String(scoreTraining))}</strong></article>
         <article><span>score-transcription</span><strong>${escapeHtml(String(scoreCopyTraining))}</strong></article>
         <article><span>note-reading</span><strong>${escapeHtml(String(noteReadingTraining))}</strong></article>
+        ${crossTrainerLabels ? `<article><span>Linked labels</span><strong>${escapeHtml(`${crossTrainerSupported}/${crossTrainerLabels}`)}</strong></article>` : ""}
+        ${crossTrainerHidden ? `<article><span>Hidden conflicts</span><strong>${escapeHtml(String(crossTrainerHidden))}</strong></article>` : ""}
         <article><span>Long</span><strong>${escapeHtml(String(longTraining))}</strong></article>
         ${corrected ? `<article><span>Corrected</span><strong>${escapeHtml(String(corrected))}</strong></article>` : ""}
         <article><span>Adaptive</span><strong>${escapeHtml(adaptiveLabel)}</strong></article>
@@ -3703,6 +3708,8 @@ function renderGoldReview() {
       <article><span>Score</span><strong>${escapeHtml(String(scoreTraining))}</strong></article>
       <article><span>score-transcription</span><strong>${escapeHtml(String(scoreCopyTraining))}</strong></article>
       <article><span>note-reading</span><strong>${escapeHtml(String(noteReadingTraining))}</strong></article>
+      ${crossTrainerLabels ? `<article><span>Linked labels</span><strong>${escapeHtml(`${crossTrainerSupported}/${crossTrainerLabels}`)}</strong></article>` : ""}
+      ${crossTrainerHidden ? `<article><span>Hidden conflicts</span><strong>${escapeHtml(String(crossTrainerHidden))}</strong></article>` : ""}
       <article><span>Long</span><strong>${escapeHtml(String(longTraining))}</strong></article>
       <article><span>transcription-alan</span><strong>${escapeHtml(String(audioQueued))}</strong></article>
       ${fastRejected ? `<article><span>Fast rejects</span><strong>${escapeHtml(String(fastRejected))}</strong></article>` : ""}

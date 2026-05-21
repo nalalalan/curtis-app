@@ -185,6 +185,21 @@ def _review_identity_keys(item: dict[str, Any]) -> set[str]:
     return keys
 
 
+def _source_crop_key(item: dict[str, Any]) -> str:
+    image = _clean(
+        item.get("sourceReviewImageUrl")
+        or item.get("sourceImageUrl")
+        or item.get("scoreImageUrl")
+        or item.get("imageUrl")
+    )
+    if not image:
+        return ""
+    piece = _clean(item.get("pieceTitle"))
+    location = _clean(item.get("scoreLocation"))
+    source = _clean(item.get("scoreSource") or item.get("sourceUrl") or item.get("sourceTitle"))
+    return "|".join([piece, location, image, source])
+
+
 def _review_interval(item: dict[str, Any]) -> dict[str, Any]:
     sample_id = _clean(item.get("sampleId"))
     if not sample_id:
@@ -1359,6 +1374,7 @@ def build_review_learning_profile(items: list[dict[str, Any]]) -> dict[str, Any]
     accepted_counts: Counter[str] = Counter()
     rejected_counts: Counter[str] = Counter()
     soft_rejected: set[str] = set()
+    source_note_letter_labels: dict[str, dict[str, Any]] = {}
     for item in items:
         key = _item_learning_key(item)
         interval = _review_interval(item)
@@ -1369,6 +1385,21 @@ def build_review_learning_profile(items: list[dict[str, Any]]) -> dict[str, Any]
             accepted_identity_keys.update(_review_identity_keys(item))
             if interval:
                 accepted_intervals.append(interval)
+            if _is_note_reading_item(item):
+                source_key = _source_crop_key(item)
+                user_letters = _clean_note_letters(item.get("userNoteLetters") or item.get("noteLetterAnswer"))
+                if source_key and user_letters and source_key not in source_note_letter_labels:
+                    source_note_letter_labels[source_key] = {
+                        "sourceKey": source_key,
+                        "letters": user_letters,
+                        "letterText": " ".join(user_letters),
+                        "reviewItemId": item.get("reviewItemId"),
+                        "pieceTitle": item.get("pieceTitle"),
+                        "scoreLocation": item.get("scoreLocation"),
+                        "sourceReviewImageUrl": item.get("sourceReviewImageUrl") or item.get("sourceImageUrl") or item.get("scoreImageUrl"),
+                        "noteLetterCorrect": bool(item.get("noteLetterCorrect")),
+                        "createdAt": item.get("createdAt"),
+                    }
         elif item.get("status") == "rejected_mismatch":
             soft_rejection = _is_soft_review_rejection(item)
             if key:
@@ -1395,12 +1426,14 @@ def build_review_learning_profile(items: list[dict[str, Any]]) -> dict[str, Any]
         "rejectedIntervals": rejected_intervals,
         "acceptedCounts": dict(accepted_counts),
         "rejectedCounts": dict(rejected_counts),
+        "sourceNoteLetterLabels": source_note_letter_labels,
+        "sourceNoteLetterLabelCount": len(source_note_letter_labels),
         "acceptedPatternCount": len(accepted_keys),
         "rejectedPatternCount": len(rejected_keys),
         "rejectedCandidateFingerprintCount": len(rejected_identity_keys),
         "softRejectedPatternCount": len(soft_rejected),
         "suppressionThreshold": 1,
-        "suppressionRule": "Already accepted source areas are treated as covered. A rejected exact MIDI pattern, same clip/score fingerprint, or overlapping rejected clip window is removed from the active review queue unless an accepted label covers the same area.",
+        "suppressionRule": "Already accepted source areas are treated as covered. A rejected exact MIDI pattern, same clip/score fingerprint, overlapping rejected clip window, or score-transcription candidate that conflicts with an accepted note-reading source label is removed from the active review queue unless an accepted label covers the same area.",
     }
 
 
@@ -1417,6 +1450,9 @@ def apply_review_learning_to_candidates(
     )
     accepted_intervals = profile.get("acceptedIntervals") if isinstance(profile.get("acceptedIntervals"), list) else []
     rejected_intervals = profile.get("rejectedIntervals") if isinstance(profile.get("rejectedIntervals"), list) else []
+    source_note_letter_labels = (
+        profile.get("sourceNoteLetterLabels") if isinstance(profile.get("sourceNoteLetterLabels"), dict) else {}
+    )
     active: list[dict[str, Any]] = []
     suppressed: list[dict[str, Any]] = []
     for candidate in candidates:
@@ -1432,7 +1468,27 @@ def apply_review_learning_to_candidates(
         )
         accepted_area_matches = bool(accepted_identity_matches or accepted_interval_matches)
         rejected_area_matches = bool(rejected_identity_matches or rejected_interval_matches)
+        source_key = _source_crop_key(candidate)
+        source_letter_label = source_note_letter_labels.get(source_key) if source_key else None
+        if not isinstance(source_letter_label, dict):
+            source_letter_label = None
+        candidate_note_letters = _clean_note_letters(
+            candidate.get("sourceScoreNotes") or candidate.get("scoreNotes") or candidate.get("detectedNotes")
+        )
+        human_source_note_letters = (
+            _clean_note_letters(source_letter_label.get("letters")) if source_letter_label else []
+        )
+        source_note_letter_agreement = None
+        if source_letter_label and candidate_note_letters:
+            source_note_letter_agreement = candidate_note_letters == human_source_note_letters
+        source_note_letter_mismatch = bool(
+            source_note_letter_agreement is False
+            and (_is_score_copy_item(candidate) or _clean(candidate.get("reviewKind")) == "score_phrase_candidate")
+        )
         status = (
+            "source_note_letter_mismatch_hidden"
+            if source_note_letter_mismatch
+            else
             "accepted_candidate_covered"
             if accepted_area_matches
             else "rejected_candidate_hidden"
@@ -1455,8 +1511,23 @@ def apply_review_learning_to_candidates(
             "reviewCandidateRejectedOverlapKeys": rejected_interval_matches,
             "reviewLearningStatus": status,
             "reviewLearningReliability": "noisy_human_signal",
+            "crossTrainerSourceKey": source_key,
+            "humanSourceNoteLetters": human_source_note_letters,
+            "humanSourceNoteLetterText": " ".join(human_source_note_letters),
+            "candidateSourceNoteLetters": candidate_note_letters,
+            "candidateSourceNoteLetterText": " ".join(candidate_note_letters),
+            "sourceNoteLetterAgreement": source_note_letter_agreement,
+            "sourceNoteLetterLabelReviewItemId": source_letter_label.get("reviewItemId") if source_letter_label else "",
+            "sourceNoteLetterLabelCorrectedFromGuess": bool(source_letter_label and not source_letter_label.get("noteLetterCorrect")),
+            "crossTrainerSupport": (
+                "note_reading_source_letter_match"
+                if source_note_letter_agreement is True
+                else "note_reading_source_letter_conflict"
+                if source_note_letter_agreement is False
+                else ""
+            ),
         }
-        if accepted_area_matches or rejected_area_matches or (key and key in rejected_only_keys):
+        if source_note_letter_mismatch or accepted_area_matches or rejected_area_matches or (key and key in rejected_only_keys):
             suppressed.append(enriched)
         else:
             active.append(enriched)
@@ -1469,8 +1540,10 @@ def _review_candidate_rank(item: dict[str, Any]) -> tuple[Any, ...]:
         "new_pattern": 1,
         "soft_rejected_pattern": 2,
     }.get(str(item.get("reviewLearningStatus") or ""), 1)
+    source_label_rank = 0 if item.get("sourceNoteLetterAgreement") is True else 2 if item.get("sourceNoteLetterAgreement") is False else 1
     return (
         learning_rank,
+        source_label_rank,
         0
         if item.get("reviewKind") == "score_copy_candidate"
         else 1
@@ -1610,6 +1683,13 @@ def build_gold_review_loop(
         ]
         if str(key)
     }
+    cross_trainer_source_label_count = int(learning_profile.get("sourceNoteLetterLabelCount") or 0)
+    cross_trainer_supported_count = len(
+        [item for item in candidates if item.get("crossTrainerSupport") == "note_reading_source_letter_match"]
+    )
+    cross_trainer_suppressed_count = len(
+        [item for item in suppressed_all if item.get("reviewLearningStatus") == "source_note_letter_mismatch_hidden"]
+    )
     suppressed_statuses = {str(item.get("reviewLearningStatus") or "") for item in suppressed_all}
     current_batch_is_covered = bool(suppressed_all) and suppressed_statuses <= {"accepted_candidate_covered"}
     queue_status = (
@@ -1687,6 +1767,10 @@ def build_gold_review_loop(
         "trainingNoteReadingExampleCount": int(training_set.get("noteReadingExampleCount") or 0),
         "trainingPositiveNoteReadingExampleCount": int(training_set.get("positiveNoteReadingExampleCount") or 0),
         "trainingNegativeNoteReadingExampleCount": int(training_set.get("negativeNoteReadingExampleCount") or 0),
+        "crossTrainerSourceLabelCount": cross_trainer_source_label_count,
+        "crossTrainerSupportedCandidateCount": cross_trainer_supported_count,
+        "crossTrainerSuppressedCandidateCount": cross_trainer_suppressed_count,
+        "crossTrainerRule": "Accepted note-reading labels become source-crop letter labels. score-transcription candidates with the same source crop must match those letters before they stay in the active queue; matching candidates rank earlier.",
         "trainingLanes": [
             {
                 "id": "transcription-alan",

@@ -715,6 +715,13 @@ class GoldReviewTests(unittest.TestCase):
         self.assertEqual(followup["trainingNoteReadingExampleCount"], 1)
         self.assertEqual(followup["trainingPositiveNoteReadingExampleCount"], 1)
         self.assertEqual(followup["acceptedEvidenceReadyCount"], 0)
+        self.assertEqual(followup["crossTrainerSourceLabelCount"], 1)
+        bridged = next(
+            item for item in followup["scoreCopyQueue"] if item["sourceReviewImageUrl"] == candidate["sourceReviewImageUrl"]
+        )
+        self.assertEqual(bridged["humanSourceNoteLetters"], ["D", "C", "D", "C", "D"])
+        self.assertTrue(bridged["sourceNoteLetterAgreement"])
+        self.assertEqual(bridged["crossTrainerSupport"], "note_reading_source_letter_match")
 
     def test_note_reading_user_letters_are_accepted_even_when_source_guess_differs(self):
         review = build_gold_review_loop({}, {"records": []}, limit=20, include_source_copy_catalog=True)
@@ -739,6 +746,17 @@ class GoldReviewTests(unittest.TestCase):
         self.assertFalse(result["goldReviewItem"]["noteLetterCorrect"])
         self.assertEqual(followup["trainingNoteReadingExampleCount"], 1)
         self.assertEqual(followup["trainingPositiveNoteReadingExampleCount"], 1)
+        self.assertEqual(followup["crossTrainerSourceLabelCount"], 1)
+        self.assertEqual(followup["crossTrainerSuppressedCandidateCount"], 1)
+        self.assertFalse(
+            any(item["sourceReviewImageUrl"] == candidate["sourceReviewImageUrl"] for item in followup["scoreCopyQueue"])
+        )
+        suppressed = next(
+            item for item in followup["suppressedQueuePreview"] if item["sourceReviewImageUrl"] == candidate["sourceReviewImageUrl"]
+        )
+        self.assertEqual(suppressed["reviewLearningStatus"], "source_note_letter_mismatch_hidden")
+        self.assertEqual(suppressed["humanSourceNoteLetters"], ["A", "B", "C"])
+        self.assertFalse(suppressed["sourceNoteLetterAgreement"])
 
     def test_source_catalog_mode_tops_up_thin_audio_queue_with_adaptive_windows(self):
         daily_records = {
