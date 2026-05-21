@@ -22,6 +22,8 @@ MAX_ADAPTIVE_REVIEW_WINDOWS_PER_SERIES = 10
 MAX_ADAPTIVE_REVIEW_QUEUE = 80
 MIN_SOURCE_TRAINING_LANE_QUEUE = 8
 MAX_SOURCE_TRAINING_REFILL_CYCLES = 40
+VISIBLE_AUDIO_QUEUE_OVERLAP_RATIO_LIMIT = 0.42
+VISIBLE_AUDIO_QUEUE_START_GAP_SECONDS = 1.25
 SCORE_COPY_TASKS = {"score_copy_exact_notes", "score_copy_exact_notation", "score_copy_pitch_skeleton"}
 NOTE_READING_TASKS = {"note_letter_reading"}
 REVIEW_CLIP_PREROLL_SECONDS = 0.4
@@ -296,6 +298,50 @@ def _review_interval_matches(
     return matches
 
 
+def _interval_overlap_ratio(left: dict[str, Any], right: dict[str, Any]) -> float:
+    if _clean(left.get("sampleId")) != _clean(right.get("sampleId")):
+        return 0.0
+    left_start = _safe_float(left.get("startSeconds"))
+    left_end = max(left_start, _safe_float(left.get("endSeconds")))
+    right_start = _safe_float(right.get("startSeconds"))
+    right_end = max(right_start, _safe_float(right.get("endSeconds")))
+    overlap = max(0.0, min(left_end, right_end) - max(left_start, right_start))
+    duration = max(0.05, min(left_end - left_start, right_end - right_start))
+    return overlap / duration
+
+
+def _diverse_audio_review_candidates(candidates: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    selected: list[dict[str, Any]] = []
+    hidden: list[dict[str, Any]] = []
+    for candidate in candidates:
+        interval = _review_interval(candidate)
+        duplicate_reason = ""
+        duplicate_of = ""
+        for accepted in selected:
+            accepted_interval = _review_interval(accepted)
+            if not interval or not accepted_interval:
+                continue
+            if _clean(interval.get("sampleId")) != _clean(accepted_interval.get("sampleId")):
+                continue
+            start_gap = abs(_safe_float(interval.get("startSeconds")) - _safe_float(accepted_interval.get("startSeconds")))
+            overlap_ratio = _interval_overlap_ratio(interval, accepted_interval)
+            if start_gap < VISIBLE_AUDIO_QUEUE_START_GAP_SECONDS or overlap_ratio >= VISIBLE_AUDIO_QUEUE_OVERLAP_RATIO_LIMIT:
+                duplicate_reason = "duplicate_visible_audio_window"
+                duplicate_of = _clean(accepted.get("reviewItemId"))
+                break
+        if duplicate_reason:
+            hidden.append(
+                {
+                    **candidate,
+                    "reviewLearningStatus": duplicate_reason,
+                    "reviewDuplicateOf": duplicate_of,
+                }
+            )
+            continue
+        selected.append(candidate)
+    return selected, hidden
+
+
 def _review_task(raw: dict[str, Any], item_type: str, score_notes: list[str]) -> str:
     explicit = _clean(raw.get("reviewTask") or raw.get("trainingTask")).lower()
     if explicit:
@@ -502,6 +548,26 @@ def _note_span_seconds(notes: list[dict[str, Any]]) -> float:
     return max(0.0, end - start)
 
 
+def _note_window_interval(notes: list[dict[str, Any]]) -> dict[str, float]:
+    if not notes:
+        return {"startSeconds": 0.0, "endSeconds": 0.0}
+    start = _safe_float(notes[0].get("startSeconds"))
+    end = max(start, _safe_float(notes[-1].get("endSeconds") or notes[-1].get("startSeconds")))
+    return {"startSeconds": start, "endSeconds": end}
+
+
+def _note_window_overlap_ratio(left: list[dict[str, Any]], right: list[dict[str, Any]]) -> float:
+    left_interval = _note_window_interval(left)
+    right_interval = _note_window_interval(right)
+    left_start = left_interval["startSeconds"]
+    left_end = max(left_start, left_interval["endSeconds"])
+    right_start = right_interval["startSeconds"]
+    right_end = max(right_start, right_interval["endSeconds"])
+    overlap = max(0.0, min(left_end, right_end) - max(left_start, right_start))
+    duration = max(0.05, min(left_end - left_start, right_end - right_start))
+    return overlap / duration
+
+
 def _midi_values(notes: list[dict[str, Any]]) -> list[int]:
     values: list[int] = []
     for note in notes:
@@ -687,7 +753,19 @@ def adaptive_review_note_windows(
                 score -= 10.0
             scored.append((score, start, window))
     scored.sort(key=lambda item: (-item[0], item[1], -len(item[2])))
-    return [window for _, _, window in scored[: max(0, int(max_windows))]]
+    selected: list[list[dict[str, Any]]] = []
+    for _, _, window in scored:
+        window_start = _note_window_interval(window)["startSeconds"]
+        if any(
+            abs(window_start - _note_window_interval(existing)["startSeconds"]) < VISIBLE_AUDIO_QUEUE_START_GAP_SECONDS
+            or _note_window_overlap_ratio(window, existing) >= VISIBLE_AUDIO_QUEUE_OVERLAP_RATIO_LIMIT
+            for existing in selected
+        ):
+            continue
+        selected.append(window)
+        if len(selected) >= max(0, int(max_windows)):
+            break
+    return selected
 
 
 def _clip_from_series(series: dict[str, Any], notes: list[dict[str, Any]]) -> dict[str, Any]:
@@ -1384,6 +1462,8 @@ def normalize_gold_review_item(raw: dict[str, Any]) -> dict[str, Any]:
     review_task = _review_task(raw, item_type, score_notes)
     expected_note_letters = _clean_note_letters(raw.get("expectedNoteLetters") or _note_letters_from_notes(score_notes or detected_notes))
     user_note_letters = _clean_note_letters(raw.get("userNoteLetters") or raw.get("noteLetterAnswer"))
+    if item_type == "note_reading" and status == "accepted_truth" and user_note_letters and not expected_note_letters:
+        expected_note_letters = user_note_letters
     note_letter_correct = bool(expected_note_letters and user_note_letters and expected_note_letters == user_note_letters)
     if status == "accepted_truth" and item_type != "note_reading" and not accepted_notes:
         accepted_notes = detected_notes
@@ -1761,11 +1841,13 @@ def build_gold_review_loop(
     ]
     reviewed_ids = {_clean(item.get("reviewItemId")) for item in items if _clean(item.get("reviewItemId"))}
     learning_profile = build_review_learning_profile(items)
+    raw_all_candidates = _queue_candidates(daily_records, include_source_copy_catalog=include_source_copy_catalog)
     raw_candidates = [
         candidate
-        for candidate in _queue_candidates(daily_records, include_source_copy_catalog=include_source_copy_catalog)
+        for candidate in raw_all_candidates
         if _clean(candidate.get("reviewItemId")) not in reviewed_ids
     ]
+    reviewed_raw_candidate_count = max(0, len(raw_all_candidates) - len(raw_candidates))
     candidates, suppressed_candidates = apply_review_learning_to_candidates(raw_candidates, learning_profile)
     source_score_snippets = requested_original_score_snippets() if include_source_copy_catalog else []
     adaptive_candidates: list[dict[str, Any]] = []
@@ -1788,6 +1870,17 @@ def build_gold_review_loop(
             if _clean(candidate.get("reviewItemId")) not in reviewed_ids
         ]
         adaptive_candidates, adaptive_suppressed_candidates = apply_review_learning_to_candidates(raw_adaptive_candidates, learning_profile)
+        if primary_queue_is_only_soft_rejected and adaptive_candidates:
+            adaptive_candidates = [
+                {
+                    **candidate,
+                    "reviewLearningStatus": "adaptive_new_window",
+                    "reviewLearningReliability": "noisy_human_signal",
+                }
+                if candidate.get("adaptiveReview") and candidate.get("reviewLearningStatus") == "soft_rejected_pattern"
+                else candidate
+                for candidate in adaptive_candidates
+            ]
         adaptive_candidates.sort(key=_review_candidate_rank)
         adaptive_candidate_pool_count = len(adaptive_candidates)
         adaptive_candidates = adaptive_candidates[:MAX_ADAPTIVE_REVIEW_QUEUE]
@@ -1795,6 +1888,10 @@ def build_gold_review_loop(
             candidates = [*adaptive_candidates, *candidates]
             adaptive_mode = True
     candidates = _dedupe_review_candidates(candidates)
+    if adaptive_mode:
+        non_soft_candidates = [item for item in candidates if item.get("reviewLearningStatus") != "soft_rejected_pattern"]
+        if non_soft_candidates:
+            candidates = non_soft_candidates
     score_candidates = [item for item in candidates if item.get("reviewTask") == "audio_score_exact_match"]
     score_copy_candidates = [item for item in candidates if _is_score_copy_task(item.get("reviewTask"))]
     note_reading_candidates = [item for item in candidates if _is_note_reading_task(item.get("reviewTask"))]
@@ -1837,10 +1934,22 @@ def build_gold_review_loop(
     exact_score_candidates = [item for item in score_candidates if item.get("scoreAgreement") is True]
     long_candidates = [item for item in candidates if item.get("reviewKind") == "long_audio_phrase_candidate"]
     candidates.sort(key=_review_candidate_rank)
+    score_copy_candidates.sort(key=_review_candidate_rank)
+    note_reading_candidates.sort(key=_review_candidate_rank)
+    raw_audio_queue_count = len(audio_candidates)
+    audio_candidates.sort(key=_review_candidate_rank)
+    audio_candidates, duplicate_audio_window_candidates = _diverse_audio_review_candidates(audio_candidates)
+    if duplicate_audio_window_candidates:
+        visible_audio_ids = {_clean(item.get("reviewItemId")) for item in audio_candidates if _clean(item.get("reviewItemId"))}
+        candidates = [
+            item
+            for item in candidates
+            if _is_score_copy_item(item) or _is_note_reading_item(item) or _clean(item.get("reviewItemId")) in visible_audio_ids
+        ]
     truth_progress = build_truth_progress(state)
     training_set = build_gold_training_set(items)
     rejection_insights = build_rejection_insights(items)
-    suppressed_all = [*suppressed_candidates, *adaptive_suppressed_candidates]
+    suppressed_all = [*suppressed_candidates, *adaptive_suppressed_candidates, *duplicate_audio_window_candidates]
     hidden_reviewed_keys = {
         str(item.get("reviewLearningKey") or "")
         for item in suppressed_all
@@ -1897,7 +2006,19 @@ def build_gold_review_loop(
         [item for item in suppressed_all if item.get("reviewLearningStatus") == "source_note_letter_mismatch_hidden"]
     )
     suppressed_statuses = {str(item.get("reviewLearningStatus") or "") for item in suppressed_all}
-    current_batch_is_covered = bool(suppressed_all) and suppressed_statuses <= {"accepted_candidate_covered"}
+    reviewed_only_batch_is_covered = (
+        not candidates
+        and not suppressed_all
+        and reviewed_raw_candidate_count > 0
+        and by_status.get("accepted_truth", 0) > 0
+    )
+    reviewed_only_batch_is_exhausted = (
+        not candidates
+        and not suppressed_all
+        and reviewed_raw_candidate_count > 0
+        and by_status.get("rejected_mismatch", 0) > 0
+    )
+    current_batch_is_covered = (bool(suppressed_all) and suppressed_statuses <= {"accepted_candidate_covered"}) or reviewed_only_batch_is_covered
     queue_status = (
         "adaptive_review_ready"
         if adaptive_mode
@@ -1906,7 +2027,7 @@ def build_gold_review_loop(
         else "current_batch_covered_by_review"
         if current_batch_is_covered
         else "current_batch_exhausted_by_learning"
-        if suppressed_all
+        if suppressed_all or reviewed_only_batch_is_exhausted
         else "review_queue_empty"
     )
     return {
@@ -1929,6 +2050,8 @@ def build_gold_review_loop(
         "scoreCopyQueueCount": len(score_copy_candidates),
         "noteReadingQueueCount": len(note_reading_candidates),
         "audioQueueCount": len(audio_candidates),
+        "rawAudioQueueCount": raw_audio_queue_count,
+        "duplicateAudioWindowHiddenCount": len(duplicate_audio_window_candidates),
         "transcriptionAlanQueueCount": len(audio_candidates),
         "scoreTranscriptionQueueCount": len(score_copy_candidates),
         "noteReadingTrainingQueueCount": len(note_reading_candidates),

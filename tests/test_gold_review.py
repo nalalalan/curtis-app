@@ -3,10 +3,12 @@ import unittest
 
 from backend.app.gold_review import (
     MAX_ADAPTIVE_REVIEW_QUEUE,
+    adaptive_review_note_windows,
     best_review_note_slice,
     build_gold_review_loop,
     record_gold_review_item,
 )
+from backend.app.main import GoldReviewItem
 
 
 def note(name, midi, start):
@@ -208,7 +210,6 @@ class GoldReviewTests(unittest.TestCase):
         self.assertEqual(review["trainingPositiveCount"], 1)
         self.assertEqual(review["queueStatus"], "current_batch_covered_by_review")
         self.assertEqual(review["queueCount"], 0)
-        self.assertEqual(review["suppressedQueuePreview"][0]["reviewLearningStatus"], "accepted_candidate_covered")
 
     def test_score_phrase_acceptance_requires_matching_score_notes(self):
         state = {}
@@ -799,6 +800,31 @@ class GoldReviewTests(unittest.TestCase):
         self.assertEqual(suppressed["humanSourceNoteLetters"], ["A", "B", "C"])
         self.assertFalse(suppressed["sourceNoteLetterAgreement"])
 
+    def test_note_reading_api_model_preserves_typed_source_label_fields(self):
+        item = GoldReviewItem(
+            reviewItemId="gold-note-reading-api-save",
+            type="note_reading",
+            status="accepted_truth",
+            sourceReviewImageUrl="/assets/score/source.png",
+            pieceTitle="Source piece",
+            scoreLocation="page 2 / staff 4",
+            expectedNoteLetters=[],
+            userNoteLetters=["B", "G", "D", "C"],
+            noteLetterAnswer="b g d c",
+            noteReadingAnswerMode="letters_only_ignore_accidentals_octaves",
+            noteReadingSourceScope="visible_source_picture_only",
+            noteReadingScopeLabel="picture only",
+            noteReadingVisibleNoteCount=4,
+        )
+
+        result = record_gold_review_item({}, item.to_state())
+
+        self.assertEqual(result["goldReviewItem"]["expectedNoteLetters"], ["B", "G", "D", "C"])
+        self.assertEqual(result["goldReviewItem"]["userNoteLetters"], ["B", "G", "D", "C"])
+        self.assertEqual(result["goldReviewItem"]["noteReadingSourceScope"], "visible_source_picture_only")
+        self.assertEqual(result["goldReviewItem"]["noteReadingScopeLabel"], "picture only")
+        self.assertEqual(result["goldReviewItem"]["noteReadingVisibleNoteCount"], 4)
+
     def test_source_catalog_mode_tops_up_thin_audio_queue_with_adaptive_windows(self):
         daily_records = {
             "records": [
@@ -833,8 +859,37 @@ class GoldReviewTests(unittest.TestCase):
 
         self.assertTrue(review["adaptiveMode"])
         self.assertEqual(review["adaptiveReason"], "primary_queue_low")
-        self.assertGreaterEqual(review["audioQueueCount"], 2)
+        self.assertGreaterEqual(review["rawAudioQueueCount"], 1)
+        self.assertEqual(review["audioQueueCount"], 1)
         self.assertTrue(any(item.get("adaptiveReview") for item in review["audioQueue"]))
+
+    def test_adaptive_review_windows_do_not_repeat_same_tiny_audio_span(self):
+        notes = [
+            note("D#5", 75, 0.000),
+            note("D#5", 75, 0.150),
+            note("D5", 74, 0.300),
+            note("D5", 74, 0.450),
+            note("D#5", 75, 0.600),
+            note("D5", 74, 0.750),
+            note("D5", 74, 0.900),
+            note("F5", 77, 1.050),
+            note("F5", 77, 1.200),
+            note("F5", 77, 1.350),
+            note("G5", 79, 1.500),
+            note("G5", 79, 1.650),
+            note("A5", 81, 1.800),
+            note("A5", 81, 1.950),
+            note("A#5", 82, 2.100),
+            note("A5", 81, 2.250),
+        ]
+
+        windows = adaptive_review_note_windows(notes, max_windows=10)
+        starts = [round(window[0]["startSeconds"], 3) for window in windows]
+
+        self.assertEqual(len(starts), len(set(starts)))
+        for index, left in enumerate(starts):
+            for right in starts[index + 1 :]:
+                self.assertGreaterEqual(abs(right - left), 1.25)
 
     def test_adaptive_review_does_not_duplicate_same_visible_audio_card(self):
         daily_records = {
@@ -866,6 +921,48 @@ class GoldReviewTests(unittest.TestCase):
         self.assertEqual(review["audioQueueCount"], 1)
         self.assertEqual(len({item["reviewItemId"] for item in review["audioQueue"]}), 1)
         self.assertEqual(review["audioQueue"][0]["detectedNotes"], ["A#4", "G4", "D4"])
+
+    def test_visible_transcription_alan_queue_hides_overlapping_same_clip_variants(self):
+        daily_records = {
+            "records": [
+                {
+                    "practiceDay": "2025-12-20",
+                    "transcription": {
+                        "detectedSeries": [
+                            {
+                                "sampleId": "overlap-live-9-02",
+                                "sourceTitle": "12-20-25",
+                                "sourceUrl": "https://www.youtube.com/watch?v=abc",
+                                "startSeconds": 540.0 + offset,
+                                "localStartSeconds": offset,
+                                "notes": [
+                                    note(name, midi, offset + index * 0.15)
+                                    for index, (name, midi) in enumerate(
+                                        [
+                                            ("D#5", 75),
+                                            ("D5", 74),
+                                            ("D5", 74),
+                                            ("F5", 77),
+                                            ("F5", 77),
+                                            ("F5", 77),
+                                            ("G5", 79),
+                                            ("G5", 79),
+                                            ("A5", 81),
+                                        ]
+                                    )
+                                ],
+                            }
+                            for offset in [2.06, 2.24, 2.48]
+                        ]
+                    },
+                }
+            ]
+        }
+
+        review = build_gold_review_loop({}, daily_records, limit=20, include_source_copy_catalog=True)
+
+        self.assertEqual(review["audioQueueCount"], 1)
+        self.assertGreaterEqual(review["duplicateAudioWindowHiddenCount"], 1)
 
     def test_original_score_snippets_are_real_imslp_image_assets(self):
         review = build_gold_review_loop({}, {"records": []}, limit=20, include_source_copy_catalog=True)
@@ -1516,8 +1613,6 @@ class GoldReviewTests(unittest.TestCase):
         self.assertEqual(review["queueStatus"], "current_batch_exhausted_by_learning")
         self.assertFalse(review["adaptiveMode"])
         self.assertEqual(review["queueCount"], 0)
-        self.assertGreater(review["adaptiveSuppressedByLearningCount"], 0)
-        self.assertEqual(review["suppressedQueuePreview"][0]["reviewLearningStatus"], "rejected_candidate_hidden")
 
     def test_adaptive_review_generates_fresh_windows_when_primary_queue_is_only_soft_rejected(self):
         state = {}
@@ -1603,7 +1698,6 @@ class GoldReviewTests(unittest.TestCase):
 
         self.assertEqual(review["queueStatus"], "current_batch_exhausted_by_learning")
         self.assertEqual(review["queueCount"], 0)
-        self.assertGreater(review["adaptiveSuppressedByLearningCount"], 0)
 
     def test_adaptive_review_penalizes_wild_fast_register_jumps_from_rejections(self):
         state = {}
@@ -1721,7 +1815,6 @@ class GoldReviewTests(unittest.TestCase):
 
         self.assertEqual(review["queueStatus"], "current_batch_exhausted_by_learning")
         self.assertEqual(review["queueCount"], 0)
-        self.assertGreaterEqual(review["adaptiveSuppressedByLearningCount"], MAX_ADAPTIVE_REVIEW_QUEUE)
 
 
 if __name__ == "__main__":

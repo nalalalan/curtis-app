@@ -176,6 +176,9 @@ class TruthWorkbenchItem(BaseModel):
     note_letter_answer: str = Field(default="", alias="noteLetterAnswer")
     note_letter_correct: bool = Field(default=False, alias="noteLetterCorrect")
     note_reading_answer_mode: str = Field(default="", alias="noteReadingAnswerMode")
+    note_reading_source_scope: str = Field(default="", alias="noteReadingSourceScope")
+    note_reading_scope_label: str = Field(default="", alias="noteReadingScopeLabel")
+    note_reading_visible_note_count: int = Field(default=0, alias="noteReadingVisibleNoteCount")
     reason: str = ""
     note: str = ""
 
@@ -217,6 +220,9 @@ class TruthWorkbenchItem(BaseModel):
             "noteLetterAnswer": self.note_letter_answer,
             "noteLetterCorrect": self.note_letter_correct,
             "noteReadingAnswerMode": self.note_reading_answer_mode,
+            "noteReadingSourceScope": self.note_reading_source_scope,
+            "noteReadingScopeLabel": self.note_reading_scope_label,
+            "noteReadingVisibleNoteCount": self.note_reading_visible_note_count,
             "reason": self.reason,
             "note": self.note,
         }
@@ -262,6 +268,9 @@ class GoldReviewItem(BaseModel):
     note_letter_answer: str = Field(default="", alias="noteLetterAnswer")
     note_letter_correct: bool = Field(default=False, alias="noteLetterCorrect")
     note_reading_answer_mode: str = Field(default="", alias="noteReadingAnswerMode")
+    note_reading_source_scope: str = Field(default="", alias="noteReadingSourceScope")
+    note_reading_scope_label: str = Field(default="", alias="noteReadingScopeLabel")
+    note_reading_visible_note_count: int = Field(default=0, alias="noteReadingVisibleNoteCount")
     reason: str = ""
     note: str = ""
 
@@ -303,6 +312,9 @@ class GoldReviewItem(BaseModel):
             "noteLetterAnswer": self.note_letter_answer,
             "noteLetterCorrect": self.note_letter_correct,
             "noteReadingAnswerMode": self.note_reading_answer_mode,
+            "noteReadingSourceScope": self.note_reading_source_scope,
+            "noteReadingScopeLabel": self.note_reading_scope_label,
+            "noteReadingVisibleNoteCount": self.note_reading_visible_note_count,
             "reason": self.reason,
             "note": self.note,
         }

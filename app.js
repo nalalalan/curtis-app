@@ -1,4 +1,5 @@
 const API_BASE_KEY = "curtis-api-base";
+const NOTE_READING_DRAFT_PREFIX = "curtis-note-reading-draft:";
 const DEFAULT_API_BASE = "https://curtis-app-production.up.railway.app";
 const PUBLIC_YOUTUBE_SOURCE = "https://www.youtube.com/@nalalan";
 
@@ -568,6 +569,43 @@ function noteLetterSequence(value) {
     .filter(Boolean);
 }
 
+function noteReadingDraftKey(reviewItemId) {
+  const id = String(reviewItemId || "").trim();
+  return id ? `${NOTE_READING_DRAFT_PREFIX}${id}` : "";
+}
+
+function noteReadingDraftValue(item) {
+  const explicit = String(item?.noteLetterAnswer || "").trim();
+  if (explicit) return explicit;
+  const key = noteReadingDraftKey(item?.reviewItemId);
+  if (!key) return "";
+  try {
+    return localStorage.getItem(key) || "";
+  } catch {
+    return "";
+  }
+}
+
+function persistNoteReadingDraft(reviewItemId, value) {
+  const key = noteReadingDraftKey(reviewItemId);
+  if (!key) return;
+  try {
+    localStorage.setItem(key, String(value || ""));
+  } catch {
+    // Draft persistence is only a browser-side safety net.
+  }
+}
+
+function clearNoteReadingDraft(reviewItemId) {
+  const key = noteReadingDraftKey(reviewItemId);
+  if (!key) return;
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // Ignore storage failures; the backend save remains authoritative.
+  }
+}
+
 async function submitNoteReading(form) {
   const candidate = findGoldReviewCandidate(form.dataset.reviewItemId);
   const state = form.querySelector("[data-note-reading-status]");
@@ -582,6 +620,7 @@ async function submitNoteReading(form) {
     button.textContent = "Saving";
   }
   const answer = String(input.value || "").trim();
+  persistNoteReadingDraft(candidate.reviewItemId, answer);
   const expectedLetters = Array.isArray(candidate.expectedNoteLetters)
     ? candidate.expectedNoteLetters.map((letter) => String(letter || "").toUpperCase()).filter(Boolean)
     : noteLetterSequence(candidate.expectedNoteLetterText || "");
@@ -618,6 +657,7 @@ async function submitNoteReading(form) {
         reason: correct ? "human_note_letters_match_source_guess" : "human_note_letters_correct_source_guess",
       },
     });
+    clearNoteReadingDraft(candidate.reviewItemId);
     applyOps(ops);
     if (state) state.textContent = "Saved.";
   } catch (error) {
@@ -3535,6 +3575,7 @@ function renderNoteReadingItem(item, index) {
   const isRecent = status !== "pending_review";
   const label = [item.scoreLocation, item.pieceTitle].filter(Boolean).join(" / ") || "notation";
   const imageUrl = assetUrl(item.sourceReviewImageUrl || item.sourceImageUrl || item.scoreImageUrl || "");
+  const draftValue = noteReadingDraftValue(item);
   const source = imageUrl
     ? `
       <section class="gold-review-source gold-review-source-original note-reading-source" aria-label="note-reading source">
@@ -3566,7 +3607,7 @@ function renderNoteReadingItem(item, index) {
         <form class="note-reading-form" data-note-reading-form data-review-item-id="${escapeHtml(item.reviewItemId || "")}">
           <label>
             <span>Note letters</span>
-            <input name="noteLetterAnswer" autocomplete="off" autocapitalize="none" spellcheck="false">
+            <input name="noteLetterAnswer" value="${escapeHtml(draftValue)}" autocomplete="off" autocapitalize="none" spellcheck="false">
           </label>
           <button type="submit">Save</button>
           <small data-note-reading-status>${escapeHtml(isRecent ? status.replace(/_/g, " ") : (item.noteReadingScopeLabel || "picture only"))}</small>
@@ -4174,6 +4215,12 @@ function render() {
 if (elements.runScanButton) elements.runScanButton.addEventListener("click", runBackendScan);
 if (elements.probeMediaButton) elements.probeMediaButton.addEventListener("click", runMediaProbe);
 if (elements.rejectPieceButton) elements.rejectPieceButton.addEventListener("click", rejectActiveTitle);
+document.addEventListener("input", (event) => {
+  const input = event.target.closest("[data-note-reading-form] input[name='noteLetterAnswer']");
+  if (!input) return;
+  const form = input.closest("[data-note-reading-form]");
+  persistNoteReadingDraft(form?.dataset?.reviewItemId, input.value);
+});
 document.addEventListener("submit", (event) => {
   const noteReadingForm = event.target.closest("[data-note-reading-form]");
   if (noteReadingForm) {
