@@ -613,7 +613,7 @@ class GoldReviewTests(unittest.TestCase):
         self.assertEqual(review["audioQueueCount"], 0)
         self.assertEqual(review["transcriptionAlanQueueCount"], 0)
         self.assertEqual(review["scoreCopyQueueCount"], 4)
-        self.assertEqual(review["noteReadingQueueCount"], 4)
+        self.assertGreaterEqual(review["noteReadingQueueCount"], 8)
         self.assertEqual(review["scoreTranscriptionQueueCount"], review["scoreCopyQueueCount"])
         self.assertEqual(review["sourceCopyTrainingQueueCount"], review["scoreCopyQueueCount"])
         self.assertEqual(review["noteReadingTrainingQueueCount"], review["noteReadingQueueCount"])
@@ -647,7 +647,11 @@ class GoldReviewTests(unittest.TestCase):
         self.assertTrue(all(item["noteReadingSourceScope"] == "visible_source_picture_only" for item in review["noteReadingQueue"]))
         self.assertTrue(all(item["noteReadingScopeLabel"] == "picture only" for item in review["noteReadingQueue"]))
         self.assertTrue(
-            all(item["noteReadingVisibleNoteCount"] == len(item["expectedNoteLetters"]) for item in review["noteReadingQueue"])
+            all(
+                item["noteReadingVisibleNoteCount"] == len(item["expectedNoteLetters"])
+                for item in review["noteReadingQueue"]
+                if item["expectedNoteLetters"]
+            )
         )
         queue_titles = {item["pieceTitle"] for item in review["scoreCopyQueue"]}
         self.assertNotIn("Paganini Moto Perpetuo, Op. 11, Solo violin", queue_titles)
@@ -683,6 +687,43 @@ class GoldReviewTests(unittest.TestCase):
         first = next(item for item in review["sourceScoreSnippets"] if item["pieceTitle"] == "Haydn Symphony No. 94, IV, Violin I")
         self.assertTrue(first["reviewImageUrl"].startswith("/assets/score/original/source-library/"))
         self.assertTrue(first["reviewImageUrl"].endswith("-review.png"))
+
+    def test_training_lanes_refill_after_visible_source_batch_is_reviewed(self):
+        state: dict[str, object] = {}
+        first = build_gold_review_loop(state, {"records": []}, limit=20, include_source_copy_catalog=True)
+
+        for candidate in first["scoreCopyQueue"]:
+            record_gold_review_item(
+                state,
+                {
+                    **candidate,
+                    "type": "score_copy",
+                    "status": "accepted_truth",
+                    "acceptedNotes": candidate["detectedNotes"],
+                    "scoreNotes": candidate["scoreNotes"],
+                },
+            )
+        for index, candidate in enumerate(first["noteReadingQueue"]):
+            letters = candidate.get("expectedNoteLetters") or [chr(ord("A") + (index % 7))]
+            record_gold_review_item(
+                state,
+                {
+                    **candidate,
+                    "type": "note_reading",
+                    "status": "accepted_truth",
+                    "noteLetterAnswer": " ".join(str(letter).lower() for letter in letters),
+                    "userNoteLetters": letters,
+                    "acceptedNotes": [],
+                },
+            )
+
+        followup = build_gold_review_loop(state, {"records": []}, limit=20, include_source_copy_catalog=True)
+
+        self.assertGreaterEqual(followup["scoreCopyQueueCount"], 1)
+        self.assertGreaterEqual(followup["noteReadingQueueCount"], 1)
+        self.assertEqual(len({item["reviewItemId"] for item in followup["scoreCopyQueue"]}), len(followup["scoreCopyQueue"]))
+        self.assertEqual(len({item["reviewItemId"] for item in followup["noteReadingQueue"]}), len(followup["noteReadingQueue"]))
+        self.assertTrue(any(item.get("continuousReviewRefill") for item in followup["scoreCopyQueue"]))
 
     def test_note_reading_queue_records_letter_only_training_without_evidence_mirror(self):
         review = build_gold_review_loop({}, {"records": []}, limit=20, include_source_copy_catalog=True)
@@ -794,6 +835,37 @@ class GoldReviewTests(unittest.TestCase):
         self.assertEqual(review["adaptiveReason"], "primary_queue_low")
         self.assertGreaterEqual(review["audioQueueCount"], 2)
         self.assertTrue(any(item.get("adaptiveReview") for item in review["audioQueue"]))
+
+    def test_adaptive_review_does_not_duplicate_same_visible_audio_card(self):
+        daily_records = {
+            "records": [
+                {
+                    "practiceDay": "2026-05-03",
+                    "transcription": {
+                        "detectedSeries": [
+                            {
+                                "sampleId": "same-primary-adaptive-window",
+                                "sourceTitle": "5-3-26",
+                                "sourceUrl": "https://www.youtube.com/watch?v=abc",
+                                "startSeconds": 120.0,
+                                "localStartSeconds": 0.0,
+                                "notes": [
+                                    note("A#4", 70, 0.0),
+                                    note("G4", 67, 0.7),
+                                    note("D4", 62, 1.4),
+                                ],
+                            }
+                        ]
+                    },
+                }
+            ]
+        }
+
+        review = build_gold_review_loop({}, daily_records, limit=20, include_source_copy_catalog=True)
+
+        self.assertEqual(review["audioQueueCount"], 1)
+        self.assertEqual(len({item["reviewItemId"] for item in review["audioQueue"]}), 1)
+        self.assertEqual(review["audioQueue"][0]["detectedNotes"], ["A#4", "G4", "D4"])
 
     def test_original_score_snippets_are_real_imslp_image_assets(self):
         review = build_gold_review_loop({}, {"records": []}, limit=20, include_source_copy_catalog=True)

@@ -3674,21 +3674,21 @@ function renderGoldReview() {
           label: TRAINING_LANE_TRANSCRIPTION_ALAN,
           count: audioQueued,
           items: audioItems,
-          emptyText: "No queued transcription-alan samples.",
+          emptyText: "Refill pending.",
           ariaLabel: "transcription-alan training",
         })}
         ${renderGoldReviewLane({
           label: TRAINING_LANE_SCORE_TRANSCRIPTION,
           count: scoreCopyQueued,
           items: copyItems,
-          emptyText: "No verified score-transcription samples.",
+          emptyText: "Refill pending.",
           ariaLabel: "score-transcription training",
         })}
         ${renderGoldReviewLane({
           label: TRAINING_LANE_NOTE_READING,
           count: noteReadingQueued,
           items: noteReadingItems,
-          emptyText: "No note-reading samples.",
+          emptyText: "Refill pending.",
           ariaLabel: "note-reading training",
           renderItem: renderNoteReadingItem,
         })}
@@ -3725,21 +3725,21 @@ function renderGoldReview() {
         label: TRAINING_LANE_TRANSCRIPTION_ALAN,
         count: audioQueued,
         items: audioItems,
-        emptyText: "No queued transcription-alan samples.",
+        emptyText: "Refill pending.",
         ariaLabel: "transcription-alan training",
       })}
       ${renderGoldReviewLane({
         label: TRAINING_LANE_SCORE_TRANSCRIPTION,
         count: scoreCopyQueued,
         items: copyItems,
-        emptyText: "No verified score-transcription samples.",
+        emptyText: "Refill pending.",
         ariaLabel: "score-transcription training",
       })}
       ${renderGoldReviewLane({
         label: TRAINING_LANE_NOTE_READING,
         count: noteReadingQueued,
         items: noteReadingItems,
-        emptyText: "No note-reading samples.",
+        emptyText: "Refill pending.",
         ariaLabel: "note-reading training",
         renderItem: renderNoteReadingItem,
       })}

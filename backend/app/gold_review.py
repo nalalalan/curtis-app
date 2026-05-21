@@ -20,6 +20,8 @@ MAX_LONG_REVIEW_NOTES = 16
 MIN_ACTIVE_AUDIO_REVIEW_QUEUE = 6
 MAX_ADAPTIVE_REVIEW_WINDOWS_PER_SERIES = 10
 MAX_ADAPTIVE_REVIEW_QUEUE = 80
+MIN_SOURCE_TRAINING_LANE_QUEUE = 8
+MAX_SOURCE_TRAINING_REFILL_CYCLES = 40
 SCORE_COPY_TASKS = {"score_copy_exact_notes", "score_copy_exact_notation", "score_copy_pitch_skeleton"}
 NOTE_READING_TASKS = {"note_letter_reading"}
 REVIEW_CLIP_PREROLL_SECONDS = 0.4
@@ -183,6 +185,50 @@ def _review_identity_keys(item: dict[str, Any]) -> set[str]:
         if score_notes or score_location:
             keys.add(f"{prefix}_claim:{image}:{score_location}:{score_notes}")
     return keys
+
+
+def _candidate_display_key(item: dict[str, Any]) -> str:
+    if _is_note_reading_item(item):
+        source_key = _source_crop_key(item)
+        letters = _clean_note_letters(
+            item.get("expectedNoteLetters")
+            or item.get("userNoteLetters")
+            or item.get("sourceScoreNotes")
+            or item.get("scoreNotes")
+            or item.get("detectedNotes")
+        )
+        return f"note_reading:{source_key}:{' '.join(letters)}" if source_key else f"note_reading:{' '.join(letters)}"
+
+    if _is_score_copy_item(item):
+        source_key = _source_crop_key(item)
+        notes = _score_note_names(item.get("sourceScoreNotes"), item.get("scoreNotes"), item.get("detectedNotes"))
+        sequence = _review_sequence_key(notes)
+        return f"score_copy:{source_key}:{sequence}" if source_key else f"score_copy:{sequence}"
+
+    sample_id = _clean(item.get("sampleId"))
+    sequence = " ".join(str(value) for value in item.get("normalizedDetectedMidiSequence") or [])
+    local_start = item.get("localStartSeconds") if item.get("localStartSeconds") is not None else item.get("startSeconds")
+    local_end = item.get("localEndSeconds") if item.get("localEndSeconds") is not None else item.get("endSeconds")
+    return f"audio:{sample_id}:{_review_time_bucket(local_start)}:{_review_time_bucket(local_end)}:{sequence}"
+
+
+def _dedupe_review_candidates(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    seen_display: set[str] = set()
+    for candidate in candidates:
+        review_id = _clean(candidate.get("reviewItemId"))
+        display_key = _candidate_display_key(candidate)
+        if review_id and review_id in seen_ids:
+            continue
+        if display_key and display_key in seen_display:
+            continue
+        if review_id:
+            seen_ids.add(review_id)
+        if display_key:
+            seen_display.add(display_key)
+        out.append(candidate)
+    return out
 
 
 def _source_crop_key(item: dict[str, Any]) -> str:
@@ -751,6 +797,7 @@ def _candidate_id(payload: dict[str, Any]) -> str:
             "pieceTitle": payload.get("pieceTitle"),
             "reviewKind": payload.get("reviewKind"),
             "reviewTask": payload.get("reviewTask"),
+            "reviewCycle": payload.get("reviewCycle"),
         },
     )
 
@@ -1147,6 +1194,135 @@ def _note_reading_candidates(score_copy_candidates: list[dict[str, Any]]) -> lis
         if note_reading:
             candidates.append(note_reading)
     return candidates
+
+
+def _source_snippet_note_reading_candidate(snippet: dict[str, Any]) -> dict[str, Any]:
+    image_url = _clean(snippet.get("reviewImageUrl") or snippet.get("sourceReviewImageUrl") or snippet.get("imageUrl"))
+    if not image_url:
+        return {}
+    title = _clean(snippet.get("pieceTitle") or snippet.get("title") or snippet.get("sourceTitle"))
+    location = _clean(
+        snippet.get("scoreLocation")
+        or snippet.get("label")
+        or (f"p. {snippet.get('sourcePdfPage')}" if snippet.get("sourcePdfPage") else "")
+    )
+    source = _clean(snippet.get("source") or snippet.get("sourceFileLabel") or snippet.get("sourcePdfLocalPath") or snippet.get("sourceUrl"))
+    payload = {
+        "reviewKind": "source_note_reading_candidate",
+        "reviewType": "note_reading",
+        "acceptanceMode": "typed_note_letters",
+        "practiceDay": "source-score",
+        "trainingOnly": True,
+        "pieceTitle": title,
+        "sourceTitle": _clean(snippet.get("sourceTitle") or title),
+        "sourceUrl": _clean(snippet.get("sourceUrl")),
+        "sampleId": "",
+        "startSeconds": 0.0,
+        "endSeconds": 0.0,
+        "detectedNotes": [],
+        "acceptedNotes": [],
+        "scoreNotes": [],
+        "sourceScoreNotes": [],
+        "normalizedDetectedMidiSequence": [],
+        "normalizedScoreMidiSequence": [],
+        "detectedNoteCount": 0,
+        "expectedNoteLetters": [],
+        "expectedNoteLetterText": "",
+        "userNoteLetters": [],
+        "noteLetterAnswer": "",
+        "noteLetterCorrect": False,
+        "scoreSource": source,
+        "scoreLocation": location,
+        "scoreImageUrl": image_url,
+        "sourceReviewImageUrl": image_url,
+        "sourceImageUrl": _clean(snippet.get("imageUrl")) or image_url,
+        "originalScoreSnippet": True,
+        "sourceImageRequiredForOriginalScore": False,
+        "noteReadingAnswerMode": "letters_only_ignore_accidentals_octaves",
+        "noteReadingSourceScope": "visible_source_picture_only",
+        "noteReadingScopeLabel": "picture only",
+        "noteReadingVisibleNoteCount": 0,
+        "reviewTrainingLane": "note_reading",
+        "reviewTrainingLaneLabel": "note-reading",
+        "reviewTask": "note_letter_reading",
+        "trainingTask": "note_letter_reading",
+        "sourceCopyOnly": False,
+        "notationCopyOnly": False,
+        "noteReadingOnly": True,
+        "binaryReview": False,
+        "binaryOnly": False,
+        "reviewQuestion": "Write the note letters only.",
+        "acceptanceRule": "Type note letters for the displayed picture only; ignore accidentals and octave numbers.",
+        "rejectionRule": "This is a source-labeling card. The submitted letters become Alan's label for the visible picture.",
+        "sourcePieceTrainingOnly": True,
+    }
+    payload["reviewItemId"] = _candidate_id(payload)
+    return payload
+
+
+def _source_snippet_note_reading_candidates(snippets: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    for snippet in snippets:
+        if not isinstance(snippet, dict):
+            continue
+        candidate = _source_snippet_note_reading_candidate(snippet)
+        if candidate:
+            candidates.append(candidate)
+    return candidates
+
+
+def _candidate_with_review_cycle(candidate: dict[str, Any], cycle: int, source: str) -> dict[str, Any]:
+    payload = {
+        **candidate,
+        "reviewCycle": cycle,
+        "reviewCycleSource": source,
+        "continuousReviewRefill": True,
+    }
+    payload.pop("reviewItemId", None)
+    payload["reviewItemId"] = _candidate_id(payload)
+    return payload
+
+
+def _continuous_refill_candidates(
+    base_candidates: list[dict[str, Any]],
+    *,
+    existing_candidates: list[dict[str, Any]],
+    reviewed_ids: set[str],
+    learning_profile: dict[str, Any],
+    minimum: int,
+    source: str,
+) -> list[dict[str, Any]]:
+    needed = max(0, int(minimum) - len(existing_candidates))
+    if needed <= 0 or not base_candidates:
+        return []
+    out: list[dict[str, Any]] = []
+    seen_display = {_candidate_display_key(candidate) for candidate in existing_candidates}
+    source_note_letter_labels = (
+        learning_profile.get("sourceNoteLetterLabels")
+        if isinstance(learning_profile.get("sourceNoteLetterLabels"), dict)
+        else {}
+    )
+    for cycle in range(1, MAX_SOURCE_TRAINING_REFILL_CYCLES + 1):
+        for candidate in base_candidates:
+            source_key = _source_crop_key(candidate)
+            source_label = source_note_letter_labels.get(source_key) if source_key else None
+            if isinstance(source_label, dict):
+                candidate_letters = _clean_note_letters(
+                    candidate.get("sourceScoreNotes") or candidate.get("scoreNotes") or candidate.get("detectedNotes")
+                )
+                source_letters = _clean_note_letters(source_label.get("letters"))
+                if candidate_letters and source_letters and candidate_letters != source_letters:
+                    continue
+            refill = _candidate_with_review_cycle(candidate, cycle, source)
+            review_id = _clean(refill.get("reviewItemId"))
+            display_key = _candidate_display_key(refill)
+            if review_id in reviewed_ids or display_key in seen_display:
+                continue
+            out.append(refill)
+            seen_display.add(display_key)
+            if len(out) >= needed:
+                return out
+    return out
 
 
 def _queue_candidates(
@@ -1591,6 +1767,7 @@ def build_gold_review_loop(
         if _clean(candidate.get("reviewItemId")) not in reviewed_ids
     ]
     candidates, suppressed_candidates = apply_review_learning_to_candidates(raw_candidates, learning_profile)
+    source_score_snippets = requested_original_score_snippets() if include_source_copy_catalog else []
     adaptive_candidates: list[dict[str, Any]] = []
     adaptive_suppressed_candidates: list[dict[str, Any]] = []
     adaptive_candidate_pool_count = 0
@@ -1617,14 +1794,43 @@ def build_gold_review_loop(
         if adaptive_candidates:
             candidates = [*adaptive_candidates, *candidates]
             adaptive_mode = True
+    candidates = _dedupe_review_candidates(candidates)
     score_candidates = [item for item in candidates if item.get("reviewTask") == "audio_score_exact_match"]
     score_copy_candidates = [item for item in candidates if _is_score_copy_task(item.get("reviewTask"))]
     note_reading_candidates = [item for item in candidates if _is_note_reading_task(item.get("reviewTask"))]
     audio_candidates = [item for item in candidates if not _is_score_copy_item(item) and not _is_note_reading_item(item)]
+    if include_source_copy_catalog:
+        source_seed_candidates = _queue_candidates({"records": []}, include_source_copy_catalog=True)
+        score_copy_seed_candidates = [item for item in source_seed_candidates if _is_score_copy_task(item.get("reviewTask"))]
+        note_reading_seed_candidates = [
+            *[item for item in source_seed_candidates if _is_note_reading_task(item.get("reviewTask"))],
+            *_source_snippet_note_reading_candidates(source_score_snippets),
+        ]
+        score_copy_refill = _continuous_refill_candidates(
+            score_copy_seed_candidates,
+            existing_candidates=score_copy_candidates,
+            reviewed_ids=reviewed_ids,
+            learning_profile=learning_profile,
+            minimum=max(4, min(12, int(limit))),
+            source="score_transcription_cycle",
+        )
+        note_reading_refill = _continuous_refill_candidates(
+            note_reading_seed_candidates,
+            existing_candidates=note_reading_candidates,
+            reviewed_ids=reviewed_ids,
+            learning_profile=learning_profile,
+            minimum=MIN_SOURCE_TRAINING_LANE_QUEUE,
+            source="note_reading_cycle",
+        )
+        if score_copy_refill or note_reading_refill:
+            candidates = _dedupe_review_candidates([*candidates, *score_copy_refill, *note_reading_refill])
+            score_candidates = [item for item in candidates if item.get("reviewTask") == "audio_score_exact_match"]
+            score_copy_candidates = [item for item in candidates if _is_score_copy_task(item.get("reviewTask"))]
+            note_reading_candidates = [item for item in candidates if _is_note_reading_task(item.get("reviewTask"))]
+            audio_candidates = [item for item in candidates if not _is_score_copy_item(item) and not _is_note_reading_item(item)]
     source_copy_training_candidates = [
         item for item in score_copy_candidates if item.get("sourcePieceTrainingOnly") or item.get("trainingOnly")
     ]
-    source_score_snippets = requested_original_score_snippets() if include_source_copy_catalog else []
     source_score_ready_snippets = [
         item for item in source_score_snippets if item.get("originalScoreSnippet") is True and item.get("imageUrl")
     ]
