@@ -85,7 +85,9 @@ class GoldReviewTests(unittest.TestCase):
         self.assertTrue(candidate["binaryOnly"])
         self.assertEqual(candidate["detectedNotes"], ["G5", "F5", "A5", "G#5", "F5"])
         self.assertEqual(candidate["detectedMidiSequence"], [79, 77, 81, 80, 77])
-        self.assertEqual(candidate["clip"]["audioUrl"], "/api/curtis/media/sample/sample-a/clip?start=0.000&end=1.150")
+        self.assertEqual(candidate["clip"]["audioUrl"], "/api/curtis/media/sample/sample-a/clip?start=0.000&end=1.650")
+        self.assertEqual(candidate["clip"]["noteLocalStartSeconds"], 0.0)
+        self.assertEqual(candidate["clip"]["noteLocalEndSeconds"], 1.0)
 
     def test_review_queue_can_surface_long_binary_phrase_candidates(self):
         names = ["Eb5", "D5", "C5", "Bb4", "D5", "Eb5", "F5", "G5", "F5", "Eb5", "D5", "C5"]
@@ -642,6 +644,11 @@ class GoldReviewTests(unittest.TestCase):
             ],
             ["D", "C", "D", "C", "D"],
         )
+        self.assertTrue(all(item["noteReadingSourceScope"] == "visible_source_picture_only" for item in review["noteReadingQueue"]))
+        self.assertTrue(all(item["noteReadingScopeLabel"] == "picture only" for item in review["noteReadingQueue"]))
+        self.assertTrue(
+            all(item["noteReadingVisibleNoteCount"] == len(item["expectedNoteLetters"]) for item in review["noteReadingQueue"])
+        )
         queue_titles = {item["pieceTitle"] for item in review["scoreCopyQueue"]}
         self.assertNotIn("Paganini Moto Perpetuo, Op. 11, Solo violin", queue_titles)
         self.assertNotIn("Wieniawski Etude-Caprice, Op. 18 No. 3", queue_titles)
@@ -701,6 +708,9 @@ class GoldReviewTests(unittest.TestCase):
         self.assertEqual(result["goldReviewItem"]["expectedNoteLetters"], ["D", "C", "D", "C", "D"])
         self.assertEqual(result["goldReviewItem"]["userNoteLetters"], ["D", "C", "D", "C", "D"])
         self.assertTrue(result["goldReviewItem"]["noteLetterCorrect"])
+        self.assertEqual(result["goldReviewItem"]["noteReadingSourceScope"], "visible_source_picture_only")
+        self.assertEqual(result["goldReviewItem"]["noteReadingScopeLabel"], "picture only")
+        self.assertEqual(result["goldReviewItem"]["noteReadingVisibleNoteCount"], 5)
         self.assertEqual(result["truthMirror"], {})
         self.assertEqual(followup["trainingNoteReadingExampleCount"], 1)
         self.assertEqual(followup["trainingPositiveNoteReadingExampleCount"], 1)
@@ -907,6 +917,9 @@ class GoldReviewTests(unittest.TestCase):
         self.assertEqual(candidate["reviewTrainingLane"], "score_alignment")
         self.assertEqual(candidate["scoreAgreementStatus"], "exact_midi_agreement")
         self.assertTrue(candidate["scoreAgreement"])
+        self.assertEqual(candidate["clip"]["audioUrl"], "/api/curtis/media/sample/sample-score-candidate/clip?start=19.600&end=21.650")
+        self.assertEqual(candidate["clip"]["noteLocalStartSeconds"], 20.0)
+        self.assertEqual(candidate["clip"]["noteLocalEndSeconds"], 21.0)
 
     def test_score_review_candidates_rank_before_audio_only_candidates(self):
         daily_records = {

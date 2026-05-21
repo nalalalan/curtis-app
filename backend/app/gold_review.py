@@ -22,6 +22,8 @@ MAX_ADAPTIVE_REVIEW_WINDOWS_PER_SERIES = 10
 MAX_ADAPTIVE_REVIEW_QUEUE = 80
 SCORE_COPY_TASKS = {"score_copy_exact_notes", "score_copy_exact_notation", "score_copy_pitch_skeleton"}
 NOTE_READING_TASKS = {"note_letter_reading"}
+REVIEW_CLIP_PREROLL_SECONDS = 0.4
+REVIEW_CLIP_POSTROLL_SECONDS = 0.65
 
 
 def _clean(value: Any) -> str:
@@ -160,6 +162,11 @@ def _review_identity_keys(item: dict[str, Any]) -> set[str]:
     if sample_id and (local_start is not None or local_end is not None):
         keys.add(f"local_clip:{sample_id}:{_review_time_bucket(local_start)}:{_review_time_bucket(local_end)}")
 
+    note_local_start = item.get("noteLocalStartSeconds")
+    note_local_end = item.get("noteLocalEndSeconds")
+    if sample_id and (note_local_start is not None or note_local_end is not None):
+        keys.add(f"note_local_clip:{sample_id}:{_review_time_bucket(note_local_start)}:{_review_time_bucket(note_local_end)}")
+
     image = _clean(
         item.get("sourceReviewImageUrl")
         or item.get("sourceImageUrl")
@@ -186,6 +193,10 @@ def _review_interval(item: dict[str, Any]) -> dict[str, Any]:
         return {}
     start = _safe_float(item.get("startSeconds"))
     end = _safe_float(item.get("endSeconds"))
+    if item.get("noteLocalStartSeconds") is not None and item.get("noteLocalEndSeconds") is not None:
+        base_abs = start - _safe_float(item.get("localStartSeconds"))
+        start = max(0.0, base_abs + _safe_float(item.get("noteLocalStartSeconds")))
+        end = max(start, base_abs + _safe_float(item.get("noteLocalEndSeconds")))
     if end <= start:
         end = start + 0.5
     return {
@@ -379,6 +390,17 @@ def _item_learning_key(item: dict[str, Any]) -> str:
                 return f"note_reading:{key}"
             return f"score_copy:{key}" if score_copy else key
     return ""
+
+
+def _is_soft_review_rejection(item: dict[str, Any]) -> bool:
+    reason = _clean(item.get("reason") or item.get("note")).lower()
+    reliability = _clean(item.get("reviewReliability")).lower()
+    return bool(
+        item.get("softRejection") is True
+        or reliability == "soft"
+        or "not infallible" in reason
+        or "soft" in reason
+    )
 
 
 def _note_dicts(value: Any) -> list[dict[str, Any]]:
@@ -613,9 +635,17 @@ def _clip_from_series(series: dict[str, Any], notes: list[dict[str, Any]]) -> di
     source_title = _clean(series.get("sourceTitle"))
     series_abs = _safe_float(series.get("startSeconds"))
     series_local = _safe_float(series.get("localStartSeconds"))
+    series_local_end = _safe_float(series.get("localEndSeconds"))
+    note_local_start = 0.0
+    note_local_end = 0.0
     if notes:
-        local_start = max(0.0, _safe_float(notes[0].get("startSeconds")) - 0.08)
-        local_end = max(local_start + 0.25, _safe_float(notes[-1].get("endSeconds")) + 0.15)
+        note_local_start = _safe_float(notes[0].get("startSeconds"))
+        note_local_end = max(note_local_start, _safe_float(notes[-1].get("endSeconds")))
+        local_start = max(0.0, note_local_start - REVIEW_CLIP_PREROLL_SECONDS)
+        local_end = max(local_start + 0.25, note_local_end + REVIEW_CLIP_POSTROLL_SECONDS)
+        if series_local_end > series_local:
+            local_end = min(local_end, series_local_end)
+            local_end = max(local_start + 0.25, local_end)
     else:
         local_start = _safe_float(series.get("localStartSeconds"))
         local_end = _safe_float(series.get("localEndSeconds"))
@@ -637,8 +667,47 @@ def _clip_from_series(series: dict[str, Any], notes: list[dict[str, Any]]) -> di
         "endSeconds": round(absolute_end, 3),
         "localStartSeconds": round(local_start, 3),
         "localEndSeconds": round(local_end, 3),
+        "noteLocalStartSeconds": round(note_local_start, 3),
+        "noteLocalEndSeconds": round(note_local_end, 3),
+        "playbackPrerollSeconds": REVIEW_CLIP_PREROLL_SECONDS,
+        "playbackPostrollSeconds": REVIEW_CLIP_POSTROLL_SECONDS,
         "durationSeconds": round(max(0.0, absolute_end - absolute_start), 3),
     }
+
+
+def _clip_with_review_padding(clip: dict[str, Any], notes: list[dict[str, Any]]) -> dict[str, Any]:
+    if not isinstance(clip, dict) or not notes:
+        return clip
+    media_url = _clean(clip.get("mediaUrl"))
+    sample_id = _clean(clip.get("sampleId"))
+    if not media_url and sample_id:
+        media_url = f"/api/curtis/media/sample/{sample_id}"
+    if not media_url:
+        return clip
+    note_local_start = _safe_float(notes[0].get("startSeconds"))
+    note_local_end = max(note_local_start, _safe_float(notes[-1].get("endSeconds")))
+    local_start = max(0.0, note_local_start - REVIEW_CLIP_PREROLL_SECONDS)
+    local_end = max(local_start + 0.25, note_local_end + REVIEW_CLIP_POSTROLL_SECONDS)
+    if local_end - local_start > MAX_REVIEW_CLIP_SECONDS:
+        local_end = local_start + MAX_REVIEW_CLIP_SECONDS
+    base_abs = _safe_float(clip.get("startSeconds")) - _safe_float(clip.get("localStartSeconds"))
+    absolute_start = max(0.0, base_abs + local_start)
+    absolute_end = max(absolute_start, base_abs + local_end)
+    padded = {
+        **clip,
+        "mediaUrl": media_url,
+        "audioUrl": f"{media_url}/clip?start={local_start:.3f}&end={local_end:.3f}",
+        "startSeconds": round(absolute_start, 3),
+        "endSeconds": round(absolute_end, 3),
+        "localStartSeconds": round(local_start, 3),
+        "localEndSeconds": round(local_end, 3),
+        "noteLocalStartSeconds": round(note_local_start, 3),
+        "noteLocalEndSeconds": round(note_local_end, 3),
+        "playbackPrerollSeconds": REVIEW_CLIP_PREROLL_SECONDS,
+        "playbackPostrollSeconds": REVIEW_CLIP_POSTROLL_SECONDS,
+        "durationSeconds": round(max(0.0, absolute_end - absolute_start), 3),
+    }
+    return padded
 
 
 def _clip_is_playable(clip: dict[str, Any]) -> bool:
@@ -699,6 +768,10 @@ def _candidate_from_series(
         "endSeconds": clip["endSeconds"],
         "localStartSeconds": clip["localStartSeconds"],
         "localEndSeconds": clip["localEndSeconds"],
+        "noteLocalStartSeconds": clip["noteLocalStartSeconds"],
+        "noteLocalEndSeconds": clip["noteLocalEndSeconds"],
+        "playbackPrerollSeconds": clip["playbackPrerollSeconds"],
+        "playbackPostrollSeconds": clip["playbackPostrollSeconds"],
         "detectedNotes": note_names,
         "detectedMidiSequence": note_midi_sequence(notes),
         "normalizedDetectedMidiSequence": collapse_consecutive_duplicate_midi(note_midi_sequence(notes)),
@@ -747,6 +820,7 @@ def _candidate_from_group(record: dict[str, Any], group: dict[str, Any]) -> dict
     if len(note_names) < 3:
         return {}
     clip = group.get("clip") if isinstance(group.get("clip"), dict) else _clip_from_series(transcription, notes)
+    clip = _clip_with_review_padding(clip, notes)
     if not _clip_is_playable(clip):
         return {}
     score = group.get("score") if isinstance(group.get("score"), dict) else {}
@@ -778,6 +852,10 @@ def _candidate_from_group(record: dict[str, Any], group: dict[str, Any]) -> dict
         "endSeconds": _safe_float(clip.get("endSeconds")),
         "localStartSeconds": _safe_float(clip.get("localStartSeconds")),
         "localEndSeconds": _safe_float(clip.get("localEndSeconds")),
+        "noteLocalStartSeconds": _safe_float(clip.get("noteLocalStartSeconds")),
+        "noteLocalEndSeconds": _safe_float(clip.get("noteLocalEndSeconds")),
+        "playbackPrerollSeconds": _safe_float(clip.get("playbackPrerollSeconds")),
+        "playbackPostrollSeconds": _safe_float(clip.get("playbackPostrollSeconds")),
         "detectedNotes": note_names,
         "detectedMidiSequence": note_midi_sequence(notes),
         "normalizedDetectedMidiSequence": detected_midi,
@@ -1026,6 +1104,9 @@ def _note_reading_candidate_from_score_copy(candidate: dict[str, Any]) -> dict[s
         "noteLetterAnswer": "",
         "noteLetterCorrect": False,
         "noteReadingAnswerMode": "letters_only_ignore_accidentals_octaves",
+        "noteReadingSourceScope": "visible_source_picture_only",
+        "noteReadingScopeLabel": "picture only",
+        "noteReadingVisibleNoteCount": len(notes),
         "reviewTrainingLane": "note_reading",
         "reviewTrainingLaneLabel": "note-reading",
         "reviewTask": "note_letter_reading",
@@ -1036,8 +1117,8 @@ def _note_reading_candidate_from_score_copy(candidate: dict[str, Any]) -> dict[s
         "binaryReview": False,
         "binaryOnly": False,
         "reviewQuestion": "Write the note letters only.",
-        "acceptanceRule": "Type note letters only; ignore accidentals and octave numbers.",
-        "rejectionRule": "If the typed letter sequence differs from the source, Curtis stores a note-reading mismatch.",
+        "acceptanceRule": "Type note letters for the displayed picture only; ignore accidentals and octave numbers.",
+        "rejectionRule": "If the typed letter sequence differs from Curtis' visible-crop guess, Curtis stores the typed source label as correction signal.",
     }
     payload.pop("reviewItemId", None)
     payload["reviewItemId"] = _candidate_id(payload)
@@ -1140,6 +1221,12 @@ def normalize_gold_review_item(raw: dict[str, Any]) -> dict[str, Any]:
         "sourceTitle": _clean(raw.get("sourceTitle")),
         "startSeconds": round(_safe_float(raw.get("startSeconds")), 3),
         "endSeconds": round(_safe_float(raw.get("endSeconds")), 3),
+        "localStartSeconds": round(_safe_float(raw.get("localStartSeconds")), 3) if raw.get("localStartSeconds") is not None else None,
+        "localEndSeconds": round(_safe_float(raw.get("localEndSeconds")), 3) if raw.get("localEndSeconds") is not None else None,
+        "noteLocalStartSeconds": round(_safe_float(raw.get("noteLocalStartSeconds")), 3) if raw.get("noteLocalStartSeconds") is not None else None,
+        "noteLocalEndSeconds": round(_safe_float(raw.get("noteLocalEndSeconds")), 3) if raw.get("noteLocalEndSeconds") is not None else None,
+        "playbackPrerollSeconds": _safe_float(raw.get("playbackPrerollSeconds")) if raw.get("playbackPrerollSeconds") is not None else None,
+        "playbackPostrollSeconds": _safe_float(raw.get("playbackPostrollSeconds")) if raw.get("playbackPostrollSeconds") is not None else None,
         "pieceTitle": _clean(raw.get("pieceTitle")),
         "scoreSource": _clean(raw.get("scoreSource")),
         "scoreAssetId": _clean(raw.get("scoreAssetId")),
@@ -1165,6 +1252,9 @@ def normalize_gold_review_item(raw: dict[str, Any]) -> dict[str, Any]:
         "noteLetterAnswer": _clean(raw.get("noteLetterAnswer")),
         "noteLetterCorrect": note_letter_correct,
         "noteReadingAnswerMode": _clean(raw.get("noteReadingAnswerMode")) or ("letters_only_ignore_accidentals_octaves" if item_type == "note_reading" else ""),
+        "noteReadingSourceScope": _clean(raw.get("noteReadingSourceScope")) or ("visible_source_picture_only" if item_type == "note_reading" else ""),
+        "noteReadingScopeLabel": _clean(raw.get("noteReadingScopeLabel")) or ("picture only" if item_type == "note_reading" else ""),
+        "noteReadingVisibleNoteCount": int(_safe_float(raw.get("noteReadingVisibleNoteCount"))) if raw.get("noteReadingVisibleNoteCount") is not None else len(expected_note_letters),
         "reviewTask": review_task,
         "trainingTask": review_task,
         "trainingLabel": "positive" if status == "accepted_truth" else "negative" if status == "rejected_mismatch" else "pending",
@@ -1268,6 +1358,7 @@ def build_review_learning_profile(items: list[dict[str, Any]]) -> dict[str, Any]
     rejected_intervals: list[dict[str, Any]] = []
     accepted_counts: Counter[str] = Counter()
     rejected_counts: Counter[str] = Counter()
+    soft_rejected: set[str] = set()
     for item in items:
         key = _item_learning_key(item)
         interval = _review_interval(item)
@@ -1279,15 +1370,19 @@ def build_review_learning_profile(items: list[dict[str, Any]]) -> dict[str, Any]
             if interval:
                 accepted_intervals.append(interval)
         elif item.get("status") == "rejected_mismatch":
+            soft_rejection = _is_soft_review_rejection(item)
             if key:
-                rejected_keys.add(key)
-                rejected_counts[key] += 1
-            rejected_identity_keys.update(_review_identity_keys(item))
-            if interval:
-                rejected_intervals.append(interval)
+                if soft_rejection:
+                    soft_rejected.add(key)
+                else:
+                    rejected_keys.add(key)
+                    rejected_counts[key] += 1
+            if not soft_rejection:
+                rejected_identity_keys.update(_review_identity_keys(item))
+                if interval:
+                    rejected_intervals.append(interval)
     rejected_only = rejected_keys - accepted_keys
     rejected_identity_only = rejected_identity_keys - accepted_identity_keys
-    soft_rejected: set[str] = set()
     return {
         "acceptedKeys": accepted_keys,
         "rejectedKeys": rejected_keys,
@@ -1560,9 +1655,7 @@ def build_gold_review_loop(
         "adaptiveMode": adaptive_mode,
         "adaptiveReason": (
             "primary_queue_suppressed_by_learning"
-            if primary_queue_suppressed_by_learning and adaptive_mode
-            else "primary_queue_only_soft_rejected"
-            if primary_queue_is_only_soft_rejected and adaptive_mode
+            if (primary_queue_suppressed_by_learning or primary_queue_is_only_soft_rejected) and adaptive_mode
             else "primary_queue_low"
             if primary_queue_low and adaptive_mode
             else "primary_queue_empty"

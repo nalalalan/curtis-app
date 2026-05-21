@@ -612,6 +612,9 @@ async function submitNoteReading(form) {
         noteLetterAnswer: answer,
         noteLetterCorrect: correct,
         noteReadingAnswerMode: "letters_only_ignore_accidentals_octaves",
+        noteReadingSourceScope: candidate.noteReadingSourceScope || "visible_source_picture_only",
+        noteReadingScopeLabel: candidate.noteReadingScopeLabel || "picture only",
+        noteReadingVisibleNoteCount: Number(candidate.noteReadingVisibleNoteCount || expectedLetters.length || userLetters.length) || userLetters.length,
         reason: correct ? "human_note_letters_match_source_guess" : "human_note_letters_correct_source_guess",
       },
     });
@@ -3563,10 +3566,10 @@ function renderNoteReadingItem(item, index) {
         <form class="note-reading-form" data-note-reading-form data-review-item-id="${escapeHtml(item.reviewItemId || "")}">
           <label>
             <span>Note letters</span>
-            <input name="noteLetterAnswer" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="a g b c d">
+            <input name="noteLetterAnswer" autocomplete="off" autocapitalize="none" spellcheck="false">
           </label>
           <button type="submit">Save</button>
-          <small data-note-reading-status>${escapeHtml(isRecent ? status.replace(/_/g, " ") : "letters only")}</small>
+          <small data-note-reading-status>${escapeHtml(isRecent ? status.replace(/_/g, " ") : (item.noteReadingScopeLabel || "picture only"))}</small>
         </form>
       </div>
     </article>
