@@ -273,6 +273,15 @@ def test_notation_styles_use_local_music_font_and_professional_glyph_sizes():
     assert "text-rendering: geometricPrecision;" in css
 
 
+def test_gold_review_training_lanes_use_user_facing_names():
+    app = Path("app.js").read_text(encoding="utf-8")
+    assert '"transcription-alan"' in app
+    assert '"score-transcription"' in app
+    assert "Audio transcription" not in app
+    assert "Notation copy" not in app
+    assert "Accept if copy matches source" not in app
+
+
 def test_local_music_font_serves_as_font_file():
     from backend.app.main import static_assets
 

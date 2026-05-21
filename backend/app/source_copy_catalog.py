@@ -164,14 +164,14 @@ def _requested_source_by_title() -> dict[str, dict[str, Any]]:
 
 
 def requested_score_copy_records() -> list[dict[str, Any]]:
-    """Training-only source-copy packets for notation-copy review.
+    """Training-only score-transcription packets for source-score review.
 
-    These records are intentionally not practice evidence. A source-copy packet
-    may enter review only after the visible source crop has a verified note
-    sequence from that same crop. The broad requested-repertoire catalog below
-    is still useful as a source library, but it is not a valid review queue
-    because its generated phrases are not proven to come from the displayed
-    IMSLP crop.
+    These records are intentionally not practice evidence. A
+    score-transcription packet may enter review only after the visible source
+    crop has a verified note sequence from that same crop. The broad
+    requested-repertoire catalog below is still useful as a source library, but
+    it is not a valid review queue because its generated phrases are not proven
+    to come from the displayed IMSLP crop.
     """
 
     records: list[dict[str, Any]] = []
@@ -193,7 +193,7 @@ def requested_score_copy_records() -> list[dict[str, Any]]:
         source_label = str(source_entry.get("label") or source_entry.get("sourceFileLabel") or "source PDF crop").strip()
         records.append(
             {
-                "practiceDay": "source-copy",
+                "practiceDay": "score-transcription",
                 "trainingOnly": True,
                 "pieces": [
                     {
@@ -202,7 +202,7 @@ def requested_score_copy_records() -> list[dict[str, Any]]:
                         "sourceUrl": str(source_entry.get("sourceUrl") or "").strip(),
                         "score": {
                             "scoreAssetId": f"source-copy-{index:02d}",
-                            "scoreSource": str(source_entry.get("source") or "notation-copy training source"),
+                            "scoreSource": str(source_entry.get("source") or "score-transcription training source"),
                             "scoreUrl": str(source_entry.get("sourceUrl") or ""),
                             "scorePdfUrl": str(source_entry.get("sourcePdfUrl") or ""),
                             "keySignature": piece["keySignature"],
@@ -212,10 +212,10 @@ def requested_score_copy_records() -> list[dict[str, Any]]:
                                 "sourcePdfLocalPath": str(source_entry.get("sourcePdfLocalPath") or ""),
                                 "sourceSnippets": [
                                     {
-                                        "measureLabel": source_label if source_ready else "source-copy packet",
-                                        "label": source_label if source_ready else "source-copy packet",
+                                        "measureLabel": source_label if source_ready else "score-transcription packet",
+                                        "label": source_label if source_ready else "score-transcription packet",
                                         "sourceStatus": "original_imslp_source_crop" if source_ready else "training_fixture_pending_original_crop",
-                                        "sourceReviewKind": "original_score_copy_training" if source_ready else "notation_copy_training_fixture",
+                                        "sourceReviewKind": "original_score_transcription_training" if source_ready else "score_transcription_training_fixture",
                                         "visibleScoreExactNoteSequence": notes,
                                         "imageUrl": source_image,
                                         "scoreImageUrl": source_image,
@@ -235,7 +235,7 @@ def requested_score_copy_records() -> list[dict[str, Any]]:
                                         "sourcePieceTrainingOnly": True,
                                         "originalScoreSnippet": source_ready,
                                         "sourceImageRequiredForOriginalScore": not source_ready,
-                                        "status": "original_score_copy_training" if source_ready else "notation_copy_training_only",
+                                        "status": "original_score_transcription_training" if source_ready else "score_transcription_training_only",
                                     }
                                 ],
                             },

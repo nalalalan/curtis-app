@@ -3251,6 +3251,9 @@ function goldReviewIsScoreCopy(item) {
     || item?.type === "score_copy";
 }
 
+const TRAINING_LANE_TRANSCRIPTION_ALAN = "transcription-alan";
+const TRAINING_LANE_SCORE_TRANSCRIPTION = "score-transcription";
+
 function renderGoldReviewSourceNotation(item) {
   const sourceNotes = item.sourceScoreNotes || item.scoreNotes || item.detectedNotes || [];
   const sourceEvents = notationEventsFromReviewField(item.sourceNotationEvents, sourceNotes);
@@ -3271,13 +3274,13 @@ function renderGoldReviewScoreSource(item) {
   const imageUrl = assetUrl(item.sourceReviewImageUrl || item.sourceImageUrl || item.scoreImageUrl || "");
   const isTrainingSource = Boolean(item.sourcePieceTrainingOnly || item.notationCopyOnly || item.sourceImageRequiredForOriginalScore);
   const isOriginalScore = Boolean(imageUrl && item.originalScoreSnippet === true && item.sourceImageRequiredForOriginalScore !== true);
-  const sourceLabel = isOriginalScore ? "Original score" : "Copy target";
+  const sourceLabel = isOriginalScore ? "Original score" : TRAINING_LANE_SCORE_TRANSCRIPTION;
   const label = isOriginalScore
     ? [item.scoreLocation, item.pieceTitle].filter(Boolean).join(" / ")
     : item.pieceTitle || item.scoreLocation || "notation source";
   if (!imageUrl) {
     return `
-      <section class="gold-review-source gold-review-source-notation${isTrainingSource ? " gold-review-source-training" : ""}" aria-label="Notation copy target">
+      <section class="gold-review-source gold-review-source-notation${isTrainingSource ? " gold-review-source-training" : ""}" aria-label="score-transcription target">
         <div class="matched-notation-head">
           <span>${escapeHtml(sourceLabel)}</span>
           <strong>${escapeHtml(shortText(label || "source", 72))}</strong>
@@ -3299,23 +3302,23 @@ function renderGoldReviewScoreSource(item) {
   }
   if (item.sourceNotationAbc || item.sourceNotationEvents?.length) {
     return `
-      <section class="gold-review-source gold-review-source-notation gold-review-source-training" aria-label="Notation copy target">
+      <section class="gold-review-source gold-review-source-notation gold-review-source-training" aria-label="score-transcription target">
         <div class="matched-notation-head">
           <span>${escapeHtml(sourceLabel)}</span>
           <strong>${escapeHtml(shortText(label || "score", 72))}</strong>
         </div>
-        <img src="${escapeHtml(imageUrl)}" alt="Notation copy target">
+        <img src="${escapeHtml(imageUrl)}" alt="score-transcription target">
         ${renderGoldReviewSourceNotation(item)}
       </section>
     `;
   }
   return `
-    <section class="gold-review-source${isOriginalScore ? " gold-review-source-original" : " gold-review-source-training"}" aria-label="${escapeHtml(isOriginalScore ? "Original score source" : "Notation copy target")}">
+    <section class="gold-review-source${isOriginalScore ? " gold-review-source-original" : " gold-review-source-training"}" aria-label="${escapeHtml(isOriginalScore ? "Original score source" : "score-transcription target")}">
       <div class="matched-notation-head">
         <span>${escapeHtml(sourceLabel)}</span>
         <strong>${escapeHtml(label || "score pending")}</strong>
       </div>
-      <img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(isOriginalScore ? "Original score source" : "Notation copy target")}">
+      <img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(isOriginalScore ? "Original score source" : "score-transcription target")}">
     </section>
   `;
 }
@@ -3387,16 +3390,16 @@ function renderGoldReviewItem(item, index) {
   const clip = item.clip && typeof item.clip === "object" ? item.clip : item;
   const status = item.status || item.defaultStatus || "pending_review";
   const isRecent = status !== "pending_review";
-  const lane = isScoreCopy ? "Notation copy" : item.reviewTrainingLane === "score_alignment" || scoreNotes ? "Score" : item.adaptiveReview ? "Adaptive" : item.reviewTask === "audio_long_phrase_exact_notes" ? "Phrase" : "Audio";
+  const lane = isScoreCopy ? TRAINING_LANE_SCORE_TRANSCRIPTION : TRAINING_LANE_TRANSCRIPTION_ALAN;
   const agreement = item.scoreAgreementStatus === "exact_midi_agreement"
     ? "same MIDI"
     : item.scoreAgreementStatus === "score_midi_mismatch"
       ? "mismatch"
       : isScoreCopy
-        ? "copy"
+        ? TRAINING_LANE_SCORE_TRANSCRIPTION
       : "";
-  const notationLabel = isScoreCopy ? "Copy" : "Detected";
-  const rule = isScoreCopy ? "Accept if copy matches source." : "One note off = reject.";
+  const notationLabel = isScoreCopy ? TRAINING_LANE_SCORE_TRANSCRIPTION : TRAINING_LANE_TRANSCRIPTION_ALAN;
+  const rule = isScoreCopy ? "Accept only if score-transcription matches the source." : "One note off = reject.";
   return `
     <article class="gold-review-item" data-status="${escapeHtml(status)}">
       <div class="gold-review-head">
@@ -3432,6 +3435,22 @@ function renderGoldReviewItem(item, index) {
         </form>
       </div>
     </article>
+  `;
+}
+
+function renderGoldReviewLane({ label, count, items, emptyText, ariaLabel }) {
+  const queued = Number(count) || 0;
+  const laneItems = Array.isArray(items) ? items : [];
+  return `
+    <section class="gold-review-lane" aria-label="${escapeHtml(ariaLabel || label)}">
+      <div class="gold-review-lane-head">
+        <strong>${escapeHtml(label)}</strong>
+        <span>${escapeHtml(String(queued))} queued</span>
+      </div>
+      ${laneItems.length
+        ? laneItems.map((item, index) => renderGoldReviewItem(item, index)).join("")
+        : `<p class="empty gold-review-lane-empty">${escapeHtml(emptyText || "No verified samples.")}</p>`}
+    </section>
   `;
 }
 
@@ -3474,7 +3493,7 @@ function renderGoldReview() {
     : "No review clips queued.";
   setText(
     elements.goldReviewCount,
-    scoreCopyQueued ? `${audioQueued} audio / ${scoreCopyQueued} copy` : scoreQueued ? `${scoreQueued} score / ${queued} queued` : `${accepted} accepted / ${queued} queued`
+    scoreCopyQueued ? `${audioQueued} transcription-alan / ${scoreCopyQueued} score-transcription` : scoreQueued ? `${scoreQueued} score / ${queued} queued` : `${accepted} accepted / ${queued} queued`
   );
   const generalItems = Array.isArray(review.queue) ? review.queue : [];
   const audioItems = Array.isArray(review.audioQueue)
@@ -3494,10 +3513,26 @@ function renderGoldReview() {
         <article><span>Hidden</span><strong>${escapeHtml(String(hidden))}</strong></article>
         <article><span>Training</span><strong>${escapeHtml(String(trainingExamples))}</strong></article>
         <article><span>Score</span><strong>${escapeHtml(String(scoreTraining))}</strong></article>
-        <article><span>Copy</span><strong>${escapeHtml(String(scoreCopyTraining))}</strong></article>
+        <article><span>score-transcription</span><strong>${escapeHtml(String(scoreCopyTraining))}</strong></article>
         <article><span>Long</span><strong>${escapeHtml(String(longTraining))}</strong></article>
         ${corrected ? `<article><span>Corrected</span><strong>${escapeHtml(String(corrected))}</strong></article>` : ""}
         <article><span>Adaptive</span><strong>${escapeHtml(adaptiveLabel)}</strong></article>
+      </div>
+      <div class="gold-review-list">
+        ${renderGoldReviewLane({
+          label: TRAINING_LANE_TRANSCRIPTION_ALAN,
+          count: audioQueued,
+          items: audioItems,
+          emptyText: "No queued transcription-alan samples.",
+          ariaLabel: "transcription-alan training",
+        })}
+        ${renderGoldReviewLane({
+          label: TRAINING_LANE_SCORE_TRANSCRIPTION,
+          count: scoreCopyQueued,
+          items: copyItems,
+          emptyText: "No verified score-transcription samples.",
+          ariaLabel: "score-transcription training",
+        })}
       </div>
       ${renderOriginalScoreSources(sourceScoreSnippets)}
       <p class="empty">${escapeHtml(rejectionDigest.message || emptyQueueText)}</p>
@@ -3512,37 +3547,31 @@ function renderGoldReview() {
       <article><span>Hidden</span><strong>${escapeHtml(String(hidden))}</strong></article>
       <article><span>Training</span><strong>${escapeHtml(String(trainingExamples))}</strong></article>
       <article><span>Score</span><strong>${escapeHtml(String(scoreTraining))}</strong></article>
-      <article><span>Copy</span><strong>${escapeHtml(String(scoreCopyTraining))}</strong></article>
+      <article><span>score-transcription</span><strong>${escapeHtml(String(scoreCopyTraining))}</strong></article>
       <article><span>Long</span><strong>${escapeHtml(String(longTraining))}</strong></article>
-      <article><span>Audio queue</span><strong>${escapeHtml(String(audioQueued))}</strong></article>
+      <article><span>transcription-alan</span><strong>${escapeHtml(String(audioQueued))}</strong></article>
       ${fastRejected ? `<article><span>Fast rejects</span><strong>${escapeHtml(String(fastRejected))}</strong></article>` : ""}
       ${unstableRejected ? `<article><span>Wide rejects</span><strong>${escapeHtml(String(unstableRejected))}</strong></article>` : ""}
       <article><span>Score queue</span><strong>${escapeHtml(scoreExactQueued ? `${scoreExactQueued}/${scoreQueued}` : String(scoreQueued))}</strong></article>
-      ${scoreCopyQueued ? `<article><span>Copy queue</span><strong>${escapeHtml(String(scoreCopyQueued))}</strong></article>` : ""}
+      <article><span>score-transcription</span><strong>${escapeHtml(String(scoreCopyQueued))}</strong></article>
       ${corrected ? `<article><span>Corrected</span><strong>${escapeHtml(String(corrected))}</strong></article>` : ""}
       <article><span>Adaptive</span><strong>${escapeHtml(adaptiveLabel)}</strong></article>
     </div>
     <div class="gold-review-list">
-      ${audioItems.length || copyItems.length ? `
-        <section class="gold-review-lane" aria-label="Video audio transcription training">
-          <div class="gold-review-lane-head">
-            <strong>Audio transcription</strong>
-            <span>${escapeHtml(String(audioQueued))} queued</span>
-          </div>
-          ${audioItems.length
-            ? audioItems.map((item, index) => renderGoldReviewItem(item, index)).join("")
-            : `<p class="empty gold-review-lane-empty">No audio clips queued.</p>`}
-        </section>
-      ` : ""}
-      ${copyItems.length ? `
-        <section class="gold-review-lane" aria-label="Score notation copy training">
-          <div class="gold-review-lane-head">
-            <strong>Notation copy</strong>
-            <span>${escapeHtml(String(scoreCopyQueued))} queued</span>
-          </div>
-          ${copyItems.map((item, index) => renderGoldReviewItem(item, index)).join("")}
-        </section>
-      ` : ""}
+      ${renderGoldReviewLane({
+        label: TRAINING_LANE_TRANSCRIPTION_ALAN,
+        count: audioQueued,
+        items: audioItems,
+        emptyText: "No queued transcription-alan samples.",
+        ariaLabel: "transcription-alan training",
+      })}
+      ${renderGoldReviewLane({
+        label: TRAINING_LANE_SCORE_TRANSCRIPTION,
+        count: scoreCopyQueued,
+        items: copyItems,
+        emptyText: "No verified score-transcription samples.",
+        ariaLabel: "score-transcription training",
+      })}
     </div>
     ${renderOriginalScoreSources(sourceScoreSnippets)}
   `;

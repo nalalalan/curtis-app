@@ -523,7 +523,13 @@ class GoldReviewTests(unittest.TestCase):
         review = build_gold_review_loop({}, daily_records)
 
         self.assertEqual(review["scoreCopyQueueCount"], 1)
+        self.assertEqual(review["scoreTranscriptionQueueCount"], 1)
+        self.assertIn(
+            {"id": "score-transcription", "label": "score-transcription", "queueKey": "scoreCopyQueue", "queueCount": 1, "trainingTask": "source_score_to_transcription_review", "gate": "verified source crop notes must match copied notes"},
+            review["trainingLanes"],
+        )
         self.assertEqual(review["queue"][0]["reviewType"], "score_copy")
+        self.assertEqual(review["queue"][0]["reviewTrainingLaneLabel"], "score-transcription")
         self.assertEqual(review["queue"][0]["scoreNotes"], ["A4"])
 
     def test_score_copy_review_queue_requires_verified_source_copy_gate(self):
@@ -565,7 +571,10 @@ class GoldReviewTests(unittest.TestCase):
         review = build_gold_review_loop({}, daily_records)
 
         self.assertEqual(review["scoreCopyQueueCount"], 0)
+        self.assertEqual(review["scoreTranscriptionQueueCount"], 0)
         self.assertEqual(review["scoreCopyQueue"], [])
+        by_lane = {lane["id"]: lane for lane in review["trainingLanes"]}
+        self.assertEqual(by_lane["score-transcription"]["queueCount"], 0)
 
     def test_score_copy_acceptance_trains_source_copy_without_score_evidence(self):
         state = {}
@@ -600,9 +609,12 @@ class GoldReviewTests(unittest.TestCase):
         review = build_gold_review_loop({}, {"records": []}, limit=20, include_source_copy_catalog=True)
 
         self.assertEqual(review["audioQueueCount"], 0)
+        self.assertEqual(review["transcriptionAlanQueueCount"], 0)
         self.assertEqual(review["scoreCopyQueueCount"], 0)
+        self.assertEqual(review["scoreTranscriptionQueueCount"], 0)
         self.assertEqual(review["sourceCopyTrainingQueueCount"], 0)
         self.assertEqual(review["scoreCopyQueue"], [])
+        self.assertEqual([lane["id"] for lane in review["trainingLanes"]], ["transcription-alan", "score-transcription"])
         self.assertGreaterEqual(review["sourceScoreSnippetCount"], 13)
         titles = {item["pieceTitle"] for item in review["sourceScoreSnippets"]}
         self.assertIn("Haydn Symphony No. 94, IV, Violin I", titles)

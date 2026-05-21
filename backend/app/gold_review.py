@@ -671,9 +671,10 @@ def _candidate_from_series(
             else "low"
         ),
         "reviewTrainingLane": "audio_notes",
+        "reviewTrainingLaneLabel": "transcription-alan",
         "reviewQuestion": "Do the displayed notes match the paired audio? Reject if one note is wrong.",
-        "acceptanceRule": "Accept only if every displayed note matches the paired audio after adjacent duplicate detections are collapsed.",
-        "rejectionRule": "Reject if any displayed note is wrong, missing, extra, out of order, or not audible in the paired clip.",
+        "acceptanceRule": "Accept transcription-alan only if every displayed note matches the paired audio after adjacent duplicate detections are collapsed.",
+        "rejectionRule": "Reject transcription-alan if any displayed note is wrong, missing, extra, out of order, or not audible in the paired clip.",
     }
     payload["reviewItemId"] = _candidate_id(payload)
     return payload
@@ -730,6 +731,7 @@ def _candidate_from_group(record: dict[str, Any], group: dict[str, Any]) -> dict
         "scoreAgreement": score_agreement,
         "scoreAgreementStatus": "exact_midi_agreement" if score_agreement else "score_midi_mismatch" if score_notes else "no_score_context",
         "reviewTrainingLane": "score_alignment" if score_notes else "audio_notes",
+        "reviewTrainingLaneLabel": "transcription-alan",
         "scoreLocation": _clean(group.get("scoreLocation") or group.get("scoreSequenceLabel") or score.get("label")),
         "scoreStatus": _clean(group.get("sourceScoreCheckStatus") or group.get("scoreSnippetStatus") or score.get("status")),
         "clip": clip,
@@ -742,8 +744,8 @@ def _candidate_from_group(record: dict[str, Any], group: dict[str, Any]) -> dict
             if score_notes
             else "Do the displayed notes match the paired audio? Reject if one note is wrong."
         ),
-        "acceptanceRule": "Accept only if every displayed audio/transcription note and every score note agree after adjacent duplicate detections are collapsed.",
-        "rejectionRule": "Reject if any note is wrong, missing, extra, out of order, or the score location is not the same phrase.",
+        "acceptanceRule": "Accept transcription-alan only if every displayed audio/transcription note matches the paired audio after adjacent duplicate detections are collapsed.",
+        "rejectionRule": "Reject transcription-alan if any note is wrong, missing, extra, out of order, or the score location is not the same phrase.",
     }
     payload["reviewItemId"] = _candidate_id(payload)
     return payload
@@ -856,6 +858,7 @@ def _score_copy_candidate_from_snippet(
         "scoreAgreement": False,
         "scoreAgreementStatus": "score_copy_review",
         "reviewTrainingLane": "score_copy",
+        "reviewTrainingLaneLabel": "score-transcription",
         "scoreSource": score_source,
         "scoreAssetId": _clean(target.get("scoreAssetId") or score_config.get("sourceId")),
         "scoreLocation": location,
@@ -882,9 +885,9 @@ def _score_copy_candidate_from_snippet(
         "sourceCopyOnly": True,
         "notationCopyOnly": True,
         "sourcePieceTrainingOnly": bool(snippet.get("sourcePieceTrainingOnly")),
-        "reviewQuestion": "Does the copied notation match the source notation? Reject if one visible detail is wrong.",
-        "acceptanceRule": "Accept only if Curtis copied the source notation exactly: pitch, octave, accidental, rhythm value, rest, beam, tuplet, stem direction, notehead, spacing, slur/tie, and source range.",
-        "rejectionRule": "Reject if any copied note, accidental, octave, duration, rest, beam, tuplet, stem direction, notehead, spacing, slur/tie, order, or source range is wrong.",
+        "reviewQuestion": "Does score-transcription match the source notation? Reject if one visible detail is wrong.",
+        "acceptanceRule": "Accept score-transcription only if Curtis copied the source notation exactly: pitch, octave, accidental, rhythm value, rest, beam, tuplet, stem direction, notehead, spacing, slur/tie, and source range.",
+        "rejectionRule": "Reject score-transcription if any copied note, accidental, octave, duration, rest, beam, tuplet, stem direction, notehead, spacing, slur/tie, order, or source range is wrong.",
     }
     payload["reviewItemId"] = _candidate_id(payload)
     return payload
@@ -972,9 +975,9 @@ def normalize_gold_review_item(raw: dict[str, Any]) -> dict[str, Any]:
             raise ValueError("Accepted score phrase labels require normalized audio and score MIDI agreement.")
     if item_type == "score_copy" and status == "accepted_truth":
         if not score_notes:
-            raise ValueError("Accepted score-copy labels require source score notes.")
+            raise ValueError("Accepted score-transcription labels require source score notes.")
         if not _normalized_review_note_agreement(accepted_notes, score_notes):
-            raise ValueError("Accepted score-copy labels require copied notes and source notes to agree.")
+            raise ValueError("Accepted score-transcription labels require copied notes and source notes to agree.")
     item = {
         "reviewItemId": _clean(raw.get("reviewItemId") or raw.get("itemId")),
         "type": item_type,
@@ -1382,6 +1385,8 @@ def build_gold_review_loop(
         "scoreQueueCount": len(score_candidates),
         "scoreCopyQueueCount": len(score_copy_candidates),
         "audioQueueCount": len(audio_candidates),
+        "transcriptionAlanQueueCount": len(audio_candidates),
+        "scoreTranscriptionQueueCount": len(score_copy_candidates),
         "sourceCopyTrainingQueueCount": len(source_copy_training_candidates),
         "sourceScoreSnippetCount": len(source_score_snippets),
         "sourceScoreReadySnippetCount": len(source_score_ready_snippets),
@@ -1422,6 +1427,23 @@ def build_gold_review_loop(
         "trainingScoreCopyExampleCount": int(training_set.get("scoreCopyExampleCount") or 0),
         "trainingPositiveScoreCopyExampleCount": int(training_set.get("positiveScoreCopyExampleCount") or 0),
         "trainingNegativeScoreCopyExampleCount": int(training_set.get("negativeScoreCopyExampleCount") or 0),
+        "trainingLanes": [
+            {
+                "id": "transcription-alan",
+                "label": "transcription-alan",
+                "queueKey": "audioQueue",
+                "queueCount": len(audio_candidates),
+                "trainingTask": "audio_to_transcription_review",
+            },
+            {
+                "id": "score-transcription",
+                "label": "score-transcription",
+                "queueKey": "scoreCopyQueue",
+                "queueCount": len(score_copy_candidates),
+                "trainingTask": "source_score_to_transcription_review",
+                "gate": "verified source crop notes must match copied notes",
+            },
+        ],
         "rejectionInsights": rejection_insights,
         "reviewLearningStatus": "reducing_review_load" if suppressed_all else "learning_no_suppression_yet",
         "reviewLearningRule": learning_profile.get("suppressionRule") or "",
@@ -1469,5 +1491,5 @@ def build_gold_review_loop(
             if suppressed_all
             else "Gold review queue is empty for current analyzed evidence."
         ),
-        "acceptanceRule": "Gold review is binary. Accept only exact displayed notes; reject any note, order, octave, audio, source-copy, or score mismatch. Score-copy labels train source reading only; accepted score evidence still requires exact audio-note and score-note MIDI agreement after consecutive duplicate detections are collapsed.",
+        "acceptanceRule": "Gold review is binary. Accept only exact displayed notes. transcription-alan labels train audio-to-notation review. score-transcription labels train source-score-to-notation review and require the visible source crop notes to match the copied notes. Accepted score evidence still requires exact audio-note and score-note MIDI agreement after consecutive duplicate detections are collapsed.",
     }
