@@ -618,6 +618,17 @@ class GoldReviewTests(unittest.TestCase):
         self.assertTrue(all(item["trainingOnly"] for item in review["scoreCopyQueue"]))
         self.assertTrue(any(item["bestEffortScoreTranscription"] for item in review["scoreCopyQueue"]))
         self.assertTrue(all(item["evidenceLevel"] == "best_effort_review_only" for item in review["scoreCopyQueue"]))
+        queue_titles = {item["pieceTitle"] for item in review["scoreCopyQueue"]}
+        self.assertNotIn("Paganini Moto Perpetuo, Op. 11, Solo violin", queue_titles)
+        self.assertNotIn("Wieniawski Etude-Caprice, Op. 18 No. 3", queue_titles)
+        self.assertNotIn("Wieniawski Etude-Caprice, Op. 18 No. 4", queue_titles)
+        self.assertTrue(
+            all(
+                "complete score" not in str(item.get("scoreLocation", "")).lower()
+                and "piano" not in str(item.get("scoreLocation", "")).lower()
+                for item in review["scoreCopyQueue"]
+            )
+        )
         self.assertEqual([lane["id"] for lane in review["trainingLanes"]], ["transcription-alan", "score-transcription"])
         self.assertGreaterEqual(review["sourceScoreSnippetCount"], 13)
         titles = {item["pieceTitle"] for item in review["sourceScoreSnippets"]}

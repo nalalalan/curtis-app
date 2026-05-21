@@ -163,6 +163,45 @@ def _requested_source_by_title() -> dict[str, dict[str, Any]]:
     return {str(item.get("pieceTitle") or "").strip(): item for item in _requested_source_library()}
 
 
+def _is_violin_only_review_source(source_entry: dict[str, Any]) -> bool:
+    """Return True only for source crops that are safe to show as review pairs.
+
+    The score-transcription lane is for copying the displayed violin source
+    into notation. Broad score-library material can still be useful as a PDF
+    source, but full scores, piano reductions, accompaniment systems, or
+    multi-player book sources are not valid accept/reject cards for Alan.
+    """
+
+    label_text = " ".join(
+        str(source_entry.get(key) or "")
+        for key in ("sourceFileLabel", "requestedPart", "label", "sourcePdfUrl", "source")
+    ).lower()
+    blocked = (
+        "complete score",
+        "full score",
+        "piano",
+        "accompaniment",
+        "score and",
+        "orchestra",
+        "orchestral",
+        "2_violins",
+        "2 violins",
+        "two violins",
+        "book 1",
+        "book 2",
+        "etudes 1-4",
+        "etudes 5-8",
+    )
+    if any(token in label_text for token in blocked):
+        return False
+    source_file_label = str(source_entry.get("sourceFileLabel") or "").strip().lower()
+    requested_part = str(source_entry.get("requestedPart") or "").strip().lower()
+    allowed_labels = ("violins i", "violin i", "violin part", "solo violin")
+    return any(token in source_file_label for token in allowed_labels) or any(
+        token in requested_part for token in allowed_labels
+    )
+
+
 def requested_score_copy_records() -> list[dict[str, Any]]:
     """Training-only score-transcription packets for source-score review.
 
@@ -183,6 +222,8 @@ def requested_score_copy_records() -> list[dict[str, Any]]:
         source_entry = source_by_title.get(title, {})
         source_image = str(source_entry.get("reviewImageUrl") or source_entry.get("imageUrl") or "").strip()
         source_ready = bool(source_entry.get("originalScoreSnippet") is True and source_image)
+        if not _is_violin_only_review_source(source_entry):
+            continue
         verified_source_notes = source_entry.get("verifiedSourceNoteSequence")
         strict_source_match = bool(
             source_ready
