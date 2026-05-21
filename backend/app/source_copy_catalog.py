@@ -140,8 +140,8 @@ VERIFIED_SCORE_COPY_PACKETS = [
         "label": "p. 2 / opening five-note figure",
         "imageUrl": "/assets/score/original/source-library/verified-copy/mozart-figaro-opening-d4-e4-fsharp4-g4-a4-context.png",
         "keySignature": {"accidentalType": "sharp", "accidentals": ["F#", "C#"], "label": "D major / 2 sharps"},
-        "notes": ["D4", "E4", "F#4", "G4", "A4"],
-        "abc": "X:1\nM:none\nL:1/8\nK:D clef=treble\nD E F G A z2 |",
+        "notes": ["D4", "C#4", "D4", "C#4", "D4"],
+        "abc": "X:1\nM:none\nL:1/8\nK:D clef=treble\nD C D C D z2 |",
         "sourcePdfPage": 2,
     },
     {

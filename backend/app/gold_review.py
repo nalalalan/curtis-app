@@ -1113,9 +1113,9 @@ def normalize_gold_review_item(raw: dict[str, Any]) -> dict[str, Any]:
     expected_note_letters = _clean_note_letters(raw.get("expectedNoteLetters") or _note_letters_from_notes(score_notes or detected_notes))
     user_note_letters = _clean_note_letters(raw.get("userNoteLetters") or raw.get("noteLetterAnswer"))
     note_letter_correct = bool(expected_note_letters and user_note_letters and expected_note_letters == user_note_letters)
-    if status == "accepted_truth" and not accepted_notes:
+    if status == "accepted_truth" and item_type != "note_reading" and not accepted_notes:
         accepted_notes = detected_notes
-    if status == "accepted_truth" and not accepted_notes:
+    if status == "accepted_truth" and item_type != "note_reading" and not accepted_notes:
         raise ValueError("Accepted gold review items require accepted notes.")
     if item_type in {"score_phrase", "audio_score_match"} and status == "accepted_truth" and not score_notes:
         raise ValueError("Accepted score phrase labels require score notes.")
@@ -1127,8 +1127,8 @@ def normalize_gold_review_item(raw: dict[str, Any]) -> dict[str, Any]:
             raise ValueError("Accepted score-transcription labels require source score notes.")
         if not _normalized_review_note_agreement(accepted_notes, score_notes):
             raise ValueError("Accepted score-transcription labels require copied notes and source notes to agree.")
-    if item_type == "note_reading" and status == "accepted_truth" and not note_letter_correct:
-        raise ValueError("Accepted note-reading labels require the typed note letters to match the source.")
+    if item_type == "note_reading" and status == "accepted_truth" and not user_note_letters:
+        raise ValueError("Accepted note-reading labels require typed note letters.")
     item = {
         "reviewItemId": _clean(raw.get("reviewItemId") or raw.get("itemId")),
         "type": item_type,

@@ -106,9 +106,13 @@ function apiBase() {
 async function apiFetch(path, options = {}) {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 60000);
+  const body = options.body && typeof options.body === "object" && !(options.body instanceof FormData) && !(options.body instanceof Blob)
+    ? JSON.stringify(options.body)
+    : options.body;
   try {
     const response = await fetch(`${apiBase()}${path}`, {
       ...options,
+      body,
       cache: "no-store",
       headers: {
         "Content-Type": "application/json",
@@ -575,13 +579,21 @@ async function submitNoteReading(form) {
   const button = form.querySelector("button");
   if (button) {
     button.disabled = true;
-    button.textContent = "Checking";
+    button.textContent = "Saving";
   }
   const answer = String(input.value || "").trim();
   const expectedLetters = Array.isArray(candidate.expectedNoteLetters)
     ? candidate.expectedNoteLetters.map((letter) => String(letter || "").toUpperCase()).filter(Boolean)
     : noteLetterSequence(candidate.expectedNoteLetterText || "");
   const userLetters = noteLetterSequence(answer);
+  if (!userLetters.length) {
+    if (state) state.textContent = "Type letters.";
+    if (button) {
+      button.disabled = false;
+      button.textContent = "Save";
+    }
+    return;
+  }
   const correct = expectedLetters.length > 0
     && userLetters.length === expectedLetters.length
     && userLetters.every((letter, index) => letter === expectedLetters[index]);
@@ -593,25 +605,25 @@ async function submitNoteReading(form) {
         ...candidate,
         reviewType: "note_reading",
         type: "note_reading",
-        status: correct ? "accepted_truth" : "rejected_mismatch",
-        acceptedNotes: correct ? noteInputSequence(noteInputText(candidate.detectedNotes || candidate.scoreNotes)) : [],
+        status: "accepted_truth",
+        acceptedNotes: [],
         expectedNoteLetters: expectedLetters,
         userNoteLetters: userLetters,
         noteLetterAnswer: answer,
         noteLetterCorrect: correct,
         noteReadingAnswerMode: "letters_only_ignore_accidentals_octaves",
-        reason: correct ? "note_letters_match" : "note_letters_mismatch",
+        reason: correct ? "human_note_letters_match_source_guess" : "human_note_letters_correct_source_guess",
       },
     });
     applyOps(ops);
-    if (state) state.textContent = correct ? "Saved correct." : "Saved mismatch.";
+    if (state) state.textContent = "Saved.";
   } catch (error) {
     backend.lastError = String(error?.message || error || "review save failed");
-    if (state) state.textContent = "Failed.";
+    if (state) state.textContent = "Could not save.";
   } finally {
     if (button) {
       button.disabled = false;
-      button.textContent = "Check";
+      button.textContent = "Save";
     }
   }
 }
@@ -3553,7 +3565,7 @@ function renderNoteReadingItem(item, index) {
             <span>Note letters</span>
             <input name="noteLetterAnswer" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="a g b c d">
           </label>
-          <button type="submit">Check</button>
+          <button type="submit">Save</button>
           <small data-note-reading-status>${escapeHtml(isRecent ? status.replace(/_/g, " ") : "letters only")}</small>
         </form>
       </div>

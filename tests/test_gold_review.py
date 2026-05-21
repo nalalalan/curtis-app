@@ -637,10 +637,10 @@ class GoldReviewTests(unittest.TestCase):
             )
         )
         self.assertEqual(
-            next(item for item in review["noteReadingQueue"] if item["detectedNotes"] == ["D4", "E4", "F#4", "G4", "A4"])[
+            next(item for item in review["noteReadingQueue"] if item["detectedNotes"] == ["D4", "C#4", "D4", "C#4", "D4"])[
                 "expectedNoteLetters"
             ],
-            ["D", "E", "F", "G", "A"],
+            ["D", "C", "D", "C", "D"],
         )
         queue_titles = {item["pieceTitle"] for item in review["scoreCopyQueue"]}
         self.assertNotIn("Paganini Moto Perpetuo, Op. 11, Solo violin", queue_titles)
@@ -679,7 +679,7 @@ class GoldReviewTests(unittest.TestCase):
 
     def test_note_reading_queue_records_letter_only_training_without_evidence_mirror(self):
         review = build_gold_review_loop({}, {"records": []}, limit=20, include_source_copy_catalog=True)
-        candidate = next(item for item in review["noteReadingQueue"] if item["expectedNoteLetters"] == ["D", "E", "F", "G", "A"])
+        candidate = next(item for item in review["noteReadingQueue"] if item["expectedNoteLetters"] == ["D", "C", "D", "C", "D"])
         state: dict[str, object] = {}
 
         result = record_gold_review_item(
@@ -688,24 +688,25 @@ class GoldReviewTests(unittest.TestCase):
                 **candidate,
                 "type": "note_reading",
                 "status": "accepted_truth",
-                "noteLetterAnswer": "d e f g a",
-                "userNoteLetters": ["D", "E", "F", "G", "A"],
+                "noteLetterAnswer": "d c d c d",
+                "userNoteLetters": ["D", "C", "D", "C", "D"],
                 "noteLetterCorrect": True,
+                "acceptedNotes": [],
             },
         )
         followup = build_gold_review_loop(state, {"records": []}, limit=20, include_source_copy_catalog=True)
 
         self.assertEqual(result["goldReviewItem"]["type"], "note_reading")
         self.assertEqual(result["goldReviewItem"]["reviewTask"], "note_letter_reading")
-        self.assertEqual(result["goldReviewItem"]["expectedNoteLetters"], ["D", "E", "F", "G", "A"])
-        self.assertEqual(result["goldReviewItem"]["userNoteLetters"], ["D", "E", "F", "G", "A"])
+        self.assertEqual(result["goldReviewItem"]["expectedNoteLetters"], ["D", "C", "D", "C", "D"])
+        self.assertEqual(result["goldReviewItem"]["userNoteLetters"], ["D", "C", "D", "C", "D"])
         self.assertTrue(result["goldReviewItem"]["noteLetterCorrect"])
         self.assertEqual(result["truthMirror"], {})
         self.assertEqual(followup["trainingNoteReadingExampleCount"], 1)
         self.assertEqual(followup["trainingPositiveNoteReadingExampleCount"], 1)
         self.assertEqual(followup["acceptedEvidenceReadyCount"], 0)
 
-    def test_note_reading_wrong_letters_store_negative_training(self):
+    def test_note_reading_user_letters_are_accepted_even_when_source_guess_differs(self):
         review = build_gold_review_loop({}, {"records": []}, limit=20, include_source_copy_catalog=True)
         candidate = review["noteReadingQueue"][0]
         state: dict[str, object] = {}
@@ -715,17 +716,19 @@ class GoldReviewTests(unittest.TestCase):
             {
                 **candidate,
                 "type": "note_reading",
-                "status": "rejected_mismatch",
+                "status": "accepted_truth",
                 "noteLetterAnswer": "a b c",
                 "userNoteLetters": ["A", "B", "C"],
+                "acceptedNotes": [],
             },
         )
         followup = build_gold_review_loop(state, {"records": []}, limit=20, include_source_copy_catalog=True)
 
-        self.assertEqual(result["goldReviewItem"]["trainingLabel"], "negative")
+        self.assertEqual(result["goldReviewItem"]["trainingLabel"], "positive")
+        self.assertEqual(result["goldReviewItem"]["userNoteLetters"], ["A", "B", "C"])
         self.assertFalse(result["goldReviewItem"]["noteLetterCorrect"])
         self.assertEqual(followup["trainingNoteReadingExampleCount"], 1)
-        self.assertEqual(followup["trainingNegativeNoteReadingExampleCount"], 1)
+        self.assertEqual(followup["trainingPositiveNoteReadingExampleCount"], 1)
 
     def test_source_catalog_mode_tops_up_thin_audio_queue_with_adaptive_windows(self):
         daily_records = {
