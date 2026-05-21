@@ -630,11 +630,24 @@ class GoldReviewTests(unittest.TestCase):
             )
         )
         self.assertEqual([lane["id"] for lane in review["trainingLanes"]], ["transcription-alan", "score-transcription"])
-        self.assertGreaterEqual(review["sourceScoreSnippetCount"], 13)
+        self.assertGreaterEqual(review["sourceScoreSnippetCount"], 10)
         titles = {item["pieceTitle"] for item in review["sourceScoreSnippets"]}
         self.assertIn("Haydn Symphony No. 94, IV, Violin I", titles)
-        self.assertIn("Paganini Moto Perpetuo, Op. 11, Solo violin", titles)
         self.assertIn("Mozart Le nozze di Figaro Overture, Violin I", titles)
+        self.assertNotIn("Paganini Moto Perpetuo, Op. 11, Solo violin", titles)
+        self.assertNotIn("Wieniawski Etude-Caprice, Op. 18 No. 3", titles)
+        self.assertNotIn("Wieniawski Etude-Caprice, Op. 18 No. 4", titles)
+        self.assertTrue(
+            all(
+                "complete score" not in str(item.get("label", "")).lower()
+                and "complete score" not in str(item.get("sourceFileLabel", "")).lower()
+                and "piano" not in str(item.get("label", "")).lower()
+                and "piano" not in str(item.get("sourceFileLabel", "")).lower()
+                and "accompaniment" not in str(item.get("label", "")).lower()
+                and "accompaniment" not in str(item.get("sourceFileLabel", "")).lower()
+                for item in review["sourceScoreSnippets"]
+            )
+        )
         first = next(item for item in review["sourceScoreSnippets"] if item["pieceTitle"] == "Haydn Symphony No. 94, IV, Violin I")
         self.assertTrue(first["reviewImageUrl"].startswith("/assets/score/original/source-library/"))
         self.assertTrue(first["reviewImageUrl"].endswith("-review.png"))
@@ -680,7 +693,7 @@ class GoldReviewTests(unittest.TestCase):
         review = build_gold_review_loop({}, {"records": []}, limit=20, include_source_copy_catalog=True)
 
         snippets = review["sourceScoreSnippets"]
-        requested_titles = {
+        violin_only_requested_titles = {
             "Haydn Symphony No. 94, IV, Violin I",
             'Schubert Symphony No. 4 "Tragic", IV, Violin I',
             "Schubert Symphony No. 3, I, Violin I",
@@ -689,21 +702,32 @@ class GoldReviewTests(unittest.TestCase):
             "Schubert Symphony No. 5, IV, Violin I",
             "Paganini Violin Concerto No. 1, I, Solo violin",
             "Paganini Violin Concerto No. 2, I, Solo violin",
-            "Paganini Moto Perpetuo, Op. 11, Solo violin",
-            "Wieniawski Etude-Caprice, Op. 18 No. 4",
-            "Wieniawski Etude-Caprice, Op. 18 No. 3",
             "Mozart Le nozze di Figaro Overture, Violin I",
             "Schumann Symphony No. 1, IV, Violin I",
         }
         snippet_titles = {item["pieceTitle"] for item in snippets}
 
-        self.assertGreaterEqual(review["sourceScoreSnippetCount"], 19)
-        self.assertGreaterEqual(review["sourceScoreReadySnippetCount"], 19)
-        self.assertTrue(requested_titles <= snippet_titles)
+        self.assertEqual(review["sourceScoreSnippetCount"], 16)
+        self.assertEqual(review["sourceScoreReadySnippetCount"], 16)
+        self.assertTrue(violin_only_requested_titles <= snippet_titles)
+        self.assertNotIn("Paganini Moto Perpetuo, Op. 11, Solo violin", snippet_titles)
+        self.assertNotIn("Wieniawski Etude-Caprice, Op. 18 No. 3", snippet_titles)
+        self.assertNotIn("Wieniawski Etude-Caprice, Op. 18 No. 4", snippet_titles)
         self.assertTrue(snippets)
         self.assertTrue(all(item["originalScoreSnippet"] for item in snippets))
         self.assertTrue(all(not item["sourceImageRequiredForOriginalScore"] for item in snippets))
         self.assertTrue(all("imslp" in item["source"].lower() for item in snippets))
+        self.assertTrue(
+            all(
+                "complete score" not in str(item.get("label", "")).lower()
+                and "complete score" not in str(item.get("sourceFileLabel", "")).lower()
+                and "piano" not in str(item.get("label", "")).lower()
+                and "piano" not in str(item.get("sourceFileLabel", "")).lower()
+                and "accompaniment" not in str(item.get("label", "")).lower()
+                and "accompaniment" not in str(item.get("sourceFileLabel", "")).lower()
+                for item in snippets
+            )
+        )
         for item in snippets:
             image_path = Path(__file__).resolve().parents[1] / item["imageUrl"].lstrip("/")
             self.assertTrue(image_path.exists(), str(image_path))

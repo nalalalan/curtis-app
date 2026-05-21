@@ -145,7 +145,8 @@ def requested_original_score_snippets() -> list[dict[str, Any]]:
         if isinstance(library, list):
             for item in library:
                 if isinstance(item, dict):
-                    snippets.append(dict(item))
+                    if _is_violin_only_review_source(item):
+                        snippets.append(dict(item))
     return snippets
 
 
