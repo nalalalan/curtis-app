@@ -614,7 +614,7 @@ class GoldReviewTests(unittest.TestCase):
         self.assertEqual(review["audioQueueCount"], 0)
         self.assertEqual(review["transcriptionAlanQueueCount"], 0)
         self.assertEqual(review["scoreCopyQueueCount"], 4)
-        self.assertGreaterEqual(review["noteReadingQueueCount"], 8)
+        self.assertEqual(review["noteReadingQueueCount"], 4)
         self.assertEqual(review["scoreTranscriptionQueueCount"], review["scoreCopyQueueCount"])
         self.assertEqual(review["sourceCopyTrainingQueueCount"], review["scoreCopyQueueCount"])
         self.assertEqual(review["noteReadingTrainingQueueCount"], review["noteReadingQueueCount"])
@@ -645,6 +645,8 @@ class GoldReviewTests(unittest.TestCase):
             ],
             ["D", "C", "D", "C", "D"],
         )
+        self.assertTrue(all(item["expectedNoteLetters"] for item in review["noteReadingQueue"]))
+        self.assertTrue(all(item["noteReadingVisibleNoteCount"] <= 5 for item in review["noteReadingQueue"]))
         self.assertTrue(all(item["noteReadingSourceScope"] == "visible_source_picture_only" for item in review["noteReadingQueue"]))
         self.assertTrue(all(item["noteReadingScopeLabel"] == "picture only" for item in review["noteReadingQueue"]))
         self.assertTrue(
@@ -689,7 +691,7 @@ class GoldReviewTests(unittest.TestCase):
         self.assertTrue(first["reviewImageUrl"].startswith("/assets/score/original/source-library/"))
         self.assertTrue(first["reviewImageUrl"].endswith("-review.png"))
 
-    def test_training_lanes_refill_after_visible_source_batch_is_reviewed(self):
+    def test_training_lanes_do_not_refill_reviewed_visible_pairs(self):
         state: dict[str, object] = {}
         first = build_gold_review_loop(state, {"records": []}, limit=20, include_source_copy_catalog=True)
 
@@ -720,11 +722,11 @@ class GoldReviewTests(unittest.TestCase):
 
         followup = build_gold_review_loop(state, {"records": []}, limit=20, include_source_copy_catalog=True)
 
-        self.assertGreaterEqual(followup["scoreCopyQueueCount"], 1)
-        self.assertGreaterEqual(followup["noteReadingQueueCount"], 1)
+        self.assertEqual(followup["scoreCopyQueueCount"], 0)
+        self.assertEqual(followup["noteReadingQueueCount"], 0)
         self.assertEqual(len({item["reviewItemId"] for item in followup["scoreCopyQueue"]}), len(followup["scoreCopyQueue"]))
         self.assertEqual(len({item["reviewItemId"] for item in followup["noteReadingQueue"]}), len(followup["noteReadingQueue"]))
-        self.assertTrue(any(item.get("continuousReviewRefill") for item in followup["scoreCopyQueue"]))
+        self.assertFalse(any(item.get("continuousReviewRefill") for item in followup["scoreCopyQueue"]))
 
     def test_note_reading_queue_records_letter_only_training_without_evidence_mirror(self):
         review = build_gold_review_loop({}, {"records": []}, limit=20, include_source_copy_catalog=True)
@@ -963,6 +965,78 @@ class GoldReviewTests(unittest.TestCase):
 
         self.assertEqual(review["audioQueueCount"], 1)
         self.assertGreaterEqual(review["duplicateAudioWindowHiddenCount"], 1)
+
+    def test_reviewed_transcription_alan_pair_does_not_return_under_new_id(self):
+        daily_records = {
+            "records": [
+                {
+                    "practiceDay": "2026-05-03",
+                    "transcription": {
+                        "detectedSeries": [
+                            {
+                                "sampleId": "reviewed-audio-window",
+                                "sourceTitle": "5-3-26",
+                                "sourceUrl": "https://www.youtube.com/watch?v=abc",
+                                "startSeconds": 120.0,
+                                "localStartSeconds": 0.0,
+                                "localEndSeconds": 3.0,
+                                "notes": [
+                                    note("G5", 79, 0.0),
+                                    note("F5", 77, 0.2),
+                                    note("A5", 81, 0.4),
+                                    note("G#5", 80, 0.6),
+                                    note("F5", 77, 0.8),
+                                ],
+                            }
+                        ]
+                    },
+                }
+            ]
+        }
+        first = build_gold_review_loop({}, daily_records, limit=20, include_source_copy_catalog=True)
+        candidate = first["audioQueue"][0]
+        state: dict[str, object] = {}
+
+        record_gold_review_item(
+            state,
+            {
+                **candidate,
+                "reviewItemId": "older-id-for-same-visible-audio-pair",
+                "status": "accepted_truth",
+                "acceptedNotes": candidate["detectedNotes"],
+            },
+        )
+        followup = build_gold_review_loop(state, daily_records, limit=20, include_source_copy_catalog=True)
+
+        self.assertEqual(followup["audioQueueCount"], 0)
+        self.assertTrue(
+            any(item["reviewLearningStatus"] == "accepted_pair_hidden" for item in followup["suppressedQueuePreview"])
+        )
+
+    def test_reviewed_score_transcription_pair_does_not_return_under_new_id(self):
+        first = build_gold_review_loop({}, {"records": []}, limit=20, include_source_copy_catalog=True)
+        candidate = first["scoreCopyQueue"][0]
+        state: dict[str, object] = {}
+
+        record_gold_review_item(
+            state,
+            {
+                **candidate,
+                "reviewItemId": "older-id-for-same-visible-score-pair",
+                "type": "score_copy",
+                "status": "rejected_mismatch",
+                "acceptedNotes": candidate["detectedNotes"],
+                "scoreNotes": candidate["scoreNotes"],
+            },
+        )
+        followup = build_gold_review_loop(state, {"records": []}, limit=20, include_source_copy_catalog=True)
+
+        self.assertFalse(
+            any(item["sourceReviewImageUrl"] == candidate["sourceReviewImageUrl"] for item in followup["scoreCopyQueue"])
+        )
+        self.assertTrue(
+            any(item["reviewLearningStatus"] == "rejected_pair_hidden" for item in followup["suppressedQueuePreview"])
+        )
 
     def test_original_score_snippets_are_real_imslp_image_assets(self):
         review = build_gold_review_loop({}, {"records": []}, limit=20, include_source_copy_catalog=True)

@@ -5059,6 +5059,7 @@ h2 {
 
 .note-reading-form label {
   display: grid;
+  grid-column: 1 / -1;
   gap: 6px;
   min-width: 0;
 }
@@ -5087,6 +5088,31 @@ h2 {
 .note-reading-form input:focus {
   outline: 2px solid rgba(47, 82, 104, .22);
   outline-offset: 1px;
+}
+
+.note-reading-keypad {
+  display: grid;
+  grid-column: 1;
+  grid-template-columns: repeat(9, minmax(0, 1fr));
+  gap: 5px;
+  min-width: 0;
+}
+
+.note-reading-keypad button {
+  min-width: 0;
+  min-height: 34px;
+  padding: 7px 5px;
+  border: 1px solid rgba(31, 41, 39, .14);
+  border-radius: 7px;
+  background: rgba(255, 253, 248, .86);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 760;
+  line-height: 1;
+}
+
+.note-reading-keypad button:hover {
+  background: rgba(95, 118, 104, .1);
 }
 
 .note-reading-form small {
@@ -5120,6 +5146,10 @@ h2 {
   .gold-review-form,
   .note-reading-form {
     grid-template-columns: 1fr;
+  }
+
+  .note-reading-keypad {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
   }
 
   .staff4-audit-head {

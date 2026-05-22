@@ -22,6 +22,7 @@ MAX_ADAPTIVE_REVIEW_WINDOWS_PER_SERIES = 10
 MAX_ADAPTIVE_REVIEW_QUEUE = 80
 MIN_SOURCE_TRAINING_LANE_QUEUE = 8
 MAX_SOURCE_TRAINING_REFILL_CYCLES = 40
+MAX_NOTE_READING_VISIBLE_NOTES = 5
 VISIBLE_AUDIO_QUEUE_OVERLAP_RATIO_LIMIT = 0.42
 VISIBLE_AUDIO_QUEUE_START_GAP_SECONDS = 1.25
 SCORE_COPY_TASKS = {"score_copy_exact_notes", "score_copy_exact_notation", "score_copy_pitch_skeleton"}
@@ -1226,6 +1227,8 @@ def _note_reading_candidate_from_score_copy(candidate: dict[str, Any]) -> dict[s
     letters = _note_letters_from_notes(notes)
     if not notes or not letters:
         return {}
+    if len(letters) > MAX_NOTE_READING_VISIBLE_NOTES:
+        return {}
     payload = {
         **candidate,
         "reviewKind": "note_reading_candidate",
@@ -1380,6 +1383,11 @@ def _continuous_refill_candidates(
         if isinstance(learning_profile.get("sourceNoteLetterLabels"), dict)
         else {}
     )
+    reviewed_display_keys = (
+        learning_profile.get("reviewedDisplayKeys")
+        if isinstance(learning_profile.get("reviewedDisplayKeys"), set)
+        else set()
+    )
     for cycle in range(1, MAX_SOURCE_TRAINING_REFILL_CYCLES + 1):
         for candidate in base_candidates:
             source_key = _source_crop_key(candidate)
@@ -1394,7 +1402,7 @@ def _continuous_refill_candidates(
             refill = _candidate_with_review_cycle(candidate, cycle, source)
             review_id = _clean(refill.get("reviewItemId"))
             display_key = _candidate_display_key(refill)
-            if review_id in reviewed_ids or display_key in seen_display:
+            if review_id in reviewed_ids or display_key in seen_display or display_key in reviewed_display_keys:
                 continue
             out.append(refill)
             seen_display.add(display_key)
@@ -1623,6 +1631,8 @@ def record_gold_review_item(state: dict[str, Any], raw: dict[str, Any]) -> dict[
 def build_review_learning_profile(items: list[dict[str, Any]]) -> dict[str, Any]:
     accepted_keys: set[str] = set()
     rejected_keys: set[str] = set()
+    accepted_display_keys: set[str] = set()
+    rejected_display_keys: set[str] = set()
     accepted_identity_keys: set[str] = set()
     rejected_identity_keys: set[str] = set()
     accepted_intervals: list[dict[str, Any]] = []
@@ -1633,11 +1643,14 @@ def build_review_learning_profile(items: list[dict[str, Any]]) -> dict[str, Any]
     source_note_letter_labels: dict[str, dict[str, Any]] = {}
     for item in items:
         key = _item_learning_key(item)
+        display_key = _candidate_display_key(item)
         interval = _review_interval(item)
         if item.get("status") == "accepted_truth":
             if key:
                 accepted_keys.add(key)
                 accepted_counts[key] += 1
+            if display_key:
+                accepted_display_keys.add(display_key)
             accepted_identity_keys.update(_review_identity_keys(item))
             if interval:
                 accepted_intervals.append(interval)
@@ -1665,16 +1678,22 @@ def build_review_learning_profile(items: list[dict[str, Any]]) -> dict[str, Any]
                     rejected_keys.add(key)
                     rejected_counts[key] += 1
             if not soft_rejection:
+                if display_key:
+                    rejected_display_keys.add(display_key)
                 rejected_identity_keys.update(_review_identity_keys(item))
                 if interval:
                     rejected_intervals.append(interval)
     rejected_only = rejected_keys - accepted_keys
+    reviewed_display_keys = accepted_display_keys | rejected_display_keys
     rejected_identity_only = rejected_identity_keys - accepted_identity_keys
     return {
         "acceptedKeys": accepted_keys,
         "rejectedKeys": rejected_keys,
         "rejectedOnlyKeys": rejected_only,
         "softRejectedKeys": soft_rejected,
+        "acceptedDisplayKeys": accepted_display_keys,
+        "rejectedDisplayKeys": rejected_display_keys,
+        "reviewedDisplayKeys": reviewed_display_keys,
         "acceptedIdentityKeys": accepted_identity_keys,
         "rejectedIdentityKeys": rejected_identity_keys,
         "rejectedOnlyIdentityKeys": rejected_identity_only,
@@ -1689,7 +1708,7 @@ def build_review_learning_profile(items: list[dict[str, Any]]) -> dict[str, Any]
         "rejectedCandidateFingerprintCount": len(rejected_identity_keys),
         "softRejectedPatternCount": len(soft_rejected),
         "suppressionThreshold": 1,
-        "suppressionRule": "Already accepted source areas are treated as covered. A rejected exact MIDI pattern, same clip/score fingerprint, overlapping rejected clip window, or score-transcription candidate that conflicts with an accepted note-reading source label is removed from the active review queue unless an accepted label covers the same area.",
+        "suppressionRule": "Already accepted or rejected visible pairs are treated as covered. A reviewed display pair, accepted source area, rejected exact MIDI pattern, same clip/score fingerprint, overlapping rejected clip window, or score-transcription candidate that conflicts with an accepted note-reading source label is removed from the active review queue unless a materially different source/audio pair is generated.",
     }
 
 
@@ -1700,6 +1719,9 @@ def apply_review_learning_to_candidates(
     accepted_keys = profile.get("acceptedKeys") if isinstance(profile.get("acceptedKeys"), set) else set()
     rejected_only_keys = profile.get("rejectedOnlyKeys") if isinstance(profile.get("rejectedOnlyKeys"), set) else set()
     soft_rejected_keys = profile.get("softRejectedKeys") if isinstance(profile.get("softRejectedKeys"), set) else set()
+    accepted_display_keys = profile.get("acceptedDisplayKeys") if isinstance(profile.get("acceptedDisplayKeys"), set) else set()
+    rejected_display_keys = profile.get("rejectedDisplayKeys") if isinstance(profile.get("rejectedDisplayKeys"), set) else set()
+    reviewed_display_keys = profile.get("reviewedDisplayKeys") if isinstance(profile.get("reviewedDisplayKeys"), set) else set()
     accepted_identity_keys = profile.get("acceptedIdentityKeys") if isinstance(profile.get("acceptedIdentityKeys"), set) else set()
     rejected_only_identity_keys = (
         profile.get("rejectedOnlyIdentityKeys") if isinstance(profile.get("rejectedOnlyIdentityKeys"), set) else set()
@@ -1713,6 +1735,7 @@ def apply_review_learning_to_candidates(
     suppressed: list[dict[str, Any]] = []
     for candidate in candidates:
         key = _candidate_sequence_key(candidate)
+        display_key = _candidate_display_key(candidate)
         identity_keys = _review_identity_keys(candidate)
         rejected_identity_matches = sorted(identity_keys & rejected_only_identity_keys)
         accepted_identity_matches = sorted(identity_keys & accepted_identity_keys)
@@ -1741,9 +1764,17 @@ def apply_review_learning_to_candidates(
             source_note_letter_agreement is False
             and (_is_score_copy_item(candidate) or _clean(candidate.get("reviewKind")) == "score_phrase_candidate")
         )
+        reviewed_display_match = bool(display_key and display_key in reviewed_display_keys)
         status = (
             "source_note_letter_mismatch_hidden"
             if source_note_letter_mismatch
+            else
+            "accepted_pair_hidden"
+            if display_key and display_key in accepted_display_keys
+            else "rejected_pair_hidden"
+            if display_key and display_key in rejected_display_keys
+            else "reviewed_pair_hidden"
+            if reviewed_display_match
             else
             "accepted_candidate_covered"
             if accepted_area_matches
@@ -1760,6 +1791,7 @@ def apply_review_learning_to_candidates(
         enriched = {
             **candidate,
             "reviewLearningKey": key,
+            "reviewDisplayKey": display_key,
             "reviewCandidateFingerprintKeys": sorted(identity_keys),
             "reviewCandidateAcceptedFingerprintKeys": accepted_identity_matches,
             "reviewCandidateRejectedFingerprintKeys": rejected_identity_matches,
@@ -1783,7 +1815,13 @@ def apply_review_learning_to_candidates(
                 else ""
             ),
         }
-        if source_note_letter_mismatch or accepted_area_matches or rejected_area_matches or (key and key in rejected_only_keys):
+        if (
+            source_note_letter_mismatch
+            or reviewed_display_match
+            or accepted_area_matches
+            or rejected_area_matches
+            or (key and key in rejected_only_keys)
+        ):
             suppressed.append(enriched)
         else:
             active.append(enriched)
@@ -1900,8 +1938,7 @@ def build_gold_review_loop(
         source_seed_candidates = _queue_candidates({"records": []}, include_source_copy_catalog=True)
         score_copy_seed_candidates = [item for item in source_seed_candidates if _is_score_copy_task(item.get("reviewTask"))]
         note_reading_seed_candidates = [
-            *[item for item in source_seed_candidates if _is_note_reading_task(item.get("reviewTask"))],
-            *_source_snippet_note_reading_candidates(source_score_snippets),
+            item for item in source_seed_candidates if _is_note_reading_task(item.get("reviewTask"))
         ]
         score_copy_refill = _continuous_refill_candidates(
             score_copy_seed_candidates,

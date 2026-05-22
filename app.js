@@ -3607,8 +3607,13 @@ function renderNoteReadingItem(item, index) {
         <form class="note-reading-form" data-note-reading-form data-review-item-id="${escapeHtml(item.reviewItemId || "")}">
           <label>
             <span>Note letters</span>
-            <input name="noteLetterAnswer" value="${escapeHtml(draftValue)}" autocomplete="off" autocapitalize="none" spellcheck="false">
+            <input name="noteLetterAnswer" value="${escapeHtml(draftValue)}" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="A G D">
           </label>
+          <div class="note-reading-keypad" aria-label="note-letter buttons">
+            ${["A", "B", "C", "D", "E", "F", "G"].map((letter) => `<button type="button" data-note-reading-key="${letter}">${letter}</button>`).join("")}
+            <button type="button" data-note-reading-key="delete" aria-label="delete last note">Del</button>
+            <button type="button" data-note-reading-key="clear">Clear</button>
+          </div>
           <button type="submit">Save</button>
           <small data-note-reading-status>${escapeHtml(isRecent ? status.replace(/_/g, " ") : (item.noteReadingScopeLabel || "picture only"))}</small>
         </form>
@@ -4215,6 +4220,24 @@ function render() {
 if (elements.runScanButton) elements.runScanButton.addEventListener("click", runBackendScan);
 if (elements.probeMediaButton) elements.probeMediaButton.addEventListener("click", runMediaProbe);
 if (elements.rejectPieceButton) elements.rejectPieceButton.addEventListener("click", rejectActiveTitle);
+document.addEventListener("click", (event) => {
+  const keyButton = event.target.closest("[data-note-reading-key]");
+  if (!keyButton) return;
+  const form = keyButton.closest("[data-note-reading-form]");
+  const input = form?.querySelector("input[name='noteLetterAnswer']");
+  if (!form || !input) return;
+  const key = keyButton.dataset.noteReadingKey || "";
+  const notes = noteInputSequence(input.value);
+  if (key === "clear") {
+    input.value = "";
+  } else if (key === "delete") {
+    input.value = notes.slice(0, -1).join(" ");
+  } else if ("ABCDEFG".includes(key)) {
+    input.value = [...notes, key].join(" ");
+  }
+  persistNoteReadingDraft(form.dataset.reviewItemId, input.value);
+  input.focus();
+});
 document.addEventListener("input", (event) => {
   const input = event.target.closest("[data-note-reading-form] input[name='noteLetterAnswer']");
   if (!input) return;
