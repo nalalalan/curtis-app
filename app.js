@@ -3638,6 +3638,32 @@ function renderGoldReviewLane({ label, count, items, emptyText, ariaLabel, rende
   `;
 }
 
+function renderGoldReviewHiddenState(review) {
+  const hidden = Number(review?.suppressedByLearningCount) || 0;
+  const adaptiveHidden = Number(review?.adaptiveSuppressedByLearningCount) || 0;
+  const crossTrainerHidden = Number(review?.crossTrainerSuppressedCandidateCount) || 0;
+  const obviousHidden = Number(review?.obviousAudioMismatchHiddenCount) || 0;
+  const parts = [
+    hidden ? `${hidden} covered pairs hidden` : "",
+    adaptiveHidden ? `${adaptiveHidden} adaptive repeats hidden` : "",
+    crossTrainerHidden ? `${crossTrainerHidden} source-label conflict hidden` : "",
+    obviousHidden ? `${obviousHidden} audio-quality misses hidden` : "",
+  ].filter(Boolean);
+  return `
+    <section class="gold-review-empty-state" aria-label="review queue empty">
+      <strong>No review cards ready.</strong>
+      <span>${escapeHtml(parts.length ? parts.join(" / ") : "No visible candidates passed the evidence gates.")}</span>
+    </section>
+  `;
+}
+
+function renderGoldReviewLanes(lanes) {
+  return lanes
+    .filter((lane) => Array.isArray(lane.items) && lane.items.length)
+    .map((lane) => renderGoldReviewLane(lane))
+    .join("");
+}
+
 function renderGoldReview() {
   if (!elements.goldReviewPanel) return;
   if (!backend.online) {
@@ -3677,9 +3703,6 @@ function renderGoldReview() {
   const rejectionInsights = review.rejectionInsights && typeof review.rejectionInsights === "object" ? review.rejectionInsights : {};
   const fastRejected = Number(rejectionInsights.rejectedFastDenseCount) || 0;
   const unstableRejected = Number(rejectionInsights.rejectedUnstableRegisterCount) || 0;
-  const emptyQueueText = review.queueStatus === "current_batch_exhausted_by_rejections"
-    ? `Batch complete. ${Number(review.suppressedByLearningCount) || 0} repeats hidden.`
-    : "No review clips queued.";
   setText(
     elements.goldReviewCount,
     scoreCopyQueued || noteReadingQueued
@@ -3700,47 +3723,20 @@ function renderGoldReview() {
   const items = [...audioItems, ...copyItems, ...noteReadingItems];
   if (!items.length) {
     elements.goldReviewPanel.innerHTML = `
-      <div class="gold-review-stats">
+      <div class="gold-review-list">
+        ${renderGoldReviewHiddenState(review)}
+      </div>
+      <div class="gold-review-stats gold-review-stats-secondary">
         <article><span>Accepted</span><strong>${escapeHtml(String(accepted))}</strong></article>
         <article><span>Queue</span><strong>${escapeHtml(String(queued))}</strong></article>
         <article><span>Rejected</span><strong>${escapeHtml(String(rejected))}</strong></article>
         <article><span>Hidden</span><strong>${escapeHtml(String(hidden))}</strong></article>
-        <article><span>Training</span><strong>${escapeHtml(String(trainingExamples))}</strong></article>
-        <article><span>Score</span><strong>${escapeHtml(String(scoreTraining))}</strong></article>
-        <article><span>score-transcription</span><strong>${escapeHtml(String(scoreCopyTraining))}</strong></article>
-        <article><span>note-reading</span><strong>${escapeHtml(String(noteReadingTraining))}</strong></article>
         ${crossTrainerLabels ? `<article><span>Linked labels</span><strong>${escapeHtml(`${crossTrainerSupported}/${crossTrainerLabels}`)}</strong></article>` : ""}
         ${crossTrainerHidden ? `<article><span>Hidden conflicts</span><strong>${escapeHtml(String(crossTrainerHidden))}</strong></article>` : ""}
-        <article><span>Long</span><strong>${escapeHtml(String(longTraining))}</strong></article>
         ${corrected ? `<article><span>Corrected</span><strong>${escapeHtml(String(corrected))}</strong></article>` : ""}
-        <article><span>Adaptive</span><strong>${escapeHtml(adaptiveLabel)}</strong></article>
-      </div>
-      <div class="gold-review-list">
-        ${renderGoldReviewLane({
-          label: TRAINING_LANE_TRANSCRIPTION_ALAN,
-          count: audioQueued,
-          items: audioItems,
-          emptyText: "Refill pending.",
-          ariaLabel: "transcription-alan training",
-        })}
-        ${renderGoldReviewLane({
-          label: TRAINING_LANE_SCORE_TRANSCRIPTION,
-          count: scoreCopyQueued,
-          items: copyItems,
-          emptyText: "Refill pending.",
-          ariaLabel: "score-transcription training",
-        })}
-        ${renderGoldReviewLane({
-          label: TRAINING_LANE_NOTE_READING,
-          count: noteReadingQueued,
-          items: noteReadingItems,
-          emptyText: "Refill pending.",
-          ariaLabel: "note-reading training",
-          renderItem: renderNoteReadingItem,
-        })}
       </div>
       ${renderOriginalScoreSources(sourceScoreSnippets)}
-      <p class="empty">${escapeHtml(rejectionDigest.message || emptyQueueText)}</p>
+      ${rejectionDigest.message ? `<p class="empty">${escapeHtml(rejectionDigest.message)}</p>` : ""}
     `;
     return;
   }
@@ -3767,28 +3763,27 @@ function renderGoldReview() {
       <article><span>Adaptive</span><strong>${escapeHtml(adaptiveLabel)}</strong></article>
     </div>
     <div class="gold-review-list">
-      ${renderGoldReviewLane({
-        label: TRAINING_LANE_TRANSCRIPTION_ALAN,
-        count: audioQueued,
-        items: audioItems,
-        emptyText: "Refill pending.",
-        ariaLabel: "transcription-alan training",
-      })}
-      ${renderGoldReviewLane({
-        label: TRAINING_LANE_SCORE_TRANSCRIPTION,
-        count: scoreCopyQueued,
-        items: copyItems,
-        emptyText: "Refill pending.",
-        ariaLabel: "score-transcription training",
-      })}
-      ${renderGoldReviewLane({
-        label: TRAINING_LANE_NOTE_READING,
-        count: noteReadingQueued,
-        items: noteReadingItems,
-        emptyText: "Refill pending.",
-        ariaLabel: "note-reading training",
-        renderItem: renderNoteReadingItem,
-      })}
+      ${renderGoldReviewLanes([
+        {
+          label: TRAINING_LANE_TRANSCRIPTION_ALAN,
+          count: audioQueued,
+          items: audioItems,
+          ariaLabel: "transcription-alan training",
+        },
+        {
+          label: TRAINING_LANE_SCORE_TRANSCRIPTION,
+          count: scoreCopyQueued,
+          items: copyItems,
+          ariaLabel: "score-transcription training",
+        },
+        {
+          label: TRAINING_LANE_NOTE_READING,
+          count: noteReadingQueued,
+          items: noteReadingItems,
+          ariaLabel: "note-reading training",
+          renderItem: renderNoteReadingItem,
+        },
+      ])}
     </div>
     ${renderOriginalScoreSources(sourceScoreSnippets)}
   `;

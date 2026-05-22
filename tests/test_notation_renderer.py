@@ -278,8 +278,10 @@ def test_gold_review_training_lanes_use_user_facing_names():
     index = Path("index.html").read_text(encoding="utf-8")
     assert '"transcription-alan"' in app
     assert '"score-transcription"' in app
-    assert "/app.js?v=20260522-review-relief" in index
+    assert "/app.js?v=20260522-clear-review-state" in index
     assert '[(isScoreCopy ? "" : item.practiceDay), lane, agreement' in app
+    assert "No review cards ready." in app
+    assert "Refill pending." not in app
     assert "Audio transcription" not in app
     assert "Notation copy" not in app
     assert "Accept if copy matches source" not in app

@@ -4842,6 +4842,29 @@ h2 {
   margin: 0;
 }
 
+.gold-review-empty-state {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+}
+
+.gold-review-empty-state strong {
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.gold-review-empty-state span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 680;
+  line-height: 1.35;
+}
+
 .gold-review-item {
   display: grid;
   gap: 8px;
