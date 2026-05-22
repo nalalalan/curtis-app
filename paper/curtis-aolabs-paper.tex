@@ -149,6 +149,8 @@ Curtis addresses this problem as a live software system rather than as a portfol
 
 The core pipeline is video \(\rightarrow\) active practice detection \(\rightarrow\) clips \(\rightarrow\) music transcription \(\rightarrow\) repeat grouping \(\rightarrow\) score matching \(\rightarrow\) heat map \(\rightarrow\) repertoire update \(\rightarrow\) passage-level observations. It is built against established difficulties in onset detection, pitch estimation, automatic music transcription, and music information retrieval rather than assuming that a video can be cleanly converted into a score~\cite{bello_onset_2005,de_cheveigne_yin_2002,benetos_amt_2013,muller_music_processing_2015,humphrey_feature_2012}. The output is intentionally small: analyzed practice days and an automatically updated repertoire list, both grounded in clips, notation, active playing time, and confidence limits.
 
+\noindent\textbf{The 22 May 2026 audio-quality follow-up hides \texttt{transcription-alan} cards when a dense source series is reduced to fewer than six visible notes, or when the visible claim collapses to one repeated pitch. Adaptive mining now requires phrase-length windows when enough detected notes exist, so obvious sparse or collapsed transcriptions become hidden quality failures instead of normal review work.}
+
 The system is also part of AO Labs' broader progress architecture. In May 2026, AO Progress was introduced as a shared ledger for cross-application state and long-term changes across public apps, papers, CV artifacts, Curtis practice state, Imagineer state, and Relay state~\cite{progress_app_2026}. Curtis supplies one stream in that ledger: timestamped media and review evidence for musical development.
 
 \section{System state}

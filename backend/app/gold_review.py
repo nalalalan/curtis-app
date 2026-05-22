@@ -23,6 +23,8 @@ MAX_ADAPTIVE_REVIEW_QUEUE = 80
 MIN_SOURCE_TRAINING_LANE_QUEUE = 8
 MAX_SOURCE_TRAINING_REFILL_CYCLES = 40
 MAX_NOTE_READING_VISIBLE_NOTES = 5
+MIN_DENSE_AUDIO_VISIBLE_NOTES = 6
+MIN_DENSE_AUDIO_SOURCE_NOTES = 12
 VISIBLE_AUDIO_QUEUE_OVERLAP_RATIO_LIMIT = 0.42
 VISIBLE_AUDIO_QUEUE_START_GAP_SECONDS = 1.25
 SCORE_COPY_TASKS = {"score_copy_exact_notes", "score_copy_exact_notation", "score_copy_pitch_skeleton"}
@@ -735,9 +737,10 @@ def adaptive_review_note_windows(
     scored: list[tuple[float, int, list[dict[str, Any]]]] = []
     seen: set[str] = set()
     search_limit = min(len(clean_notes), 160)
+    min_length = MIN_DENSE_AUDIO_VISIBLE_NOTES if len(clean_notes) >= MIN_DENSE_AUDIO_VISIBLE_NOTES else 3
     for start in range(0, search_limit):
         max_length = min(MAX_LONG_REVIEW_NOTES, search_limit - start)
-        for length in range(3, max_length + 1):
+        for length in range(min_length, max_length + 1):
             window = clean_notes[start : start + length]
             span = _note_span_seconds(window)
             if span > MAX_REVIEW_CLIP_SECONDS - 0.25:
@@ -896,6 +899,8 @@ def _candidate_from_series(
     if not _clip_is_playable(clip):
         return {}
     note_metrics = _review_note_metrics(notes)
+    source_detected_count = int(series.get("noteCount") or len(_note_dicts(series.get("notes"))))
+    source_to_visible_ratio = round(source_detected_count / max(1, len(note_names)), 3)
     payload = {
         "reviewKind": "long_audio_phrase_candidate" if len(note_names) >= MIN_LONG_REVIEW_NOTES else "audio_phrase_candidate",
         "reviewType": "audio_phrase",
@@ -917,7 +922,8 @@ def _candidate_from_series(
         "detectedMidiSequence": note_midi_sequence(notes),
         "normalizedDetectedMidiSequence": collapse_consecutive_duplicate_midi(note_midi_sequence(notes)),
         "detectedNoteCount": len(note_names),
-        "sourceDetectedNoteCount": int(series.get("noteCount") or len(_note_dicts(series.get("notes")))),
+        "sourceDetectedNoteCount": source_detected_count,
+        "sourceToVisibleNoteRatio": source_to_visible_ratio,
         "audioAgreementCount": note_metrics["audioAgreementCount"],
         "spectralAgreementCount": note_metrics["spectralAgreementCount"],
         "detectedMidiDistinctCount": note_metrics["detectedMidiDistinctCount"],
@@ -952,6 +958,50 @@ def _candidate_from_series(
     }
     payload["reviewItemId"] = _candidate_id(payload)
     return payload
+
+
+def _audio_candidate_quality_issue(candidate: dict[str, Any]) -> str:
+    if _is_score_copy_item(candidate) or _is_note_reading_item(candidate):
+        return ""
+    detected_count = int(candidate.get("detectedNoteCount") or len(_clean_note_names(candidate.get("detectedNotes"))))
+    source_count = int(candidate.get("sourceDetectedNoteCount") or 0)
+    distinct_midi = int(candidate.get("detectedMidiDistinctCount") or 0)
+    duplicate_ratio = float(candidate.get("duplicateRatio") or 0.0)
+    max_duplicate_run = int(candidate.get("maxConsecutiveDuplicateMidi") or 0)
+    if (
+        detected_count < MIN_DENSE_AUDIO_VISIBLE_NOTES
+        and source_count >= MIN_DENSE_AUDIO_SOURCE_NOTES
+        and source_count >= detected_count * 3
+    ):
+        return "under_transcribed_audio_hidden"
+    if detected_count >= 4 and distinct_midi <= 1 and (duplicate_ratio >= 0.75 or max_duplicate_run >= 4):
+        return "single_pitch_transcription_hidden"
+    return ""
+
+
+def _suppress_obvious_audio_transcription_misses(candidates: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    active: list[dict[str, Any]] = []
+    hidden: list[dict[str, Any]] = []
+    for candidate in candidates:
+        issue = _audio_candidate_quality_issue(candidate)
+        if not issue:
+            active.append(candidate)
+            continue
+        detected_count = int(candidate.get("detectedNoteCount") or len(_clean_note_names(candidate.get("detectedNotes"))))
+        source_count = int(candidate.get("sourceDetectedNoteCount") or 0)
+        hidden.append(
+            {
+                **candidate,
+                "reviewLearningStatus": issue,
+                "reviewQualityGate": issue,
+                "reviewQualityLimit": (
+                    f"Hidden before review: visible transcription claims {detected_count} notes"
+                    + (f" from {source_count} detected source events" if source_count else "")
+                    + "."
+                ),
+            }
+        )
+    return active, hidden
 
 
 def _candidate_from_group(record: dict[str, Any], group: dict[str, Any]) -> dict[str, Any]:
@@ -1887,6 +1937,8 @@ def build_gold_review_loop(
     ]
     reviewed_raw_candidate_count = max(0, len(raw_all_candidates) - len(raw_candidates))
     candidates, suppressed_candidates = apply_review_learning_to_candidates(raw_candidates, learning_profile)
+    candidates, quality_suppressed_candidates = _suppress_obvious_audio_transcription_misses(candidates)
+    suppressed_candidates.extend(quality_suppressed_candidates)
     source_score_snippets = requested_original_score_snippets() if include_source_copy_catalog else []
     adaptive_candidates: list[dict[str, Any]] = []
     adaptive_suppressed_candidates: list[dict[str, Any]] = []
@@ -1908,6 +1960,8 @@ def build_gold_review_loop(
             if _clean(candidate.get("reviewItemId")) not in reviewed_ids
         ]
         adaptive_candidates, adaptive_suppressed_candidates = apply_review_learning_to_candidates(raw_adaptive_candidates, learning_profile)
+        adaptive_candidates, adaptive_quality_suppressed_candidates = _suppress_obvious_audio_transcription_misses(adaptive_candidates)
+        adaptive_suppressed_candidates.extend(adaptive_quality_suppressed_candidates)
         if primary_queue_is_only_soft_rejected and adaptive_candidates:
             adaptive_candidates = [
                 {
@@ -2112,6 +2166,13 @@ def build_gold_review_loop(
         "adaptiveCandidatePoolCount": adaptive_candidate_pool_count,
         "adaptiveQueueLimit": MAX_ADAPTIVE_REVIEW_QUEUE,
         "adaptiveSuppressedByLearningCount": len(adaptive_suppressed_candidates),
+        "obviousAudioMismatchHiddenCount": len(
+            [
+                item
+                for item in [*suppressed_candidates, *adaptive_suppressed_candidates]
+                if item.get("reviewQualityGate")
+            ]
+        ),
         "suppressedByLearningCount": len(suppressed_candidates),
         "reviewedIds": len(reviewed_ids),
         "acceptedPatternCount": int(learning_profile.get("acceptedPatternCount") or 0),

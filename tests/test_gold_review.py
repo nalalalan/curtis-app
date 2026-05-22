@@ -865,6 +865,88 @@ class GoldReviewTests(unittest.TestCase):
         self.assertEqual(review["audioQueueCount"], 1)
         self.assertTrue(any(item.get("adaptiveReview") for item in review["audioQueue"]))
 
+    def test_dense_source_audio_does_not_publish_sparse_transcription_card(self):
+        daily_records = {
+            "records": [
+                {
+                    "practiceDay": "2026-05-03",
+                    "transcription": {
+                        "detectedSeries": [
+                            {
+                                "sampleId": "dense-source-sparse-card",
+                                "sourceTitle": "5-3-26",
+                                "sourceUrl": "https://www.youtube.com/watch?v=abc",
+                                "startSeconds": 120.0,
+                                "localStartSeconds": 0.0,
+                                "localEndSeconds": 6.0,
+                                "noteCount": 24,
+                                "notes": [
+                                    note("D5", 74, 0.0),
+                                    note("E5", 76, 0.2),
+                                    note("F#5", 78, 0.4),
+                                    note("G5", 79, 0.6),
+                                ],
+                            }
+                        ]
+                    },
+                }
+            ]
+        }
+
+        review = build_gold_review_loop({}, daily_records, limit=20)
+
+        self.assertEqual(review["audioQueueCount"], 0)
+        self.assertGreaterEqual(review["obviousAudioMismatchHiddenCount"], 1)
+        self.assertTrue(
+            any(item["reviewLearningStatus"] == "under_transcribed_audio_hidden" for item in review["suppressedQueuePreview"])
+        )
+
+    def test_single_pitch_audio_collapse_does_not_publish_review_card(self):
+        daily_records = {
+            "records": [
+                {
+                    "practiceDay": "2026-05-03",
+                    "transcription": {
+                        "detectedSeries": [
+                            {
+                                "sampleId": "single-pitch-collapse",
+                                "sourceTitle": "5-3-26",
+                                "sourceUrl": "https://www.youtube.com/watch?v=abc",
+                                "startSeconds": 120.0,
+                                "localStartSeconds": 0.0,
+                                "localEndSeconds": 5.0,
+                                "noteCount": 4,
+                                "notes": [
+                                    note("G4", 67, 0.0),
+                                    note("G4", 67, 1.0),
+                                    note("G4", 67, 2.0),
+                                    note("G4", 67, 3.0),
+                                ],
+                            }
+                        ]
+                    },
+                }
+            ]
+        }
+
+        review = build_gold_review_loop({}, daily_records, limit=20)
+
+        self.assertEqual(review["audioQueueCount"], 0)
+        self.assertEqual(review["obviousAudioMismatchHiddenCount"], 1)
+        self.assertTrue(
+            any(item["reviewLearningStatus"] == "single_pitch_transcription_hidden" for item in review["suppressedQueuePreview"])
+        )
+
+    def test_dense_adaptive_windows_require_real_phrase_length(self):
+        names = ["D5", "E5", "F#5", "G5", "A5", "B5", "C6", "D6", "E6", "F#6"]
+        midis = [74, 76, 78, 79, 81, 83, 84, 86, 88, 90]
+        notes = [note(name, midi, index * 0.2) for index, (name, midi) in enumerate(zip(names, midis))]
+
+        windows = adaptive_review_note_windows(notes, max_windows=5)
+
+        self.assertTrue(windows)
+        self.assertTrue(all(len(window) >= 6 for window in windows))
+
     def test_adaptive_review_windows_do_not_repeat_same_tiny_audio_span(self):
         notes = [
             note("D#5", 75, 0.000),
