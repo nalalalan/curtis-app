@@ -516,14 +516,15 @@ function findGoldReviewCandidate(id) {
   return goldReviewCandidates().find((item) => String(item.reviewItemId || "") === String(id || "")) || null;
 }
 
-async function submitGoldReview(form, status) {
+async function submitGoldReview(form, status, submitter = null) {
   const candidate = findGoldReviewCandidate(form.dataset.reviewItemId);
   const state = form.querySelector("[data-gold-review-status]");
   if (!candidate) {
     if (state) state.textContent = "Missing item.";
     return;
   }
-  const button = form.querySelector(`button[value="${status}"]`) || form.querySelector("button");
+  const button = submitter || form.querySelector(`button[value="${status}"]`) || form.querySelector("button");
+  const originalButtonText = button ? button.textContent : "";
   if (button) {
     button.disabled = true;
     button.textContent = status === "rejected_mismatch" ? "Rejecting" : "Accepting";
@@ -532,6 +533,9 @@ async function submitGoldReview(form, status) {
   const acceptedNotes = noteInputSequence(noteInputText(candidate.detectedNotes || candidate.acceptedNotes));
   const scoreNotes = noteInputSequence(noteInputText(candidate.scoreNotes || candidate.sourceScoreNotes));
   const reviewType = candidate.reviewType || candidate.type || (scoreNotes.length ? "audio_score_match" : "audio_phrase");
+  const rejectionReason = status === "rejected_mismatch"
+    ? String(submitter?.dataset?.rejectionReason || "wrong_pitch")
+    : "";
   try {
     const ops = await apiFetch("/api/curtis/gold-review/items", {
       method: "POST",
@@ -542,7 +546,9 @@ async function submitGoldReview(form, status) {
         acceptedNotes,
         scoreNotes,
         scoreLocation: candidate.scoreLocation || "",
-        reason: status === "rejected_mismatch" ? "one_or_more_notes_wrong" : "",
+        rejectionReason,
+        failureCategory: rejectionReason,
+        reason: rejectionReason || "",
       })
     });
     backend = { online: true, ops, lastError: "" };
@@ -552,7 +558,7 @@ async function submitGoldReview(form, status) {
     if (state) state.textContent = "Failed.";
     if (button) {
       button.disabled = false;
-      button.textContent = status === "rejected_mismatch" ? "Reject" : "Accept";
+      button.textContent = originalButtonText || (status === "rejected_mismatch" ? "Reject" : "Accept");
     }
   }
 }
@@ -636,6 +642,9 @@ async function submitNoteReading(form) {
   const correct = expectedLetters.length > 0
     && userLetters.length === expectedLetters.length
     && userLetters.every((letter, index) => letter === expectedLetters[index]);
+  const reason = expectedLetters.length
+    ? (correct ? "human_note_letters_match_source_guess" : "human_note_letters_correct_source_guess")
+    : "human_first_visible_source_note_letters";
   if (state) state.textContent = "Saving.";
   try {
     const ops = await apiFetch("/api/curtis/gold-review/items", {
@@ -654,7 +663,7 @@ async function submitNoteReading(form) {
         noteReadingSourceScope: candidate.noteReadingSourceScope || "visible_source_picture_only",
         noteReadingScopeLabel: candidate.noteReadingScopeLabel || "picture only",
         noteReadingVisibleNoteCount: Number(candidate.noteReadingVisibleNoteCount || expectedLetters.length || userLetters.length) || userLetters.length,
-        reason: correct ? "human_note_letters_match_source_guess" : "human_note_letters_correct_source_guess",
+        reason,
       },
     });
     clearNoteReadingDraft(candidate.reviewItemId);
@@ -3382,6 +3391,25 @@ function goldReviewIsNoteReading(item) {
     || item?.type === "note_reading";
 }
 
+function goldReviewRejectionOptions(item) {
+  const options = Array.isArray(item?.rejectionReasonOptions) ? item.rejectionReasonOptions : [];
+  if (options.length) return options.filter((option) => option && option.id && option.label).slice(0, 5);
+  return goldReviewIsScoreCopy(item)
+    ? [
+        { id: "wrong_pitch", label: "Wrong pitch" },
+        { id: "wrong_octave_accidental", label: "Octave/accidental" },
+        { id: "wrong_source_range", label: "Wrong range" },
+        { id: "wrong_source_pair", label: "Wrong source" },
+      ]
+    : [
+        { id: "wrong_pitch", label: "Wrong pitch" },
+        { id: "missing_notes", label: "Missing notes" },
+        { id: "extra_notes", label: "Extra notes" },
+        { id: "too_few_visible_notes", label: "Too few" },
+        { id: "clipped_audio", label: "Clipped" },
+      ];
+}
+
 const TRAINING_LANE_TRANSCRIPTION_ALAN = "transcription-alan";
 const TRAINING_LANE_SCORE_TRANSCRIPTION = "score-transcription";
 const TRAINING_LANE_NOTE_READING = "note-reading";
@@ -3532,6 +3560,8 @@ function renderGoldReviewItem(item, index) {
   const rule = isScoreCopy
     ? (item.sourceCopyPitchSkeletonOnly ? "Notes match source = accept." : "Accept only if score-transcription matches the source.")
     : "One note off = reject.";
+  const trainingReason = item.activeTrainingReason || item.activeTrainingQuestion || "";
+  const rejectionOptions = goldReviewRejectionOptions(item);
   return `
     <article class="gold-review-item" data-status="${escapeHtml(status)}">
       <div class="gold-review-head">
@@ -3559,9 +3589,12 @@ function renderGoldReviewItem(item, index) {
         </section>
         <form class="gold-review-form" data-gold-review-form data-review-item-id="${escapeHtml(item.reviewItemId || "")}">
           <p class="gold-review-rule">${escapeHtml(rule)}</p>
+          ${trainingReason ? `<p class="gold-review-training-reason">${escapeHtml(trainingReason)}</p>` : ""}
           <div class="gold-review-actions">
             <button type="submit" name="status" value="accepted_truth">Accept</button>
-            <button type="submit" name="status" value="rejected_mismatch">Reject</button>
+            ${rejectionOptions.map((option) => `
+              <button type="submit" name="status" value="rejected_mismatch" data-rejection-reason="${escapeHtml(option.id)}">${escapeHtml(option.label)}</button>
+            `).join("")}
           </div>
           <small data-gold-review-status>${escapeHtml(isRecent ? status.replace(/_/g, " ") : "")}</small>
         </form>
@@ -3576,6 +3609,8 @@ function renderNoteReadingItem(item, index) {
   const label = [item.scoreLocation, item.pieceTitle].filter(Boolean).join(" / ") || "notation";
   const imageUrl = assetUrl(item.sourceReviewImageUrl || item.sourceImageUrl || item.scoreImageUrl || "");
   const draftValue = noteReadingDraftValue(item);
+  const trainingReason = item.activeTrainingReason || item.activeTrainingQuestion || "";
+  const placeholder = item.noteReadingSourceScope === "first_visible_source_notes" ? "First notes: A G D" : "A G D";
   const source = imageUrl
     ? `
       <section class="gold-review-source gold-review-source-original note-reading-source" aria-label="note-reading source">
@@ -3607,8 +3642,9 @@ function renderNoteReadingItem(item, index) {
         <form class="note-reading-form" data-note-reading-form data-review-item-id="${escapeHtml(item.reviewItemId || "")}">
           <label>
             <span>Note letters</span>
-            <input name="noteLetterAnswer" value="${escapeHtml(draftValue)}" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="A G D">
+            <input name="noteLetterAnswer" value="${escapeHtml(draftValue)}" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="${escapeHtml(placeholder)}">
           </label>
+          ${trainingReason ? `<p class="gold-review-training-reason">${escapeHtml(trainingReason)}</p>` : ""}
           <div class="note-reading-keypad" aria-label="note-letter buttons">
             ${["A", "B", "C", "D", "E", "F", "G"].map((letter) => `<button type="button" data-note-reading-key="${letter}">${letter}</button>`).join("")}
             <button type="button" data-note-reading-key="delete" aria-label="delete last note">Del</button>
@@ -4249,7 +4285,7 @@ document.addEventListener("submit", (event) => {
   const goldForm = event.target.closest("[data-gold-review-form]");
   if (goldForm) {
     event.preventDefault();
-    submitGoldReview(goldForm, event.submitter?.value || "accepted_truth");
+    submitGoldReview(goldForm, event.submitter?.value || "accepted_truth", event.submitter);
     return;
   }
   const form = event.target.closest("[data-piece-label-form]");

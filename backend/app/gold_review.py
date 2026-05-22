@@ -19,8 +19,9 @@ MIN_LONG_REVIEW_NOTES = 6
 MAX_LONG_REVIEW_NOTES = 16
 MIN_ACTIVE_AUDIO_REVIEW_QUEUE = 6
 MAX_ADAPTIVE_REVIEW_WINDOWS_PER_SERIES = 10
+MAX_EXPLORATORY_REVIEW_WINDOWS_PER_SERIES = 28
 MAX_ADAPTIVE_REVIEW_QUEUE = 80
-MIN_SOURCE_TRAINING_LANE_QUEUE = 8
+MIN_SOURCE_TRAINING_LANE_QUEUE = 4
 MAX_SOURCE_TRAINING_REFILL_CYCLES = 40
 MAX_NOTE_READING_VISIBLE_NOTES = 5
 MIN_DENSE_AUDIO_VISIBLE_NOTES = 6
@@ -29,6 +30,21 @@ VISIBLE_AUDIO_QUEUE_OVERLAP_RATIO_LIMIT = 0.42
 VISIBLE_AUDIO_QUEUE_START_GAP_SECONDS = 1.25
 SCORE_COPY_TASKS = {"score_copy_exact_notes", "score_copy_exact_notation", "score_copy_pitch_skeleton"}
 NOTE_READING_TASKS = {"note_letter_reading"}
+REJECTION_REASON_LABELS = {
+    "wrong_pitch": "Wrong pitch",
+    "missing_notes": "Missing notes",
+    "extra_notes": "Extra notes",
+    "wrong_order": "Wrong order",
+    "too_few_visible_notes": "Too few notes",
+    "one_pitch_collapse": "One-note collapse",
+    "clipped_audio": "Clipped audio",
+    "wrong_source_pair": "Wrong source",
+    "wrong_octave_accidental": "Octave/accidental",
+    "wrong_source_range": "Wrong range",
+    "other_mismatch": "Other mismatch",
+}
+DEFAULT_AUDIO_REJECTION_REASONS = ["wrong_pitch", "missing_notes", "extra_notes", "wrong_order", "too_few_visible_notes", "clipped_audio"]
+DEFAULT_SCORE_COPY_REJECTION_REASONS = ["wrong_pitch", "wrong_octave_accidental", "wrong_source_range", "wrong_source_pair"]
 REVIEW_CLIP_PREROLL_SECONDS = 0.4
 REVIEW_CLIP_POSTROLL_SECONDS = 0.65
 
@@ -115,6 +131,45 @@ def _is_note_reading_item(item: dict[str, Any]) -> bool:
         or _clean(item.get("type")).lower() == "note_reading"
         or _clean(item.get("reviewType")).lower() == "note_reading"
     )
+
+
+def _rejection_reason_options(review_task: Any, item_type: Any = "") -> list[dict[str, str]]:
+    task = _clean(review_task).lower()
+    kind = _clean(item_type).lower()
+    ids = DEFAULT_SCORE_COPY_REJECTION_REASONS if kind == "score_copy" or _is_score_copy_task(task) else DEFAULT_AUDIO_REJECTION_REASONS
+    return [{"id": reason_id, "label": REJECTION_REASON_LABELS[reason_id]} for reason_id in ids]
+
+
+def _normalize_rejection_reason(value: Any, *, fallback: Any = "", review_task: Any = "", item_type: Any = "") -> str:
+    raw = _clean(value or fallback).lower().replace("-", "_").replace(" ", "_")
+    if raw in REJECTION_REASON_LABELS:
+        return raw
+    text = raw.replace("_", " ")
+    if "too few" in text or "under transcribed" in text or "sparse" in text:
+        return "too_few_visible_notes"
+    if "single pitch" in text or "one pitch" in text or "one note collapse" in text or "same pitch" in text:
+        return "one_pitch_collapse"
+    if "missing" in text:
+        return "missing_notes"
+    if "extra" in text:
+        return "extra_notes"
+    if "order" in text or "out of order" in text:
+        return "wrong_order"
+    if "clip" in text or "cut" in text or "start" in text or "release" in text:
+        return "clipped_audio"
+    if "octave" in text or "accidental" in text or "sharp" in text or "flat" in text:
+        return "wrong_octave_accidental"
+    if "range" in text:
+        return "wrong_source_range"
+    if "source" in text or "score location" in text or "wrong score" in text or "wrong crop" in text:
+        return "wrong_source_pair"
+    if "pitch" in text or "note" in text or "wrong" in text or "mismatch" in text:
+        return "wrong_pitch"
+    task = _clean(review_task).lower()
+    kind = _clean(item_type).lower()
+    if kind == "score_copy" or _is_score_copy_task(task):
+        return "wrong_pitch"
+    return "wrong_pitch" if task or kind else "other_mismatch"
 
 
 def _notes_from_names(names: list[str]) -> list[dict[str, Any]]:
@@ -403,6 +458,10 @@ def _training_example_from_item(item: dict[str, Any]) -> dict[str, Any]:
         "noteCount": len(target_midi or detected_midi),
         "duplicateTolerance": item.get("duplicateTolerance"),
         "reason": item.get("reason"),
+        "rejectionReason": item.get("rejectionReason") or "",
+        "failureCategory": item.get("failureCategory") or "",
+        "rejectionReasonLabel": item.get("rejectionReasonLabel") or "",
+        "trainingSignalKind": item.get("trainingSignalKind") or "binary_label",
         "createdAt": item.get("createdAt"),
         "labelRevision": item.get("labelRevision") or 1,
         "correctedLabel": bool(item.get("correctedLabel")),
@@ -424,6 +483,9 @@ def build_gold_training_set(items: list[dict[str, Any]]) -> dict[str, Any]:
     positive_note_reading_examples = [item for item in note_reading_examples if item.get("label") == "positive"]
     negative_note_reading_examples = [item for item in note_reading_examples if item.get("label") == "negative"]
     long_phrase_examples = [item for item in examples if int(item.get("noteCount") or 0) >= MIN_LONG_REVIEW_NOTES]
+    failure_reason_counts = Counter(_clean(item.get("failureCategory") or item.get("rejectionReason")) for item in negatives)
+    failure_reason_counts.pop("", None)
+    dominant_failure = failure_reason_counts.most_common(1)[0][0] if failure_reason_counts else ""
     return {
         "version": f"{GOLD_REVIEW_VERSION}_training_v1",
         "exampleCount": len(examples),
@@ -443,12 +505,18 @@ def build_gold_training_set(items: list[dict[str, Any]]) -> dict[str, Any]:
         "positiveLongPhraseCount": len([item for item in long_phrase_examples if item.get("label") == "positive"]),
         "negativeLongPhraseCount": len([item for item in long_phrase_examples if item.get("label") == "negative"]),
         "tasks": dict(Counter(_clean(item.get("task")) for item in examples)),
+        "failureReasonCounts": dict(failure_reason_counts),
+        "dominantFailureReason": dominant_failure,
+        "dominantFailureReasonLabel": REJECTION_REASON_LABELS.get(dominant_failure, "") if dominant_failure else "",
         "recentExamples": examples[:8],
     }
 
 
 def build_rejection_insights(items: list[dict[str, Any]]) -> dict[str, Any]:
     rejected = [item for item in items if item.get("status") == "rejected_mismatch"]
+    reason_counts = Counter(_clean(item.get("failureCategory") or item.get("rejectionReason")) for item in rejected)
+    reason_counts.pop("", None)
+    dominant_reason = reason_counts.most_common(1)[0][0] if reason_counts else ""
     long_rejected = [item for item in rejected if len(_normalized_review_midi_sequence(_clean_note_names(item.get("detectedNotes")))) >= MIN_LONG_REVIEW_NOTES]
     dense_rejected = []
     unstable_rejected = []
@@ -472,6 +540,9 @@ def build_rejection_insights(items: list[dict[str, Any]]) -> dict[str, Any]:
         "rejectedLongPhraseCount": len(long_rejected),
         "rejectedFastDenseCount": len(dense_rejected),
         "rejectedUnstableRegisterCount": len(unstable_rejected),
+        "failureReasonCounts": dict(reason_counts),
+        "dominantFailureReason": dominant_reason,
+        "dominantFailureReasonLabel": REJECTION_REASON_LABELS.get(dominant_reason, "") if dominant_reason else "",
         "dominantIssue": issue,
         "nextAction": (
             "Rank shorter, steadier onset-bounded windows ahead of long fast candidates until accepted examples prove the fast-note detector."
@@ -930,6 +1001,8 @@ def _candidate_from_series(
         "distinctPitchClassCount": note_metrics["distinctPitchClassCount"],
         "adjacentDuplicateCount": note_metrics["adjacentDuplicateCount"],
         "maxConsecutiveDuplicateMidi": note_metrics["maxConsecutiveDuplicateMidi"],
+        "largeLeapCount": note_metrics["largeLeapCount"],
+        "detectedMidiRange": note_metrics["detectedMidiRange"],
         "duplicateRatio": note_metrics["duplicateRatio"],
         "repetitionPenalty": note_metrics["repetitionPenalty"],
         "adaptiveQualityScore": note_metrics["adaptiveQualityScore"],
@@ -1004,6 +1077,87 @@ def _suppress_obvious_audio_transcription_misses(candidates: list[dict[str, Any]
     return active, hidden
 
 
+def _candidate_failure_risks(candidate: dict[str, Any]) -> list[str]:
+    risks: list[str] = []
+    if not _is_score_copy_item(candidate) and not _is_note_reading_item(candidate):
+        detected_count = int(candidate.get("detectedNoteCount") or len(_clean_note_names(candidate.get("detectedNotes"))))
+        source_count = int(candidate.get("sourceDetectedNoteCount") or 0)
+        distinct_midi = int(candidate.get("detectedMidiDistinctCount") or 0)
+        duplicate_ratio = float(candidate.get("duplicateRatio") or 0.0)
+        max_duplicate_run = int(candidate.get("maxConsecutiveDuplicateMidi") or 0)
+        large_leaps = int(candidate.get("largeLeapCount") or 0)
+        midi_range = int(candidate.get("detectedMidiRange") or 0)
+        if detected_count < MIN_DENSE_AUDIO_VISIBLE_NOTES and source_count >= MIN_DENSE_AUDIO_SOURCE_NOTES:
+            risks.append("too_few_visible_notes")
+        if detected_count >= 4 and distinct_midi <= 1 and (duplicate_ratio >= 0.65 or max_duplicate_run >= 4):
+            risks.append("one_pitch_collapse")
+        if detected_count >= 8 and (large_leaps >= 3 or midi_range >= 24):
+            risks.append("wrong_pitch")
+    if candidate.get("scoreAgreementStatus") == "score_midi_mismatch":
+        risks.append("wrong_source_pair")
+    return list(dict.fromkeys(risks))
+
+
+def _active_training_signal(candidate: dict[str, Any], profile: dict[str, Any]) -> dict[str, Any]:
+    status = _clean(candidate.get("reviewLearningStatus") or "new_pattern")
+    risks = _candidate_failure_risks(candidate)
+    failure_counts = profile.get("failureReasonCounts") if isinstance(profile.get("failureReasonCounts"), dict) else {}
+    dominant_failure = _clean(profile.get("dominantFailureReason"))
+    reasons: list[str] = []
+    value = 50
+
+    if status == "new_pattern":
+        value += 30
+        reasons.append("fresh visible pattern")
+    elif status == "accepted_pattern":
+        value += 12
+        reasons.append("matches an accepted pattern")
+    elif status == "soft_rejected_pattern":
+        value -= 18
+        reasons.append("previously soft-rejected pattern")
+
+    if _is_note_reading_item(candidate):
+        value += 10
+        reasons.append("source-note label")
+    elif _is_score_copy_item(candidate):
+        value += 16
+        reasons.append("source-copy label")
+    else:
+        value += 14
+        reasons.append("audio transcription label")
+
+    if candidate.get("sourceNoteLetterAgreement") is True:
+        value += 18
+        reasons.append("agrees with accepted source letters")
+    if candidate.get("adaptiveReview"):
+        value += 6
+        reasons.append("fresh adaptive audio window")
+    if candidate.get("activeTrainingSource") == "exploratory_unreviewed_audio_window":
+        value += 18
+        reasons.append("unreviewed exploratory window")
+    if int(candidate.get("detectedNoteCount") or 0) >= MIN_LONG_REVIEW_NOTES:
+        value += 8
+        reasons.append("phrase-length")
+    if risks:
+        value -= 8 * len(risks)
+        if dominant_failure and dominant_failure in risks:
+            value -= 12
+            reasons.append(f"resembles prior {REJECTION_REASON_LABELS.get(dominant_failure, dominant_failure).lower()} rejects")
+    if failure_counts and not risks:
+        reasons.append("does not match dominant rejection risks")
+
+    options = _rejection_reason_options(candidate.get("reviewTask"), candidate.get("reviewType") or candidate.get("type"))
+    return {
+        "activeTrainingValue": max(0, int(round(value))),
+        "activeTrainingReason": " / ".join(reasons[:4]),
+        "activeTrainingQuestion": "Accept if exact. If rejecting, choose the failure type so Curtis can route future cards better.",
+        "activeTrainingFailureRisks": risks,
+        "activeTrainingDominantFailure": dominant_failure,
+        "activeTrainingDecision": "show" if value >= 45 else "low_priority",
+        "rejectionReasonOptions": options,
+    }
+
+
 def _candidate_from_group(record: dict[str, Any], group: dict[str, Any]) -> dict[str, Any]:
     transcription = group.get("transcription") if isinstance(group.get("transcription"), dict) else {}
     notes = best_review_note_slice(_note_dicts(transcription.get("notes")))
@@ -1030,6 +1184,7 @@ def _candidate_from_group(record: dict[str, Any], group: dict[str, Any]) -> dict
     detected_midi = collapse_consecutive_duplicate_midi(note_midi_sequence(notes))
     score_midi = _normalized_review_midi_sequence(score_notes)
     score_agreement = bool(score_midi and detected_midi and score_midi == detected_midi)
+    note_metrics = _review_note_metrics(notes)
     payload = {
         "reviewKind": "score_phrase_candidate" if score_notes else "reference_phrase_candidate",
         "reviewType": "audio_score_match" if score_notes else "audio_phrase",
@@ -1051,6 +1206,15 @@ def _candidate_from_group(record: dict[str, Any], group: dict[str, Any]) -> dict
         "detectedMidiSequence": note_midi_sequence(notes),
         "normalizedDetectedMidiSequence": detected_midi,
         "detectedNoteCount": len(note_names),
+        "detectedMidiDistinctCount": note_metrics["detectedMidiDistinctCount"],
+        "distinctPitchClassCount": note_metrics["distinctPitchClassCount"],
+        "adjacentDuplicateCount": note_metrics["adjacentDuplicateCount"],
+        "maxConsecutiveDuplicateMidi": note_metrics["maxConsecutiveDuplicateMidi"],
+        "largeLeapCount": note_metrics["largeLeapCount"],
+        "detectedMidiRange": note_metrics["detectedMidiRange"],
+        "duplicateRatio": note_metrics["duplicateRatio"],
+        "repetitionPenalty": note_metrics["repetitionPenalty"],
+        "adaptiveQualityScore": note_metrics["adaptiveQualityScore"],
         "matchedNoteRun": int(group.get("matchedNoteRun") or 0),
         "audioAgreementCount": sum(1 for note in notes if note.get("audioAgreement") is True),
         "spectralAgreementCount": sum(1 for note in notes if "spectral_onset" in (note.get("agreementSources") or [])),
@@ -1369,10 +1533,10 @@ def _source_snippet_note_reading_candidate(snippet: dict[str, Any]) -> dict[str,
         "sourceImageUrl": _clean(snippet.get("imageUrl")) or image_url,
         "originalScoreSnippet": True,
         "sourceImageRequiredForOriginalScore": False,
-        "noteReadingAnswerMode": "letters_only_ignore_accidentals_octaves",
-        "noteReadingSourceScope": "visible_source_picture_only",
-        "noteReadingScopeLabel": "picture only",
-        "noteReadingVisibleNoteCount": 0,
+        "noteReadingAnswerMode": "letters_only_first_8_visible_ignore_accidentals_octaves",
+        "noteReadingSourceScope": "first_visible_source_notes",
+        "noteReadingScopeLabel": "first 8 visible notes",
+        "noteReadingVisibleNoteCount": 8,
         "reviewTrainingLane": "note_reading",
         "reviewTrainingLaneLabel": "note-reading",
         "reviewTask": "note_letter_reading",
@@ -1382,9 +1546,9 @@ def _source_snippet_note_reading_candidate(snippet: dict[str, Any]) -> dict[str,
         "noteReadingOnly": True,
         "binaryReview": False,
         "binaryOnly": False,
-        "reviewQuestion": "Write the note letters only.",
-        "acceptanceRule": "Type note letters for the displayed picture only; ignore accidentals and octave numbers.",
-        "rejectionRule": "This is a source-labeling card. The submitted letters become Alan's label for the visible picture.",
+        "reviewQuestion": "Write the first 8 visible note letters only.",
+        "acceptanceRule": "Type the first 8 visible note letters only; ignore accidentals and octave numbers.",
+        "rejectionRule": "This is a source-labeling card. The submitted letters become Alan's label for the visible source crop.",
         "sourcePieceTrainingOnly": True,
     }
     payload["reviewItemId"] = _candidate_id(payload)
@@ -1454,6 +1618,7 @@ def _continuous_refill_candidates(
             display_key = _candidate_display_key(refill)
             if review_id in reviewed_ids or display_key in seen_display or display_key in reviewed_display_keys:
                 continue
+            refill.update(_active_training_signal({**refill, "reviewLearningStatus": "new_pattern"}, learning_profile))
             out.append(refill)
             seen_display.add(display_key)
             if len(out) >= needed:
@@ -1466,6 +1631,7 @@ def _queue_candidates(
     *,
     adaptive: bool = False,
     include_source_copy_catalog: bool = False,
+    adaptive_window_limit: int | None = None,
 ) -> list[dict[str, Any]]:
     candidates: list[dict[str, Any]] = []
     source_records = requested_score_copy_records() if include_source_copy_catalog and not adaptive else []
@@ -1487,9 +1653,15 @@ def _queue_candidates(
         transcription = record.get("transcription") if isinstance(record.get("transcription"), dict) else {}
         for series in transcription.get("detectedSeries", []) if isinstance(transcription.get("detectedSeries"), list) else []:
             if adaptive:
-                for index, window in enumerate(adaptive_review_note_windows(_note_dicts(series.get("notes")))):
+                windows = adaptive_review_note_windows(
+                    _note_dicts(series.get("notes")),
+                    max_windows=adaptive_window_limit or MAX_ADAPTIVE_REVIEW_WINDOWS_PER_SERIES,
+                )
+                for index, window in enumerate(windows):
                     candidate = _candidate_from_series(record, series, notes_override=window, adaptive_index=index)
                     if candidate:
+                        if adaptive_window_limit and adaptive_window_limit > MAX_ADAPTIVE_REVIEW_WINDOWS_PER_SERIES:
+                            candidate["activeTrainingSource"] = "exploratory_unreviewed_audio_window"
                         candidates.append(candidate)
             else:
                 candidate = _candidate_from_series(record, series)
@@ -1518,6 +1690,17 @@ def normalize_gold_review_item(raw: dict[str, Any]) -> dict[str, Any]:
         raw.get("scoreMatchedNotes"),
     )
     review_task = _review_task(raw, item_type, score_notes)
+    reason = _clean(raw.get("reason") or raw.get("note"))
+    rejection_reason = (
+        _normalize_rejection_reason(
+            raw.get("rejectionReason") or raw.get("failureCategory"),
+            fallback=reason,
+            review_task=review_task,
+            item_type=item_type,
+        )
+        if status == "rejected_mismatch"
+        else ""
+    )
     expected_note_letters = _clean_note_letters(raw.get("expectedNoteLetters") or _note_letters_from_notes(score_notes or detected_notes))
     user_note_letters = _clean_note_letters(raw.get("userNoteLetters") or raw.get("noteLetterAnswer"))
     if item_type == "note_reading" and status == "accepted_truth" and user_note_letters and not expected_note_letters:
@@ -1591,7 +1774,11 @@ def normalize_gold_review_item(raw: dict[str, Any]) -> dict[str, Any]:
         "normalizedAcceptedMidiSequence": _normalized_review_midi_sequence(accepted_notes),
         "normalizedScoreMidiSequence": _normalized_review_midi_sequence(score_notes),
         "duplicateTolerance": "consecutive_duplicate_notes_collapsed",
-        "reason": _clean(raw.get("reason") or raw.get("note")),
+        "reason": reason or (rejection_reason if status == "rejected_mismatch" else ""),
+        "rejectionReason": rejection_reason,
+        "failureCategory": rejection_reason,
+        "rejectionReasonLabel": REJECTION_REASON_LABELS.get(rejection_reason, "") if rejection_reason else "",
+        "trainingSignalKind": "failure_reason" if rejection_reason else "binary_label",
         "createdAt": _clean(raw.get("createdAt")) or utc_now(),
         "reviewVersion": GOLD_REVIEW_VERSION,
     }
@@ -1618,6 +1805,8 @@ def record_gold_review_item(state: dict[str, Any], raw: dict[str, Any]) -> dict[
                 "scoreNotes": previous.get("scoreNotes") or [],
                 "expectedNoteLetters": previous.get("expectedNoteLetters") or [],
                 "userNoteLetters": previous.get("userNoteLetters") or [],
+                "rejectionReason": previous.get("rejectionReason") or "",
+                "failureCategory": previous.get("failureCategory") or "",
                 "createdAt": _clean(previous.get("createdAt")),
                 "labelRevision": int(previous.get("labelRevision") or 1),
             }
@@ -1660,6 +1849,8 @@ def record_gold_review_item(state: dict[str, Any], raw: dict[str, Any]) -> dict[
                 "trainingTask": item["trainingTask"],
                 "trainingLabel": item["trainingLabel"],
                 "reason": item["reason"],
+                "rejectionReason": item["rejectionReason"],
+                "failureCategory": item["failureCategory"],
                 "createdAt": item["createdAt"],
             },
         )
@@ -1689,6 +1880,7 @@ def build_review_learning_profile(items: list[dict[str, Any]]) -> dict[str, Any]
     rejected_intervals: list[dict[str, Any]] = []
     accepted_counts: Counter[str] = Counter()
     rejected_counts: Counter[str] = Counter()
+    failure_reason_counts: Counter[str] = Counter()
     soft_rejected: set[str] = set()
     source_note_letter_labels: dict[str, dict[str, Any]] = {}
     for item in items:
@@ -1721,6 +1913,9 @@ def build_review_learning_profile(items: list[dict[str, Any]]) -> dict[str, Any]
                     }
         elif item.get("status") == "rejected_mismatch":
             soft_rejection = _is_soft_review_rejection(item)
+            failure_reason = _clean(item.get("failureCategory") or item.get("rejectionReason"))
+            if failure_reason:
+                failure_reason_counts[failure_reason] += 1
             if key:
                 if soft_rejection:
                     soft_rejected.add(key)
@@ -1736,6 +1931,7 @@ def build_review_learning_profile(items: list[dict[str, Any]]) -> dict[str, Any]
     rejected_only = rejected_keys - accepted_keys
     reviewed_display_keys = accepted_display_keys | rejected_display_keys
     rejected_identity_only = rejected_identity_keys - accepted_identity_keys
+    dominant_failure = failure_reason_counts.most_common(1)[0][0] if failure_reason_counts else ""
     return {
         "acceptedKeys": accepted_keys,
         "rejectedKeys": rejected_keys,
@@ -1753,6 +1949,8 @@ def build_review_learning_profile(items: list[dict[str, Any]]) -> dict[str, Any]
         "rejectedCounts": dict(rejected_counts),
         "sourceNoteLetterLabels": source_note_letter_labels,
         "sourceNoteLetterLabelCount": len(source_note_letter_labels),
+        "failureReasonCounts": dict(failure_reason_counts),
+        "dominantFailureReason": dominant_failure,
         "acceptedPatternCount": len(accepted_keys),
         "rejectedPatternCount": len(rejected_keys),
         "rejectedCandidateFingerprintCount": len(rejected_identity_keys),
@@ -1865,6 +2063,7 @@ def apply_review_learning_to_candidates(
                 else ""
             ),
         }
+        enriched.update(_active_training_signal(enriched, profile))
         if (
             source_note_letter_mismatch
             or reviewed_display_match
@@ -1886,6 +2085,7 @@ def _review_candidate_rank(item: dict[str, Any]) -> tuple[Any, ...]:
     }.get(str(item.get("reviewLearningStatus") or ""), 1)
     source_label_rank = 0 if item.get("sourceNoteLetterAgreement") is True else 2 if item.get("sourceNoteLetterAgreement") is False else 1
     return (
+        -int(item.get("activeTrainingValue") or 0),
         learning_rank,
         source_label_rank,
         0
@@ -1940,9 +2140,11 @@ def build_gold_review_loop(
     candidates, quality_suppressed_candidates = _suppress_obvious_audio_transcription_misses(candidates)
     suppressed_candidates.extend(quality_suppressed_candidates)
     source_score_snippets = requested_original_score_snippets() if include_source_copy_catalog else []
+    source_snippet_note_reading_seed_candidates = _source_snippet_note_reading_candidates(source_score_snippets)
     adaptive_candidates: list[dict[str, Any]] = []
     adaptive_suppressed_candidates: list[dict[str, Any]] = []
     adaptive_candidate_pool_count = 0
+    exploratory_candidate_pool_count = 0
     adaptive_mode = False
     primary_audio_candidates = [item for item in candidates if not _is_score_copy_item(item) and not _is_note_reading_item(item)]
     suppressed_audio_candidates = [
@@ -1979,6 +2181,30 @@ def build_gold_review_loop(
         if adaptive_candidates:
             candidates = [*adaptive_candidates, *candidates]
             adaptive_mode = True
+        elif adaptive_suppressed_candidates or suppressed_audio_candidates:
+            seen_adaptive_ids = {_clean(candidate.get("reviewItemId")) for candidate in raw_adaptive_candidates}
+            raw_exploratory_candidates = [
+                candidate
+                for candidate in _queue_candidates(
+                    daily_records,
+                    adaptive=True,
+                    include_source_copy_catalog=False,
+                    adaptive_window_limit=MAX_EXPLORATORY_REVIEW_WINDOWS_PER_SERIES,
+                )
+                if _clean(candidate.get("reviewItemId")) not in reviewed_ids
+                and _clean(candidate.get("reviewItemId")) not in seen_adaptive_ids
+            ]
+            exploratory_candidates, exploratory_suppressed = apply_review_learning_to_candidates(raw_exploratory_candidates, learning_profile)
+            exploratory_candidates, exploratory_quality_suppressed = _suppress_obvious_audio_transcription_misses(exploratory_candidates)
+            exploratory_suppressed.extend(exploratory_quality_suppressed)
+            adaptive_suppressed_candidates.extend(exploratory_suppressed)
+            exploratory_candidates.sort(key=_review_candidate_rank)
+            exploratory_candidate_pool_count = len(exploratory_candidates)
+            exploratory_candidates = exploratory_candidates[:MAX_ADAPTIVE_REVIEW_QUEUE]
+            if exploratory_candidates:
+                candidates = [*exploratory_candidates, *candidates]
+                adaptive_candidates = exploratory_candidates
+                adaptive_mode = True
     candidates = _dedupe_review_candidates(candidates)
     if adaptive_mode:
         non_soft_candidates = [item for item in candidates if item.get("reviewLearningStatus") != "soft_rejected_pattern"]
@@ -1994,6 +2220,10 @@ def build_gold_review_loop(
         note_reading_seed_candidates = [
             item for item in source_seed_candidates if _is_note_reading_task(item.get("reviewTask"))
         ]
+        if len(note_reading_candidates) < MIN_SOURCE_TRAINING_LANE_QUEUE:
+            note_reading_seed_candidates = _dedupe_review_candidates(
+                [*note_reading_seed_candidates, *source_snippet_note_reading_seed_candidates]
+            )
         score_copy_refill = _continuous_refill_candidates(
             score_copy_seed_candidates,
             existing_candidates=score_copy_candidates,
@@ -2149,6 +2379,7 @@ def build_gold_review_loop(
         "sourceCopyTrainingQueueCount": len(source_copy_training_candidates),
         "sourceScoreSnippetCount": len(source_score_snippets),
         "sourceScoreReadySnippetCount": len(source_score_ready_snippets),
+        "sourceSnippetNoteReadingCandidateCount": len(source_snippet_note_reading_seed_candidates),
         "scoreExactAgreementQueueCount": len(exact_score_candidates),
         "longPhraseQueueCount": len(long_candidates),
         "rawQueueCount": len(raw_candidates),
@@ -2164,6 +2395,7 @@ def build_gold_review_loop(
         ),
         "adaptiveCandidateCount": len(adaptive_candidates),
         "adaptiveCandidatePoolCount": adaptive_candidate_pool_count,
+        "exploratoryCandidatePoolCount": exploratory_candidate_pool_count,
         "adaptiveQueueLimit": MAX_ADAPTIVE_REVIEW_QUEUE,
         "adaptiveSuppressedByLearningCount": len(adaptive_suppressed_candidates),
         "obviousAudioMismatchHiddenCount": len(
@@ -2194,6 +2426,9 @@ def build_gold_review_loop(
         "trainingNoteReadingExampleCount": int(training_set.get("noteReadingExampleCount") or 0),
         "trainingPositiveNoteReadingExampleCount": int(training_set.get("positiveNoteReadingExampleCount") or 0),
         "trainingNegativeNoteReadingExampleCount": int(training_set.get("negativeNoteReadingExampleCount") or 0),
+        "trainingFailureReasonCounts": training_set.get("failureReasonCounts") or {},
+        "trainingDominantFailureReason": training_set.get("dominantFailureReason") or "",
+        "trainingDominantFailureReasonLabel": training_set.get("dominantFailureReasonLabel") or "",
         "crossTrainerSourceLabelCount": cross_trainer_source_label_count,
         "crossTrainerSupportedCandidateCount": cross_trainer_supported_count,
         "crossTrainerSuppressedCandidateCount": cross_trainer_suppressed_count,
@@ -2226,6 +2461,26 @@ def build_gold_review_loop(
         "rejectionInsights": rejection_insights,
         "reviewLearningStatus": "reducing_review_load" if suppressed_all else "learning_no_suppression_yet",
         "reviewLearningRule": learning_profile.get("suppressionRule") or "",
+        "activeTraining": {
+            "status": "ready" if candidates else "needs_fresh_candidates",
+            "labelCount": len(items),
+            "positiveCount": int(training_set.get("positiveCount") or 0),
+            "negativeCount": int(training_set.get("negativeCount") or 0),
+            "failureReasonCounts": training_set.get("failureReasonCounts") or {},
+            "dominantFailureReason": training_set.get("dominantFailureReason") or "",
+            "dominantFailureReasonLabel": training_set.get("dominantFailureReasonLabel") or "",
+            "usefulQueueCount": len([item for item in candidates if int(item.get("activeTrainingValue") or 0) >= 45]),
+            "exploratoryCandidatePoolCount": exploratory_candidate_pool_count,
+            "rejectionReasonOptions": [
+                {"id": reason_id, "label": label}
+                for reason_id, label in REJECTION_REASON_LABELS.items()
+            ],
+            "nextAction": (
+                "Review the highest-value card and choose a rejection reason if it is wrong."
+                if candidates
+                else "Current labels have exhausted the visible batch; mine or rescan fresh audio before asking for more labels."
+            ),
+        },
         "rejectionDigest": {
             "status": queue_status,
             "hiddenReviewedPatternCount": len(hidden_reviewed_keys),

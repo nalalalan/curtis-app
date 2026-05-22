@@ -180,6 +180,8 @@ class TruthWorkbenchItem(BaseModel):
     note_reading_scope_label: str = Field(default="", alias="noteReadingScopeLabel")
     note_reading_visible_note_count: int = Field(default=0, alias="noteReadingVisibleNoteCount")
     reason: str = ""
+    rejection_reason: str = Field(default="", alias="rejectionReason")
+    failure_category: str = Field(default="", alias="failureCategory")
     note: str = ""
 
     def to_state(self) -> dict[str, Any]:
@@ -224,6 +226,8 @@ class TruthWorkbenchItem(BaseModel):
             "noteReadingScopeLabel": self.note_reading_scope_label,
             "noteReadingVisibleNoteCount": self.note_reading_visible_note_count,
             "reason": self.reason,
+            "rejectionReason": self.rejection_reason,
+            "failureCategory": self.failure_category,
             "note": self.note,
         }
 
