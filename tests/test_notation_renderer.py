@@ -310,8 +310,8 @@ def test_gold_review_training_lanes_use_user_facing_names():
     index = Path("index.html").read_text(encoding="utf-8")
     assert '"transcription-alan"' in app
     assert '"score-transcription"' in app
-    assert "/app.js?v=20260523-training-state" in index
-    assert "/styles.css?v=20260523-training-state" in index
+    assert "/app.js?v=20260523-match-attempts" in index
+    assert "/styles.css?v=20260523-match-attempts" in index
     assert '[(isScoreCopy ? "" : item.practiceDay), lane, agreement' in app
     assert "No review cards ready." in app
     assert "Refill pending." not in app
@@ -322,6 +322,9 @@ def test_gold_review_training_lanes_use_user_facing_names():
     assert "function applyOps" in app
     assert "Visible queue:" in app
     assert "playing feedback still needs transcription-alan labels later" in app
+    assert "Best current attempts" in app
+    assert "attempts, not accepted evidence" in app
+    assert "renderSourceAudioMatchAttempts(completion)" in app
     assert "Need ${targetCount} note letters." in app
     assert "blocked source/audio match" in app
     assert "No user action." in app

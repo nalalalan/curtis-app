@@ -4056,6 +4056,91 @@ function renderStaff4Mining(mining, sourceRescan) {
   `;
 }
 
+function attemptWindowLabel(attempt) {
+  const start = Number(attempt?.absoluteStartSeconds ?? attempt?.audioAbsoluteStartSeconds ?? attempt?.localStartSeconds ?? attempt?.audioLocalStartSeconds);
+  const end = Number(attempt?.absoluteEndSeconds ?? attempt?.audioAbsoluteEndSeconds ?? attempt?.localEndSeconds ?? attempt?.audioLocalEndSeconds);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return "";
+  return `${start.toFixed(3)}-${end.toFixed(3)}s`;
+}
+
+function attemptSequenceLabel(attempt) {
+  return String(
+    attempt?.windowSequence
+    || attempt?.bestAudioSequence
+    || attempt?.detectedSequence
+    || attempt?.nearestSequence
+    || ""
+  ).trim();
+}
+
+function renderAttemptResultCard(item) {
+  const attempt = item.attempt && typeof item.attempt === "object" ? item.attempt : {};
+  const sequence = attemptSequenceLabel(attempt) || "sequence pending";
+  const exact = Number(attempt.exactCount);
+  const targetCount = Number(item.targetCount) || 0;
+  const exactLabel = Number.isFinite(exact) && targetCount
+    ? `${exact}/${targetCount} exact`
+    : Number.isFinite(exact) ? `${exact} exact` : "exact count pending";
+  const time = attemptWindowLabel(attempt);
+  const status = String(item.status || attempt.status || "").replace(/_/g, " ");
+  return `
+    <article class="match-attempt-card">
+      <span>${escapeHtml(item.label)}</span>
+      <strong>${escapeHtml(shortText(sequence, 72))}</strong>
+      <em>${escapeHtml([exactLabel, time, status].filter(Boolean).join(" / "))}</em>
+    </article>
+  `;
+}
+
+function renderSourceAudioMatchAttempts(completion) {
+  const target = completion?.sourceCropReverificationTarget && typeof completion.sourceCropReverificationTarget === "object"
+    ? completion.sourceCropReverificationTarget
+    : {};
+  const searches = [
+    ["Wide search", completion?.sourceCropWideAttemptSearch],
+    ["Alternate search", completion?.sourceCropAlternateAttemptSearch],
+    ["Adjacent search", completion?.sourceCropAdjacentSourceAttemptSearch],
+    ["Failed-note probe", completion?.sourceCropFailedNoteProbe?.probeSearch],
+  ].filter(([, search]) => search && typeof search === "object");
+  const targetSequence = String(target.targetSequence || "").trim();
+  const audioSequence = String(target.bestAudioSequence || target.detectedSequence || "").trim();
+  if (!targetSequence && !audioSequence && !searches.length) return "";
+  const targetCount = Array.isArray(target.targetMidiSequence) ? target.targetMidiSequence.length : 0;
+  const attempts = searches
+    .map(([label, search]) => ({
+      label,
+      status: search.status,
+      attempt: search.nearestWindow || search.bestCandidate || search,
+      targetCount,
+    }))
+    .filter((item) => attemptSequenceLabel(item.attempt) || Number.isFinite(Number(item.attempt?.exactCount)));
+  const searchedWindowCount = searches.reduce((sum, [, search]) => sum + (Number(search.searchedWindowCount) || 0), 0);
+  const bestExact = attempts.reduce((best, item) => {
+    const exact = Number(item.attempt?.exactCount);
+    return Number.isFinite(exact) ? Math.max(best, exact) : best;
+  }, 0);
+  const sourceImage = assetUrl(target.sourceReviewImageUrl || target.sourceImageUrl || "");
+  const block = String(target.limit || completion.nextAction || "").trim();
+  return `
+    <section class="match-attempts" aria-label="Score transcription audio attempts">
+      <div class="match-attempts-head">
+        <strong>Best current attempts</strong>
+        <span>attempts, not accepted evidence</span>
+      </div>
+      <div class="match-attempts-grid">
+        ${sourceImage ? `<div class="match-attempt-source"><img src="${escapeHtml(sourceImage)}" alt="Source score crop under review"></div>` : ""}
+        <article class="match-attempt-primary">
+          <span>${escapeHtml([searchedWindowCount ? `${searchedWindowCount} windows searched` : "", bestExact && targetCount ? `${bestExact}/${targetCount} nearest` : ""].filter(Boolean).join(" / ") || "search in progress")}</span>
+          <strong>${escapeHtml(shortText(targetSequence || "target pending", 88))}</strong>
+          <em>${escapeHtml(audioSequence ? `audio attempt: ${audioSequence}` : "audio attempt pending")}</em>
+          ${block ? `<p>${escapeHtml(shortText(block, 180))}</p>` : ""}
+        </article>
+      </div>
+      ${attempts.length ? `<div class="match-attempt-list">${attempts.slice(0, 4).map(renderAttemptResultCard).join("")}</div>` : ""}
+    </section>
+  `;
+}
+
 function renderTranscriptionCompletion() {
   if (!elements.transcriptionCompletion) return;
   if (!backend.online) {
@@ -4124,6 +4209,7 @@ function renderTranscriptionCompletion() {
       <span>Next</span>
       <strong>${escapeHtml(shortText(completion.nextAction || "pending", 110))}</strong>
     </div>
+    ${renderSourceAudioMatchAttempts(completion)}
     ${renderStaff4Mining(completion.staff4AdjacentMining, completion.staff4SourceAudioRescan)}
     ${renderStaff4Audit(completion.staff4PhraseAudit)}
   `;
