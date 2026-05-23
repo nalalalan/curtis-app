@@ -3940,7 +3940,7 @@ function renderStaff4Audit(audit) {
   const reviewCrop = isCropReview && rejectedCrop ? assetUrl(scoreBlock.sourceReviewImageUrl || decision.reviewImageUrl || "") : "";
   const title = isCropReview ? "blocked source/audio match" : decisionLabel;
   const nextAction = isCropReview
-    ? (audit.nextAction || "Curtis must find an audio-agreed May 3 window before this crop can become score evidence.")
+    ? "Curtis must reverify the visible source crop against transcription and paired audio before this lane reopens."
     : (audit.nextAction || "");
   const diagnosticPlots = [pitchTrace, spectrogram].filter(Boolean);
   return `
