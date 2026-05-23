@@ -3793,6 +3793,28 @@ function renderGoldReviewLanes(lanes) {
     .join("");
 }
 
+function renderGoldReviewTrainingState({ audioQueued = 0, scoreCopyQueued = 0, noteReadingQueued = 0 } = {}) {
+  const visible = [
+    audioQueued ? `${audioQueued} ${TRAINING_LANE_TRANSCRIPTION_ALAN}` : "",
+    scoreCopyQueued ? `${scoreCopyQueued} ${TRAINING_LANE_SCORE_TRANSCRIPTION}` : "",
+    noteReadingQueued ? `${noteReadingQueued} ${TRAINING_LANE_NOTE_READING}` : "",
+  ].filter(Boolean);
+  const primary = visible.length ? `Visible queue: ${visible.join(" / ")}.` : "No visible training queue.";
+  const gateText = audioQueued || scoreCopyQueued
+    ? "Only source/audio-checked cards appear here."
+    : "transcription-alan and score-transcription reopen when candidates pass evidence gates.";
+  const coachingText = noteReadingQueued
+    ? "note-reading improves source-score labels; playing feedback still needs transcription-alan labels later."
+    : "playing feedback needs source labels and audio-transcription labels.";
+  return `
+    <section class="gold-review-training-state" aria-label="training lane state">
+      <strong>${escapeHtml(primary)}</strong>
+      <span>${escapeHtml(gateText)}</span>
+      <span>${escapeHtml(coachingText)}</span>
+    </section>
+  `;
+}
+
 function renderGoldReview() {
   if (!elements.goldReviewPanel) return;
   if (!backend.online) {
@@ -3891,6 +3913,7 @@ function renderGoldReview() {
       ${corrected ? `<article><span>Corrected</span><strong>${escapeHtml(String(corrected))}</strong></article>` : ""}
       <article><span>Adaptive</span><strong>${escapeHtml(adaptiveLabel)}</strong></article>
     </div>
+    ${renderGoldReviewTrainingState({ audioQueued, scoreCopyQueued, noteReadingQueued })}
     <div class="gold-review-list">
       ${renderGoldReviewLanes([
         {

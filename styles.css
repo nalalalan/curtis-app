@@ -4736,6 +4736,29 @@ h2 {
   line-height: 1.08;
 }
 
+.gold-review-training-state {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: rgba(255, 253, 248, .78);
+}
+
+.gold-review-training-state strong {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.gold-review-training-state span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 690;
+  line-height: 1.3;
+}
+
 .source-score-strip {
   display: grid;
   gap: 8px;
