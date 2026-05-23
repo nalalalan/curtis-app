@@ -121,7 +121,24 @@ async function apiFetch(path, options = {}) {
       },
       signal: controller.signal
     });
-    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+    if (!response.ok) {
+      let detail = "";
+      try {
+        const payload = await response.clone().json();
+        detail = typeof payload?.detail === "string"
+          ? payload.detail
+          : Array.isArray(payload?.detail)
+            ? payload.detail.map((item) => item?.msg || item?.message || "").filter(Boolean).join("; ")
+            : "";
+      } catch {
+        try {
+          detail = await response.text();
+        } catch {
+          detail = "";
+        }
+      }
+      throw new Error([`${response.status} ${response.statusText}`, detail].filter(Boolean).join(": "));
+    }
     return await response.json();
   } finally {
     window.clearTimeout(timeout);
@@ -575,6 +592,25 @@ function noteLetterSequence(value) {
     .filter(Boolean);
 }
 
+function noteReadingTargetLetterCount(item) {
+  const visible = Number(item?.noteReadingVisibleNoteCount || 0);
+  if (Number.isFinite(visible) && visible > 0) return Math.floor(visible);
+  const expectedLetters = Array.isArray(item?.expectedNoteLetters)
+    ? item.expectedNoteLetters
+    : noteLetterSequence(item?.expectedNoteLetterText || "");
+  return expectedLetters.length;
+}
+
+function noteReadingFormatLetters(letters) {
+  return (Array.isArray(letters) ? letters : []).map((letter) => String(letter || "").toUpperCase()).filter(Boolean).join(" ");
+}
+
+function noteReadingLimitedLetters(value, targetCount = 0) {
+  const letters = noteLetterSequence(value);
+  const limit = Number(targetCount) || 0;
+  return limit > 0 ? letters.slice(0, limit) : letters;
+}
+
 function noteReadingDraftKey(reviewItemId) {
   const id = String(reviewItemId || "").trim();
   return id ? `${NOTE_READING_DRAFT_PREFIX}${id}` : "";
@@ -612,15 +648,42 @@ function clearNoteReadingDraft(reviewItemId) {
   }
 }
 
+function syncNoteReadingForm(form, options = {}) {
+  const candidate = findGoldReviewCandidate(form?.dataset?.reviewItemId);
+  const input = form?.querySelector("[name='noteLetterAnswer']");
+  if (!candidate || !input) return { candidate, letters: [], targetCount: 0, complete: false };
+  const targetCount = noteReadingTargetLetterCount(candidate);
+  const letters = noteReadingLimitedLetters(input.value, targetCount);
+  const formatted = noteReadingFormatLetters(letters);
+  if (input.value !== formatted) input.value = formatted;
+  if (options.persist !== false) persistNoteReadingDraft(candidate.reviewItemId, formatted);
+  const complete = targetCount > 0 ? letters.length === targetCount : letters.length > 0;
+  const counter = form.querySelector("[data-note-reading-counter]");
+  const status = form.querySelector("[data-note-reading-status]");
+  const saveButton = form.querySelector("[data-note-reading-save]");
+  const countText = targetCount > 0
+    ? `${letters.length}/${targetCount}${complete ? " ready" : ""}`
+    : letters.length ? `${letters.length} notes` : "Type note letters.";
+  if (counter) counter.textContent = countText;
+  if (status && options.preserveStatus !== true) {
+    status.textContent = targetCount > 0 && !complete
+      ? `Need ${targetCount} note letters.`
+      : countText;
+  }
+  if (saveButton) saveButton.disabled = !complete;
+  return { candidate, letters, targetCount, complete };
+}
+
 async function submitNoteReading(form) {
-  const candidate = findGoldReviewCandidate(form.dataset.reviewItemId);
+  const synced = syncNoteReadingForm(form);
+  const candidate = synced.candidate;
   const state = form.querySelector("[data-note-reading-status]");
   const input = form.querySelector("[name='noteLetterAnswer']");
   if (!candidate || !input) {
     if (state) state.textContent = "Missing item.";
     return;
   }
-  const button = form.querySelector("button");
+  const button = form.querySelector("[data-note-reading-save]");
   if (button) {
     button.disabled = true;
     button.textContent = "Saving";
@@ -633,6 +696,14 @@ async function submitNoteReading(form) {
   const userLetters = noteLetterSequence(answer);
   if (!userLetters.length) {
     if (state) state.textContent = "Type letters.";
+    if (button) {
+      button.disabled = false;
+      button.textContent = "Save";
+    }
+    return;
+  }
+  if (synced.targetCount > 0 && userLetters.length !== synced.targetCount) {
+    if (state) state.textContent = `Need ${synced.targetCount} note letters.`;
     if (button) {
       button.disabled = false;
       button.textContent = "Save";
@@ -659,10 +730,10 @@ async function submitNoteReading(form) {
         userNoteLetters: userLetters,
         noteLetterAnswer: answer,
         noteLetterCorrect: correct,
-        noteReadingAnswerMode: "letters_only_ignore_accidentals_octaves",
+        noteReadingAnswerMode: candidate.noteReadingAnswerMode || "letters_only_ignore_accidentals_octaves",
         noteReadingSourceScope: candidate.noteReadingSourceScope || "visible_source_picture_only",
         noteReadingScopeLabel: candidate.noteReadingScopeLabel || "picture only",
-        noteReadingVisibleNoteCount: Number(candidate.noteReadingVisibleNoteCount || expectedLetters.length || userLetters.length) || userLetters.length,
+        noteReadingVisibleNoteCount: synced.targetCount || userLetters.length,
         reason,
       },
     });
@@ -671,12 +742,13 @@ async function submitNoteReading(form) {
     if (state) state.textContent = "Saved.";
   } catch (error) {
     backend.lastError = String(error?.message || error || "review save failed");
-    if (state) state.textContent = "Could not save.";
+    if (state) state.textContent = shortText(`Could not save: ${backend.lastError}`, 120);
   } finally {
     if (button) {
       button.disabled = false;
       button.textContent = "Save";
     }
+    syncNoteReadingForm(form, { persist: false, preserveStatus: true });
   }
 }
 
@@ -3608,9 +3680,20 @@ function renderNoteReadingItem(item, index) {
   const isRecent = status !== "pending_review";
   const label = [item.scoreLocation, item.pieceTitle].filter(Boolean).join(" / ") || "notation";
   const imageUrl = assetUrl(item.sourceReviewImageUrl || item.sourceImageUrl || item.scoreImageUrl || "");
-  const draftValue = noteReadingDraftValue(item);
+  const targetCount = noteReadingTargetLetterCount(item);
+  const draftLetters = noteReadingLimitedLetters(noteReadingDraftValue(item), targetCount);
+  const draftValue = noteReadingFormatLetters(draftLetters);
+  const isComplete = targetCount > 0 ? draftLetters.length === targetCount : draftLetters.length > 0;
   const trainingReason = item.activeTrainingReason || item.activeTrainingQuestion || "";
   const placeholder = item.noteReadingSourceScope === "first_visible_source_notes" ? "First notes: A G D" : "A G D";
+  const statusText = isRecent
+    ? status.replace(/_/g, " ")
+    : targetCount > 0
+      ? `Need ${targetCount} note letters.`
+      : (item.noteReadingScopeLabel || "picture only");
+  const counterText = targetCount > 0
+    ? `${draftLetters.length}/${targetCount}${isComplete ? " ready" : ""}`
+    : draftLetters.length ? `${draftLetters.length} notes` : "";
   const source = imageUrl
     ? `
       <section class="gold-review-source gold-review-source-original note-reading-source" aria-label="note-reading source">
@@ -3639,9 +3722,9 @@ function renderNoteReadingItem(item, index) {
       </div>
       <div class="gold-review-grid gold-review-note-reading-grid">
         ${source}
-        <form class="note-reading-form" data-note-reading-form data-review-item-id="${escapeHtml(item.reviewItemId || "")}">
+        <form class="note-reading-form" data-note-reading-form data-review-item-id="${escapeHtml(item.reviewItemId || "")}" data-note-reading-target-count="${escapeHtml(String(targetCount || ""))}">
           <label>
-            <span>Note letters</span>
+            <span>Note letters <em data-note-reading-counter>${escapeHtml(counterText)}</em></span>
             <input name="noteLetterAnswer" value="${escapeHtml(draftValue)}" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="${escapeHtml(placeholder)}">
           </label>
           ${trainingReason ? `<p class="gold-review-training-reason">${escapeHtml(trainingReason)}</p>` : ""}
@@ -3650,8 +3733,8 @@ function renderNoteReadingItem(item, index) {
             <button type="button" data-note-reading-key="delete" aria-label="delete last note">Del</button>
             <button type="button" data-note-reading-key="clear">Clear</button>
           </div>
-          <button type="submit">Save</button>
-          <small data-note-reading-status>${escapeHtml(isRecent ? status.replace(/_/g, " ") : (item.noteReadingScopeLabel || "picture only"))}</small>
+          <button type="submit" data-note-reading-save ${isComplete ? "" : "disabled"}>Save</button>
+          <small data-note-reading-status>${escapeHtml(statusText)}</small>
         </form>
       </div>
     </article>
@@ -3855,13 +3938,19 @@ function renderStaff4Audit(audit) {
   const displayAllowed = scoreBlock.sourceCropDisplayAllowed === true && scoreBlock.sourceCropReady === true && scoreBlock.truthEvidenceAccepted === true;
   const sourceCrop = isCropReview && !rejectedCrop && displayAllowed ? assetUrl(scoreBlock.sourceImageUrl || "") : "";
   const reviewCrop = isCropReview && rejectedCrop ? assetUrl(scoreBlock.sourceReviewImageUrl || decision.reviewImageUrl || "") : "";
+  const title = isCropReview ? "blocked source/audio match" : decisionLabel;
+  const nextAction = isCropReview
+    ? (audit.nextAction || "Curtis must find an audio-agreed May 3 window before this crop can become score evidence.")
+    : (audit.nextAction || "");
+  const diagnosticPlots = [pitchTrace, spectrogram].filter(Boolean);
   return `
     <section class="staff4-audit-card" aria-label="Source phrase audit packet">
       <div class="staff4-audit-head">
-        <strong>${escapeHtml(decisionLabel)}</strong>
+        <strong>${escapeHtml(title)}</strong>
         <span>${escapeHtml(headerDetail)}</span>
         ${packetUrl ? `<a href="${escapeHtml(packetUrl)}" target="_blank" rel="noreferrer">JSON</a>` : ""}
       </div>
+      ${nextAction ? `<p class="staff4-audit-next">${escapeHtml(isCropReview ? `No user action. ${nextAction}` : nextAction)}</p>` : ""}
       <div class="staff4-audit-grid">
         ${videoUrl ? `
           <div class="staff4-audit-media">
@@ -3875,9 +3964,16 @@ function renderStaff4Audit(audit) {
         ` : ""}
         ${sourceCrop ? `<img class="staff4-audit-plot" src="${escapeHtml(sourceCrop)}" alt="Accepted source score crop">` : ""}
         ${reviewCrop ? `<img class="staff4-audit-plot staff4-audit-review-plot" src="${escapeHtml(reviewCrop)}" alt="Source review context">` : ""}
-        ${pitchTrace ? `<img class="staff4-audit-plot" src="${escapeHtml(pitchTrace)}" alt="Pitch trace">` : ""}
-        ${spectrogram ? `<img class="staff4-audit-plot" src="${escapeHtml(spectrogram)}" alt="Spectrogram">` : ""}
       </div>
+      ${diagnosticPlots.length ? `
+        <details class="staff4-audit-details">
+          <summary>Machine audit plots</summary>
+          <div class="staff4-audit-diagnostics">
+            ${pitchTrace ? `<img class="staff4-audit-plot" src="${escapeHtml(pitchTrace)}" alt="Pitch trace">` : ""}
+            ${spectrogram ? `<img class="staff4-audit-plot" src="${escapeHtml(spectrogram)}" alt="Spectrogram">` : ""}
+          </div>
+        </details>
+      ` : ""}
     </section>
   `;
 }
@@ -4258,22 +4354,24 @@ document.addEventListener("click", (event) => {
   const input = form?.querySelector("input[name='noteLetterAnswer']");
   if (!form || !input) return;
   const key = keyButton.dataset.noteReadingKey || "";
-  const notes = noteInputSequence(input.value);
+  const candidate = findGoldReviewCandidate(form.dataset.reviewItemId);
+  const targetCount = noteReadingTargetLetterCount(candidate);
+  const notes = noteReadingLimitedLetters(input.value, targetCount);
   if (key === "clear") {
     input.value = "";
   } else if (key === "delete") {
     input.value = notes.slice(0, -1).join(" ");
-  } else if ("ABCDEFG".includes(key)) {
+  } else if ("ABCDEFG".includes(key) && (!targetCount || notes.length < targetCount)) {
     input.value = [...notes, key].join(" ");
   }
-  persistNoteReadingDraft(form.dataset.reviewItemId, input.value);
+  syncNoteReadingForm(form);
   input.focus();
 });
 document.addEventListener("input", (event) => {
   const input = event.target.closest("[data-note-reading-form] input[name='noteLetterAnswer']");
   if (!input) return;
   const form = input.closest("[data-note-reading-form]");
-  persistNoteReadingDraft(form?.dataset?.reviewItemId, input.value);
+  syncNoteReadingForm(form);
 });
 document.addEventListener("submit", (event) => {
   const noteReadingForm = event.target.closest("[data-note-reading-form]");

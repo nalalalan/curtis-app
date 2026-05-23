@@ -869,6 +869,19 @@ class GoldReviewTests(unittest.TestCase):
         self.assertEqual(result["goldReviewItem"]["noteReadingScopeLabel"], "picture only")
         self.assertEqual(result["goldReviewItem"]["noteReadingVisibleNoteCount"], 4)
 
+        rejected = GoldReviewItem(
+            reviewItemId="gold-note-reading-api-reject",
+            type="note_reading",
+            status="rejected_mismatch",
+            sourceReviewImageUrl="/assets/score/source.png",
+            rejectionReason="wrong_source_pair",
+            failureCategory="score_identity",
+        )
+        rejected_result = record_gold_review_item({}, rejected.to_state())
+
+        self.assertEqual(rejected_result["goldReviewItem"]["rejectionReason"], "wrong_source_pair")
+        self.assertEqual(rejected_result["goldReviewItem"]["failureCategory"], "wrong_source_pair")
+
     def test_source_catalog_mode_tops_up_thin_audio_queue_with_adaptive_windows(self):
         daily_records = {
             "records": [

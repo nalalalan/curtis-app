@@ -14,7 +14,7 @@ def test_notation_renderer_draws_exact_accidentals():
         const code = fs.readFileSync("app.js", "utf8");
         const context = {
           console,
-          window: {},
+          window: { location: { search: "", hostname: "127.0.0.1", origin: "http://127.0.0.1" } },
           document: {
             addEventListener() {},
             querySelector() { return null; },
@@ -23,6 +23,11 @@ def test_notation_renderer_draws_exact_accidentals():
             body: {},
           },
           navigator: {},
+          localStorage: {
+            getItem() { return ""; },
+            setItem() {},
+            removeItem() {},
+          },
           setTimeout,
           clearTimeout,
           URLSearchParams,
@@ -238,6 +243,33 @@ def test_notation_renderer_draws_exact_accidentals():
         assert(sourceCopy.includes('notation-fit'), "source-copy notation should fit inside the review card");
         assert(sourceCopy.includes('(3G^FG B2'), "source-copy notation must preserve tuplets and durations from the source ABC");
         assert(sourceCopy.includes('data-abc-staffwidth') === false, "default source-copy notation should not invent a fixed staff width unless requested");
+
+        const noteReading = vm.runInContext(
+          `(() => {
+            const item = {
+              reviewItemId: 'note-eight',
+              noteReadingVisibleNoteCount: 8,
+              noteLetterAnswer: 'a b c d e f g a b',
+              noteReadingSourceScope: 'first_visible_source_notes',
+              noteReadingScopeLabel: 'first 8 visible notes',
+              sourceReviewImageUrl: '/score.png',
+              scoreLocation: 'page 2 / staff 4',
+              pieceTitle: 'Wieniawski Scherzo-Tarantelle, Op. 16'
+            };
+            return {
+              target: noteReadingTargetLetterCount(item),
+              limited: noteReadingFormatLetters(noteReadingLimitedLetters(item.noteLetterAnswer, 8)),
+              html: renderNoteReadingItem(item, 0)
+            };
+          })()`,
+          context
+        );
+        assert(noteReading.target === 8, "note-reading cards must carry the visible target count");
+        assert(noteReading.limited === "A B C D E F G A", "note-reading drafts must be capped at the requested count");
+        assert(noteReading.html.includes('data-note-reading-target-count="8"'), "note-reading form must expose the target count");
+        assert(noteReading.html.includes('data-note-reading-save'), "note-reading save button must be addressable separately from keypad keys");
+        assert(noteReading.html.includes('8/8 ready'), "completed note-reading draft should show ready state instead of making the user count");
+        assert(noteReading.html.includes('value="A B C D E F G A"'), "rendered note-reading input must drop extra notes");
         """
     )
     completed = subprocess.run(["node", "-e", script], cwd=".", text=True, capture_output=True)
@@ -278,11 +310,18 @@ def test_gold_review_training_lanes_use_user_facing_names():
     index = Path("index.html").read_text(encoding="utf-8")
     assert '"transcription-alan"' in app
     assert '"score-transcription"' in app
-    assert "/app.js?v=20260522-active-training" in index
+    assert "/app.js?v=20260523-note-reading-relief" in index
     assert '[(isScoreCopy ? "" : item.practiceDay), lane, agreement' in app
     assert "No review cards ready." in app
     assert "Refill pending." not in app
     assert "data-rejection-reason" in app
+    assert "noteReadingTargetLetterCount" in app
+    assert "data-note-reading-target-count" in app
+    assert "data-note-reading-save" in app
+    assert "Need ${targetCount} note letters." in app
+    assert "blocked source/audio match" in app
+    assert "No user action." in app
+    assert "Machine audit plots" in app
     assert "activeTrainingReason" in app
     assert "Audio transcription" not in app
     assert "Notation copy" not in app
