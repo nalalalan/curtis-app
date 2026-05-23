@@ -385,6 +385,16 @@ function sourcePayload() {
   };
 }
 
+function applyOps(ops) {
+  backend = {
+    online: true,
+    loading: false,
+    ops,
+    lastError: "",
+  };
+  render();
+}
+
 async function loadBackendState() {
   backend = { ...backend, loading: true, lastError: "" };
   render();
