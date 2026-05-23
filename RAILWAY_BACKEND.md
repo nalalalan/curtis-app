@@ -7,8 +7,11 @@ Autonomous practice-video review for Curtis preparation.
 ## Required Inputs
 
 - `OPENAI_API_KEY`
-- `OPENAI_MODEL=gpt-5.5`
-- `OPENAI_REASONING_EFFORT=xhigh`
+- `OPENAI_MODEL=gpt-5-mini`
+- `OPENAI_REASONING_EFFORT=low`
+- `OPENAI_AUDIO_MODEL=gpt-audio-mini`
+- `OPENAI_PIECE_VERIFY_MODEL=gpt-audio-mini`
+- `OPENAI_VISION_MODEL=gpt-4o-mini`
 - `YOUTUBE_API_KEY` for public YouTube channel inventory.
 - Default public source is `https://www.youtube.com/@nalalan`; override with `CURTIS_YOUTUBE_SOURCE` only if the channel changes.
 - `YOUTUBE_CLIENT_ID` and `YOUTUBE_CLIENT_SECRET` from a Google OAuth web client for persistent authenticated channel access.
@@ -91,7 +94,7 @@ If OAuth callback storage is not used, set all of:
 - Authenticated YouTube mode uses OAuth `mine=true` channel access and the uploads playlist for the connected account.
 - YouTube media judgment is blocked until a permitted video media path exists; the Data API does not provide raw video content.
 - Instagram automation inventories authorized account media through Graph API and marks media URLs for section processing when present.
-- OpenAI defaults to `gpt-5.5` with `xhigh` reasoning for future media-section scoring.
+- OpenAI defaults to `gpt-5-mini` with `low` reasoning for future media-section scoring. Audio defaults to `gpt-audio-mini`; frame checks default to `gpt-4o-mini`.
 
 ## Still Required For Full Judgment
 
