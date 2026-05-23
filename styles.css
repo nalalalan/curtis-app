@@ -5381,6 +5381,15 @@ h2 {
   .gold-review-form {
     grid-column: auto;
   }
+
+  .match-attempts-grid,
+  .match-attempt-list {
+    grid-template-columns: 1fr;
+  }
+
+  .match-attempt-source img {
+    max-height: 112px;
+  }
 }
 
 @media (max-width: 620px) {
@@ -5469,6 +5478,17 @@ h2 {
     max-width: 62%;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .match-attempts-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .match-attempt-primary strong,
+  .match-attempt-card strong {
+    font-size: 13px;
   }
 
   .piece-row {
